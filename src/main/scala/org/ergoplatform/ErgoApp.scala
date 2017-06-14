@@ -2,7 +2,8 @@ package org.ergoplatform
 
 import akka.actor.ActorRef
 import io.circe
-import org.ergoplatform.transaction.proposition.{AnyoneCanSpendProposition, AnyoneCanSpendTransaction}
+import org.ergoplatform.modifiers.{AnyoneCanSpendTransaction, ErgoBlock}
+import org.ergoplatform.transaction.proposition.AnyoneCanSpendProposition
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
@@ -13,7 +14,7 @@ import scala.reflect.runtime.universe.Type
 class ErgoApp(val settingsFilename: String) extends Application {
   override type P = AnyoneCanSpendProposition
   override type TX = AnyoneCanSpendTransaction
-  override type PMOD = _
+  override type PMOD = ErgoBlock
   override type NVHT = _
 
   implicit lazy val settings = new Settings {

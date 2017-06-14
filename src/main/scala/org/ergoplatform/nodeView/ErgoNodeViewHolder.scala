@@ -17,12 +17,12 @@ class ErgoNodeViewHolder(settings: Settings) extends NodeViewHolder[PublicKey255
   ErgoBlock] {
   override val networkChunkSize: Int = settings.networkChunkSize
 
-  override type SI = HybridSyncInfo
+  override type SI = ErgoSyncInfo
 
-  override type HIS = HybridHistory
-  override type MS = HBoxStoredState
-  override type VL = HWallet
-  override type MP = SimpleBoxTransactionMemPool
+  override type HIS = ErgoHistory
+  override type MS = ErgoState
+  override type VL = ErgoWallet
+  override type MP = ErgoMemPool
 
   override val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(ErgoHeader.ModifierTypeId -> ErgoHeaderSerializer,

@@ -2,8 +2,9 @@ package org.ergoplatform
 
 import akka.actor.ActorRef
 import io.circe
-import org.ergoplatform.modifiers.{AnyoneCanSpendTransaction, ErgoBlock}
-import org.ergoplatform.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.block.ErgoBlock
+import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec

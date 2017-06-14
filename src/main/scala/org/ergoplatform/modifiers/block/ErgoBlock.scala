@@ -1,6 +1,7 @@
-package org.ergoplatform.modifiers
+package org.ergoplatform.modifiers.block
 
-import org.ergoplatform.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.block.Block
 

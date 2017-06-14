@@ -30,7 +30,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition
     AnyoneCanSpendNoncedBox.idFromBox(prop, nonce)
   }
 
-  override lazy val unlockers: Traversable[BoxUnlocker[Nothing]] = Seq()
+  override lazy val unlockers: Traversable[BoxUnlocker[AnyoneCanSpendProposition]] = Seq()
 
   lazy val hashNoNonces = FastCryptographicHash(
     Bytes.concat(scorex.core.utils.concatFixLengthBytes(to.map(_._1.bytes)),

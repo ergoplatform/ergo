@@ -1,14 +1,15 @@
-package org.ergoplatform.transaction.proposition
+package org.ergoplatform.modifiers
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.transaction.proposition.AnyoneCanSpendTransaction._
+import org.ergoplatform.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import scorex.core.crypto.hash.FastCryptographicHash
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.BoxTransaction
 import scorex.core.transaction.box.BoxUnlocker
 import scorex.crypto.encode.Base58
+import AnyoneCanSpendTransaction._
 
 import scala.util.Try
 
@@ -17,9 +18,11 @@ import scala.util.Try
   */
 case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition, Value)],
                                      to: IndexedSeq[(AnyoneCanSpendProposition, Nonce)],
-                                     override val fee: Long,
                                      override val timestamp: Long) extends
   BoxTransaction[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] {
+
+  //TODO remove fee and timestamp from base class?
+  override val fee: Value = from.map(_._2).sum - to.map(_._2).sum
 
   override type M = AnyoneCanSpendTransaction
 

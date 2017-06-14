@@ -16,7 +16,7 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransac
 
   override def secretByPublicImage(publicImage: AnyoneCanSpendProposition): Option[Nothing] = None
 
-  override def generateNewSecret(): ErgoWallet = ???
+  override def generateNewSecret(): ErgoWallet = this
 
   override def historyTransactions: Seq[WalletTransaction[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]] = ???
 
@@ -25,7 +25,6 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransac
   override def publicKeys: Set[PI] = Set()
 
   override def secrets: Set[S] = Set()
-
 
   override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = ???
 

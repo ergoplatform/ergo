@@ -1,8 +1,9 @@
-package org.ergoplatform.modifiers
+package org.ergoplatform.modifiers.block
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block

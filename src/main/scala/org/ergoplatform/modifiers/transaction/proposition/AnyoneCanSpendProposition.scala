@@ -1,4 +1,4 @@
-package org.ergoplatform.transaction.proposition
+package org.ergoplatform.modifiers.transaction.proposition
 
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.box.proposition.ProofOfKnowledgeProposition

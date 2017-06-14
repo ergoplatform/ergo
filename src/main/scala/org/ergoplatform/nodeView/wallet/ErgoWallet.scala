@@ -4,13 +4,12 @@ import org.ergoplatform.modifiers.block.ErgoBlock
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
 import scorex.core.transaction.box.Box
-import scorex.core.transaction.box.proposition.PublicKey25519Proposition
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
 import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-class ErgoWallet extends Wallet[PublicKey25519Proposition, AnyoneCanSpendTransaction, ErgoBlock, ErgoWallet]
+class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoBlock, ErgoWallet]
   with ScorexLogging {
   override type S = Nothing
   override type PI = AnyoneCanSpendProposition
@@ -19,13 +18,13 @@ class ErgoWallet extends Wallet[PublicKey25519Proposition, AnyoneCanSpendTransac
 
   override def generateNewSecret(): ErgoWallet = ???
 
-  override def historyTransactions: Seq[WalletTransaction[PublicKey25519Proposition, AnyoneCanSpendTransaction]] = ???
+  override def historyTransactions: Seq[WalletTransaction[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]] = ???
 
-  override def boxes(): Seq[WalletBox[PublicKey25519Proposition, _ <: Box[PublicKey25519Proposition]]] = ???
+  override def boxes(): Seq[WalletBox[AnyoneCanSpendProposition, _ <: Box[AnyoneCanSpendProposition]]] = ???
 
-  override def publicKeys: Set[ErgoWallet.this.type] = ???
+  override def publicKeys: Set[PI] = Set()
 
-  override def secrets: Set[ErgoWallet.this.type] = ???
+  override def secrets: Set[S] = Set()
 
 
   override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = ???

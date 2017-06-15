@@ -24,7 +24,7 @@ case class ErgoHeader(parentId: BlockId,
 
   override def version: Version = 0.toByte
 
-  override val modifierTypeId: ModifierTypeId = 100: Byte
+  override val modifierTypeId: ModifierTypeId = ErgoHeader.ModifierTypeId
 
   override lazy val id: ModifierId = Constants.hash(bytes)
 

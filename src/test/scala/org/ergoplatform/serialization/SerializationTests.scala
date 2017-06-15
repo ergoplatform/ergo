@@ -19,4 +19,9 @@ class SerializationTests extends PropSpec
     checkSerializationRoundtrip(anyoneCanSpendTransactionGen)
   }
 
+  property("ErgoSyncInfo serialization") {
+    checkSerializationRoundtrip(ergoSyncInfoGen)
+  }
+
+
 }

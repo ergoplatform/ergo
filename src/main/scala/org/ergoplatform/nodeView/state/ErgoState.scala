@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.block.ErgoBlock
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.StateChanges
 import scorex.core.transaction.state.authenticated.BoxMinimalState
@@ -31,4 +32,9 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
   override def rollbackTo(version: VersionTag): Try[ErgoState] = ???
 
   override type NVCT = this.type
+}
+
+object ErgoState {
+
+  def readOrGenerate(settings: ErgoSettings): ErgoState = new ErgoState
 }

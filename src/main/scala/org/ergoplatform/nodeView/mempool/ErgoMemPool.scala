@@ -55,4 +55,6 @@ case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
 
 object ErgoMemPool {
   type TxKey = scala.collection.mutable.WrappedArray.ofByte
+
+  def empty: ErgoMemPool = new ErgoMemPool(TrieMap())
 }

@@ -6,10 +6,10 @@ import org.ergoplatform.modifiers.block.ErgoBlock
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
-import scorex.core.settings.Settings
 
 import scala.reflect.runtime.universe.Type
 
@@ -19,7 +19,7 @@ class ErgoApp(val settingsFilename: String) extends Application {
   override type PMOD = ErgoBlock
   override type NVHT = ErgoNodeViewHolder
 
-  implicit lazy val settings = new Settings {
+  implicit lazy val settings: ErgoSettings = new ErgoSettings {
     override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename)
   }
   override val apiRoutes: Seq[ApiRoute] = Seq()

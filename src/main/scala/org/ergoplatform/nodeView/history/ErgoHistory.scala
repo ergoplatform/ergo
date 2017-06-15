@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.block.ErgoBlock
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{ModifierIds, ProgressInfo}
@@ -34,3 +35,9 @@ class ErgoHistory extends History[AnyoneCanSpendProposition,
 
   override type NVCT = ErgoHistory
 }
+
+object ErgoHistory {
+  def readOrGenerate(settings: ErgoSettings): ErgoHistory = new ErgoHistory
+}
+
+

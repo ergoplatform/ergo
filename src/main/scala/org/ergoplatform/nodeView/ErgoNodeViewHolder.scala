@@ -7,14 +7,14 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.core.settings.Settings
 import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-class ErgoNodeViewHolder(settings: Settings) extends NodeViewHolder[AnyoneCanSpendProposition,
+class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
   ErgoBlock] {
   override val networkChunkSize: Int = settings.networkChunkSize

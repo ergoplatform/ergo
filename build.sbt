@@ -9,6 +9,11 @@ version := "0.1.0"
 scalaVersion := "2.12.2"
 
 libraryDependencies ++= Seq(
+  "org.scalactic" %% "scalactic" % "3.0.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.1" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
+  "org.scorexfoundation" %% "iodb" % "0.3.1",
+  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-M5-SNAPSHOT" % "test",
   "org.scorexfoundation" %% "scorex-core" % "2.0.0-M5-SNAPSHOT"
 )
 

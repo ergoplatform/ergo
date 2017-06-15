@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.modifiers.block.ErgoBlock
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.box.Box
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
 import scorex.core.utils.ScorexLogging
@@ -35,4 +36,9 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransac
   override def rollback(to: VersionTag): Try[ErgoWallet] = ???
 
   override type NVCT = this.type
+}
+
+object ErgoWallet {
+  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
+
 }

@@ -14,9 +14,7 @@ import scala.util.Try
   * Stores up to 50 last PoW & Pos blocks
   * Thus maximum message size is about 100 * 33 ~= 3.2 KB
   */
-case class ErgoSyncInfo(override val answer: Boolean,
-                        lastBlockIds: Seq[ModifierId]
-                       ) extends SyncInfo {
+case class ErgoSyncInfo(answer: Boolean, lastBlockIds: Seq[ModifierId]) extends SyncInfo {
 
   override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {
     lastBlockIds.map(b => ErgoHeader.ModifierTypeId -> b)
@@ -27,11 +25,20 @@ case class ErgoSyncInfo(override val answer: Boolean,
   override def serializer: Serializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
+object ErgoSyncInfo {
+  val MaxBlockIds = 1000
+}
+
 object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
 
-  override def toBytes(obj: ErgoSyncInfo): Array[Byte] = ???
+  override def toBytes(obj: ErgoSyncInfo): Array[Byte] =
+    (if (obj.answer) 1.toByte else 0.toByte) +: scorex.core.utils.concatFixLengthBytes(obj.lastBlockIds)
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = ???
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = Try {
+    val answer = if (bytes.head == 1.toByte) true else false
+    val ids = bytes.slice(1, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
+    ErgoSyncInfo(answer, ids)
+  }
 }
 
 object ErgoSyncInfoMessageSpec extends SyncInfoMessageSpec[ErgoSyncInfo](ErgoSyncInfoSerializer.parseBytes)

@@ -4,14 +4,14 @@ import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool._
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.transaction.MemoryPool
-import scorex.core.utils.ScorexLogging
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try
 
 case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
-  extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] with ScorexLogging {
+  extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] {
+
   override type NVCT = ErgoMemPool
 
   private def key(id: Array[Byte]): TxKey = new mutable.WrappedArray.ofByte(id)

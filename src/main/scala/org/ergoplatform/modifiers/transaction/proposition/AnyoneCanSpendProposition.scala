@@ -16,7 +16,7 @@ object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProp
 
   override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendProposition] = bytes match {
     case b if b sameElements Array(-127.toByte) => Success(new AnyoneCanSpendProposition)
-    case _ => Failure(new Error("Incorrect proposition"))
+    case l => Failure(new Error(s"Incorrect proposition ${l.headOption}"))
   }
 }
 

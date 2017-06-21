@@ -10,10 +10,6 @@ import scorex.core.serialization.Serializer
 import scala.util.Try
 
 
-/**
-  * Stores up to 50 last PoW & Pos blocks
-  * Thus maximum message size is about 100 * 33 ~= 3.2 KB
-  */
 case class ErgoSyncInfo(answer: Boolean, lastBlockIds: Seq[ModifierId]) extends SyncInfo {
 
   override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {

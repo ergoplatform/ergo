@@ -8,7 +8,9 @@ import scorex.core.utils.ScorexLogging
 
 class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLogging {
 
-  def update(b: ErgoBlock, isBest: Boolean): Unit = ???
+  def insert(b: ErgoBlock, isBest: Boolean): Unit = ???
+
+  def drop(b: ModifierId, isBest: Boolean): Unit = ???
 
   def height: Int = ???
 

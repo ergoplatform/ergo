@@ -94,7 +94,7 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
   }
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
-    storage.drop(modifierId, modifierId sameElements bestBlockId)
+    storage.drop(modifierId)
     new ErgoHistory(storage, validators, settings)
   }
 

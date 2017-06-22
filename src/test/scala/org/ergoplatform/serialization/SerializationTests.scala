@@ -23,5 +23,13 @@ class SerializationTests extends PropSpec
     checkSerializationRoundtrip(ergoSyncInfoGen)
   }
 
+  property("ErgoHeader serialization") {
+    checkSerializationRoundtrip(ergoHeaderGen)
+  }
+
+  property("ErgoBlock serialization") {
+    checkSerializationRoundtrip(ergoBlockGen)
+  }
+
 
 }

@@ -40,18 +40,14 @@ trait ErgoGenerators extends CoreGenerators {
   } yield ErgoSyncInfo(answer, ids)
 
   lazy val ergoHeaderGen: Gen[ErgoHeader] = for {
+    version <- Arbitrary.arbitrary[Byte]
     parentId <- genBytesList(Constants.ModifierIdSize)
     stateRoot <- genBytesList(Constants.ModifierIdSize)
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
-  } yield ErgoHeader(parentId: BlockId,
-    interlinks: Seq[Array[Byte]],
-    stateRoot: Array[Byte],
-    transactionsRoot: Array[Byte],
-    timestamp: Block.Timestamp,
-    nonce: Int)
+  } yield ErgoHeader(version, parentId, interlinks, stateRoot, transactionsRoot, timestamp, nonce)
 
   //TODO add full block here
   lazy val ergoBlockGen: Gen[ErgoBlock] = ergoHeaderGen

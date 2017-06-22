@@ -9,21 +9,19 @@ import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
 import scala.util.Try
 
-case class ErgoHeader(parentId: BlockId,
+case class ErgoHeader(version: Version,
+                      parentId: BlockId,
                       interlinks: Seq[Array[Byte]],
                       stateRoot: Array[Byte],
                       transactionsRoot: Array[Byte],
                       timestamp: Block.Timestamp,
                       nonce: Int) extends ErgoBlock {
   override def transactions: Option[Seq[AnyoneCanSpendTransaction]] = None
-
-  override def version: Version = 0.toByte
 
   override val modifierTypeId: ModifierTypeId = ErgoHeader.ModifierTypeId
 
@@ -55,7 +53,7 @@ case class ErgoHeader(parentId: BlockId,
 }
 
 object ErgoHeader {
-  val ModifierTypeId = 1: Byte
+  val ModifierTypeId = 10: Byte
 }
 
 object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
@@ -75,15 +73,16 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
         interlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
       }
     }
-    Bytes.concat(bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
+    Bytes.concat(Array(h.version), bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
   }
 
   override def parseBytes(bytes: Array[Version]): Try[ErgoHeader] = Try {
-    val parentId = bytes.slice(0, 32)
-    val transactionsRoot = bytes.slice(32, 64)
-    val stateRoot = bytes.slice(64, 96)
-    val timestamp = Longs.fromByteArray(bytes.slice(96, 104))
-    val nonce = Ints.fromByteArray(bytes.slice(104, 108))
+    val version = bytes.head
+    val parentId = bytes.slice(1, 33)
+    val transactionsRoot = bytes.slice(33, 65)
+    val stateRoot = bytes.slice(65, 97)
+    val timestamp = Longs.fromByteArray(bytes.slice(97, 105))
+    val nonce = Ints.fromByteArray(bytes.slice(105, 109))
     @tailrec
     def parseInnerchainLinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
@@ -93,9 +92,9 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
     } else {
       acc
     }
-    val innerchainLinks = parseInnerchainLinks(108, Seq())
+    val innerchainLinks = parseInnerchainLinks(109, Seq())
 
-    ErgoHeader(parentId, innerchainLinks, stateRoot, transactionsRoot, timestamp, nonce)
+    ErgoHeader(version, parentId, innerchainLinks, stateRoot, transactionsRoot, timestamp, nonce)
   }
 }
 

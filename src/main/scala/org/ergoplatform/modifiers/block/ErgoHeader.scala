@@ -9,6 +9,7 @@ import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
+import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
@@ -54,11 +55,17 @@ case class ErgoHeader(parentId: BlockId,
 }
 
 object ErgoHeader {
-  val ModifierTypeId = 0: Byte
+  val ModifierTypeId = 1: Byte
 }
 
 object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
-  override def toBytes(h: ErgoHeader): Array[Byte] = {
+  override def toBytes(h: ErgoHeader): Array[Version] = {
+    val BytesWithoutInterlinksLength = 108
+
+    def bytesWithoutInterlinks(h: ErgoHeader): Array[Byte] = {
+      Bytes.concat(h.parentId, h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Ints.toByteArray(h.nonce))
+    }
+
     def interlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
         acc
@@ -71,13 +78,7 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
     Bytes.concat(bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
   }
 
-  val BytesWithoutInterlinksLength = 108
-
-  def bytesWithoutInterlinks(h: ErgoHeader): Array[Byte] = {
-    Bytes.concat(h.parentId, h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Ints.toByteArray(h.nonce))
-  }
-
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoHeader] = Try {
+  override def parseBytes(bytes: Array[Version]): Try[ErgoHeader] = Try {
     val parentId = bytes.slice(0, 32)
     val transactionsRoot = bytes.slice(32, 64)
     val stateRoot = bytes.slice(64, 96)
@@ -96,5 +97,5 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
 
     ErgoHeader(parentId, innerchainLinks, stateRoot, transactionsRoot, timestamp, nonce)
   }
-
 }
+

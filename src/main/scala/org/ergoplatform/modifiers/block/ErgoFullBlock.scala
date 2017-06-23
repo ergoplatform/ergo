@@ -12,24 +12,26 @@ import scala.util.Try
 
 case class ErgoFullBlock(header: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]) extends ErgoBlock {
 
-
   override lazy val version: Version = header.version
 
   override lazy val timestamp: Timestamp = header.timestamp
 
   override lazy val parentId: ModifierId = header.parentId
 
-  override val json: Json = header.json
+  override lazy val json: Json = header.json
 
-  override val transactions: Option[Seq[AnyoneCanSpendTransaction]] = Some(txs)
+  override lazy val transactions: Option[Seq[AnyoneCanSpendTransaction]] = Some(txs)
 
-  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.ModifierTypeId
+  override lazy val modifierTypeId: ModifierTypeId = ErgoFullBlock.ModifierTypeId
 
-  override val id: ModifierId = header.id
+  override lazy val id: ModifierId = header.id
 
   override type M = ErgoFullBlock
 
-  override def serializer: Serializer[ErgoFullBlock] = ErgoFullBlockSerializer
+  override lazy val serializer: Serializer[ErgoFullBlock] = ErgoFullBlockSerializer
+
+  override lazy val toString: String = s"ErgoFullBlock(${json.noSpaces})"
+
 }
 
 object ErgoFullBlock {

@@ -29,7 +29,7 @@ case class ErgoHeader(version: Version,
 
   lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
 
-  override def json: Json = Map(
+  override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
     "innerchainLinks" -> interlinks.map(l => Base58.encode(l).asJson).asJson,
     "transactionsRoot" -> Base58.encode(transactionsRoot).asJson,
@@ -40,11 +40,11 @@ case class ErgoHeader(version: Version,
   ).asJson
 
 
-  override def toString: String = s"Header(${json.noSpaces})"
+  override lazy val toString: String = s"Header(${json.noSpaces})"
 
   override type M = ErgoHeader
 
-  override def serializer: Serializer[ErgoHeader] = ErgoHeaderSerializer
+  override lazy val serializer: Serializer[ErgoHeader] = ErgoHeaderSerializer
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case that: ErgoHeader => id sameElements that.id

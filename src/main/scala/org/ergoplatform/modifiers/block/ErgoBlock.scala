@@ -11,23 +11,9 @@ import scorex.core.utils.ScorexLogging
 import scala.util.Try
 
 trait ErgoBlock extends PersistentNodeViewModifier[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]
-  with Block[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]
-
-object ErgoBlockSerializer extends Serializer[ErgoBlock] with ScorexLogging {
-
-  override def toBytes(block: ErgoBlock): Array[Byte] = {
-    Bytes.concat(Array(block.modifierTypeId), block.bytes)
-  }
-  
-  override def parseBytes(bytesAll: Array[Byte]): Try[ErgoBlock] = Try {
-    lazy val blockBytes = bytesAll.tail
-    bytesAll.head match {
-      case ErgoHeader.ModifierTypeId =>
-        ErgoHeaderSerializer.parseBytes(blockBytes).get
-
-      case m =>
-        throw new Error(s"Unknown block type ${m}")
-    }
-  }
+  with Block[AnyoneCanSpendProposition, AnyoneCanSpendTransaction] {
+  def stateRoot: Array[Byte]
+  val nonce: Int
 
 }
+

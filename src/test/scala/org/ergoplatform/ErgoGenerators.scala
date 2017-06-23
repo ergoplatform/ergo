@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoHeader}
+import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoFullBlock, ErgoHeader}
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -49,7 +49,16 @@ trait ErgoGenerators extends CoreGenerators {
     timestamp <- positiveLongGen
   } yield ErgoHeader(version, parentId, interlinks, stateRoot, transactionsRoot, timestamp, nonce)
 
-  //TODO add full block here
-  lazy val ergoBlockGen: Gen[ErgoBlock] = ergoHeaderGen
+  lazy val ergoFullBlockGen: Gen[ErgoFullBlock] = for {
+    version <- Arbitrary.arbitrary[Byte]
+    parentId <- genBytesList(Constants.ModifierIdSize)
+    stateRoot <- genBytesList(Constants.ModifierIdSize)
+    transactions <- Gen.listOf(anyoneCanSpendTransactionGen)
+    nonce <- Arbitrary.arbitrary[Int]
+    interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
+    timestamp <- positiveLongGen
+  } yield ErgoFullBlock(version, parentId, interlinks, stateRoot, transactions, timestamp, nonce)
+
+  lazy val ergoBlockGen: Gen[ErgoBlock] = Gen.oneOf(ergoHeaderGen, ergoFullBlockGen)
 
 }

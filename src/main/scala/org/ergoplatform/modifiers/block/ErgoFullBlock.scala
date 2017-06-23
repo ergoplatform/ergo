@@ -18,6 +18,7 @@ case class ErgoFullBlock(header: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]
 
   override lazy val parentId: ModifierId = header.parentId
 
+  //TODO add transactions here
   override lazy val json: Json = header.json
 
   override lazy val transactions: Option[Seq[AnyoneCanSpendTransaction]] = Some(txs)

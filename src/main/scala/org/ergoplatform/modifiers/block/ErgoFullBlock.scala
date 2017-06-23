@@ -5,25 +5,19 @@ import io.circe.Json
 import org.ergoplatform.modifiers.transaction.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
-import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-case class ErgoFullBlock(version: Version,
-                         parentId: BlockId,
-                         interlinks: Seq[Array[Byte]],
-                         stateRoot: Array[Byte],
-                         txs: Seq[AnyoneCanSpendTransaction],
-                         timestamp: Block.Timestamp,
-                         nonce: Int) extends ErgoBlock {
+case class ErgoFullBlock(header: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]) extends ErgoBlock {
 
-  //TODO Implement
-  val transactionsRootHash: Array[Byte] = Constants.hash(txs.headOption.map(_.bytes).getOrElse("empty".getBytes))
 
-  //TODO Block version == Header version ??
-  val header = ErgoHeader(version, parentId, interlinks, stateRoot, transactionsRootHash, timestamp, nonce)
+  override lazy val version: Version = header.version
+
+  override lazy val timestamp: Timestamp = header.timestamp
+
+  override lazy val parentId: ModifierId = header.parentId
 
   override val json: Json = header.json
 
@@ -41,8 +35,20 @@ case class ErgoFullBlock(version: Version,
 object ErgoFullBlock {
   val ModifierTypeId = 11: Byte
 
-  def apply(h: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
-    ErgoFullBlock(h.version, h.parentId, h.interlinks, h.stateRoot, txs, h.timestamp, h.nonce)
+  def apply(version: Version,
+            parentId: BlockId,
+            interlinks: Seq[Array[Version]],
+            stateRoot: Array[Version],
+            txs: Seq[AnyoneCanSpendTransaction],
+            timestamp: Timestamp,
+            nonce: Int): ErgoFullBlock = {
+    val header = ErgoHeader(version, parentId, interlinks, stateRoot, calcTransactionsRootHash(txs), timestamp, nonce)
+    ErgoFullBlock(header, txs)
+  }
+
+  def calcTransactionsRootHash(txs: Seq[AnyoneCanSpendTransaction]): Array[Byte] = {
+    //TODO Implement
+    Constants.hash(txs.headOption.map(_.bytes).getOrElse("empty".getBytes))
   }
 }
 

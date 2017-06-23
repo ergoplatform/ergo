@@ -19,7 +19,7 @@ class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLo
     ByteArrayWrapper(Blake2b256("height".getBytes ++ blockId))
 
   def insert(b: ErgoBlock, isBest: Boolean): Unit = {
-    val bHeight = heightOf(b.parentId).get + 1
+    val bHeight = if(b.id sameElements settings.genesisId) 1 else heightOf(b.parentId).get + 1
     val blockH: (ByteArrayWrapper, ByteArrayWrapper) = (blockHeightKey(b.id), ByteArrayWrapper(Longs.toByteArray(bHeight)))
     val bestBlockSeq: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (isBest) {
       Seq(bestBlockIdKey -> ByteArrayWrapper(b.id))
@@ -30,7 +30,7 @@ class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLo
     storage.update(
       ByteArrayWrapper(b.id),
       Seq(),
-      Seq(blockH) ++ bestBlockSeq ++ Seq(ByteArrayWrapper(b.id) -> ByteArrayWrapper(b.bytes)))
+      Seq(blockH) ++ bestBlockSeq ++ Seq(ByteArrayWrapper(b.id) -> ByteArrayWrapper(ErgoBlockSerializer.toBytes(b))))
   }
 
   def drop(id: ModifierId): Unit = {
@@ -60,7 +60,13 @@ class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLo
 
   def bestBlockId: Array[Byte] = storage.get(bestBlockIdKey).map(_.data).getOrElse(settings.genesisId)
 
-  def bestBlock: ErgoBlock = modifierById(bestBlockId).get
+  def bestBlock: ErgoBlock = {
+//    if(bestBlockId sameElements settings.genesisId) {
+//      settings.genesisBlock
+//    } else {
+      modifierById(bestBlockId).get
+//    }
+  }
 
   def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))
     .map(b => Ints.fromByteArray(b.data))

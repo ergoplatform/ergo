@@ -23,9 +23,9 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
 
   val bestBlock: ErgoBlock = storage.bestBlock
   val bestBlockId: ModifierId = bestBlock.id
-  val height: Int = storage.heightOf(bestBlockId).get
+  val height: Int = storage.heightOf(bestBlockId).getOrElse(0)
 
-  override def isEmpty: Boolean = storage.height == 1
+  override def isEmpty: Boolean = storage.height == 0
 
   override def modifierById(id: ModifierId): Option[ErgoBlock] = storage.modifierById(id)
 
@@ -160,6 +160,7 @@ object ErgoHistory extends ScorexLogging {
     })
 
     val storage = new HistoryStorage(blockStorage, settings)
+    if(storage.bestBlockId sameElements settings.genesisId) storage.insert(settings.genesisBlock, isBest = true)
     val validators = Seq()
 
     new ErgoHistory(storage, validators, settings)

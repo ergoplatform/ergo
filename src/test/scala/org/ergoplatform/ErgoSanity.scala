@@ -30,7 +30,7 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   ErgoHistory] with ErgoGenerators {
 
   val settings: ErgoSettings = new ErgoSettings {
-    override val settingsJSON: Map[String, circe.Json] = Map()
+    override def settingsJSON: Map[String, circe.Json] = Map()
   }
 
 

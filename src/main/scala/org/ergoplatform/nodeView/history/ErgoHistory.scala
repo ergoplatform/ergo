@@ -52,7 +52,7 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
     //TODO don't put settings.maxRollback blocks in memory
     val currentChain = lastBlocks(settings.maxRollback)
     val parent = modifierById(block.parentId).get
-    def until(b: ErgoBlock): Boolean = isGenesis(b) || currentChain.exists(_.id sameElements b.id)
+    def until(b: ErgoBlock): Boolean = b.isGenesis || currentChain.exists(_.id sameElements b.id)
     val toApply = chainBack(settings.maxRollback, parent, until)
     storage.insert(block, isBest = true)
     val bestCommon = toApply.head
@@ -63,7 +63,7 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
   }
 
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = {
-    def until(b: ErgoBlock): Boolean = isGenesis(b) || other.lastBlockIds.exists(_ sameElements b.id)
+    def until(b: ErgoBlock): Boolean = b.isGenesis || other.lastBlockIds.exists(_ sameElements b.id)
     chainBack(settings.maxRollback + 1, bestBlock, until) match {
       case last: Seq[ErgoBlock] if last.length > settings.maxRollback =>
         HistoryComparisonResult.Nonsense
@@ -105,7 +105,7 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
 
   override def continuationIds(from: ModifierIds, size: Int): Option[ModifierIds] = {
     val bestcommonPoint: Int = from.flatMap(f => storage.heightOf(f._2)).max
-    def until(b: ErgoBlock): Boolean = isGenesis(b) || from.exists(_._2 sameElements b.id)
+    def until(b: ErgoBlock): Boolean = b.isGenesis || from.exists(_._2 sameElements b.id)
     val last = chainBack(size + 1, bestBlock, until)
     if (last.length > size) None
     else Some(last.map(b => (b.modifierTypeId, b.id)))
@@ -115,7 +115,7 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
     lastBlocks(ErgoSyncInfo.MaxBlockIds).map(_.id))
 
   private def lastBlocks(count: Int): Seq[ErgoBlock] = {
-    def until(b: ErgoBlock): Boolean = isGenesis(b)
+    def until(b: ErgoBlock): Boolean = b.isGenesis
     chainBack(count, bestBlock, until)
   }
 
@@ -138,8 +138,6 @@ class ErgoHistory(storage: HistoryStorage, validators: Seq[BlockValidator[ErgoBl
     else loop(count, startBlock, Seq(startBlock))
   }
 
-  def isGenesis(b: ErgoBlock): Boolean = b.id sameElements settings.genesisId
-
   override type NVCT = ErgoHistory
 }
 
@@ -160,7 +158,7 @@ object ErgoHistory extends ScorexLogging {
     })
 
     val storage = new HistoryStorage(blockStorage, settings)
-    if(storage.bestBlockId sameElements settings.genesisId) storage.insert(settings.genesisBlock, isBest = true)
+    if (storage.bestBlockId sameElements settings.genesisId) storage.insert(settings.genesisBlock, isBest = true)
     val validators = Seq()
 
     new ErgoHistory(storage, validators, settings)

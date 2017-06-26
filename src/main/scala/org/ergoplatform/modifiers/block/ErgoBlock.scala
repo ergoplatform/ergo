@@ -6,4 +6,6 @@ import scorex.core.PersistentNodeViewModifier
 import scorex.core.block.Block
 
 trait ErgoBlock extends PersistentNodeViewModifier[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]
-  with Block[AnyoneCanSpendProposition, AnyoneCanSpendTransaction]
+  with Block[AnyoneCanSpendProposition, AnyoneCanSpendTransaction] {
+  def isGenesis: Boolean
+}

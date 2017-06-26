@@ -1,7 +1,8 @@
 package org.ergoplatform
 
 import io.circe
-import org.ergoplatform.modifiers.block.ErgoBlock
+import org.ergoplatform.mining.Miner
+import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoHeader}
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -10,7 +11,9 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
+import scorex.core.block.Block._
 import scorex.core.transaction.state.StateChanges
+import scorex.core.utils.NetworkTime
 import scorex.testkit.{BlockchainPerformance, BlockchainSanity}
 
 class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
@@ -45,5 +48,11 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
 
   override val stateChangesGenerator: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = stateChangesGen
 
-  override def genValidModifier(history: ErgoHistory): ErgoBlock = ???
+  override def genValidModifier(history: ErgoHistory): ErgoBlock = {
+    Miner.genBlock(BigInt(1),
+      history.bestBlock,
+      Array.fill(32)(0.toByte),
+      Array.fill(32)(0.toByte),
+      NetworkTime.time())
+  }
 }

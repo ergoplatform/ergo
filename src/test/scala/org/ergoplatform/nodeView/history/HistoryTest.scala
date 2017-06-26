@@ -12,6 +12,7 @@ import org.scalatest.{Matchers, PropSpec}
 import scorex.core.utils.NetworkTime
 import scorex.testkit.TestkitHelpers
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 class HistoryTest extends PropSpec
@@ -28,20 +29,20 @@ class HistoryTest extends PropSpec
   new File(settings.dataDir).mkdirs()
 
 
-  def genValidBlock(history: ErgoHistory): ErgoFullBlock =  {
-    Miner.genBlock(BigInt(1),
-      history.bestHeader,
-      Array.fill(32)(0.toByte),
-      Seq(),
-      NetworkTime.time())
+  @tailrec
+  final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
+    acc.reverse
+  } else {
+    val block = Miner.genBlock(BigInt(1), acc.head.header, Array.fill(32)(0.toByte), Seq(), NetworkTime.time())
+    genChain(height - 1,  block +: acc)
   }
 
   val history = ErgoHistory.readOrGenerate(settings)
 
   property("Appended headers and blocks to best chain in history") {
     var h = history
-    check { _ =>
-      val block = genValidBlock(h)
+    val chain = genChain(100, Seq(h.bestFullBlock)).tail
+    chain.foreach { block =>
       val header = block.header
       val inBestBlock = h.bestFullBlock
 

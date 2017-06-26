@@ -33,7 +33,11 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
 
   override def isEmpty: Boolean = fullBlockStorage.height == 0
 
-  override def modifierById(id: ModifierId): Option[ErgoBlock] = fullBlockStorage.modifierById(id)
+  override def modifierById(id: ModifierId): Option[ErgoBlock] = fullBlockById(id).orElse(headerById(id))
+
+  def fullBlockById(id: ModifierId): Option[ErgoFullBlock] = fullBlockStorage.modifierById(id)
+
+  def headerById(id: ModifierId): Option[ErgoHeader] = headerStorage.modifierById(id)
 
   override def append(block: ErgoBlock): Try[(ErgoHistory, ProgressInfo[ErgoBlock])] = Try {
     log.debug(s"Trying to append block ${Base58.encode(block.id)} to history")
@@ -112,7 +116,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   override def openSurfaceIds(): Seq[ModifierId] = Seq(bestFullBlockId)
 
   override def applicable(modifier: ErgoBlock): Boolean = !contains(modifier.id) &&
-    fullBlockStorage.heightOf(modifier.parentId).exists(_ > fullBlocksHeight - settings.maxRollback)
+    storageOf(modifier).heightOf(modifier.parentId).exists(_ > fullBlocksHeight - settings.maxRollback)
+
 
   override def continuationIds(from: ModifierIds, size: Int): Option[ModifierIds] = {
     val bestcommonPoint: Int = from.flatMap(f => fullBlockStorage.heightOf(f._2)).max

@@ -12,6 +12,8 @@ import scala.util.Try
 
 case class ErgoFullBlock(header: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]) extends ErgoBlock {
 
+  override lazy val isGenesis: Boolean = header.isGenesis
+
   override lazy val version: Version = header.version
 
   override lazy val timestamp: Timestamp = header.timestamp

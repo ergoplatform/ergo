@@ -61,11 +61,7 @@ class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLo
   def bestBlockId: Array[Byte] = storage.get(bestBlockIdKey).map(_.data).getOrElse(settings.genesisId)
 
   def bestBlock: ErgoBlock = {
-//    if(bestBlockId sameElements settings.genesisId) {
-//      settings.genesisBlock
-//    } else {
-      modifierById(bestBlockId).get
-//    }
+     modifierById(bestBlockId).get
   }
 
   def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))

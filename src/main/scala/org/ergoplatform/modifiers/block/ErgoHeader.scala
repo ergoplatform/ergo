@@ -50,6 +50,8 @@ case class ErgoHeader(version: Version,
     case that: ErgoHeader => id sameElements that.id
     case _ => false
   }
+
+  lazy val isGenesis: Boolean = interlinks.isEmpty
 }
 
 object ErgoHeader {

@@ -48,6 +48,8 @@ class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: Modifier
 
   def height: Int = heightOf(bestBlockId).get
 
+  def contains(id: ModifierId): Boolean = modifierById(id).isDefined
+
   def modifierById(id: ModifierId): Option[BlockT] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     ErgoBlockSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>

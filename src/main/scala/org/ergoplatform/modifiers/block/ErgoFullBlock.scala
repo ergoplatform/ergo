@@ -35,6 +35,10 @@ case class ErgoFullBlock(header: ErgoHeader, txs: Seq[AnyoneCanSpendTransaction]
 
   override lazy val toString: String = s"ErgoFullBlock(${json.noSpaces})"
 
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case that: ErgoFullBlock => that.id sameElements id
+    case _ => false
+  }
 }
 
 object ErgoFullBlock {

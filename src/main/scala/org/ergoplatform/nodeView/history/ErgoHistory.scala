@@ -24,7 +24,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoBlock, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
-  val bestFullBlock: ErgoBlock = fullBlockStorage.bestBlock
+  val bestFullBlock: ErgoFullBlock = fullBlockStorage.bestBlock
   val bestHeader: ErgoHeader = headerStorage.bestBlock
   lazy val bestFullBlockId: ModifierId = bestFullBlock.id
   lazy val bestHeaderId: ModifierId = bestHeader.id
@@ -43,11 +43,11 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     log.debug(s"Trying to append block ${Base58.encode(block.id)} to history")
     require(applicable(block))
     validate(block).get
-    val progress: ProgressInfo[ErgoBlock] = if (block.parentId sameElements bestFullBlockId) {
+    val progress: ProgressInfo[ErgoBlock] = if (block.parentId sameElements storageOf(block).bestBlockId) {
       //new block at the end of a chain
       storageOf(block).insert(block, isBest = true)
       ProgressInfo(None, Seq(), Seq(block))
-    } else if (fullBlockStorage.heightOf(block.parentId) == fullBlockStorage.heightOf(bestFullBlockId)) {
+    } else if (storageOf(block).heightOf(block.parentId) == storageOf(block).heightOf(storageOf(block).bestBlockId)) {
       log.debug(s"New best fork with block ${block.encodedId}")
       processFork(block).get
     } else {
@@ -115,9 +115,21 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
 
   override def openSurfaceIds(): Seq[ModifierId] = Seq(bestFullBlockId)
 
-  override def applicable(modifier: ErgoBlock): Boolean = !contains(modifier.id) &&
-    storageOf(modifier).heightOf(modifier.parentId).exists(_ > fullBlocksHeight - settings.maxRollback)
+  override def applicable(modifier: ErgoBlock): Boolean = {
+    val containsHeaderForFullBlock = modifier match {
+      case f: ErgoFullBlock => contains(f.header)
+      case _ => true
+    }
+    !contains(modifier) && containsHeaderForFullBlock &&
+      storageOf(modifier).heightOf(modifier.parentId).exists(_ > fullBlocksHeight - settings.maxRollback)
+  }
 
+  override def contains(pm: ErgoBlock): Boolean = storageOf(pm).contains(pm.id)
+
+  override def contains(id: ModifierId): Boolean = {
+    //TODO what if we have Header but don't have FullBlock??
+    fullBlockStorage.contains(id) && headerStorage.contains(id)
+  }
 
   override def continuationIds(from: ModifierIds, size: Int): Option[ModifierIds] = {
     val bestcommonPoint: Int = from.flatMap(f => fullBlockStorage.heightOf(f._2)).max

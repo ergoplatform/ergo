@@ -48,7 +48,7 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   override val stateChangesGenerator: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = stateChangesGen
 
   override def genValidModifier(history: ErgoHistory): ErgoBlock = {
-    Miner.genBlock(BigInt(1),
+    Miner.genHeader(BigInt(1),
       history.bestHeader,
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),

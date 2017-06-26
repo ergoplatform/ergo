@@ -3,23 +3,23 @@ package org.ergoplatform.nodeView.history
 import com.google.common.primitives.{Ints, Longs}
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoBlockSerializer}
-import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier._
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
-class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLogging {
+class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
+
 
   private val bestBlockIdKey = ByteArrayWrapper(Array.fill(storage.keySize)(-1: Byte))
 
   private def blockHeightKey(blockId: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256("height".getBytes ++ blockId))
 
-  def insert(b: ErgoBlock, isBest: Boolean): Unit = {
-    val bHeight = if(b.id sameElements settings.genesisId) 1 else heightOf(b.parentId).get + 1
+  def insert(b: BlockT, isBest: Boolean): Unit = {
+    val bHeight = if (b.isGenesis) 1 else heightOf(b.parentId).get + 1
     val blockH: (ByteArrayWrapper, ByteArrayWrapper) = (blockHeightKey(b.id), ByteArrayWrapper(Longs.toByteArray(bHeight)))
     val bestBlockSeq: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (isBest) {
       Seq(bestBlockIdKey -> ByteArrayWrapper(b.id))
@@ -48,20 +48,21 @@ class HistoryStorage(storage: LSMStore, settings: ErgoSettings) extends ScorexLo
 
   def height: Int = heightOf(bestBlockId).get
 
-  def modifierById(id: ModifierId): Option[ErgoBlock] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
+  def modifierById(id: ModifierId): Option[BlockT] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     ErgoBlockSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>
-        Some(b)
+        //TODO asInstanceOf
+        Try(b.asInstanceOf[BlockT]).toOption
       case Failure(e) =>
         log.warn("Failed to parse block from db", e)
         None
     }
   }
 
-  def bestBlockId: Array[Byte] = storage.get(bestBlockIdKey).map(_.data).getOrElse(settings.genesisId)
+  def bestBlockId: Array[Byte] = storage.get(bestBlockIdKey).map(_.data).getOrElse(genesisId)
 
-  def bestBlock: ErgoBlock = {
-     modifierById(bestBlockId).get
+  def bestBlock: BlockT = {
+    modifierById(bestBlockId).get
   }
 
   def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))

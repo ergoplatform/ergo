@@ -35,7 +35,7 @@ object Miner {
   }
 
   private def constructInterlinkVector(parent: ErgoHeader): Seq[Array[Byte]] = {
-    val genesisId = parent.interlinks.head
+    val genesisId = if(parent.isGenesis) parent.id else parent.interlinks.head
 
     def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
       if (parent.realDifficulty >= curDifficulty) {

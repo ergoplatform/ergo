@@ -41,7 +41,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
 
   override def append(block: ErgoBlock): Try[(ErgoHistory, ProgressInfo[ErgoBlock])] = Try {
     log.debug(s"Trying to append block ${Base58.encode(block.id)} to history")
-    require(applicable(block))
+    applicableTry(block).get
     validate(block).get
     val progress: ProgressInfo[ErgoBlock] = if (block.parentId sameElements storageOf(block).bestBlockId) {
       //new block at the end of a chain
@@ -109,19 +109,29 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   }
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
+    //TODO should we drop from both storages?
+    headerStorage.drop(modifierId)
     fullBlockStorage.drop(modifierId)
     new ErgoHistory(fullBlockStorage, headerStorage, validators, settings)
   }
 
   override def openSurfaceIds(): Seq[ModifierId] = Seq(bestFullBlockId)
 
-  override def applicable(modifier: ErgoBlock): Boolean = {
+  override def applicable(modifier: ErgoBlock): Boolean = applicableTry(modifier).isSuccess
+
+  def applicableTry(modifier: ErgoBlock): Try[Unit] = Try {
+    require(!contains(modifier), s"Block $modifier is already in history")
     val containsHeaderForFullBlock = modifier match {
-      case f: ErgoFullBlock => contains(f.header)
-      case _ => true
+      case f: ErgoFullBlock => require(contains(f.header), s"Should first apply header for full block $modifier")
+      case _ =>
     }
-    !contains(modifier) && containsHeaderForFullBlock &&
-      storageOf(modifier).heightOf(modifier.parentId).exists(_ > fullBlocksHeight - settings.maxRollback)
+    storageOf(modifier).heightOf(modifier.parentId) match {
+      case None =>
+        throw new Error(s"Parent for $modifier is not in history")
+      case Some(h) if h < storageOf(modifier).height - settings.maxRollback=>
+        throw new Error(s"Modifier $modifier is too old")
+      case _ =>
+    }
   }
 
   override def contains(pm: ErgoBlock): Boolean = storageOf(pm).contains(pm.id)

@@ -5,7 +5,7 @@ import java.io.File
 import io.circe
 import org.ergoplatform.ErgoGenerators
 import org.ergoplatform.mining.Miner
-import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
+import org.ergoplatform.modifiers.block.ErgoFullBlock
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -34,42 +34,62 @@ class HistoryTest extends PropSpec
     acc.reverse
   } else {
     val block = Miner.genBlock(BigInt(1), acc.head.header, Array.fill(32)(0.toByte), Seq(), NetworkTime.time())
-    genChain(height - 1,  block +: acc)
+    genChain(height - 1, block +: acc)
   }
 
-  val history = ErgoHistory.readOrGenerate(settings)
+  var history = ErgoHistory.readOrGenerate(settings)
 
   property("Appended headers and blocks to best chain in history") {
-    var h = history
-    val chain = genChain(100, Seq(h.bestFullBlock)).tail
+    val chain = genChain(100, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val header = block.header
-      val inBestBlock = h.bestFullBlock
+      val inBestBlock = history.bestFullBlock
 
-      h.contains(header) shouldBe false
-      h.contains(block) shouldBe false
-      h.applicable(header) shouldBe true
-      h.applicable(block) shouldBe false
-      h.bestHeader shouldBe inBestBlock.header
-      h.bestFullBlock shouldBe inBestBlock
+      history.contains(header) shouldBe false
+      history.contains(block) shouldBe false
+      history.applicable(header) shouldBe true
+      history.applicable(block) shouldBe false
+      history.bestHeader shouldBe inBestBlock.header
+      history.bestFullBlock shouldBe inBestBlock
 
-      h = h.append(header).get._1
+      history = history.append(header).get._1
 
-      h.contains(header) shouldBe true
-      h.contains(block) shouldBe false
-      h.applicable(header) shouldBe false
-      h.applicable(block) shouldBe true
-      h.bestHeader shouldBe header
-      h.bestFullBlock shouldBe inBestBlock
+      history.contains(header) shouldBe true
+      history.contains(block) shouldBe false
+      history.applicable(header) shouldBe false
+      history.applicable(block) shouldBe true
+      history.bestHeader shouldBe header
+      history.bestFullBlock shouldBe inBestBlock
 
-      h = h.append(block).get._1
+      history = history.append(block).get._1
 
-      h.contains(header) shouldBe true
-      h.contains(block) shouldBe true
-      h.applicable(header) shouldBe false
-      h.applicable(block) shouldBe false
-      h.bestHeader shouldBe header
-      h.bestFullBlock shouldBe block
+      history.contains(header) shouldBe true
+      history.contains(block) shouldBe true
+      history.applicable(header) shouldBe false
+      history.applicable(block) shouldBe false
+      history.bestHeader shouldBe header
+      history.bestFullBlock shouldBe block
+    }
+  }
+
+  property("Drop last block from history") {
+    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    chain.foreach { block =>
+      val header = block.header
+      val inBestBlock = history.bestFullBlock
+
+      history.bestHeader shouldBe inBestBlock.header
+      history.bestFullBlock shouldBe inBestBlock
+
+      history = history.append(header).get._1.append(block).get._1
+
+      history.bestHeader shouldBe header
+      history.bestFullBlock shouldBe block
+
+      history = history.drop(header.id)
+
+      history.bestHeader shouldBe inBestBlock.header
+      history.bestFullBlock shouldBe inBestBlock
     }
   }
 

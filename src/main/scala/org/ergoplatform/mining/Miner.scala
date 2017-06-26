@@ -1,21 +1,30 @@
 package org.ergoplatform.mining
 
-import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.block.ErgoHeader
+import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
+import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
-import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
-import scala.util.{Random, Try}
+import scala.util.Random
 
 object Miner {
 
   def genBlock(difficulty: BigInt,
                parent: ErgoHeader,
                stateRoot: Array[Version],
-               transactionsRoot: Array[Version],
-               timestamp: Timestamp): ErgoHeader = {
+               transactions: Seq[AnyoneCanSpendTransaction],
+               timestamp: Timestamp): ErgoFullBlock = {
+    val transactionsRoot = ErgoFullBlock.calcTransactionsRootHash(transactions)
+    val h = genHeader(difficulty, parent, stateRoot, transactionsRoot, timestamp)
+    ErgoFullBlock(h, transactions)
+  }
+
+  def genHeader(difficulty: BigInt,
+                parent: ErgoHeader,
+                stateRoot: Array[Version],
+                transactionsRoot: Array[Version],
+                timestamp: Timestamp): ErgoHeader = {
     val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent)
     else Seq(parent.id)
 
@@ -35,7 +44,7 @@ object Miner {
   }
 
   private def constructInterlinkVector(parent: ErgoHeader): Seq[Array[Byte]] = {
-    val genesisId = if(parent.isGenesis) parent.id else parent.interlinks.head
+    val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
 
     def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
       if (parent.realDifficulty >= curDifficulty) {

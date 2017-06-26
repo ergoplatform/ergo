@@ -5,7 +5,7 @@ import java.io.File
 import io.circe
 import org.ergoplatform.ErgoGenerators
 import org.ergoplatform.mining.Miner
-import org.ergoplatform.modifiers.block.ErgoHeader
+import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -27,23 +27,48 @@ class HistoryTest extends PropSpec
   }
   new File(settings.dataDir).mkdirs()
 
-  def genValidHeader(history: ErgoHistory): ErgoHeader =  {
+
+  def genValidBlock(history: ErgoHistory): ErgoFullBlock =  {
     Miner.genBlock(BigInt(1),
       history.bestHeader,
       Array.fill(32)(0.toByte),
-      Array.fill(32)(0.toByte),
+      Seq(),
       NetworkTime.time())
   }
 
   val history = ErgoHistory.readOrGenerate(settings)
 
-  property("Appended block is in history") {
+  property("Appended headers and blocks to best chain in history") {
     var h = history
     check { _ =>
-      val header = genValidHeader(h)
-      h.modifierById(header.id).isDefined shouldBe false
+      val block = genValidBlock(h)
+      val header = block.header
+      val inBestBlock = h.bestFullBlock
+
+      h.contains(header) shouldBe false
+      h.contains(block) shouldBe false
+      h.applicable(header) shouldBe true
+      h.applicable(block) shouldBe false
+      h.bestHeader shouldBe inBestBlock.header
+      h.bestFullBlock shouldBe inBestBlock
+
       h = h.append(header).get._1
-      h.modifierById(header.id).isDefined shouldBe true
+
+      h.contains(header) shouldBe true
+      h.contains(block) shouldBe false
+      h.applicable(header) shouldBe false
+      h.applicable(block) shouldBe true
+      h.bestHeader shouldBe header
+      h.bestFullBlock shouldBe inBestBlock
+
+      h = h.append(block).get._1
+
+      h.contains(header) shouldBe true
+      h.contains(block) shouldBe true
+      h.applicable(header) shouldBe false
+      h.applicable(block) shouldBe false
+      h.bestHeader shouldBe header
+      h.bestFullBlock shouldBe block
     }
   }
 

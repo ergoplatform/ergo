@@ -58,7 +58,7 @@ class HistoryTest extends PropSpec
       history.headersHeight shouldBe (inHeight + 1)
       history.fullBlocksHeight shouldBe (inHeight + 1)
     }
-    chain.foreach (block => history.heightOf(block).isDefined shouldBe true)
+    chain.foreach(block => history.heightOf(block).isDefined shouldBe true)
   }
 
 
@@ -67,8 +67,10 @@ class HistoryTest extends PropSpec
     val chain = genChain(blocksToApply, Seq(history.bestFullBlock)).tail
     history = applyChain(history, chain)
     history.fullBlocksHeight should be > blocksToApply
-    history.lastBlocks(blocksToApply).length shouldBe blocksToApply
-
+    val lastBlocks = history.lastBlocks(blocksToApply)
+    lastBlocks.length shouldBe blocksToApply
+    lastBlocks.foreach(b => assert(chain.contains(b)))
+    lastBlocks.last shouldBe history.bestFullBlock
   }
 
   property("Appended headers and blocks to best chain in history") {
@@ -77,7 +79,7 @@ class HistoryTest extends PropSpec
       val header = block.header
       val inBestBlock = history.bestFullBlock
       val inHeight = history.fullBlocksHeight
-        history.headersHeight shouldBe inHeight
+      history.headersHeight shouldBe inHeight
 
       history.contains(header) shouldBe false
       history.contains(block) shouldBe false

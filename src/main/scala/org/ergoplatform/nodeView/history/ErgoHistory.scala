@@ -73,9 +73,10 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     val toApply = chainBack(settings.maxRollback, parent, until)
     storageOf(block).insert(block, isBest = true)
     val bestCommon = toApply.head
+    assert(currentChain.exists(_.id sameElements bestCommon.id), "No common block found")
     val i = currentChain.indexWhere(_.id sameElements bestCommon.id)
     val toRollback = currentChain.takeRight(currentChain.length - i)
-    assert(toRollback.head.id sameElements bestCommon.id)
+    assert(toRollback.head == bestCommon, s"${toRollback.head} == $bestCommon")
     ProgressInfo(Some(bestCommon.id), toRollback, toApply)
   }
 
@@ -130,7 +131,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     storageOf(modifier).heightOf(modifier.parentId) match {
       case None =>
         throw new Error(s"Parent for $modifier is not in history")
-      case Some(h) if h < storageOf(modifier).height - settings.maxRollback=>
+      case Some(h) if h < storageOf(modifier).height - settings.maxRollback =>
         throw new Error(s"Modifier $modifier is too old")
       case _ =>
     }
@@ -176,7 +177,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
       }
     }
     if (isEmpty) Seq()
-    else loop(count, startBlock, Seq(startBlock))
+    else loop(count, startBlock, Seq(startBlock)).reverse
   }
 
   override type NVCT = ErgoHistory

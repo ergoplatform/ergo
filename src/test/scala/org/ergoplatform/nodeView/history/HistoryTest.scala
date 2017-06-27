@@ -45,11 +45,12 @@ class HistoryTest extends PropSpec
     history
   }
 
+  val BlocksInChain = 30
 
   var history = ErgoHistory.readOrGenerate(settings)
 
   property("modifierById() should return correct type") {
-    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       history.modifierById(block.id).isDefined shouldBe false
 
@@ -66,7 +67,7 @@ class HistoryTest extends PropSpec
   }
 
   property("heightOf() should return height of all blocks") {
-    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val inHeight = history.fullBlocksHeight
       history = history.append(block.header).get._1.append(block).get._1
@@ -78,7 +79,7 @@ class HistoryTest extends PropSpec
   }
 
   property("lastBlocks() should return last blocks") {
-    val blocksToApply = 10
+    val blocksToApply = BlocksInChain
     val chain = genChain(blocksToApply, Seq(history.bestFullBlock)).tail
     history = applyChain(history, chain)
     history.fullBlocksHeight should be > blocksToApply
@@ -89,7 +90,7 @@ class HistoryTest extends PropSpec
   }
 
   property("Appended headers and blocks to best chain in history") {
-    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val header = block.header
       val inBestBlock = history.bestFullBlock
@@ -128,7 +129,7 @@ class HistoryTest extends PropSpec
   }
 
   property("Drop last block from history") {
-    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val header = block.header
       val inBestBlock = history.bestFullBlock

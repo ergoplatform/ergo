@@ -42,7 +42,6 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   override def append(block: ErgoBlock): Try[(ErgoHistory, ProgressInfo[ErgoBlock])] = Try {
     log.debug(s"Trying to append block ${Base58.encode(block.id)} to history")
     applicableTry(block).get
-    validate(block).get
     val progress: ProgressInfo[ErgoBlock] = if (block.parentId sameElements storageOf(block).bestBlockId) {
       //new block at the end of a chain
       storageOf(block).insert(block, isBest = true)
@@ -101,7 +100,6 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     }
   }
 
-
   private def validate(block: ErgoBlock): Try[Unit] = Try {
     val validationResuls = validators.map(_.validate(block))
     validationResuls.foreach {
@@ -135,6 +133,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
         throw new Error(s"Modifier $modifier is too old")
       case _ =>
     }
+    validate(modifier).get
   }
 
   override def contains(pm: ErgoBlock): Boolean = storageOf(pm).contains(pm.id)

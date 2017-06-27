@@ -49,7 +49,7 @@ class HistoryTest extends PropSpec
   var history = ErgoHistory.readOrGenerate(settings)
 
 
-  property("heightOf()") {
+  property("heightOf() should return height of all blocks") {
     val chain = genChain(100, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val inHeight = history.fullBlocksHeight
@@ -58,10 +58,11 @@ class HistoryTest extends PropSpec
       history.headersHeight shouldBe (inHeight + 1)
       history.fullBlocksHeight shouldBe (inHeight + 1)
     }
+    chain.foreach (block => history.heightOf(block).isDefined shouldBe true)
   }
 
 
-  property("lastBlocks() return last blocks") {
+  property("lastBlocks() should return last blocks") {
     val blocksToApply = 10
     val chain = genChain(blocksToApply, Seq(history.bestFullBlock)).tail
     history = applyChain(history, chain)

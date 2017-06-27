@@ -49,6 +49,18 @@ class HistoryTest extends PropSpec
 
   var history = ErgoHistory.readOrGenerate(settings)
 
+  property("compare()") {
+    //TODO what if headers1 > headers2 but fullchain 1 < fullchain2?
+  }
+
+  property("continuationIds()") {
+    //TODO
+  }
+
+  property("syncInfo()") {
+    //TODO
+  }
+
   property("modifierById() should return correct type") {
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>

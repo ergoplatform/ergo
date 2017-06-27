@@ -28,8 +28,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   val bestHeader: ErgoHeader = headerStorage.bestBlock
   lazy val bestFullBlockId: ModifierId = bestFullBlock.id
   lazy val bestHeaderId: ModifierId = bestHeader.id
-  lazy val fullBlocksHeight: Int = fullBlockStorage.heightOf(bestFullBlockId).getOrElse(0)
-  lazy val headersHeight: Int = fullBlockStorage.heightOf(bestHeaderId).getOrElse(0)
+  lazy val fullBlocksHeight: Int = fullBlockStorage.heightOf(bestFullBlockId).get
+  lazy val headersHeight: Int = headerStorage.heightOf(bestHeaderId).get
 
   override def isEmpty: Boolean = fullBlockStorage.height == 0
 

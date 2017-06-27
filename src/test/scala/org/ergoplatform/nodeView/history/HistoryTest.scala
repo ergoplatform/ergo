@@ -55,6 +55,8 @@ class HistoryTest extends PropSpec
       val inHeight = history.fullBlocksHeight
       history = history.append(block.header).get._1.append(block).get._1
       history.heightOf(block).get shouldBe (inHeight + 1)
+      history.headersHeight shouldBe (inHeight + 1)
+      history.fullBlocksHeight shouldBe (inHeight + 1)
     }
   }
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import com.google.common.primitives.{Ints, Longs}
+import com.google.common.primitives.Ints
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoBlockSerializer}
 import scorex.core.NodeViewModifier._
@@ -20,7 +20,7 @@ class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: Modifier
 
   def insert(b: BlockT, isBest: Boolean): Unit = {
     val bHeight = if (b.isGenesis) 1 else heightOf(b.parentId).get + 1
-    val blockH: (ByteArrayWrapper, ByteArrayWrapper) = (blockHeightKey(b.id), ByteArrayWrapper(Longs.toByteArray(bHeight)))
+    val blockH: (ByteArrayWrapper, ByteArrayWrapper) = (blockHeightKey(b.id), ByteArrayWrapper(Ints.toByteArray(bHeight)))
     val bestBlockSeq: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (isBest) {
       Seq(bestBlockIdKey -> ByteArrayWrapper(b.id))
     } else {
@@ -69,4 +69,5 @@ class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: Modifier
 
   def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))
     .map(b => Ints.fromByteArray(b.data))
+
 }

@@ -63,6 +63,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     case h: ErgoFullBlock => fullBlockStorage.asInstanceOf[HistoryStorage[T]]
   }
 
+  def heightOf(m: ErgoBlock): Option[Int] = storageOf(m).heightOf(m.id)
+
   private def processFork(block: ErgoBlock): Try[ProgressInfo[ErgoBlock]] = Try {
     //TODO don't put settings.maxRollback blocks in memory
     val currentChain = lastBlocks(settings.maxRollback)
@@ -153,7 +155,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ErgoSyncInfo(answer,
     lastBlocks(ErgoSyncInfo.MaxBlockIds).map(_.id))
 
-  private def lastBlocks(count: Int): Seq[ErgoBlock] = {
+  def lastBlocks(count: Int): Seq[ErgoBlock] = {
     def until(b: ErgoBlock): Boolean = b.isGenesis
     chainBack(count, bestFullBlock, until)
   }

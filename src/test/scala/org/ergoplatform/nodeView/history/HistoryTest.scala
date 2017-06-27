@@ -58,7 +58,12 @@ class HistoryTest extends PropSpec
   }
 
   property("syncInfo()") {
-    //TODO
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
+    val answer = Random.nextBoolean()
+    history =  applyChain(history, chain)
+    val si = history.syncInfo(answer)
+    si.answer shouldBe answer
+    si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).map(_.id).flatten
   }
 
   property("modifierById() should return correct type") {

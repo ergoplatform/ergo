@@ -71,6 +71,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
       case last: Seq[ErgoBlock] =>
         val bestCommon = last.head
         val blocksAfterCommon = other.lastBlockIds.length - other.lastBlockIds.indexWhere(_ sameElements bestCommon.id)
+        //TODO compare by cummulative difficulty, rather then chain length
         if (blocksAfterCommon == last.length) {
           HistoryComparisonResult.Equal
         } else if (blocksAfterCommon > last.length) {

@@ -90,6 +90,9 @@ class HistoryTest extends PropSpec
 
       history.bestHeader shouldBe inBestBlock.header
       history.bestFullBlock shouldBe inBestBlock
+
+      history = history.append(header).get._1.append(block).get._1
+
     }
   }
 

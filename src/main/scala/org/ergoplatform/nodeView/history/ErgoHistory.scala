@@ -149,6 +149,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     else Some(last.map(b => (b.modifierTypeId, b.id)))
   }
 
+  //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ErgoSyncInfo(answer,
     lastBlocks(ErgoSyncInfo.MaxBlockIds).map(_.id))
 

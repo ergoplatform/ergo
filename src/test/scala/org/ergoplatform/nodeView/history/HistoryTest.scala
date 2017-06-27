@@ -5,7 +5,7 @@ import java.io.File
 import io.circe
 import org.ergoplatform.ErgoGenerators
 import org.ergoplatform.mining.Miner
-import org.ergoplatform.modifiers.block.ErgoFullBlock
+import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -48,6 +48,22 @@ class HistoryTest extends PropSpec
 
   var history = ErgoHistory.readOrGenerate(settings)
 
+  property("modifierById() should return correct type") {
+    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    chain.foreach { block =>
+      history.modifierById(block.id).isDefined shouldBe false
+
+      history = history.append(block.header).get._1
+      history.headerById(block.id).isDefined shouldBe true
+      history.fullBlockById(block.id).isDefined shouldBe false
+      history.modifierById(block.id).isInstanceOf[Some[ErgoHeader]] shouldBe true
+
+      history = history.append(block).get._1
+      history.headerById(block.id).isDefined shouldBe true
+      history.fullBlockById(block.id).isDefined shouldBe true
+      history.modifierById(block.id).isInstanceOf[Some[ErgoFullBlock]] shouldBe true
+    }
+  }
 
   property("heightOf() should return height of all blocks") {
     val chain = genChain(100, Seq(history.bestFullBlock)).tail
@@ -60,7 +76,6 @@ class HistoryTest extends PropSpec
     }
     chain.foreach(block => history.heightOf(block).isDefined shouldBe true)
   }
-
 
   property("lastBlocks() should return last blocks") {
     val blocksToApply = 10

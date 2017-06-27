@@ -96,4 +96,26 @@ class HistoryTest extends PropSpec
     }
   }
 
+  property("process fork") {
+    forAll(smallInt){ forkLength: Int  =>
+      whenever(forkLength > 0) {
+        val fork1 = genChain(forkLength, Seq(history.bestFullBlock)).tail
+        val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlock)).tail
+
+        fork1.foreach { block =>
+          history = history.append(block.header).get._1.append(block).get._1
+        }
+        history.bestHeader shouldBe fork1.last.header
+        history.bestFullBlock shouldBe fork1.last
+
+        fork2.foreach { block =>
+          history = history.append(block.header).get._1.append(block).get._1
+        }
+        history.bestHeader shouldBe fork2.last.header
+        history.bestFullBlock shouldBe fork2.last
+      }
+    }
+  }
+
+
 }

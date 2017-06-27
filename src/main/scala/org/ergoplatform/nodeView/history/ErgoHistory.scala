@@ -157,7 +157,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
 
   def lastBlocks(count: Int): Seq[ErgoBlock] = {
     def until(b: ErgoBlock): Boolean = b.isGenesis
-    chainBack(count, bestFullBlock, until)
+    chainBack(count - 1, bestFullBlock, until)
   }
 
   private def chainBack(count: Int, startBlock: ErgoBlock, until: ErgoBlock => Boolean): Seq[ErgoBlock] = {

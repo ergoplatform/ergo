@@ -37,13 +37,44 @@ class HistoryTest extends PropSpec
     genChain(height - 1, block +: acc)
   }
 
+  def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
+    var history = historyIn
+    blocks.foreach { block =>
+      history = history.append(block.header).get._1.append(block).get._1
+    }
+    history
+  }
+
+
   var history = ErgoHistory.readOrGenerate(settings)
+
+
+  property("heightOf()") {
+    val chain = genChain(100, Seq(history.bestFullBlock)).tail
+    chain.foreach { block =>
+      val inHeight = history.fullBlocksHeight
+      history = history.append(block.header).get._1.append(block).get._1
+      history.heightOf(block).get shouldBe (inHeight + 1)
+    }
+  }
+
+
+  property("lastBlocks() return last blocks") {
+    val blocksToApply = 10
+    val chain = genChain(blocksToApply, Seq(history.bestFullBlock)).tail
+    history = applyChain(history, chain)
+    history.fullBlocksHeight should be > blocksToApply
+    history.lastBlocks(blocksToApply).length shouldBe blocksToApply
+
+  }
 
   property("Appended headers and blocks to best chain in history") {
     val chain = genChain(100, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val header = block.header
       val inBestBlock = history.bestFullBlock
+      val inHeight = history.fullBlocksHeight
+        history.headersHeight shouldBe inHeight
 
       history.contains(header) shouldBe false
       history.contains(block) shouldBe false
@@ -54,6 +85,8 @@ class HistoryTest extends PropSpec
 
       history = history.append(header).get._1
 
+      history.headersHeight shouldBe (inHeight + 1)
+      history.fullBlocksHeight shouldBe inHeight
       history.contains(header) shouldBe true
       history.contains(block) shouldBe false
       history.applicable(header) shouldBe false
@@ -63,6 +96,8 @@ class HistoryTest extends PropSpec
 
       history = history.append(block).get._1
 
+      history.headersHeight shouldBe (inHeight + 1)
+      history.fullBlocksHeight shouldBe (inHeight + 1)
       history.contains(header) shouldBe true
       history.contains(block) shouldBe true
       history.applicable(header) shouldBe false
@@ -97,20 +132,16 @@ class HistoryTest extends PropSpec
   }
 
   property("process fork") {
-    forAll(smallInt){ forkLength: Int  =>
+    forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val fork1 = genChain(forkLength, Seq(history.bestFullBlock)).tail
         val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlock)).tail
 
-        fork1.foreach { block =>
-          history = history.append(block.header).get._1.append(block).get._1
-        }
+        history = applyChain(history, fork1)
         history.bestHeader shouldBe fork1.last.header
         history.bestFullBlock shouldBe fork1.last
 
-        fork2.foreach { block =>
-          history = history.append(block.header).get._1.append(block).get._1
-        }
+        history = applyChain(history, fork2)
         history.bestHeader shouldBe fork2.last.header
         history.bestFullBlock shouldBe fork2.last
       }

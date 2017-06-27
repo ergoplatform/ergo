@@ -57,27 +57,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     (new ErgoHistory(fullBlockStorage, headerStorage, validators, settings), progress)
   }
 
-  private def storageOf[T <: ErgoBlock](b: T): HistoryStorage[T] = b match {
-    case h: ErgoHeader => headerStorage.asInstanceOf[HistoryStorage[T]]
-    case h: ErgoFullBlock => fullBlockStorage.asInstanceOf[HistoryStorage[T]]
-  }
 
   def heightOf(m: ErgoBlock): Option[Int] = storageOf(m).heightOf(m.id)
-
-  private def processFork(block: ErgoBlock): Try[ProgressInfo[ErgoBlock]] = Try {
-    //TODO don't put settings.maxRollback blocks in memory
-    val currentChain = lastBlocks(settings.maxRollback)
-    val parent = modifierById(block.parentId).get
-    def until(b: ErgoBlock): Boolean = b.isGenesis || currentChain.exists(_.id sameElements b.id)
-    val toApply = chainBack(settings.maxRollback, parent, until)
-    storageOf(block).insert(block, isBest = true)
-    val bestCommon = toApply.head
-    assert(currentChain.exists(_.id sameElements bestCommon.id), "No common block found")
-    val i = currentChain.indexWhere(_.id sameElements bestCommon.id)
-    val toRollback = currentChain.takeRight(currentChain.length - i)
-    assert(toRollback.head == bestCommon, s"${toRollback.head} == $bestCommon")
-    ProgressInfo(Some(bestCommon.id), toRollback, toApply)
-  }
 
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = {
     def until(b: ErgoBlock): Boolean = b.isGenesis || other.lastBlockIds.exists(_ sameElements b.id)
@@ -98,15 +79,6 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
           HistoryComparisonResult.Younger
         }
     }
-  }
-
-  private def validate(block: ErgoBlock): Try[Unit] = Try {
-    val validationResuls = validators.map(_.validate(block))
-    validationResuls.foreach {
-      case Failure(e) => log.warn(s"Block validation failed", e)
-      case _ =>
-    }
-    validationResuls.foreach(_.get)
   }
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
@@ -159,6 +131,36 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
     def until(b: ErgoBlock): Boolean = b.isGenesis
     chainBack(count - 1, bestFullBlock, until)
   }
+
+  private def storageOf[T <: ErgoBlock](b: T): HistoryStorage[T] = b match {
+    case h: ErgoHeader => headerStorage.asInstanceOf[HistoryStorage[T]]
+    case h: ErgoFullBlock => fullBlockStorage.asInstanceOf[HistoryStorage[T]]
+  }
+
+  private def processFork(block: ErgoBlock): Try[ProgressInfo[ErgoBlock]] = Try {
+    //TODO don't put settings.maxRollback blocks in memory
+    val currentChain = lastBlocks(settings.maxRollback)
+    val parent = modifierById(block.parentId).get
+    def until(b: ErgoBlock): Boolean = b.isGenesis || currentChain.exists(_.id sameElements b.id)
+    val toApply = chainBack(settings.maxRollback, parent, until)
+    storageOf(block).insert(block, isBest = true)
+    val bestCommon = toApply.head
+    assert(currentChain.exists(_.id sameElements bestCommon.id), "No common block found")
+    val i = currentChain.indexWhere(_.id sameElements bestCommon.id)
+    val toRollback = currentChain.takeRight(currentChain.length - i)
+    assert(toRollback.head == bestCommon, s"${toRollback.head} == $bestCommon")
+    ProgressInfo(Some(bestCommon.id), toRollback, toApply)
+  }
+
+  private def validate(block: ErgoBlock): Try[Unit] = Try {
+    val validationResuls = validators.map(_.validate(block))
+    validationResuls.foreach {
+      case Failure(e) => log.warn(s"Block validation failed", e)
+      case _ =>
+    }
+    validationResuls.foreach(_.get)
+  }
+
 
   private def chainBack(count: Int, startBlock: ErgoBlock, until: ErgoBlock => Boolean): Seq[ErgoBlock] = {
     @tailrec

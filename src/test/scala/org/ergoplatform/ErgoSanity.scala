@@ -37,10 +37,10 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
 
 
   //Node view components
-  override val history = ErgoHistory.readOrGenerate(settings)
-  override val mempool = ErgoMemPool.empty
-  override val wallet = ErgoWallet.readOrGenerate(settings)
-  override val state = ErgoState.readOrGenerate(settings)
+  override val history: ErgoHistory = ErgoHistory.readOrGenerate(settings)
+  override val mempool: ErgoMemPool = ErgoMemPool.empty
+  override val wallet: ErgoWallet = ErgoWallet.readOrGenerate(settings)
+  override val state: ErgoState = ErgoState.readOrGenerate(settings)
 
   //Generators
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = anyoneCanSpendTransactionGen

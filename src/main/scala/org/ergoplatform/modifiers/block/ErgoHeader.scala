@@ -31,7 +31,7 @@ case class ErgoHeader(version: Version,
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
-    "innerchainLinks" -> interlinks.map(l => Base58.encode(l).asJson).asJson,
+    "interlink" -> interlinks.map(l => Base58.encode(l).asJson).asJson,
     "transactionsRoot" -> Base58.encode(transactionsRoot).asJson,
     "stateRoot" -> Base58.encode(stateRoot).asJson,
     "parentId" -> Base58.encode(parentId).asJson,
@@ -55,7 +55,7 @@ case class ErgoHeader(version: Version,
 }
 
 object ErgoHeader {
-  val ModifierTypeId = 10: Byte
+  val ModifierTypeId: Byte = 10: Byte
 }
 
 object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
@@ -85,6 +85,7 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
     val stateRoot = bytes.slice(65, 97)
     val timestamp = Longs.fromByteArray(bytes.slice(97, 105))
     val nonce = Ints.fromByteArray(bytes.slice(105, 109))
+
     @tailrec
     def parseInnerchainLinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
@@ -94,6 +95,7 @@ object ErgoHeaderSerializer extends Serializer[ErgoHeader] {
     } else {
       acc
     }
+
     val innerchainLinks = parseInnerchainLinks(109, Seq())
 
     ErgoHeader(version, parentId, innerchainLinks, stateRoot, transactionsRoot, timestamp, nonce)

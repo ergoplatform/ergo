@@ -208,9 +208,15 @@ object ErgoHistory extends ScorexLogging {
 
     val fbStorage = new HistoryStorage[ErgoFullBlock](fullBlockDB, settings.genesisId)
     val headerStorage = new HistoryStorage[ErgoHeader](headerDB, settings.genesisId)
-    if (fbStorage.bestBlockId sameElements settings.genesisId) {
-      fbStorage.insert(settings.genesisBlock, isBest = true)
-      headerStorage.insert(settings.genesisBlock.header, isBest = true)
+    (fbStorage.version, headerStorage.version) match {
+      case (None, None) =>
+        log.info("Creating new history")
+        fbStorage.insert(settings.genesisBlock, isBest = true)
+        headerStorage.insert(settings.genesisBlock.header, isBest = true)
+      case (Some(v1), Some(v2)) if v1 == v2 =>
+        log.info(s"Reopening history with storage version $v1")
+      case m =>
+        throw new Error(s"Broken storage versions: $m")
     }
     val validators = Seq()
 

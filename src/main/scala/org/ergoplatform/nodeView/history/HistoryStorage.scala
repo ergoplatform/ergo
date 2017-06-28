@@ -12,7 +12,6 @@ import scala.util.{Failure, Success, Try}
 
 class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
 
-
   private val bestBlockIdKey = ByteArrayWrapper(Array.fill(storage.keySize)(-1: Byte))
 
   private def blockHeightKey(blockId: ModifierId): ByteArrayWrapper =
@@ -69,5 +68,7 @@ class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: Modifier
 
   def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))
     .map(b => Ints.fromByteArray(b.data))
+
+  def version: Option[String] = storage.lastVersionID.map(d => Base58.encode(d.data))
 
 }

@@ -24,8 +24,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoBlock, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
-  val bestFullBlock: ErgoFullBlock = fullBlockStorage.bestBlock
-  val bestHeader: ErgoHeader = headerStorage.bestBlock
+  lazy val bestFullBlock: ErgoFullBlock = fullBlockStorage.bestBlock
+  lazy val bestHeader: ErgoHeader = headerStorage.bestBlock
   lazy val bestFullBlockId: ModifierId = bestFullBlock.id
   lazy val bestHeaderId: ModifierId = bestHeader.id
   lazy val fullBlocksHeight: Int = fullBlockStorage.heightOf(bestFullBlockId).get
@@ -71,7 +71,7 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
       case last: Seq[ErgoBlock] =>
         val bestCommon = last.head
         val blocksAfterCommon = other.lastBlockIds.length - other.lastBlockIds.indexWhere(_ sameElements bestCommon.id)
-        //TODO compare by cummulative difficulty, rather then chain length
+        //TODO compare by cumulative difficulty, rather then chain length
         if (blocksAfterCommon == last.length) {
           HistoryComparisonResult.Equal
         } else if (blocksAfterCommon > last.length) {
@@ -134,8 +134,8 @@ class ErgoHistory(fullBlockStorage: HistoryStorage[ErgoFullBlock],
   }
 
   private def storageOf[T <: ErgoBlock](b: T): HistoryStorage[T] = b match {
-    case h: ErgoHeader => headerStorage.asInstanceOf[HistoryStorage[T]]
-    case h: ErgoFullBlock => fullBlockStorage.asInstanceOf[HistoryStorage[T]]
+    case _: ErgoHeader => headerStorage.asInstanceOf[HistoryStorage[T]]
+    case _: ErgoFullBlock => fullBlockStorage.asInstanceOf[HistoryStorage[T]]
   }
 
   private def processFork(block: ErgoBlock): Try[ProgressInfo[ErgoBlock]] = Try {

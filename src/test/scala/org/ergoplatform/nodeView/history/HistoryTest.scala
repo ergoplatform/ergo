@@ -3,16 +3,13 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe
-import org.ergoplatform.ErgoGenerators
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.core.utils.NetworkTime
 import scorex.testkit.TestkitHelpers
 
-import scala.annotation.tailrec
 import scala.util.Random
 
 class HistoryTest extends PropSpec
@@ -20,30 +17,14 @@ class HistoryTest extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
-  with TestkitHelpers {
+  with TestkitHelpers
+  with ChainGenerator {
   val settings: ErgoSettings = new ErgoSettings {
     override def settingsJSON: Map[String, circe.Json] = Map()
 
-    override val dataDir: String = s"/tmp/ergo/${Random.alphanumeric.take(8)}"
+    override val dataDir: String = s"/tmp/ergo/test-history"
   }
   new File(settings.dataDir).mkdirs()
-
-
-  @tailrec
-  final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
-    acc.reverse
-  } else {
-    val block = Miner.genBlock(BigInt(1), acc.head.header, Array.fill(32)(0.toByte), Seq(), NetworkTime.time())
-    genChain(height - 1, block +: acc)
-  }
-
-  def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
-    var history = historyIn
-    blocks.foreach { block =>
-      history = history.append(block.header).get._1.append(block).get._1
-    }
-    history
-  }
 
   val BlocksInChain = 30
 
@@ -60,10 +41,10 @@ class HistoryTest extends PropSpec
   property("syncInfo()") {
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     val answer = Random.nextBoolean()
-    history =  applyChain(history, chain)
+    history = applyChain(history, chain)
     val si = history.syncInfo(answer)
     si.answer shouldBe answer
-    si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).map(_.id).flatten
+    si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
   }
 
   property("modifierById() should return correct type") {

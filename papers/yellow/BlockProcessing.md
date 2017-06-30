@@ -3,7 +3,10 @@ Ergo Modifiers Processing
 
 This document describes processing algorithm for Ergo modifiers in all security modes.  
 Unlike most of blockchain systems, Ergo have the following types of modifiers:
-- Transaction
+1. In-memory:
+- Transaction - in-memory modifier
+- transactionIdsForHeader - ids of transactions in concrete block
+2. Persistent:
 - BlockTransactions - Sequence of transactions, corresponding to 1 block
 - ADProofs - proof of transaction correctness relative to corresponding UTXO
 - ??? Interlinks
@@ -15,7 +18,7 @@ Fullnode
 For full node modifiers precessing workflow:
 
 1. Send ErgoSyncInfo message to connected peers
-2. Get response with INV message, containing ids of blocks, better then our best block
+2. Get response with INV message, containing ids of blocks, better than our best block
 3. Request headers for all ids from 2.
 4. On receiving header
 ```scala
@@ -28,7 +31,7 @@ For full node modifiers precessing workflow:
 ```
 5.On receiving transaction ids from header:
 ```scala
-  History.apply(transactionIdsForHeader)
+  Mempool.apply(transactionIdsForHeader)
   transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
     request transaction with txId
   }
@@ -37,22 +40,24 @@ For full node modifiers precessing workflow:
 ```scala
  if(Mempool.apply(transaction).isSuccess) {
     if(!isInitialBootstrapping) Broadcast INV for this transaction
-    history.getHeadersWithoutTransactionsAndTheirTransactionIds.foreach { (h, txIds) =>
-       if(txIds.forall(txId => Mempool.contains(txId))) {
-          GOTO 7
-       }
+    Mempool.getHeadersWithAllTransactions { BlockTransactions =>
+       GOTO 7
     }
  }
 ```
-7. Now we have BlockTrasactions: all transactions corresponding to some Header
+7. Now we have BlockTransactions: all transactions corresponding to some Header
 ```scala
-  if(History.apply(BlockTrasactions) == Success(ProgressInfo)) {
-      if(!isInitialBootstrapping) Broadcast INV for BlockTrasactions // ?? Whe should notify our neighbours, that now we have all the transactions
+  if(History.apply(BlockTransactions) == Success(ProgressInfo)) {
+      if(!isInitialBootstrapping) Broadcast INV for BlockTransactions // ?? Whe should notify our neighbours, that now we have all the transactions
      //State apply modifiers (may be empty for block in a fork chain) and generate ADProofs for them
-     if(minimalState().apply(ProgressInfo) == Success(ADProofs)) {
+     //TODO requires different interface from scorex-core, because it should return ADProofs
+     if(minimalState().apply(ProgressInfo) == Success((newState, ADProofs))) {
        ADProofs.foreach { ADProof =>
          History.apply(ADProof)
        }
+     } else {
+       //Drop Header from history, because it's transaction sequence is not valid
+       History.drop(BlockTransactions.headerId)
      }
   } else {
     blacklist peer who sent header

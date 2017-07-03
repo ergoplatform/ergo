@@ -22,6 +22,8 @@ Ergo will have the following parameters, that will determine concrete security r
 4. BlocksToKeep: Int - number of last blocks to keep with transactions, for all other blocks it keep header only. Keep all blocks from genesis if negative
 5. MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant)
 
+`if(VerifyTransactions == false) require(BlocksToKeep == 0)`
+
 Mode from **"multimode.md"** can be determined as follows:
 ```scala
 mode = if(ADState == false && VerifyTransactions == true && PoPoWBootstrap == false && BlocksToKeep < 0) "full"
@@ -51,6 +53,7 @@ def updateHeadersChainToBestInNetwork() = {
 ```
 
 **boootstrap**
+
 1.Download headers:
 ```scala
 if(PoPoW) {
@@ -63,9 +66,9 @@ if(PoPoW) {
 2.Download initial State to start process transactions:
 ```scala
 if(ADState == true) {
-  //Nothing to do, initialize state with state roothash from block header
+  Initialize state with state roothash from block header BlocksToKeep ago
 } else if(BlocksToKeep < 0 || BlocksToKeep > History.headersHeight) {
-  //Nothing to do, will calculate State by processing full blocks starting from genesis
+  Initialize state with genesis State
 } else {
   //We need to download full state BlocksToKeep back in history
   //TODO what if we can download state only "BlocksToKeep - N" or "BlocksToKeep + N" blocks back?
@@ -91,32 +94,33 @@ if(ADState == true) {
   } else {
     //we have headers chain better then full block         
     3.1. 
-    assert(history contains header chain from State.bestHeader to History.bestHeaderx)
-    History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
-      sendToRandomFullNode(GetBlockTransactionsForHeader(header))
-      if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
-    }
-    3.2. On receiving modifiers ADProofs or BlockTransactions
-    //TODO History should return non-empty ProgressInfo only if it contains both ADProofs and BlockTransactions, or it contains BlockTransactions and ADState==false
-    if(History.apply(modifier) == Success(ProgressInfo)) {
-      if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
-        if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
-        if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
-      } else {
-        //Drop Header from history, because it's transaction sequence is not valid
-        History.drop(BlockTransactions.headerId)
+      assert(history contains header chain from State.bestHeader to History.bestHeaders)
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+        sendToRandomFullNode(GetBlockTransactionsForHeader(header))
+        if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
-    } else {
-      blacklistPeer
+    3.2. On receiving modifiers ADProofs or BlockTransactions
+      //TODO History should return non-empty ProgressInfo only if it contains both ADProofs and BlockTransactions, or it contains BlockTransactions and ADState==false
+      if(History.apply(modifier) == Success(ProgressInfo)) {
+        if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+          if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
+          if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
+        } else {
+          //Drop Header from history, because it's transaction sequence is not valid
+          History.drop(BlockTransactions.headerId)
+        }
+      } else {
+        blacklistPeer
+      }
+      GOTO 3
     }
-    GOTO 3
-  }
 ```
-4. GOTO regular mode
+4.GOTO regular mode
 
 
 **regular**
-1.`updateHeadersChainToBestInNetwork()` // May work in a separate thread
+Two infinite loops in different threads with the following functions inside:
+1.`updateHeadersChainToBestInNetwork()`
 2.Download and update full blocks when needed
 ```scala
   if(State.bestHeader == History.bestHeader) {
@@ -127,12 +131,12 @@ if(ADState == true) {
   } else {
     //we have headers chain better then full block         
     3.1. Request transaction ids from all headers without transactions
-      assert(history contains header chain from State.bestHeader to History.bestHeaderx)
+      assert(history contains header chain from State.bestHeader to History.bestHeaders)
       History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
-        sendToRandomFullNode(GetBlockTransactionsForHeader(header))
+        sendToRandomFullNode(GetTransactionIdsForHeader(header))
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
-    3.2. On receiving transaction ids from header:
+    3.2. On receiving TransactionIdsForHeader:
       Mempool.apply(transactionIdsForHeader)
       transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
         request transaction with txId
@@ -144,19 +148,6 @@ if(ADState == true) {
             GOTO 3.4 //now we have BlockTransactions
          }
       }
-    3.4. (same as 3.2. from bootstrap) On receiving modifiers ADProofs or BlockTransactions
-    //TODO History should return non-empty ProgressInfo only if it contains both ADProofs and BlockTransactions, or it contains BlockTransactions and ADState==false
-    if(History.apply(modifier) == Success(ProgressInfo)) {
-      if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
-        if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
-        if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
-      } else {
-        //Drop Header from history, because it's transaction sequence is not valid
-        History.drop(BlockTransactions.headerId)
-      }
-    } else {
-      blacklistPeer
-    }
-    GOTO 3
+    3.4. (same as 3.2. from bootstrap)
   }
 ```

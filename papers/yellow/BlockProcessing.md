@@ -193,7 +193,22 @@ else if(ADState == false && VerifyTransactions == true && PoPoWBootstrap == fals
 else if(ADState == true && VerifyTransactions == true && PoPoWBootstrap == false) "light-full"
 else if(ADState == true && VerifyTransactions == false && PoPoWBootstrap == true && BlocksToKeep == 0) "light-spv"
 else if(ADState == true && VerifyTransactions == true && PoPoWBootstrap == true && BlocksToKeep == 0) "light-full-PoPoW"
-sele //Other combinations are possible
+else //Other combinations are possible
+```
+
+```scala
+def updateHeadersChainToBestInNetwork() = {
+  1.2.1. Send ErgoSyncInfo message to connected peers
+  1.2.2. Get response with INV message, containing ids of blocks, better than our best block
+  1.2.3. Request headers for all ids from 1.2.2.
+  1.2.4. On receiving header
+   if(History.apply(header).isSuccess) {
+      if(!(localScore == networkScore)) GOTO 1.2.1
+   } else {
+      blacklist peer
+      GOTO 1.2.1
+   }
+}
 ```
 
 **boootstrap**
@@ -203,17 +218,7 @@ if(PoPoW) {
   1.1.1. Send GetPoPoWProof(suffix = Max(MinimalSuffix ,BlocksToKeep)) for all connections
   1.1.2. On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better, than it's current best header chain)
 } else {
-  1.2.1. Send ErgoSyncInfo message to connected peers
-  1.2.2. Get response with INV message, containing ids of blocks, better than our best block
-  1.2.3. Request headers for all ids from 1.2.2.
-  1.2.4. On receiving header
-   if(History.apply(header).isSuccess) {
-      if(!(localScore == networkScore)) GOTO 1.2.1
-      else GOTO 2
-   } else {
-      blacklist peer
-      GOTO 1.2.1
-   }
+  updateHeadersChainToBestInNetwork()
 }
 ```
 2.Download initial State to start process transactions:
@@ -237,7 +242,78 @@ if(ADState == true) {
 }
 
 ```
-3.GOTO regular mode
+3.Update State to best headers height
+```scala
+  if(State.bestHeader == History.bestHeader) {
+    //Do nothing, State is already updated
+  } else if(VerifyTransactions == false) {
+    //Just update State rootshash to best header in history
+    State.setBestHeader(History.bestHeader)
+  } else {
+    //we have headers chain better then full block         
+    3.1. 
+    assert(history contains header chain from State.bestHeader to History.bestHeaderx)
+    History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+      sendToRandomFullNode(GetBlockTransactionsForHeader(header))
+      if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
+    }
+    3.2. On receiving modifiers ADProofs or BlockTransactions
+    //TODO History should return non-empty ProgressInfo only if it contains both ADProofs and BlockTransactions, or it contains BlockTransactions and ADState==false
+    if(History.apply(modifier) == Success(ProgressInfo)) {
+      if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+        if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
+        if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
+      } else {
+        //Drop Header from history, because it's transaction sequence is not valid
+        History.drop(BlockTransactions.headerId)
+      }
+    } else {
+      blacklistPeer
+    }
+    GOTO 3
+  }
+```
+4. GOTO regular mode
+
+
+
+
 
 **regular**
+1.`updateHeadersChainToBestInNetwork()` // May work in a separate thread
+
+5.On receiving transaction ids from header:
+```scala
+  Mempool.apply(transactionIdsForHeader)
+  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+    request transaction with txId
+  }
+```
+6.On receiving a transaction:
+```scala
+ if(Mempool.apply(transaction).isSuccess) {
+    if(!isInitialBootstrapping) Broadcast INV for this transaction
+    Mempool.getHeadersWithAllTransactions { BlockTransactions =>
+       GOTO 7
+    }
+ }
+```
+7.Now we have BlockTransactions: all transactions corresponding to some Header
+```scala
+  if(History.apply(BlockTransactions) == Success(ProgressInfo)) {
+      if(!isInitialBootstrapping) Broadcast INV for BlockTransactions // ?? We should notify our neighbours, that now we have all the transactions
+     //State apply modifiers (may be empty for block in a fork chain) and generate ADProofs for them
+     //TODO requires different interface from scorex-core, because it should return ADProofs
+     //TODO when mininal state apply Progress info, it may also create UTXOSnapshot (e.g. every 30000 blocks like in Ethereum). This UTXOSnapshot should be required for mining by Rollerchain
+     if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+       if("mode"="full" || "mode"=="pruned-full") ADProofs.foreach ( ADProof => History.apply(ADProof))
+       if("mode"=="pruned-full" || "mode"=="light-full") drop BlockTransactions and ADProofs older than BlocksToKeep
+     } else {
+       //Drop Header from history, because it's transaction sequence is not valid
+       History.drop(BlockTransactions.headerId)
+     }
+  } else {
+    blacklist peer who sent header
+  }
+```
 

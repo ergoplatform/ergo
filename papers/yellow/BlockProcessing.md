@@ -276,44 +276,49 @@ if(ADState == true) {
 4. GOTO regular mode
 
 
-
-
-
 **regular**
 1.`updateHeadersChainToBestInNetwork()` // May work in a separate thread
-
-5.On receiving transaction ids from header:
+2.Download and update full blocks when needed
 ```scala
-  Mempool.apply(transactionIdsForHeader)
-  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
-    request transaction with txId
-  }
-```
-6.On receiving a transaction:
-```scala
- if(Mempool.apply(transaction).isSuccess) {
-    if(!isInitialBootstrapping) Broadcast INV for this transaction
-    Mempool.getHeadersWithAllTransactions { BlockTransactions =>
-       GOTO 7
-    }
- }
-```
-7.Now we have BlockTransactions: all transactions corresponding to some Header
-```scala
-  if(History.apply(BlockTransactions) == Success(ProgressInfo)) {
-      if(!isInitialBootstrapping) Broadcast INV for BlockTransactions // ?? We should notify our neighbours, that now we have all the transactions
-     //State apply modifiers (may be empty for block in a fork chain) and generate ADProofs for them
-     //TODO requires different interface from scorex-core, because it should return ADProofs
-     //TODO when mininal state apply Progress info, it may also create UTXOSnapshot (e.g. every 30000 blocks like in Ethereum). This UTXOSnapshot should be required for mining by Rollerchain
-     if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
-       if("mode"="full" || "mode"=="pruned-full") ADProofs.foreach ( ADProof => History.apply(ADProof))
-       if("mode"=="pruned-full" || "mode"=="light-full") drop BlockTransactions and ADProofs older than BlocksToKeep
-     } else {
-       //Drop Header from history, because it's transaction sequence is not valid
-       History.drop(BlockTransactions.headerId)
-     }
+  if(State.bestHeader == History.bestHeader) {
+    //Do nothing, State is already updated
+  } else if(VerifyTransactions == false) {
+    //Just update State rootshash to best header in history
+    State.setBestHeader(History.bestHeader)
   } else {
-    blacklist peer who sent header
+    //we have headers chain better then full block         
+    3.1. Request transaction ids from all headers without transactions
+      assert(history contains header chain from State.bestHeader to History.bestHeaderx)
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+        sendToRandomFullNode(GetBlockTransactionsForHeader(header))
+        if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
+      }
+    3.2. On receiving transaction ids from header:
+      Mempool.apply(transactionIdsForHeader)
+      transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+        request transaction with txId
+      }
+    3.3. On receiving a transaction:
+      if(Mempool.apply(transaction).isSuccess) {
+         Broadcast INV for this transaction
+         Mempool.getHeadersWithAllTransactions { BlockTransactions =>
+            GOTO 3.4 //now we have BlockTransactions
+         }
+      }
+    3.4. (same as 3.2. from bootstrap) On receiving modifiers ADProofs or BlockTransactions
+    //TODO History should return non-empty ProgressInfo only if it contains both ADProofs and BlockTransactions, or it contains BlockTransactions and ADState==false
+    if(History.apply(modifier) == Success(ProgressInfo)) {
+      if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+        if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
+        if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
+      } else {
+        //Drop Header from history, because it's transaction sequence is not valid
+        History.drop(BlockTransactions.headerId)
+      }
+    } else {
+      blacklistPeer
+    }
+    GOTO 3
   }
 ```
 

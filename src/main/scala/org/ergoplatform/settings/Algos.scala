@@ -13,4 +13,7 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
+  //TODO get from scrypto
+  def merkleTreeRoot(elements: Seq[Array[Byte]]):Array[Byte] = ???
+
 }

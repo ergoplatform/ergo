@@ -11,14 +11,15 @@ import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
 
-case class ErgoHeader(version: Version,
-                      parentId: BlockId,
-                      interlinksRoot: Array[Byte],
-                      ADProofsRoot: Array[Byte],
-                      stateRoot: Array[Byte],
-                      transactionsRoot: Array[Byte],
-                      timestamp: Block.Timestamp,
-                      nonce: Int) extends NodeViewModifier {
+case class Header(version: Version,
+                  parentId: BlockId,
+                  interlinksRoot: Array[Byte],
+                  ADProofsRoot: Array[Byte],
+                  stateRoot: Array[Byte],
+                  transactionsRoot: Array[Byte],
+                  timestamp: Block.Timestamp,
+                  nonce: Int) extends NodeViewModifier {
+
   lazy val payloadRootHash: Array[Byte] = Algos.merkleTreeRoot(Seq(Array(version),
     interlinksRoot,
     ADProofsRoot,
@@ -27,9 +28,10 @@ case class ErgoHeader(version: Version,
     Longs.toByteArray(timestamp),
     parentId
   ))
-  lazy val minimalHeader = ErgoMinimalHeader(payloadRootHash, nonce)
 
-  override val modifierTypeId: ModifierTypeId = ErgoHeader.ModifierTypeId
+  lazy val minimalHeader = MinimalHeader(payloadRootHash, nonce)
+
+  override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
   override lazy val id: ModifierId = minimalHeader.id
 
@@ -48,18 +50,18 @@ case class ErgoHeader(version: Version,
 
   override lazy val toString: String = s"Header(${json.noSpaces})"
 
-  override type M = ErgoHeader
+  override type M = Header
 
-  override lazy val serializer: Serializer[ErgoHeader] = ???
+  override lazy val serializer: Serializer[Header] = ???
 
   override def equals(obj: scala.Any): Boolean = obj match {
-    case that: ErgoHeader => id sameElements that.id
+    case that: Header => id sameElements that.id
     case _ => false
   }
 
-  lazy val isGenesis: Boolean = ??? //interlinks.isEmpty
+  lazy val isGenesis: Boolean = interlinksRoot sameElements Algos.EmptyMerkleTreeRoot
 }
 
-object ErgoHeader {
-  val ModifierTypeId: Byte = 10: Byte
+object Header {
+  val ModifierTypeId: Byte = 101: Byte
 }

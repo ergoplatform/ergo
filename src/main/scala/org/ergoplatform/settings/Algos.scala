@@ -16,4 +16,6 @@ object Algos {
   //TODO get from scrypto
   def merkleTreeRoot(elements: Seq[Array[Byte]]):Array[Byte] = ???
 
+  lazy val EmptyMerkleTreeRoot:Array[Byte] = merkleTreeRoot(Seq())
+
 }

@@ -9,7 +9,7 @@ import scala.util.Try
 case class PoPoWProof(m: Int,
                       k: Int,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header]) extends Comparable[PoPoWProof] with Ordered[PoPoWProof] with ErgoModifier {
+                      suffix: Seq[Header]) extends Comparable[PoPoWProof] with Ordered[PoPoWProof] with HistoryModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.ModifierTypeId
 

@@ -6,7 +6,7 @@ import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-case class BlockTransactions(txs: Seq[AnyoneCanSpendTransaction]) extends ErgoModifier {
+case class BlockTransactions(txs: Seq[AnyoneCanSpendTransaction]) extends HistoryModifier {
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 

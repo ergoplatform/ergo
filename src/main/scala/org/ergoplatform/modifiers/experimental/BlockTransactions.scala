@@ -3,12 +3,10 @@ package org.ergoplatform.modifiers.experimental
 import io.circe.Json
 import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-case class BlockTransactions(txs: Seq[AnyoneCanSpendTransaction]) extends NodeViewModifier {
-
+case class BlockTransactions(txs: Seq[AnyoneCanSpendTransaction]) extends ErgoModifier {
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 

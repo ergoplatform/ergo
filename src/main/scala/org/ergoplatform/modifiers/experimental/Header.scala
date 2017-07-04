@@ -4,7 +4,6 @@ import com.google.common.primitives.Longs
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
 import scorex.core.block.Block._
@@ -18,7 +17,7 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Block.Timestamp,
-                  nonce: Int) extends NodeViewModifier {
+                  nonce: Int) extends ErgoModifier {
 
   lazy val payloadRootHash: Array[Byte] = Algos.merkleTreeRoot(Seq(Array(version),
     interlinksRoot,

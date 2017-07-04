@@ -6,7 +6,7 @@ This document describes processing algorithm for Ergo modifiers in all security 
 Unlike most of blockchain systems, Ergo have the following types of **modifiers**:
 1. In-memory:
 - Transaction - in-memory modifier
-- transactionIdsForHeader - ids of transactions in concrete block
+- TransactionIdsForHeader - ids of transactions in concrete block
 - UTXOSnapshotManifest - ids of UTXO chunks and 
 2. Persistent:
 - BlockTransactions - Sequence of transactions, corresponding to 1 block.
@@ -137,8 +137,8 @@ Two infinite loops in different threads with the following functions inside:
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
     3.2. On receiving TransactionIdsForHeader:
-      Mempool.apply(transactionIdsForHeader)
-      transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+      Mempool.apply(TransactionIdsForHeader)
+      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
         request transaction with txId
       }
     3.3. On receiving a transaction:

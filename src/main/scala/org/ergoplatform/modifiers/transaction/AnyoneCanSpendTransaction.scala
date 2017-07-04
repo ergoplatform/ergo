@@ -14,7 +14,7 @@ import scorex.crypto.encode.Base58
 import scala.util.Try
 
 /**
-  * Transaction witohut any lockers and unlockers
+  * Transaction without any lockers and unlockers
   */
 case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition, Value)],
                                      to: IndexedSeq[(AnyoneCanSpendProposition, Nonce)],

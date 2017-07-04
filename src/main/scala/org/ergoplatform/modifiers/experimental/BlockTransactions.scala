@@ -10,13 +10,13 @@ case class BlockTransactions(txs: Seq[AnyoneCanSpendTransaction]) extends ErgoMo
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 
-  override def id: ModifierId = BlockTransactions.rootHash(txs.map(_.id))
+  override lazy val id: ModifierId = BlockTransactions.rootHash(txs.map(_.id))
 
   override type M = BlockTransactions
 
-  override def serializer: Serializer[BlockTransactions] = ???
+  override lazy val serializer: Serializer[BlockTransactions] = ???
 
-  override def json: Json = ???
+  override lazy val json: Json = ???
 
 }
 

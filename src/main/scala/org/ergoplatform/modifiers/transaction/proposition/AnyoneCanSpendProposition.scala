@@ -8,7 +8,7 @@ import scala.util.{Failure, Success, Try}
 class AnyoneCanSpendProposition extends ProofOfKnowledgeProposition[Nothing] {
   override type M = AnyoneCanSpendProposition
 
-  override def serializer: Serializer[AnyoneCanSpendProposition] = AnyoneCanSpendPropositionSerializer
+  override lazy val serializer: Serializer[AnyoneCanSpendProposition] = AnyoneCanSpendPropositionSerializer
 }
 
 object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition] {

@@ -1,11 +1,10 @@
 package org.ergoplatform.modifiers.experimental
 
 import io.circe.Json
-import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-class PoPoWProof extends NodeViewModifier {
+class PoPoWProof extends ErgoModifier {
   override val modifierTypeId: ModifierTypeId = PoPoWProof.ModifierTypeId
 
   override def id: ModifierId = ???

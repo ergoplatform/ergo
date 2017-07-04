@@ -2,11 +2,10 @@ package org.ergoplatform.modifiers.experimental
 
 import io.circe.Json
 import org.ergoplatform.settings.Constants
-import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends NodeViewModifier {
+case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends ErgoModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
 
   override def id: ModifierId = Constants.hash(scorex.core.utils.concatFixLengthBytes(ids))

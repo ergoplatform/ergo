@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.block.ErgoBlock
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.StateChanges

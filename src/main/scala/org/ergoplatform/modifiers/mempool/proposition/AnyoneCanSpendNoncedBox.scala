@@ -1,4 +1,4 @@
-package org.ergoplatform.modifiers.transaction.proposition
+package org.ergoplatform.modifiers.mempool.proposition
 
 import com.google.common.primitives.Longs
 import io.circe.Json

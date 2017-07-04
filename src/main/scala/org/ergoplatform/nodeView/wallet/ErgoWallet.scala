@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.block.ErgoBlock
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.box.Box
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}

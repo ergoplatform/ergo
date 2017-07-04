@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
 

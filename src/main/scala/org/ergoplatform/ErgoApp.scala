@@ -3,8 +3,8 @@ package org.ergoplatform
 import akka.actor.ActorRef
 import io.circe
 import org.ergoplatform.modifiers.block.ErgoBlock
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiRoute

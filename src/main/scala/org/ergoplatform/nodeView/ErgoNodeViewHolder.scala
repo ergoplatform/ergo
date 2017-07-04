@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoHeader, ErgoHeaderSerializer}
-import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.transaction.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoState

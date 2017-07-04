@@ -1,12 +1,13 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.state
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoModifier
 import org.ergoplatform.nodeView.state.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoModifier {
+case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends StateModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
 
   override lazy val id: ModifierId = ???

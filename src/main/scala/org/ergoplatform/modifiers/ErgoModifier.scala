@@ -1,4 +1,4 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers
 
 import scorex.core.NodeViewModifier
 

@@ -1,13 +1,15 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.state
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends ErgoModifier {
+case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends StateModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.ModifierTypeId
 
   override lazy val id: ModifierId = Constants.hash(scorex.core.utils.concatBytes(chunkRootHashes :+ blockId))

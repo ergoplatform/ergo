@@ -1,4 +1,4 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Longs
 import io.circe.Json

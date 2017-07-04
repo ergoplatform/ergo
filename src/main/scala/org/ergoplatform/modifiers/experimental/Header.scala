@@ -17,7 +17,7 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Block.Timestamp,
-                  nonce: Int) extends ErgoModifier {
+                  nonce: Int) extends HistoryModifier {
 
   lazy val payloadRootHash: Array[Byte] = Algos.merkleTreeRoot(Seq(Array(version),
     interlinksRoot,

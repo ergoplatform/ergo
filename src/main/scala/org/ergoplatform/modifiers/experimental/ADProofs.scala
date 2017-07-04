@@ -7,7 +7,7 @@ import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-case class ADProofs(proofBytes: Array[Byte]) extends ErgoModifier {
+case class ADProofs(proofBytes: Array[Byte]) extends HistoryModifier {
   override val modifierTypeId: ModifierTypeId = ADProofs.ModifierTypeId
 
   override lazy val id: ModifierId = Constants.hash(proofBytes)

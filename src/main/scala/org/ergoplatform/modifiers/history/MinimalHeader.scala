@@ -1,6 +1,7 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.history
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoModifier
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer

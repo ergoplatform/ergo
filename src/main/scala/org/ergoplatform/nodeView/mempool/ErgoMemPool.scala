@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool._
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.transaction.MemoryPool

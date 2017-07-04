@@ -4,8 +4,8 @@ import java.io.File
 
 import io.iohk.iodb.LSMStore
 import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoFullBlock, ErgoHeader}
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.transaction.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier._
 import scorex.core.block.BlockValidator

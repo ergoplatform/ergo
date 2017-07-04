@@ -1,4 +1,4 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.history
 
 import io.circe.Json
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}

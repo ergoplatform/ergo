@@ -1,8 +1,8 @@
 package org.ergoplatform
 
 import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoFullBlock, ErgoHeader}
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}

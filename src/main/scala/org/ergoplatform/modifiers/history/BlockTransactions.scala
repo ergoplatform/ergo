@@ -1,7 +1,7 @@
-package org.ergoplatform.modifiers.experimental
+package org.ergoplatform.modifiers.history
 
 import io.circe.Json
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer

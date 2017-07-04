@@ -1,10 +1,10 @@
-package org.ergoplatform.modifiers.transaction
+package org.ergoplatform.modifiers.mempool
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.transaction.AnyoneCanSpendTransaction._
-import org.ergoplatform.modifiers.transaction.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition, AnyoneCanSpendPropositionSerializer}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction._
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition, AnyoneCanSpendPropositionSerializer}
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.BoxTransaction
@@ -19,7 +19,7 @@ import scala.util.Try
 case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition, Value)],
                                      to: IndexedSeq[(AnyoneCanSpendProposition, Nonce)],
                                      override val timestamp: Long) extends
-  BoxTransaction[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] {
+  BoxTransaction[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] with MempoolModifier {
 
   //TODO remove fee and timestamp from base class?
   override val fee: Value = from.map(_._2).sum - to.map(_._2).sum

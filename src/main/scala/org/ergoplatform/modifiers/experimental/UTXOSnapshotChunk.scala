@@ -7,13 +7,13 @@ import scorex.core.serialization.Serializer
 class UTXOSnapshotChunk extends ErgoModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
 
-  override def id: ModifierId = ???
+  override lazy val id: ModifierId = ???
 
   override type M = UTXOSnapshotChunk
 
-  override def serializer: Serializer[UTXOSnapshotChunk] = ???
+  override lazy val serializer: Serializer[UTXOSnapshotChunk] = ???
 
-  override def json: Json = ???
+  override lazy val json: Json = ???
 }
 
 object UTXOSnapshotChunk {

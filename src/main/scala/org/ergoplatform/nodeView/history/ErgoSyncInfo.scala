@@ -18,7 +18,7 @@ case class ErgoSyncInfo(answer: Boolean, lastBlockIds: Seq[ModifierId]) extends 
 
   override type M = ErgoSyncInfo
 
-  override def serializer: Serializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
+  override lazy val serializer: Serializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
 object ErgoSyncInfo {

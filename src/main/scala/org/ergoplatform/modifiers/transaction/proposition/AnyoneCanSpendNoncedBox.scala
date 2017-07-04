@@ -15,7 +15,7 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
                                    override val value: Long
                                   ) extends Box[AnyoneCanSpendProposition] with JsonSerializable {
 
-  override def json: Json = Map(
+  override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
     "nonce" -> nonce.asJson,
     "value" -> value.asJson
@@ -26,7 +26,7 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
 
   override type M = AnyoneCanSpendNoncedBox
 
-  override def serializer: Serializer[AnyoneCanSpendNoncedBox] = AnyoneCanSpendNoncedBoxSerializer
+  override lazy val serializer: Serializer[AnyoneCanSpendNoncedBox] = AnyoneCanSpendNoncedBoxSerializer
 }
 
 object AnyoneCanSpendNoncedBox {

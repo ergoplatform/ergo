@@ -8,13 +8,13 @@ import scorex.core.serialization.Serializer
 case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends ErgoModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
 
-  override def id: ModifierId = Constants.hash(scorex.core.utils.concatFixLengthBytes(ids))
+  override lazy val id: ModifierId = Constants.hash(scorex.core.utils.concatFixLengthBytes(ids))
 
   override type M = TransactionIdsForHeader
 
-  override def serializer: Serializer[TransactionIdsForHeader] = ???
+  override lazy val serializer: Serializer[TransactionIdsForHeader] = ???
 
-  override def json: Json = ???
+  override lazy val json: Json = ???
 
   lazy val rootHash = BlockTransactions.rootHash(ids)
 }
@@ -22,7 +22,7 @@ case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends ErgoModifier {
 object TransactionIdsForHeader {
   val ModifierTypeId: Byte = 103: Byte
 
-  def validate(header: Header, txIds: TransactionIdsForHeader): Boolean = {
+  def validate(txIds: TransactionIdsForHeader, header: Header): Boolean = {
     header.transactionsRoot sameElements txIds.rootHash
   }
 }

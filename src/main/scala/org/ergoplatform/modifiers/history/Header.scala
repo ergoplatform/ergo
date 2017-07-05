@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Longs
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
 import scorex.core.block.Block._
@@ -12,7 +12,7 @@ import scorex.crypto.encode.Base58
 
 case class Header(version: Version,
                   override val parentId: BlockId,
-                  interlinksRoot: Array[Byte],
+                  interlinks: Seq[Array[Byte]],
                   ADProofsRoot: Array[Byte],
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
@@ -20,7 +20,7 @@ case class Header(version: Version,
                   nonce: Int) extends HistoryModifier {
 
   lazy val payloadRootHash: Array[Byte] = Algos.merkleTreeRoot(Seq(Array(version),
-    interlinksRoot,
+    Constants.hash(scorex.core.utils.concatFixLengthBytes(interlinks)),
     ADProofsRoot,
     stateRoot,
     transactionsRoot,
@@ -39,7 +39,7 @@ case class Header(version: Version,
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
     "transactionsRoot" -> Base58.encode(transactionsRoot).asJson,
-    "interlinksRoot" -> Base58.encode(interlinksRoot).asJson,
+//    "interlinksRoot" -> Base58.encode(interlinksRoot).asJson,
     "ADProofsRoot" -> Base58.encode(ADProofsRoot).asJson,
     "stateRoot" -> Base58.encode(stateRoot).asJson,
     "parentId" -> Base58.encode(parentId).asJson,
@@ -58,7 +58,7 @@ case class Header(version: Version,
     case _ => false
   }
 
-  lazy val isGenesis: Boolean = interlinksRoot sameElements Algos.EmptyMerkleTreeRoot
+  lazy val isGenesis: Boolean = interlinks.isEmpty
 }
 
 object Header {

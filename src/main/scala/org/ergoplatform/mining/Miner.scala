@@ -16,7 +16,7 @@ object Miner {
                 parent: Header,
                 stateRoot: Array[Byte],
                 adProofs: ADProofs,
-                transactionsRoot: Seq[AnyoneCanSpendTransaction],
+                transactions: Seq[AnyoneCanSpendTransaction],
                 timestamp: Timestamp): ErgoFullBlock = {
 ???
   }
@@ -27,14 +27,13 @@ object Miner {
                 adProofsRoot: Array[Byte],
                 transactionsRoot: Array[Byte],
                 timestamp: Timestamp): Header = {
-//    val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent)
-//    else Seq(parent.id)
-    val interlinksRoot: Array[Byte] = ???
+    val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent)
+    else Seq(parent.id)
 
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextInt
-      val header = Header(0.toByte, parent.id, interlinksRoot, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce)
+      val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce)
       if (correctWorkDone(header.id, difficulty)) header
       else generateHeader()
     }
@@ -46,7 +45,6 @@ object Miner {
     Constants.MaxTarget / blockTarget
   }
 
-/*
   private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
     val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
 
@@ -63,7 +61,6 @@ object Miner {
 
     genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
   }
-*/
 
   def correctWorkDone(id: Array[Version], difficulty: BigInt): Boolean = {
     val target = Constants.MaxTarget / difficulty

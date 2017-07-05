@@ -1,10 +1,8 @@
 package org.ergoplatform.settings
 
 import scorex.core.block.Block._
-import scorex.crypto.encode.Base58
-
-import scala.annotation.tailrec
-import scala.util.Try
+import scorex.crypto.authds.merkle.MerkleTree
+import scorex.crypto.hash.{Blake2b256, CommutativeHash}
 
 object Algos {
 
@@ -13,9 +11,13 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
-  //TODO get from scrypto
-  def merkleTreeRoot(elements: Seq[Array[Byte]]):Array[Byte] = ???
+//  val hash = Blake2b256
+  val hash = new CommutativeHash(Blake2b256)
 
-  lazy val EmptyMerkleTreeRoot:Array[Byte] = merkleTreeRoot(Seq())
+  //TODO get from scrypto?
+  def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] = if (elements.isEmpty) EmptyMerkleTreeRoot
+  else MerkleTree(elements)(hash).rootHash
+
+  lazy val EmptyMerkleTreeRoot: Array[Byte] = Algos.hash(Array[Byte]())
 
 }

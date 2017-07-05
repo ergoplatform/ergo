@@ -5,7 +5,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition, AnyoneCanSpendPropositionSerializer}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.BoxTransaction
 import scorex.core.transaction.box.BoxUnlocker
@@ -32,7 +32,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition
 
   override lazy val unlockers: Traversable[BoxUnlocker[AnyoneCanSpendProposition]] = Seq()
 
-  lazy val hashNoNonces = Constants.hash(
+  lazy val hashNoNonces = Algos.hash(
     Bytes.concat(scorex.core.utils.concatFixLengthBytes(to.map(_._1.bytes)),
       scorex.core.utils.concatFixLengthBytes(unlockers.map(_.closedBoxId)),
       Longs.toByteArray(timestamp),
@@ -40,7 +40,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition
   )
 
   override lazy val newBoxes: Traversable[AnyoneCanSpendNoncedBox] = to.zipWithIndex.map { case ((prop, value), idx) =>
-    val nonce = nonceFromDigest(Constants.hash(prop.bytes ++ hashNoNonces ++ Ints.toByteArray(idx)))
+    val nonce = nonceFromDigest(Algos.hash(prop.bytes ++ hashNoNonces ++ Ints.toByteArray(idx)))
     AnyoneCanSpendNoncedBox(prop, nonce, value)
   }
 

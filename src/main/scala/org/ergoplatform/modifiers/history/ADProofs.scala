@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import io.circe.Json
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
@@ -10,7 +10,7 @@ import scala.util.Try
 case class ADProofs(proofBytes: Array[Byte]) extends HistoryModifier {
   override val modifierTypeId: ModifierTypeId = ADProofs.ModifierTypeId
 
-  override lazy val id: ModifierId = Constants.hash(proofBytes)
+  override lazy val id: ModifierId = Algos.hash(proofBytes)
 
   override type M = ADProofs
 

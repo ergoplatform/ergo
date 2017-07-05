@@ -2,7 +2,8 @@ package org.ergoplatform
 
 import io.circe
 import org.ergoplatform.mining.Miner
-import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoHeader}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -17,14 +18,14 @@ import scorex.testkit.{BlockchainPerformance, BlockchainSanity}
 
 class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
-  ErgoBlock,
+  ErgoPersistentModifier,
   ErgoSyncInfo,
   AnyoneCanSpendNoncedBox,
   ErgoMemPool,
   ErgoState,
   ErgoHistory] with BlockchainPerformance[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
-  ErgoBlock,
+  ErgoPersistentModifier,
   ErgoSyncInfo,
   AnyoneCanSpendNoncedBox,
   ErgoMemPool,
@@ -47,11 +48,13 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
 
   override val stateChangesGenerator: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = stateChangesGen
 
-  override def genValidModifier(history: ErgoHistory): ErgoHeader = {
-    Miner.genBlock(BigInt(1),
-      history.bestHeader,
+  override def genValidModifier(history: ErgoHistory): Header = {
+    val bestHeader: Header = ???
+    Miner.genHeader(BigInt(1),
+      bestHeader,
       Array.fill(32)(0.toByte),
-      Seq(),
-      NetworkTime.time()).header
+      Array.fill(32)(0.toByte),
+      Array.fill(32)(0.toByte),
+      NetworkTime.time())
   }
 }

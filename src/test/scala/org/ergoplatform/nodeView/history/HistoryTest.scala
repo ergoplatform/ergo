@@ -1,3 +1,4 @@
+/*
 package org.ergoplatform.nodeView.history
 
 import java.io.File
@@ -169,3 +170,4 @@ class HistoryTest extends PropSpec
 
 
 }
+*/

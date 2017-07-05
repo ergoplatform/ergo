@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoFullBlock, ErgoHeader}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -39,26 +39,16 @@ trait ErgoGenerators extends CoreGenerators {
     ids <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(answer, ids)
 
-  lazy val ergoHeaderGen: Gen[ErgoHeader] = for {
+  lazy val ergoHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- genBytesList(Constants.ModifierIdSize)
     stateRoot <- genBytesList(Constants.ModifierIdSize)
+    adRoot <- genBytesList(Constants.ModifierIdSize)
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
-  } yield ErgoHeader(version, parentId, interlinks, stateRoot, transactionsRoot, timestamp, nonce)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce)
 
-  lazy val ergoFullBlockGen: Gen[ErgoFullBlock] = for {
-    version <- Arbitrary.arbitrary[Byte]
-    parentId <- genBytesList(Constants.ModifierIdSize)
-    stateRoot <- genBytesList(Constants.ModifierIdSize)
-    transactions <- Gen.listOf(anyoneCanSpendTransactionGen)
-    nonce <- Arbitrary.arbitrary[Int]
-    interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
-    timestamp <- positiveLongGen
-  } yield ErgoFullBlock(version, parentId, interlinks, stateRoot, transactions, timestamp, nonce)
-
-  lazy val ergoBlockGen: Gen[ErgoBlock] = Gen.oneOf(ergoHeaderGen, ergoFullBlockGen)
 
 }

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView
 
-import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoHeader, ErgoHeaderSerializer}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -16,7 +16,7 @@ import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
-  ErgoBlock] {
+  ErgoPersistentModifier] {
   override val networkChunkSize: Int = settings.networkChunkSize
 
   override type SI = ErgoSyncInfo
@@ -27,7 +27,7 @@ class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCa
   override type MP = ErgoMemPool
 
   override val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-    Map(ErgoHeader.ModifierTypeId -> ErgoHeaderSerializer,
+    Map(???,
       Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {

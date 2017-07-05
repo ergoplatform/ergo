@@ -2,7 +2,7 @@ package org.ergoplatform
 
 import akka.actor.ActorRef
 import io.circe
-import org.ergoplatform.modifiers.block.ErgoBlock
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
@@ -16,7 +16,7 @@ import scala.reflect.runtime.universe.Type
 class ErgoApp(val settingsFilename: String) extends Application {
   override type P = AnyoneCanSpendProposition
   override type TX = AnyoneCanSpendTransaction
-  override type PMOD = ErgoBlock
+  override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder
 
   implicit lazy val settings: ErgoSettings = new ErgoSettings {

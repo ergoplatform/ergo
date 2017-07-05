@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.state
 
-import org.ergoplatform.modifiers.ErgoModifier
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 
-trait StateModifier extends ErgoModifier
+trait StateModifier extends ErgoPersistentModifier
+

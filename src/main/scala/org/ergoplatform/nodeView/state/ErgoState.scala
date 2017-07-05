@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.modifiers.block.ErgoBlock
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.state.StateModifier
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.StateChanges
@@ -14,7 +15,7 @@ import scala.util.Try
 class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
-  ErgoBlock,
+  ErgoPersistentModifier,
   ErgoState] with ScorexLogging {
 
   override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
@@ -25,7 +26,7 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
 
   override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
 
-  override def changes(mod: ErgoBlock): Try[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
+  override def changes(mod: ErgoPersistentModifier): Try[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
 
   override def applyChanges(changes: StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], newVersion: VersionTag): Try[ErgoState] = ???
 

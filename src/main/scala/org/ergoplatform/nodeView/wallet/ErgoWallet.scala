@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.modifiers.block.ErgoBlock
+import org.ergoplatform.modifiers.{ErgoModifier, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.settings.ErgoSettings
@@ -10,7 +11,7 @@ import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoBlock, ErgoWallet]
+class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
   override type S = Nothing
   override type PI = AnyoneCanSpendProposition
@@ -31,7 +32,7 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition, AnyoneCanSpendTransac
 
   override def scanOffchain(txs: Seq[AnyoneCanSpendTransaction]): ErgoWallet = ???
 
-  override def scanPersistent(modifier: ErgoBlock): ErgoWallet = ???
+  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = ???
 
   override def rollback(to: VersionTag): Try[ErgoWallet] = ???
 

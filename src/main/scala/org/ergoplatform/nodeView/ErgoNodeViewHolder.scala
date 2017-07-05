@@ -20,7 +20,6 @@ class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCa
   override val networkChunkSize: Int = settings.networkChunkSize
 
   override type SI = ErgoSyncInfo
-
   override type HIS = ErgoHistory
   override type MS = ErgoState
   override type VL = ErgoWallet

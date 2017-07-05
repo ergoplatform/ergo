@@ -1,8 +1,10 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.ErgoGenerators
+import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.serialization.{BytesSerializable, Serializer}
 
 class SerializationTests extends PropSpec
   with PropertyChecks
@@ -25,6 +27,10 @@ class SerializationTests extends PropSpec
 
   property("ErgoHeader serialization") {
     checkSerializationRoundtrip(ergoHeaderGen)
+  }
+
+  property("ErgoMinimalHeader serialization") {
+    checkSerializationRoundtrip(ergoMinimalHeaderGen)
   }
 /*
   property("ErgoFullBlock serialization") {

@@ -12,7 +12,7 @@ import scala.util.Try
 case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends StateModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.ModifierTypeId
 
-  override lazy val id: ModifierId = Constants.hash(scorex.core.utils.concatBytes(chunkRootHashes :+ blockId))
+  override lazy val id: ModifierId = Algos.hash(scorex.core.utils.concatBytes(chunkRootHashes :+ blockId))
 
   override type M = UTXOSnapshotManifest
 

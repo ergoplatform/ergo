@@ -2,14 +2,14 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.Json
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
 case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
 
-  override lazy val id: ModifierId = Constants.hash(scorex.core.utils.concatFixLengthBytes(ids))
+  override lazy val id: ModifierId = Algos.hash(scorex.core.utils.concatFixLengthBytes(ids))
 
   override type M = TransactionIdsForHeader
 

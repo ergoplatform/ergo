@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool.proposition
 import com.google.common.primitives.Longs
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{JsonSerializable, Serializer}
 import scorex.core.transaction.box.Box
 import scorex.crypto.encode.Base58
@@ -22,7 +22,7 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
   ).asJson
 
 
-  override val id: Array[Byte] = Constants.hash(Longs.toByteArray(nonce))
+  override val id: Array[Byte] = Algos.hash(Longs.toByteArray(nonce))
 
   override type M = AnyoneCanSpendNoncedBox
 
@@ -32,7 +32,7 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
 object AnyoneCanSpendNoncedBox {
 
   def idFromBox(prop: AnyoneCanSpendProposition, nonce: Long): Array[Byte] =
-    Constants.hash(prop.serializer.toBytes(prop) ++ Longs.toByteArray(nonce))
+    Algos.hash(prop.serializer.toBytes(prop) ++ Longs.toByteArray(nonce))
 
 }
 

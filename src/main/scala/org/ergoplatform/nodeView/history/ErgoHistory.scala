@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{Header, HistoryModifier}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.settings.ErgoSettings
@@ -14,13 +14,14 @@ import scorex.crypto.encode.Base58
 import scala.annotation.tailrec
 import scala.util.Try
 
-class ErgoHistory(settings: ErgoSettings)
+//TODO replace ErgoPersistentModifier to HistoryModifier
+class ErgoHistory(storage: ModifiersStorage, settings: ErgoSettings)
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
   override def isEmpty: Boolean = ???
 
-  override def modifierById(id: ModifierId): Option[HistoryModifier] = ???
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = storage.modifierById(id)
 
   override def append(block: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(block.id)} to history")

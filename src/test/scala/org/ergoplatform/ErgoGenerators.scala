@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.history.{Header, MinimalHeader}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header, MinimalHeader}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -55,4 +55,7 @@ trait ErgoGenerators extends CoreGenerators {
     nonce <- Arbitrary.arbitrary[Int]
   } yield MinimalHeader(payloadHash, nonce)
 
+  lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
+    txs <- Gen.listOf(anyoneCanSpendTransactionGen)
+  } yield BlockTransactions(txs)
 }

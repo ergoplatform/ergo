@@ -32,14 +32,9 @@ class SerializationTests extends PropSpec
   property("ErgoMinimalHeader serialization") {
     checkSerializationRoundtrip(ergoMinimalHeaderGen)
   }
-/*
-  property("ErgoFullBlock serialization") {
-    checkSerializationRoundtrip(ergoFullBlockGen)
+
+  property("BlockTransactions serialization") {
+    checkSerializationRoundtrip(blockTransactionsGen)
   }
-
-  property("ErgoBlock serialization") {
-    checkSerializationRoundtrip(ergoBlockGen)
-  }*/
-
 
 }

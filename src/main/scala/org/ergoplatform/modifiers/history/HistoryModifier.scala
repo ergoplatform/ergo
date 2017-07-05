@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.ErgoModifier
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 
-trait HistoryModifier extends ErgoModifier
+trait HistoryModifier extends ErgoPersistentModifier
+
+

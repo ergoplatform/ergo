@@ -11,7 +11,7 @@ import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
 
 case class Header(version: Version,
-                  parentId: BlockId,
+                  override val parentId: BlockId,
                   interlinksRoot: Array[Byte],
                   ADProofsRoot: Array[Byte],
                   stateRoot: Array[Byte],

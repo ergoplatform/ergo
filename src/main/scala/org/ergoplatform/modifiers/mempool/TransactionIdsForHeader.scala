@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.Json
-import org.ergoplatform.modifiers.ErgoModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}

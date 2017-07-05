@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.block.ErgoHeader
+import org.ergoplatform.modifiers.history.Header
 import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.consensus.SyncInfo
@@ -13,7 +13,7 @@ import scala.util.Try
 case class ErgoSyncInfo(answer: Boolean, lastBlockIds: Seq[ModifierId]) extends SyncInfo {
 
   override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {
-    lastBlockIds.map(b => ErgoHeader.ModifierTypeId -> b)
+    lastBlockIds.map(b => Header.ModifierTypeId -> b)
   }
 
   override type M = ErgoSyncInfo

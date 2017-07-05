@@ -1,3 +1,4 @@
+/*
 package org.ergoplatform.nodeView.history
 
 import com.google.common.primitives.Ints
@@ -10,7 +11,7 @@ import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success, Try}
 
-class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
+class HistoryStorageOld[BlockT <: ErgoBlock](storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
 
   private val bestBlockIdKey = ByteArrayWrapper(Array.fill(storage.keySize)(-1: Byte))
 
@@ -72,3 +73,4 @@ class HistoryStorage[BlockT <: ErgoBlock](storage: LSMStore, genesisId: Modifier
   def version: Option[String] = storage.lastVersionID.map(d => Base58.encode(d.data))
 
 }
+*/

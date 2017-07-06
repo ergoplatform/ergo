@@ -1,13 +1,11 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header, MinimalHeader}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, MinimalHeader}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.block.Block
-import scorex.core.block.Block._
 import scorex.core.transaction.state.{Insertion, StateChanges}
 import scorex.testkit.CoreGenerators
 
@@ -58,4 +56,10 @@ trait ErgoGenerators extends CoreGenerators {
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
     txs <- Gen.listOf(anyoneCanSpendTransactionGen)
   } yield BlockTransactions(txs)
+
+  lazy val ADProofsGen: Gen[ADProofs] = for {
+    proof <- genBoundedBytes(32, 32 * 1024)
+  } yield ADProofs(proof)
+
+
 }

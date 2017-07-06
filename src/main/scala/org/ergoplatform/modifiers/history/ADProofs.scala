@@ -14,7 +14,7 @@ case class ADProofs(proofBytes: Array[Byte]) extends HistoryModifier {
 
   override type M = ADProofs
 
-  override lazy val serializer: Serializer[ADProofs] = ???
+  override lazy val serializer: Serializer[ADProofs] = ADProofsSerializer
 
   override lazy val json: Json = ???
 
@@ -28,4 +28,12 @@ object ADProofs {
     ???
   }
 
+}
+
+object ADProofsSerializer extends Serializer[ADProofs] {
+  override def toBytes(obj: ADProofs): Array[ModifierTypeId] = obj.proofBytes
+
+  override def parseBytes(bytes: Array[ModifierTypeId]): Try[ADProofs] = Try{
+    ADProofs(bytes)
+  }
 }

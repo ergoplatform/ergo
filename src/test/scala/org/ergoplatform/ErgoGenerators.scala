@@ -58,8 +58,9 @@ trait ErgoGenerators extends CoreGenerators {
   } yield BlockTransactions(txs)
 
   lazy val ADProofsGen: Gen[ADProofs] = for {
+    headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
-  } yield ADProofs(proof)
+  } yield ADProofs(headerId, proof)
 
 
 }

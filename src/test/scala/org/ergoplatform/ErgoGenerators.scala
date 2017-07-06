@@ -54,8 +54,9 @@ trait ErgoGenerators extends CoreGenerators {
   } yield MinimalHeader(payloadHash, nonce)
 
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
+    headerId <- genBytesList(Constants.ModifierIdSize)
     txs <- Gen.listOf(anyoneCanSpendTransactionGen)
-  } yield BlockTransactions(txs)
+  } yield BlockTransactions(headerId, txs)
 
   lazy val ADProofsGen: Gen[ADProofs] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)

@@ -43,11 +43,11 @@ class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
     }
   }
 
-
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = ???
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
     storage.drop(modifierId)
+    this
   }
 
   override def openSurfaceIds(): Seq[ModifierId] = ???
@@ -60,7 +60,7 @@ class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
         val parentOpt = modifierById(m.parentId)
         require(parentOpt.isDefined, "Parent header is no defined")
         require(!contains(m.id), "Header is already in history")
-      //TODO require(Algos.blockIdDifficulty(m.id) >= difficulty, "Block difficulty is not enough")
+      //TODO require(Algos.blockIdDifficulty(m.headerHash) >= difficulty, "Block difficulty is not enough")
       //TODO check timestamp
       case m: BlockTransactions =>
         require(contains(m.headerId), s"Header for modifier $m is no defined")

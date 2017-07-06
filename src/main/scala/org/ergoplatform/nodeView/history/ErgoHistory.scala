@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, PoPoWProof}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.settings.ErgoSettings
@@ -15,26 +15,39 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-class ErgoHistory(storage: ModifiersStorage, settings: ErgoSettings)
+class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
+
+  lazy val bestHeaderId: ModifierId = ???
+  lazy val bestHeaderWithId: ModifierId = ???
 
   override def isEmpty: Boolean = ???
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = storage.modifierById(id)
 
-  override def append(block: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
-    log.debug(s"Trying to append modifier ${Base58.encode(block.id)} to history")
-    applicableTry(block).get
-    ???
+  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
+    log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
+    applicableTry(modifier).get
+    modifier match {
+      case m: Header =>
+        ???
+      case m: BlockTransactions =>
+        ???
+      case m: ADProofs =>
+        ???
+      case m: PoPoWProof =>
+        ???
+      case m =>
+        throw new Error(s"Modifier $m have incorrect type")
+    }
   }
 
 
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = ???
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
-    //TODO should we drop from both storages?
-    ???
+    storage.drop(modifierId)
   }
 
   override def openSurfaceIds(): Seq[ModifierId] = ???
@@ -42,7 +55,24 @@ class ErgoHistory(storage: ModifiersStorage, settings: ErgoSettings)
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
   def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = Try {
-    ???
+    modifier match {
+      case m: Header =>
+        val parentOpt = modifierById(m.parentId)
+        require(parentOpt.isDefined, "Parent header is no defined")
+        require(!contains(m.id), "Header is already in history")
+      //TODO require(Algos.blockIdDifficulty(m.id) >= difficulty, "Block difficulty is not enough")
+      //TODO check timestamp
+      case m: BlockTransactions =>
+        require(contains(m.headerId), s"Header for modifier $m is no defined")
+        require(!contains(m.id), s"Modifier $m is already in history")
+      case m: ADProofs =>
+        require(contains(m.headerId), s"Header for modifier $m is no defined")
+        require(!contains(m.id), s"Modifier $m is already in history")
+      case m: PoPoWProof =>
+        ???
+      case m =>
+        throw new Error(s"Modifier $m have incorrect type")
+    }
   }
 
   override def contains(pm: ErgoPersistentModifier): Boolean = ???

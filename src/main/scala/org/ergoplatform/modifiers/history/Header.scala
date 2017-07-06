@@ -66,6 +66,7 @@ case class Header(version: Version,
 
 object Header {
   val ModifierTypeId: Byte = 101: Byte
+
 }
 
 

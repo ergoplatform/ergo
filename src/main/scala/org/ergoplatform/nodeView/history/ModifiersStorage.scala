@@ -4,6 +4,7 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history.{HistoryModifier, HistoryModifierSerializer}
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success}
 
@@ -24,6 +25,13 @@ class ModifiersStorage(storage: LSMStore, genesisId: ModifierId) extends ScorexL
       ByteArrayWrapper(b.id),
       Seq(),
       Seq(ByteArrayWrapper(b.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(b))))
+  }
+
+  def drop(id: ModifierId): Unit = {
+    storage.update(
+      ByteArrayWrapper(Blake2b256(id ++ "drop".getBytes)),
+      Seq(ByteArrayWrapper(id)),
+      Seq())
   }
 
 }

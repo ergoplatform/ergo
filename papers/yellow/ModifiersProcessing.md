@@ -107,7 +107,7 @@ if(ADState == true) {
           if(BlocksToKeep>=0) remove BlockTransactions and ADProofs older than BlocksToKeep from history
         } else {
           //Drop Header from history, because it's transaction sequence is not valid
-          History.drop(BlockTransactions.headerId)
+          History.drop(modifier.headerId)
         }
       } else {
         blacklistPeer

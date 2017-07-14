@@ -21,10 +21,10 @@ class ErgoHistory(storage: HistoryStorage,
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
-  lazy val bestHeaderId: ModifierId = ???
+  lazy val bestHeaderId: ModifierId = storage.bestHeaderId
   lazy val bestHeaderIdWithTransactions: ModifierId = ???
 
-  override def isEmpty: Boolean = ???
+  override def isEmpty: Boolean = bestHeaderId sameElements config.GenesisId
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = storage.modifierById(id)
 
@@ -33,9 +33,16 @@ class ErgoHistory(storage: HistoryStorage,
     applicableTry(modifier).get
     modifier match {
       case m: Header =>
+        assert(bestHeaderId sameElements storage.bestHeaderId, "History is inconsistent")
         storage.insert(m)
-
-        ???
+        if (bestHeaderId sameElements storage.bestHeaderId) {
+          log.info(s"New orphaned header ${m.encodedId}")
+          (new ErgoHistory(storage, indexStorage, config), ProgressInfo(None, Seq(), Seq()))
+        } else {
+          log.info(s"New best header ${m.encodedId}")
+          //TODO Notify node view holder that it should download transactions ?
+          (new ErgoHistory(storage, indexStorage, config), ProgressInfo(None, Seq(), Seq()))
+        }
       case m: BlockTransactions =>
         storage.insert(m)
 

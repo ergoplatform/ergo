@@ -8,7 +8,10 @@ import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success}
 
-class ModifiersStorage(storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
+/**
+  * Simple key-value storage for History Modifiers
+  */
+class ModifiersStorage(storage: LSMStore) extends ScorexLogging {
 
   def modifierById(id: ModifierId): Option[HistoryModifier] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {

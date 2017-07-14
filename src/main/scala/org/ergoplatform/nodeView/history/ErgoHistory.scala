@@ -15,7 +15,9 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
+class ErgoHistory(modifiersStorage: ModifiersStorage,
+                  indexStorage: ModifiersStorage,
+                  config: HistoryConfig)
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
@@ -24,19 +26,27 @@ class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
 
   override def isEmpty: Boolean = ???
 
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = storage.modifierById(id)
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = modifiersStorage.modifierById(id)
 
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
     modifier match {
       case m: Header =>
+        modifiersStorage.insert(m)
+
         ???
       case m: BlockTransactions =>
+        modifiersStorage.insert(m)
+
         ???
       case m: ADProofs =>
+        modifiersStorage.insert(m)
+
         ???
       case m: PoPoWProof =>
+        modifiersStorage.insert(m)
+
         ???
       case m =>
         throw new Error(s"Modifier $m have incorrect type")
@@ -46,7 +56,7 @@ class ErgoHistory(storage: ModifiersStorage, config: HistoryConfig)
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = ???
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
-    storage.drop(modifierId)
+    modifiersStorage.drop(modifierId)
     this
   }
 

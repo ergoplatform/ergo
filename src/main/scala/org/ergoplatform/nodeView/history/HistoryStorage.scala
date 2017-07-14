@@ -1,76 +1,71 @@
-/*
 package org.ergoplatform.nodeView.history
 
-import com.google.common.primitives.Ints
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.modifiers.block.{ErgoBlock, ErgoBlockSerializer}
-import scorex.core.NodeViewModifier._
+import org.ergoplatform.modifiers.history.{Header, HistoryModifier, HistoryModifierSerializer}
+import org.ergoplatform.settings.Algos
+import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
-class HistoryStorageOld[BlockT <: ErgoBlock](storage: LSMStore, genesisId: ModifierId) extends ScorexLogging {
+class HistoryStorage(storage: LSMStore) extends ScorexLogging {
 
-  private val bestBlockIdKey = ByteArrayWrapper(Array.fill(storage.keySize)(-1: Byte))
+  private val BestHederKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(0.toByte))
 
-  private def blockHeightKey(blockId: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Blake2b256("height".getBytes ++ blockId))
+  def bestHeaderId: Array[Byte] = storage.get(BestHederKey).get.data
 
-  def insert(b: BlockT, isBest: Boolean): Unit = {
-    val bHeight = if (b.isGenesis) 1 else heightOf(b.parentId).get + 1
-    val blockH: (ByteArrayWrapper, ByteArrayWrapper) = (blockHeightKey(b.id), ByteArrayWrapper(Ints.toByteArray(bHeight)))
-    val bestBlockSeq: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (isBest) {
-      Seq(bestBlockIdKey -> ByteArrayWrapper(b.id))
-    } else {
-      Seq()
-    }
+  def difficultyAt(id: Array[Byte]): Option[BigInt] = storage.get(headerDiffKey(id)).map(b => BigInt(b.data))
 
-    storage.update(
-      ByteArrayWrapper(b.id),
-      Seq(),
-      Seq(blockH) ++ bestBlockSeq ++ Seq(ByteArrayWrapper(b.id) -> ByteArrayWrapper(ErgoBlockSerializer.toBytes(b))))
-  }
+  def scoreOf(id: Array[Byte]): Option[BigInt] = storage.get(headerScoreKey(id)).map(b => BigInt(b.data))
 
-  def drop(id: ModifierId): Unit = {
-    if (id sameElements bestBlockId) {
-      modifierById(id) match {
-        case Some(b) =>
-          storage.rollback(ByteArrayWrapper(b.parentId))
-        case None =>
-          log.warn(s"Trying to drop non-existing block ${Base58.encode(id)}")
-      }
-    } else {
-      //TODO
-    }
-  }
+  def bestChainScore: BigInt = scoreOf(bestHeaderId).get
 
-  def height: Int = heightOf(bestBlockId).get
-
-  def contains(id: ModifierId): Boolean = modifierById(id).isDefined
-
-  def modifierById(id: ModifierId): Option[BlockT] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
-    ErgoBlockSerializer.parseBytes(bBytes.data) match {
+  def modifierById(id: ModifierId): Option[HistoryModifier] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
+    HistoryModifierSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>
-        //TODO asInstanceOf
-        Try(b.asInstanceOf[BlockT]).toOption
+        Some(b)
       case Failure(e) =>
         log.warn("Failed to parse block from db", e)
         None
     }
   }
 
-  def bestBlockId: Array[Byte] = storage.get(bestBlockIdKey).map(_.data).getOrElse(genesisId)
-
-  def bestBlock: BlockT = {
-    modifierById(bestBlockId).get
+  def insert(b: HistoryModifier): Unit = {
+    val indexRows = indexes(b)
+    storage.update(
+      ByteArrayWrapper(b.id),
+      Seq(),
+      indexRows :+ (ByteArrayWrapper(b.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(b))))
   }
 
-  def heightOf(blockId: ModifierId): Option[Int] = storage.get(blockHeightKey(blockId))
-    .map(b => Ints.fromByteArray(b.data))
+  def drop(id: ModifierId): Unit = {
+    storage.update(
+      ByteArrayWrapper(Blake2b256(id ++ "drop".getBytes)),
+      Seq(ByteArrayWrapper(id), headerScoreKey(id), headerDiffKey(id)),
+      Seq())
+  }
 
-  def version: Option[String] = storage.lastVersionID.map(d => Base58.encode(d.data))
+  private def headerDiffKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
+
+  private def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+
+  private def indexes(mod: HistoryModifier): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+    mod match {
+      case h: Header =>
+        val requiredDifficulty: BigInt = ???
+        val blockScore = scoreOf(h.parentId).get + requiredDifficulty
+        val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestChainScore) {
+          Seq((BestHederKey, ByteArrayWrapper(h.id)))
+        } else {
+          Seq()
+        }
+        val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        val diffRow = Seq((headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        bestRow ++ diffRow ++ scoreRow
+      case _ =>
+        Seq()
+    }
+  }
 
 }
-*/

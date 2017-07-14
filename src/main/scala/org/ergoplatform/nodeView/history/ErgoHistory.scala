@@ -15,37 +15,37 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-class ErgoHistory(modifiersStorage: ModifiersStorage,
-                  indexStorage: ModifiersStorage,
+class ErgoHistory(storage: HistoryStorage,
+                  indexStorage: IndexStorage,
                   config: HistoryConfig)
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ScorexLogging {
 
   lazy val bestHeaderId: ModifierId = ???
-  lazy val bestHeaderWithId: ModifierId = ???
+  lazy val bestHeaderIdWithTransactions: ModifierId = ???
 
   override def isEmpty: Boolean = ???
 
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = modifiersStorage.modifierById(id)
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = storage.modifierById(id)
 
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
     modifier match {
       case m: Header =>
-        modifiersStorage.insert(m)
+        storage.insert(m)
 
         ???
       case m: BlockTransactions =>
-        modifiersStorage.insert(m)
+        storage.insert(m)
 
         ???
       case m: ADProofs =>
-        modifiersStorage.insert(m)
+        storage.insert(m)
 
         ???
       case m: PoPoWProof =>
-        modifiersStorage.insert(m)
+        storage.insert(m)
 
         ???
       case m =>
@@ -56,7 +56,7 @@ class ErgoHistory(modifiersStorage: ModifiersStorage,
   override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = ???
 
   override def drop(modifierId: ModifierId): ErgoHistory = {
-    modifiersStorage.drop(modifierId)
+    storage.drop(modifierId)
     this
   }
 

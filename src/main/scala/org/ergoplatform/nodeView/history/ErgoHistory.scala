@@ -99,17 +99,10 @@ class ErgoHistory(storage: HistoryStorage,
     }
   }
 
-  override def contains(pm: ErgoPersistentModifier): Boolean = ???
-
-  override def contains(id: ModifierId): Boolean = ???
-
   override def continuationIds(from: ModifierIds, size: Int): Option[ModifierIds] = ???
 
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
-
-  private def validate(modifier: ErgoPersistentModifier): Try[Unit] = ???
-
 
   private def headerChainBack(count: Int, startBlock: Header, until: Header => Boolean): Seq[Header] = {
     @tailrec

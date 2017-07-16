@@ -1,10 +1,8 @@
-/*
 package org.ergoplatform.nodeView.history
 
 import java.io.File
 
 import io.circe
-import org.ergoplatform.modifiers.block.{ErgoFullBlock, ErgoHeader}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -40,15 +38,18 @@ class HistoryTest extends PropSpec
   }
 
   property("syncInfo()") {
+/*
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     val answer = Random.nextBoolean()
     history = applyChain(history, chain)
     val si = history.syncInfo(answer)
     si.answer shouldBe answer
     si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
+*/
   }
 
   property("modifierById() should return correct type") {
+/*
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       history.modifierById(block.id).isDefined shouldBe false
@@ -63,9 +64,11 @@ class HistoryTest extends PropSpec
       history.fullBlockById(block.id).isDefined shouldBe true
       history.modifierById(block.id).isInstanceOf[Some[ErgoFullBlock]] shouldBe true
     }
+    */
   }
 
   property("heightOf() should return height of all blocks") {
+/*
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val inHeight = history.fullBlocksHeight
@@ -75,9 +78,11 @@ class HistoryTest extends PropSpec
       history.fullBlocksHeight shouldBe (inHeight + 1)
     }
     chain.foreach(block => history.heightOf(block).isDefined shouldBe true)
+*/
   }
 
   property("lastBlocks() should return last blocks") {
+/*
     val blocksToApply = BlocksInChain
     val chain = genChain(blocksToApply, Seq(history.bestFullBlock)).tail
     history = applyChain(history, chain)
@@ -86,48 +91,25 @@ class HistoryTest extends PropSpec
     lastBlocks.length shouldBe blocksToApply
     lastBlocks.foreach(b => assert(chain.contains(b)))
     lastBlocks.last shouldBe history.bestFullBlock
+*/
   }
 
-  property("Appended headers and blocks to best chain in history") {
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-    chain.foreach { block =>
-      val header = block.header
-      val inBestBlock = history.bestFullBlock
-      val inHeight = history.fullBlocksHeight
-      history.headersHeight shouldBe inHeight
-
+  property("Appended headers to best chain in history") {
+    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+    chain.foreach {header =>
       history.contains(header) shouldBe false
-      history.contains(block) shouldBe false
       history.applicable(header) shouldBe true
-      history.applicable(block) shouldBe false
-      history.bestHeader shouldBe inBestBlock.header
-      history.bestFullBlock shouldBe inBestBlock
 
       history = history.append(header).get._1
 
-      history.headersHeight shouldBe (inHeight + 1)
-      history.fullBlocksHeight shouldBe inHeight
       history.contains(header) shouldBe true
-      history.contains(block) shouldBe false
       history.applicable(header) shouldBe false
-      history.applicable(block) shouldBe true
       history.bestHeader shouldBe header
-      history.bestFullBlock shouldBe inBestBlock
-
-      history = history.append(block).get._1
-
-      history.headersHeight shouldBe (inHeight + 1)
-      history.fullBlocksHeight shouldBe (inHeight + 1)
-      history.contains(header) shouldBe true
-      history.contains(block) shouldBe true
-      history.applicable(header) shouldBe false
-      history.applicable(block) shouldBe false
-      history.bestHeader shouldBe header
-      history.bestFullBlock shouldBe block
     }
   }
 
   property("Drop last block from history") {
+/*
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
     chain.foreach { block =>
       val header = block.header
@@ -149,9 +131,11 @@ class HistoryTest extends PropSpec
       history = history.append(header).get._1.append(block).get._1
 
     }
+*/
   }
 
   property("process fork") {
+/*
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val fork1 = genChain(forkLength, Seq(history.bestFullBlock)).tail
@@ -166,8 +150,8 @@ class HistoryTest extends PropSpec
         history.bestFullBlock shouldBe fork2.last
       }
     }
+*/
   }
 
 
 }
-*/

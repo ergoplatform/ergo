@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history
 
-case class HistoryConfig(PoPoWBootstrap: Boolean,
-                         BlocksToKeep: Int,
-                         MinimalSuffix: Int,
-                         GenesisId: Array[Byte])
+case class HistoryConfig(poPoWBootstrap: Boolean,
+                         blocksToKeep: Int,
+                         minimalSuffix: Int)

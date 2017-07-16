@@ -1,11 +1,30 @@
 package org.ergoplatform
 
+import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Algos
+import scorex.core.block.Block._
+import scorex.core.utils.NetworkTime
 
 import scala.annotation.tailrec
 
 trait ChainGenerator {
+  @tailrec
+  final def genHeaderChain(height: Int, acc: Seq[Header]): Seq[Header] = if (height == 0) {
+    acc.reverse
+  } else {
+    val block = Miner.genHeader(BigInt(1),
+      acc.head,
+      Array.fill(32)(0.toByte),
+      Array.fill(32)(0.toByte),
+      Array.fill(32)(0.toByte),
+      NetworkTime.time()): Header
+    genHeaderChain(height - 1, block +: acc)
+  }
+
+
   @tailrec
   final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
     acc.reverse

@@ -78,8 +78,8 @@ class ErgoHistory(storage: HistoryStorage,
 
   def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = Try {
     modifier match {
-      case m: Header if m.isGenesis && isEmpty =>
-        true
+      case m: Header if m.isGenesis =>
+        require(isEmpty, "Trying to append genesis block to non-empty history")
       case m: Header =>
         val parentOpt = modifierById(m.parentId)
         require(parentOpt.isDefined, "Parent header is no defined")

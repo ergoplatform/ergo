@@ -11,9 +11,9 @@ import scala.util.{Failure, Success}
 
 class HistoryStorage(storage: LSMStore) extends ScorexLogging {
 
-  private val BestHederKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(0.toByte))
+  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(0.toByte))
 
-  def bestHeaderId: Array[Byte] = storage.get(BestHederKey).get.data
+  def bestHeaderId: Array[Byte] = storage.get(BestHeaderKey).get.data
 
   def difficultyAt(id: Array[Byte]): Option[BigInt] = storage.get(headerDiffKey(id)).map(b => BigInt(b.data))
 
@@ -32,7 +32,9 @@ class HistoryStorage(storage: LSMStore) extends ScorexLogging {
   }
 
   def insert(b: HistoryModifier): Unit = {
-    val indexRows = indexes(b)
+    //TODO calculate
+    val requiredDifficulty: BigInt = 1
+    val indexRows = indexes(b, requiredDifficulty)
     storage.update(
       ByteArrayWrapper(b.id),
       Seq(),
@@ -50,17 +52,21 @@ class HistoryStorage(storage: LSMStore) extends ScorexLogging {
 
   private def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
-  private def indexes(mod: HistoryModifier): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+  private def indexes(mod: HistoryModifier, requiredDifficulty: BigInt): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     mod match {
+      case h: Header if h.isGenesis=>
+        Seq((BestHeaderKey, ByteArrayWrapper(h.id)),
+          (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
+          (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+
       case h: Header =>
-        val requiredDifficulty: BigInt = ???
         val blockScore = scoreOf(h.parentId).get + requiredDifficulty
         val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestChainScore) {
-          Seq((BestHederKey, ByteArrayWrapper(h.id)))
+          Seq((BestHeaderKey, ByteArrayWrapper(h.id)))
         } else {
           Seq()
         }
-        val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray)))
         val diffRow = Seq((headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
         bestRow ++ diffRow ++ scoreRow
       case _ =>

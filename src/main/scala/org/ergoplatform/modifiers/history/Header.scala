@@ -20,7 +20,7 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Block.Timestamp,
-                  nonce: Int) extends HistoryModifier {
+                  nonce: Long) extends HistoryModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
@@ -57,7 +57,6 @@ case class Header(version: Version,
 
 object Header {
   val ModifierTypeId: Byte = 101: Byte
-
 }
 
 
@@ -66,7 +65,7 @@ object HeaderSerializer extends Serializer[Header] {
     val BytesWithoutInterlinksLength = 108
 
     def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(h.parentId, h.ADProofsRoot, h.transactionsRoot,
-      h.stateRoot, Longs.toByteArray(h.timestamp), Ints.toByteArray(h.nonce))
+      h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce))
 
 
     def interlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
@@ -88,7 +87,7 @@ object HeaderSerializer extends Serializer[Header] {
     val transactionsRoot = bytes.slice(65, 97)
     val stateRoot = bytes.slice(97, 129)
     val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
-    val nonce = Ints.fromByteArray(bytes.slice(137, 141))
+    val nonce = Longs.fromByteArray(bytes.slice(137, 145))
 
     @tailrec
     def parseInnterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -100,7 +99,7 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val innerlinks = parseInnterlinks(141, Seq())
+    val innerlinks = parseInnterlinks(145, Seq())
 
     Header(version, parentId, innerlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce)
   }

@@ -7,7 +7,7 @@ import org.ergoplatform.settings.Algos
 trait HeadersProcesser {
   protected val storage: LSMStore
 
-  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(0.toByte))
+  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
 
   def bestHeaderId: Array[Byte] = storage.get(BestHeaderKey).get.data
 

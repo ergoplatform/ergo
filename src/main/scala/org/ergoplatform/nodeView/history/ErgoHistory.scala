@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.{FullModeHistoryStorage, HistoryStorage}
+import org.ergoplatform.nodeView.history.storage.{HeadersProcessor, HistoryStorage, ModifiersProcessor}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -158,8 +158,9 @@ object ErgoHistory extends ScorexLogging {
     }
     val config: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
     val historyStorage: HistoryStorage = {
+      val headersProcessor = new HeadersProcessor(storage)
       //TODO select according specified regime
-      new FullModeHistoryStorage(storage)
+      new HistoryStorage(storage: LSMStore, Seq(headersProcessor))
     }
 
     val history = new ErgoHistory(historyStorage, config)

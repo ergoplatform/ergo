@@ -1,14 +1,18 @@
 package org.ergoplatform.nodeView.history.storage
 
-import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{Header, HistoryModifier, HistoryModifierSerializer}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import org.ergoplatform.modifiers.history.{HistoryModifier, HistoryModifierSerializer}
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success}
 
-trait HistoryStorage extends ScorexLogging with HeadersProcesser {
+class HistoryStorage(protected val storage: LSMStore,
+                     processors: Seq[ModifiersProcessor]) extends ScorexLogging {
+  //TODO ensure we have headers processor???
+  private val headersProcessor = processors.find(a => a.isInstanceOf[HeadersProcessor]).get.asInstanceOf[HeadersProcessor]
+  def bestHeaderId: ModifierId = headersProcessor.bestHeaderId
 
   def modifierById(id: ModifierId): Option[HistoryModifier] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {
@@ -23,7 +27,8 @@ trait HistoryStorage extends ScorexLogging with HeadersProcesser {
   def insert(b: HistoryModifier): Unit = {
     //TODO calculate
     val requiredDifficulty: BigInt = 1
-    val indexRows = indexes(b, requiredDifficulty)
+    val env: ModifierProcessorEnvironment = ModifierProcessorEnvironment(requiredDifficulty)
+    val indexRows = indexes(b, env)
     storage.update(
       ByteArrayWrapper(b.id),
       Seq(),
@@ -31,18 +36,16 @@ trait HistoryStorage extends ScorexLogging with HeadersProcesser {
   }
 
   def drop(id: ModifierId): Unit = {
+    val idsToRemove = processors.flatMap(_.idsToDrop(id))
     storage.update(
       ByteArrayWrapper(Blake2b256(id ++ "drop".getBytes)),
-      Seq(ByteArrayWrapper(id), headerScoreKey(id), headerDiffKey(id)),
+      ByteArrayWrapper(id) +: idsToRemove,
       Seq())
   }
 
-  private def indexes(mod: HistoryModifier, requiredDifficulty: BigInt): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    mod match {
-      case h: Header => headerIndexes(h, requiredDifficulty)
-      case _ =>
-        Seq()
-    }
+  private def indexes(mod: HistoryModifier,
+                      env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+    processors.flatMap(_.indexes(mod, env))
   }
 
 

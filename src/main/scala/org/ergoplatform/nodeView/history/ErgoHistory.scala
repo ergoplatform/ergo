@@ -7,9 +7,9 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.storage.{FullModeHistoryStorage, HistoryStorage}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
-import scorex.core.block.Block
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.utils.ScorexLogging
@@ -157,8 +157,12 @@ object ErgoHistory extends ScorexLogging {
       ErgoFullBlock(header, blockTransactions, aDProofs)
     }
     val config: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
+    val historyStorage: HistoryStorage = {
+      //TODO select according specified regime
+      new FullModeHistoryStorage(storage)
+    }
 
-    val history = new ErgoHistory(new HistoryStorage(storage), config)
+    val history = new ErgoHistory(historyStorage, config)
     if (history.isEmpty) {
       history.append(genesis.header).get._1.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
     } else {

@@ -4,9 +4,9 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.ADProofs
 
 trait ADProofsProcessor {
-  def indexes(m: ADProofs, env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)]
+  def toInsert(m: ADProofs, env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)]
 
-  def idsToDrop(modifier: ADProofs): Seq[ByteArrayWrapper]
+  def toDrop(modifier: ADProofs): Seq[ByteArrayWrapper]
 
 }
 

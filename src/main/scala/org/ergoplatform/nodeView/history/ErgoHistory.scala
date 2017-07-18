@@ -20,16 +20,18 @@ import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
 trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
-    with HeadersProcessor
-    with ADProofsProcessor
-    with ScorexLogging {
+  with HeadersProcessor
+  with ADProofsProcessor
+  with ScorexLogging {
 
   protected val config: HistoryConfig
   protected val storage: LSMStore
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
+
   //TODO .get.asInstanceOf ??
   def bestHeader: Header = modifierById(bestHeaderId).get.asInstanceOf[Header]
+
   def bestHeaderIdWithTransactions: ModifierId = ???
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
@@ -37,13 +39,13 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
+    val env = ModifierProcessorEnvironment(BigInt(1))
     modifier match {
       case m: Header =>
         assert(isEmpty || (bestHeaderId sameElements bestHeaderId), "History is inconsistent")
         //TODO calculate
-        val env = ModifierProcessorEnvironment(BigInt(1))
-        val indexesRow = indexes(m, env)
-        historyStorage.insert(m, indexesRow)
+        val dataToInsert = toInsert(m, env)
+        historyStorage.insert(m.id, dataToInsert)
         if (bestHeaderId sameElements bestHeaderId) {
           log.info(s"New orphaned header ${m.encodedId}")
           (this, ProgressInfo(None, Seq(), Seq()))
@@ -57,7 +59,8 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
         ???
       case m: ADProofs =>
-        //        storage.insert(m)
+        val indexesRow = toInsert(m, env)
+        if (indexesRow.nonEmpty) historyStorage.insert(m.id, indexesRow)
 
         ???
       case m: PoPoWProof =>
@@ -74,7 +77,7 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
   override def reportInvalid(modifier: ErgoPersistentModifier): ErgoHistory = {
     val idsToRemove = modifier match {
-      case h: Header => idsToDrop(h)
+      case h: Header => toDrop(h)
       case _ => ???
     }
     historyStorage.drop(modifier.id, idsToRemove)
@@ -161,6 +164,7 @@ object ErgoHistory extends ScorexLogging {
       override protected val storage: LSMStore = db
     }
     if (history.isEmpty) {
+      log.info("Initialize empty history with genesis block")
       history.append(genesis.header).get._1.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
     } else {
       history

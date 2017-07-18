@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history.{HistoryModifier, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory._
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.hash.Blake2b256
@@ -9,9 +10,12 @@ import scorex.crypto.hash.Blake2b256
 import scala.util.{Failure, Success}
 
 class HistoryStorage(protected val storage: LSMStore,
-                     processors: Seq[ModifiersProcessor]) extends ScorexLogging {
+                     processors: Seq[ModifiersProcessor]) extends ScorexLogging with AutoCloseable {
+
+
   //TODO ensure we have headers processor???
   private val headersProcessor = processors.find(a => a.isInstanceOf[HeadersProcessor]).get.asInstanceOf[HeadersProcessor]
+
   def bestHeaderId: ModifierId = headersProcessor.bestHeaderId
 
   def modifierById(id: ModifierId): Option[HistoryModifier] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
@@ -48,5 +52,9 @@ class HistoryStorage(protected val storage: LSMStore,
     processors.flatMap(_.indexes(mod, env))
   }
 
+  override def close(): Unit = {
+    log.info("Closing history storage...")
+    storage.close()
+  }
 
 }

@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.{HeadersProcessor, HistoryStorage, ModifiersProcessor}
+import org.ergoplatform.nodeView.history.storage.{HeadersProcessor, HistoryStorage}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -124,6 +124,7 @@ class ErgoHistory(storage: HistoryStorage,
   }
 
   override type NVCT = ErgoHistory
+
 }
 
 object ErgoHistory extends ScorexLogging {
@@ -135,12 +136,6 @@ object ErgoHistory extends ScorexLogging {
     val storage = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
 
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        log.info("Closing history storage...")
-        storage.close()
-      }
-    })
     //TODO state should not be empty
     val stateRoot = Array.fill(32)(0.toByte)
     val genesis: ErgoFullBlock = {

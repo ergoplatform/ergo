@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.{HeadersProcessor, HistoryStorage, ModifierProcessorEnvironment}
+import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -19,17 +19,17 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-class ErgoHistory(protected val storage: LSMStore,
-                  config: HistoryConfig)
-  extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
+trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with HeadersProcessor
+    with ADProofsProcessor
     with ScorexLogging {
 
+  val config: HistoryConfig
 
-  val historyStorage: HistoryStorage = new HistoryStorage(storage)
+  lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
   //TODO .get.asInstanceOf ??
-  lazy val bestHeader: Header = modifierById(bestHeaderId).get.asInstanceOf[Header]
-  lazy val bestHeaderIdWithTransactions: ModifierId = ???
+  def bestHeader: Header = modifierById(bestHeaderId).get.asInstanceOf[Header]
+  def bestHeaderIdWithTransactions: ModifierId = ???
 
   override lazy val isEmpty: Boolean = Try(bestHeaderId).isFailure
 
@@ -47,22 +47,22 @@ class ErgoHistory(protected val storage: LSMStore,
         historyStorage.insert(m, indexesRow)
         if (bestHeaderId sameElements bestHeaderId) {
           log.info(s"New orphaned header ${m.encodedId}")
-          (new ErgoHistory(storage, config), ProgressInfo(None, Seq(), Seq()))
+          (this, ProgressInfo(None, Seq(), Seq()))
         } else {
           log.info(s"New best header ${m.encodedId}")
           //TODO Notify node view holder that it should download transactions ?
-          (new ErgoHistory(storage, config), ProgressInfo(None, Seq(), Seq()))
+          (this, ProgressInfo(None, Seq(), Seq()))
         }
       case m: BlockTransactions =>
-//        storage.insert(m)
+        //        storage.insert(m)
 
         ???
       case m: ADProofs =>
-//        storage.insert(m)
+        //        storage.insert(m)
 
         ???
       case m: PoPoWProof =>
-//        storage.insert(m)
+        //        storage.insert(m)
 
         ???
       case m =>
@@ -143,7 +143,7 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.dataDir
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val storage = new LSMStore(iFile, maxJournalEntryCount = 10000)
+    val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
 
     //TODO state should not be empty
@@ -161,9 +161,12 @@ object ErgoHistory extends ScorexLogging {
       val aDProofs: ADProofs = ADProofs(header.id, Array())
       ErgoFullBlock(header, blockTransactions, aDProofs)
     }
-    val config: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
+    val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
-    val history = new ErgoHistory(storage, config)
+    val history = new ErgoHistory with EmptyADProofsProcessor {
+      override val config: HistoryConfig = historyConfig
+      override protected val storage: LSMStore = db
+    }
     if (history.isEmpty) {
       history.append(genesis.header).get._1.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
     } else {

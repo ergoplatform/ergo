@@ -22,6 +22,7 @@ import scala.util.Try
 trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
   with HeadersProcessor
   with ADProofsProcessor
+  with BlockTransactionsProcessor
   with ScorexLogging {
 
   protected val config: HistoryConfig
@@ -55,14 +56,21 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
           (this, ProgressInfo(None, Seq(), Seq()))
         }
       case m: BlockTransactions =>
-        //        storage.insert(m)
-
-        ???
+        val dataToInsert = toInsert(m, env)
+        if (dataToInsert.nonEmpty) {
+          historyStorage.insert(m.id, dataToInsert)
+          ???
+        } else {
+          (this, ProgressInfo(None, Seq(), Seq()))
+        }
       case m: ADProofs =>
-        val indexesRow = toInsert(m, env)
-        if (indexesRow.nonEmpty) historyStorage.insert(m.id, indexesRow)
-
-        ???
+        val dataToInsert = toInsert(m, env)
+        if (dataToInsert.nonEmpty) {
+          historyStorage.insert(m.id, dataToInsert)
+          ???
+        } else {
+          (this, ProgressInfo(None, Seq(), Seq()))
+        }
       case m: PoPoWProof =>
         //        storage.insert(m)
 
@@ -159,7 +167,7 @@ object ErgoHistory extends ScorexLogging {
     }
     val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
-    val history = new ErgoHistory with EmptyADProofsProcessor {
+    val history = new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
       override protected val config: HistoryConfig = historyConfig
       override protected val storage: LSMStore = db
     }

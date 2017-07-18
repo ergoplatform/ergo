@@ -8,11 +8,11 @@ import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success}
 
-class HistoryStorage(val storage: LSMStore) extends ScorexLogging with AutoCloseable {
+class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable {
 
 
 
-  def modifierById(id: ModifierId): Option[HistoryModifier] = storage.get(ByteArrayWrapper(id)).flatMap { bBytes =>
+  def modifierById(id: ModifierId): Option[HistoryModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>
         Some(b)
@@ -22,15 +22,17 @@ class HistoryStorage(val storage: LSMStore) extends ScorexLogging with AutoClose
     }
   }
 
+  def contains(id: ModifierId): Boolean = modifierById(id).isDefined
+
   def insert(b: HistoryModifier, indexRows: Seq[(ByteArrayWrapper,ByteArrayWrapper)]): Unit = {
-    storage.update(
+    db.update(
       ByteArrayWrapper(b.id),
       Seq(),
       indexRows :+ (ByteArrayWrapper(b.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(b))))
   }
 
   def drop(id: ModifierId, idsToRemove: Seq[ByteArrayWrapper]): Unit = {
-    storage.update(
+    db.update(
       ByteArrayWrapper(Blake2b256(id ++ "drop".getBytes)),
       ByteArrayWrapper(id) +: idsToRemove,
       Seq())
@@ -39,7 +41,7 @@ class HistoryStorage(val storage: LSMStore) extends ScorexLogging with AutoClose
 
   override def close(): Unit = {
     log.info("Closing history storage...")
-    storage.close()
+    db.close()
   }
 
 }

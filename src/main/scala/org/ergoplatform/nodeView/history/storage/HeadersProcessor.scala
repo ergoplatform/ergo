@@ -12,7 +12,7 @@ trait HeadersProcessor {
 
   private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
 
-  def isEmpty: Boolean = historyStorage.db.get(BestHeaderKey).isDefined
+  def isEmpty: Boolean = historyStorage.db.get(BestHeaderKey).isEmpty
 
   def bestHeaderId: Array[Byte] = historyStorage.db.get(BestHeaderKey).get.data
 

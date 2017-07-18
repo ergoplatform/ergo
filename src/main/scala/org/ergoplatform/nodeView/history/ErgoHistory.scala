@@ -175,6 +175,7 @@ object ErgoHistory extends ScorexLogging {
       log.info("Initialize empty history with genesis block")
       history.append(genesis.header).get._1.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
     } else {
+      log.info("Initialize non-empty history ")
       history
     }
   }

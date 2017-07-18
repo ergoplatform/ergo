@@ -3,10 +3,10 @@ package org.ergoplatform.nodeView.history.storage
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.HistoryModifier
 
-trait ModifiersProcessor {
+trait ModifiersProcessor[M <: HistoryModifier] {
 
-  def indexes(m: HistoryModifier, env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)]
+  def indexes(m: M, env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)]
 
-  def idsToDrop(modifierId: Array[Byte]): Seq[ByteArrayWrapper]
+  def idsToDrop(modifier: M): Seq[ByteArrayWrapper]
 
 }

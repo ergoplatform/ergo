@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -101,9 +102,9 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
       case m: Header =>
         validate(m).get
       case m: BlockTransactions =>
-        require(contains(m.headerId), s"Header for modifier $m is no defined")
-        require(!contains(m.id), s"Modifier $m is already in history")
+        validate(m)
       case m: ADProofs =>
+        validate(m)
       case m: PoPoWProof =>
         ???
       case m =>
@@ -165,13 +166,22 @@ object ErgoHistory extends ScorexLogging {
     }
     val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
-    val history = new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
-      override protected val config: HistoryConfig = historyConfig
-      override protected val storage: LSMStore = db
+    val history = if (!settings.verifyTransactions) {
+      new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
+        override protected val config: HistoryConfig = historyConfig
+        override protected val storage: LSMStore = db
+      }
+    } else {
+      new ErgoHistory with FullnodeADProofsProcessor with FullnodeBlockTransactionsProcessor {
+        override protected val config: HistoryConfig = historyConfig
+        override protected val storage: LSMStore = db
+      }
     }
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
-      history.append(genesis.header).get._1.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
+      val historyWithHeader = history.append(genesis.header).get._1
+      if (settings.verifyTransactions) historyWithHeader.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
+      else historyWithHeader
     } else {
       log.info("Initialize non-empty history ")
       history

@@ -1,3 +1,3 @@
-package org.ergoplatform.nodeView.history.storage
+package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 case class ModifierProcessorEnvironment(requiredDifficulty: BigInt)

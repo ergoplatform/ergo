@@ -1,20 +1,24 @@
 package org.ergoplatform.nodeView.history.storage
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 
+import scala.util.Try
+
 trait HeadersProcessor {
 
-  protected val storage: LSMStore
+  protected val historyStorage: HistoryStorage
 
   private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
 
-  def bestHeaderId: Array[Byte] = storage.get(BestHeaderKey).get.data
+  def isEmpty: Boolean = historyStorage.db.get(BestHeaderKey).isDefined
 
-  protected def difficultyAt(id: Array[Byte]): Option[BigInt] = storage.get(headerDiffKey(id)).map(b => BigInt(b.data))
+  def bestHeaderId: Array[Byte] = historyStorage.db.get(BestHeaderKey).get.data
 
-  protected def scoreOf(id: Array[Byte]): Option[BigInt] = storage.get(headerScoreKey(id)).map(b => BigInt(b.data))
+  protected def difficultyAt(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerDiffKey(id)).map(b => BigInt(b.data))
+
+  protected def scoreOf(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))
 
   protected def bestHeadersChainScore: BigInt = scoreOf(bestHeaderId).get
 
@@ -23,7 +27,7 @@ trait HeadersProcessor {
   protected def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
   def indexes(h: Header,
-                       env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+              env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty = env.requiredDifficulty
     if (h.isGenesis) {
       Seq((BestHeaderKey, ByteArrayWrapper(h.id)),
@@ -46,5 +50,17 @@ trait HeadersProcessor {
     //TODO what if we're dropping best block id ??
     val modifierId = modifier.id
     Seq(headerDiffKey(modifierId), headerScoreKey(modifierId))
+  }
+
+  def validate(m: Header): Try[Unit] = Try {
+    if (m.isGenesis) {
+      require(isEmpty, "Trying to append genesis block to non-empty history")
+    } else {
+      val parentOpt = historyStorage.modifierById(m.parentId)
+      require(parentOpt.isDefined, "Parent header is no defined")
+      require(!historyStorage.contains(m.id), "Header is already in history")
+      //TODO require(Algos.blockIdDifficulty(m.headerHash) >= difficulty, "Block difficulty is not enough")
+      //TODO check timestamp
+    }
   }
 }

@@ -24,14 +24,13 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
     with ADProofsProcessor
     with ScorexLogging {
 
-  val config: HistoryConfig
+  protected val config: HistoryConfig
+  protected val storage: LSMStore
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
   //TODO .get.asInstanceOf ??
   def bestHeader: Header = modifierById(bestHeaderId).get.asInstanceOf[Header]
   def bestHeaderIdWithTransactions: ModifierId = ???
-
-  override lazy val isEmpty: Boolean = Try(bestHeaderId).isFailure
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 
@@ -88,14 +87,8 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
   def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = Try {
     modifier match {
-      case m: Header if m.isGenesis =>
-        require(isEmpty, "Trying to append genesis block to non-empty history")
       case m: Header =>
-        val parentOpt = modifierById(m.parentId)
-        require(parentOpt.isDefined, "Parent header is no defined")
-        require(!contains(m.id), "Header is already in history")
-      //TODO require(Algos.blockIdDifficulty(m.headerHash) >= difficulty, "Block difficulty is not enough")
-      //TODO check timestamp
+        validate(m).get
       case m: BlockTransactions =>
         require(contains(m.headerId), s"Header for modifier $m is no defined")
         require(!contains(m.id), s"Modifier $m is already in history")
@@ -164,7 +157,7 @@ object ErgoHistory extends ScorexLogging {
     val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
     val history = new ErgoHistory with EmptyADProofsProcessor {
-      override val config: HistoryConfig = historyConfig
+      override protected val config: HistoryConfig = historyConfig
       override protected val storage: LSMStore = db
     }
     if (history.isEmpty) {

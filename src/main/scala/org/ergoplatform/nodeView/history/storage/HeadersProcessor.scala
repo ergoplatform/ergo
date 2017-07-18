@@ -4,7 +4,7 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 
-trait HeadersProcessor extends ModifiersProcessor[Header] {
+trait HeadersProcessor {
 
   protected val storage: LSMStore
 
@@ -22,7 +22,7 @@ trait HeadersProcessor extends ModifiersProcessor[Header] {
 
   protected def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
-  override def indexes(h: Header,
+  def indexes(h: Header,
                        env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty = env.requiredDifficulty
     if (h.isGenesis) {
@@ -42,7 +42,7 @@ trait HeadersProcessor extends ModifiersProcessor[Header] {
     }
   }
 
-  override def idsToDrop(modifier: Header): Seq[ByteArrayWrapper] = {
+  def idsToDrop(modifier: Header): Seq[ByteArrayWrapper] = {
     //TODO what if we're dropping best block id ??
     val modifierId = modifier.id
     Seq(headerDiffKey(modifierId), headerScoreKey(modifierId))

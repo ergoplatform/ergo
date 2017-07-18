@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 
@@ -31,10 +31,10 @@ trait HeadersProcessor {
                env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty = env.requiredDifficulty
     if (h.isGenesis) {
-      Seq((BestHeaderKey, ByteArrayWrapper(h.id)),
+      Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
+        (BestHeaderKey, ByteArrayWrapper(h.id)),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        (ByteArrayWrapper(h.id), ByteArrayWrapper(h.bytes)))
+        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestHeadersChainScore) {
@@ -44,7 +44,7 @@ trait HeadersProcessor {
       }
       val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray)))
       val diffRow = Seq((headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
-      bestRow ++ diffRow ++ scoreRow ++ Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(h.bytes)))
+      Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))) ++ bestRow ++ diffRow ++ scoreRow
     }
   }
 

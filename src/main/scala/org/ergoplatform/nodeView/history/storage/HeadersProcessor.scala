@@ -26,13 +26,14 @@ trait HeadersProcessor {
 
   protected def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
-  def indexes(h: Header,
-              env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+  def toInsert(h: Header,
+               env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty = env.requiredDifficulty
     if (h.isGenesis) {
       Seq((BestHeaderKey, ByteArrayWrapper(h.id)),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
+        (ByteArrayWrapper(h.id), ByteArrayWrapper(h.bytes)))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestHeadersChainScore) {
@@ -42,11 +43,11 @@ trait HeadersProcessor {
       }
       val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray)))
       val diffRow = Seq((headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
-      bestRow ++ diffRow ++ scoreRow
+      bestRow ++ diffRow ++ scoreRow ++ Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(h.bytes)))
     }
   }
 
-  def idsToDrop(modifier: Header): Seq[ByteArrayWrapper] = {
+  def toDrop(modifier: Header): Seq[ByteArrayWrapper] = {
     //TODO what if we're dropping best block id ??
     val modifierId = modifier.id
     Seq(headerDiffKey(modifierId), headerScoreKey(modifierId))

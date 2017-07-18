@@ -5,13 +5,14 @@ import io.circe.Json
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
 case class ADProofs(headerId: ModifierId, proofBytes: Array[Byte]) extends HistoryModifier {
   override val modifierTypeId: ModifierTypeId = ADProofs.ModifierTypeId
 
-  override lazy val id: ModifierId = Algos.hash(proofBytes)
+  override lazy val id: ModifierId = Algos.hash(Array(modifierTypeId) ++ headerId ++ proofBytes)
 
   override type M = ADProofs
 
@@ -19,6 +20,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: Array[Byte]) extends Histo
 
   override lazy val json: Json = ???
 
+  override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
 }
 
 object ADProofs {

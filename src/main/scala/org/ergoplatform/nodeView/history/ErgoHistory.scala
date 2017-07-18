@@ -104,8 +104,6 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
         require(contains(m.headerId), s"Header for modifier $m is no defined")
         require(!contains(m.id), s"Modifier $m is already in history")
       case m: ADProofs =>
-        require(contains(m.headerId), s"Header for modifier $m is no defined")
-        require(!contains(m.id), s"Modifier $m is already in history")
       case m: PoPoWProof =>
         ???
       case m =>

@@ -7,6 +7,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
+import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
@@ -14,13 +15,15 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 
-  override lazy val id: ModifierId = BlockTransactions.rootHash(txs.map(_.id))
+  override lazy val id: ModifierId = if(txs.nonEmpty) BlockTransactions.rootHash(txs.map(_.id)) else headerId
 
   override type M = BlockTransactions
 
   override lazy val serializer: Serializer[BlockTransactions] = BlockTransactionsSerializer
 
   override lazy val json: Json = ???
+
+  override def toString: String = s"BlockTransactions(${Base58.encode(id)},${Base58.encode(headerId)},$txs)"
 
 }
 

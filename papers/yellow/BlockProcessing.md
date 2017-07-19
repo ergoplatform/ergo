@@ -38,7 +38,7 @@ For full node regime, modifiers precessing workflow is as follows:
     blacklist peer
  }
 ```
-5.On receiving transaction ids from header:
+5. On receiving transaction ids from header:
 ```scala
   Mempool.apply(transactionIdsForHeader)
   transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
@@ -106,14 +106,14 @@ Its **regular** modifiers processing is the same as for fullnode regime, while i
      case Failure(e) => ??? //UTXOSnapshotChunk or constcucted state roothash is invalid  
   }
 ```
-8.Request BlockTransactions starting from State we have
+8. Request BlockTransactions starting from State we have
 ```scala
   History.headersStartingFromId(State.headerId).foreach { header => 
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
   }
 ```
-9.On receiving BlockTransactions: ``` same as in Fullnode.7```
-10.Operate as Fullnode
+9. On receiving BlockTransactions: ``` same as in Fullnode.7```
+10. Operate as Fullnode
    
 Light-Fullnode   
 ==============

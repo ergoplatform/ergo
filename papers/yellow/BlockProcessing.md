@@ -158,7 +158,7 @@ TODO - Mode, that have synchronization by PoPoWProof, download and verify full b
 Light-SPV
 =========
 
-**boootstrap**
+**bootstrap**
 1. Send GetPoPoWProof for all connections
 2. On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better, than it's current best header chain)
 3. GOTO regular regime

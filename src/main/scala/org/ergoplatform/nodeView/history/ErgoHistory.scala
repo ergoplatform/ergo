@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -145,22 +146,6 @@ object ErgoHistory extends ScorexLogging {
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-
-    //TODO state should not be empty
-    val stateRoot = Array.fill(32)(0.toByte)
-    val genesis: ErgoFullBlock = {
-      val header: Header = Header(0.toByte,
-        Array.fill(32)(0.toByte),
-        Seq(),
-        Algos.EmptyMerkleTreeRoot,
-        stateRoot: Array[Byte],
-        Algos.EmptyMerkleTreeRoot,
-        1500203225564L,
-        0)
-      val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq())
-      val aDProofs: ADProofs = ADProofs(header.id, Array())
-      ErgoFullBlock(header, blockTransactions, aDProofs)
-    }
     val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
     val history = if (!settings.verifyTransactions) {
@@ -176,6 +161,28 @@ object ErgoHistory extends ScorexLogging {
     }
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
+      val genesis: ErgoFullBlock = {
+        val genesisTimestamp = 1500203225564L
+        val initialState = ErgoState.initialState
+        val stateRoot = initialState.rootHash()
+        val genesisTx = new AnyoneCanSpendTransaction(
+          initialState.anyoneCanSpendBoxesAtHeight(0).map(b => (b.proposition, b.value)),
+          IndexedSeq((new AnyoneCanSpendProposition, 0L)),
+          genesisTimestamp)
+
+        val header: Header = Header(0.toByte,
+          Array.fill(32)(0.toByte),
+          Seq(),
+          Algos.EmptyMerkleTreeRoot,
+          stateRoot: Array[Byte],
+          BlockTransactions.rootHash(Seq(genesisTx.id)),
+          genesisTimestamp,
+          0)
+        val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
+        val aDProofs: ADProofs = ADProofs(header.id, Array())
+        ErgoFullBlock(header, blockTransactions, aDProofs)
+      }
+
       val historyWithHeader = history.append(genesis.header).get._1
       if (settings.verifyTransactions) historyWithHeader.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
       else historyWithHeader

@@ -31,9 +31,6 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
-  //TODO .get.asInstanceOf ??
-  def bestHeader: Header = modifierById(bestHeaderId).get.asInstanceOf[Header]
-
   def bestHeaderIdWithTransactions: ModifierId = ???
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)

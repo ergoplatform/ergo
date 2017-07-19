@@ -38,14 +38,14 @@ For full node regime, modifiers precessing workflow is as follows:
     blacklist peer
  }
 ```
-5.On receiving transaction ids from header:
+5. On receiving transaction ids from header:
 ```scala
   Mempool.apply(transactionIdsForHeader)
   transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
     request transaction with txId
   }
 ```
-6.On receiving a transaction:
+6. On receiving a transaction:
 ```scala
  if(Mempool.apply(transaction).isSuccess) {
     if(!isInitialBootstrapping) Broadcast INV for this transaction
@@ -54,7 +54,7 @@ For full node regime, modifiers precessing workflow is as follows:
     }
  }
 ```
-7.Now we have BlockTransactions: all transactions corresponding to some Header
+7. Now we have BlockTransactions: all transactions corresponding to some Header
 ```scala
   if(History.apply(BlockTransactions) == Success(ProgressInfo)) {
       if(!isInitialBootstrapping) Broadcast INV for BlockTransactions // ?? We should notify our neighbours, that now we have all the transactions
@@ -90,14 +90,15 @@ Its **regular** modifiers processing is the same as for fullnode regime, while i
     blacklist peer
  }
 ```
-5.Request historical UTXOSnapshotManifest for at least BlocksToKeep back
-6.On receiving UTXOSnapshotManifest
+5. Request historical UTXOSnapshotManifest for at least BlocksToKeep back
+
+6. On receiving UTXOSnapshotManifest
 ```scala
   UTXOSnapshotManifest.chunks.foreach { chunk => 
     request chunk from sender() //Or from random fullnode
   }
 ```
-7.On receiving UTXOSnapshotChunk
+7. On receiving UTXOSnapshotChunk
 ```scala
   State.applyChunk(UTXOSnapshotChunk) match {
      case Success(Some(newMinimalState)) => GOTO 8
@@ -105,14 +106,14 @@ Its **regular** modifiers processing is the same as for fullnode regime, while i
      case Failure(e) => ??? //UTXOSnapshotChunk or constcucted state roothash is invalid  
   }
 ```
-8.Request BlockTransactions starting from State we have
+8. Request BlockTransactions starting from State we have
 ```scala
   History.headersStartingFromId(State.headerId).foreach { header => 
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
   }
 ```
-9.On receiving BlockTransactions: ``` same as in Fullnode.7```
-10.Operate as Fullnode
+9. On receiving BlockTransactions: ``` same as in Fullnode.7```
+10. Operate as Fullnode
    
 Light-Fullnode   
 ==============
@@ -129,14 +130,14 @@ Light-Fullnode
     blacklist peer
  }
 ```
-5.Request BlockTransactions and ADProofs starting from BlocksToKeep back in History (just 1 last header after node botstrapping)
+5. Request BlockTransactions and ADProofs starting from BlocksToKeep back in History (just 1 last header after node botstrapping)
 ```scala
   History.lastBestHeaders(BlocksToKeep).foreach { header => 
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
     send message(GetAdProofsHeader(header)) to Random fullnode
   }
 ```
-6.On receiving modifier: BlockTransactions or ADProofs
+6. On receiving modifier: BlockTransactions or ADProofs
 ```scala
   if(History.apply(modifier) == Success(ProgressInfo)) {
   //TODO if history now contains both ADProofs and BlockTransactions, it should return ProgressInfo with both of them, otherwise it should return empty ProgressInfo
@@ -157,7 +158,7 @@ TODO - Mode, that have synchronization by PoPoWProof, download and verify full b
 Light-SPV
 =========
 
-**boootstrap**
+**bootstrap**
 1. Send GetPoPoWProof for all connections
 2. On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better, than it's current best header chain)
 3. GOTO regular regime

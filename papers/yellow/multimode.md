@@ -77,7 +77,7 @@ Light-SPV
 This mode is not about checking any full blocks. Like in Bitcoin, an SPV node is downloading block headers only,
 and so checks only proofs of work and links. Unlike Bitcoin's SPV, the Light-SPV is downloading
  and checking not all the headers but a sublinear(in blockchain length) number of them(in benchmarks, this is about just
- tens of kilobytesm instead of tens or hundreds of megabytes for Bitcoin/Ethereum).
+ tens of kilobytes instead of tens or hundreds of megabytes for Bitcoin/Ethereum).
  
 Light-SPV mode is intended to be useful for mobile phones and low-end hardware. 
    

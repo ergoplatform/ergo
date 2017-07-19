@@ -1,5 +1,4 @@
-Ergo Modifiers Processing
--------------------------
+# Ergo Modifiers Processing
 
 This document describes processing algorithm for Ergo modifiers in all security modes.
 
@@ -34,8 +33,7 @@ else if(ADState == true && VerifyTransactions == true && PoPoWBootstrap == true 
 else //Other combinations are possible
 ```
 
-Modifiers processing
-====================
+# Modifiers processing
 
 ```scala
 def updateHeadersChainToBestInNetwork() = {
@@ -52,7 +50,7 @@ def updateHeadersChainToBestInNetwork() = {
 }
 ```
 
-**boootstrap**
+## bootstrap
 
 1.Download headers:
 ```scala
@@ -118,10 +116,14 @@ if(ADState == true) {
 4.GOTO regular mode
 
 
-**regular**
+## regular
+
 Two infinite loops in different threads with the following functions inside:
+
 1.`updateHeadersChainToBestInNetwork()`
+
 2.Download and update full blocks when needed
+
 ```scala
   if(State.bestHeader == History.bestHeader) {
     //Do nothing, State is already updated

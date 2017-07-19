@@ -17,6 +17,9 @@ trait HeadersProcessor {
 
   def bestHeaderId: Array[Byte] = historyStorage.db.get(BestHeaderKey).get.data
 
+  //TODO .get.asInstanceOf ??
+  def bestHeader: Header = historyStorage.modifierById(bestHeaderId).get.asInstanceOf[Header]
+
   protected def difficultyAt(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerDiffKey(id)).map(b => BigInt(b.data))
 
   protected def scoreOf(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))

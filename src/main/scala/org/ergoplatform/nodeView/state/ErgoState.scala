@@ -3,8 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.modifiers.state.StateModifier
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.StateChanges
 import scorex.core.transaction.state.authenticated.BoxMinimalState
@@ -17,6 +16,20 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
   ErgoState] with ScorexLogging {
+
+  /**
+    * @return boxes, that miner can take to himself when he creates a new block
+    */
+  def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
+    //TODO implement correctly
+    IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
+  }
+
+  //TODO implement correctly
+  def rootHash(): Array[Byte] = Algos.EmptyMerkleTreeRoot
+
+  //TODO implement correctly
+  def stateHeight: Int = 0
 
   override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
 
@@ -38,4 +51,7 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
 object ErgoState {
 
   def readOrGenerate(settings: ErgoSettings): ErgoState = new ErgoState
+
+  //Initial state even before genesis block application
+  val initialState: ErgoState = new ErgoState
 }

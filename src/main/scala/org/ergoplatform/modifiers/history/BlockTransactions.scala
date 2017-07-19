@@ -13,9 +13,11 @@ import scala.util.Try
 
 case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction]) extends HistoryModifier {
 
+  assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
+
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 
-  override lazy val id: ModifierId = if(txs.nonEmpty) BlockTransactions.rootHash(txs.map(_.id)) else headerId
+  override lazy val id: ModifierId = BlockTransactions.rootHash(txs.map(_.id))
 
   override type M = BlockTransactions
 

@@ -50,8 +50,6 @@ def updateHeadersChainToBestInNetwork() = {
 }
 ```
 
-# Modes
-
 ## bootstrap
 
 1.Download headers:

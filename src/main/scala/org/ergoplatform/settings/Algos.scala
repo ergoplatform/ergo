@@ -11,12 +11,14 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
+  val hashLength = 32
+
   val hash = Blake2b256
   //TODO replace to concrete mining algorithm
   val miningHash = Blake2b256
 
   def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] =
-    if (elements.isEmpty) EmptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
+    if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 
-  lazy val EmptyMerkleTreeRoot: Array[Byte] = Algos.hash(Array[Byte]())
+  lazy val emptyMerkleTreeRoot: Array[Byte] = Algos.hash(Array[Byte]())
 }

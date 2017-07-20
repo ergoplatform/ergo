@@ -1,9 +1,9 @@
 package org.ergoplatform.settings
 
+import Algos.hashLength
+
 object Constants {
-
-  val MaxTarget = BigInt(1, Array.fill(32)(Byte.MinValue))
+  val MaxTarget = BigInt(1, Array.fill(hashLength)(Byte.MinValue))
   val InitialDifficulty = BigInt(1)
-  val ModifierIdSize = 32
-
+  val ModifierIdSize: Int = hashLength
 }

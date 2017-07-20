@@ -21,11 +21,12 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
-  with HeadersProcessor
-  with ADProofsProcessor
-  with BlockTransactionsProcessor
-  with ScorexLogging {
+trait ErgoHistory
+  extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
+    with HeadersProcessor
+    with ADProofsProcessor
+    with BlockTransactionsProcessor
+    with ScorexLogging {
 
   protected val config: HistoryConfig
   protected val storage: LSMStore
@@ -129,6 +130,7 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
         }
       }
     }
+
     if (isEmpty) Seq()
     else loop(count, startBlock, Seq(startBlock)).reverse
   }
@@ -172,7 +174,7 @@ object ErgoHistory extends ScorexLogging {
         val header: Header = Header(0.toByte,
           Array.fill(32)(0.toByte),
           Seq(),
-          Algos.EmptyMerkleTreeRoot,
+          Algos.emptyMerkleTreeRoot,
           stateRoot: Array[Byte],
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,

@@ -32,7 +32,22 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
-  def bestHeaderIdWithTransactions: ModifierId = ???
+  def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
+
+  private def bestHeaderIdOpt: Option[Array[Byte]] = historyStorage.bestHeaderId
+
+  //It is safe to call this function right after history initialization with genesis block
+  def bestHeader: Header = bestHeaderOpt.get
+
+  def bestHeaderOpt: Option[Header] = historyStorage.bestHeaderId.flatMap { id =>
+    historyStorage.modifierById(id) match {
+      case Some(h: Header) => Some(h)
+      case _ => None
+    }
+  }
+
+  //None if we don't process transactions at all, Some otherwise
+  def bestHeaderIdWithTransactions: Option[ModifierId] = ???
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 
@@ -42,11 +57,11 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
     val env = ModifierProcessorEnvironment(BigInt(1))
     modifier match {
       case m: Header =>
-        assert(isEmpty || (bestHeaderId sameElements bestHeaderId), "History is inconsistent")
+        assert(isEmpty || (bestHeaderIdOpt sameElements bestHeaderIdOpt), "History is inconsistent")
         //TODO calculate
         val dataToInsert = toInsert(m, env)
         historyStorage.insert(m.id, dataToInsert)
-        if (bestHeaderId sameElements bestHeaderId) {
+        if (bestHeaderIdOpt sameElements bestHeaderIdOpt) {
           log.info(s"New orphaned header ${m.encodedId}")
           (this, ProgressInfo(None, Seq(), Seq()))
         } else {
@@ -55,21 +70,9 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
           (this, ProgressInfo(None, Seq(), Seq()))
         }
       case m: BlockTransactions =>
-        val dataToInsert = toInsert(m, env)
-        if (dataToInsert.nonEmpty) {
-          historyStorage.insert(m.id, dataToInsert)
-          ???
-        } else {
-          (this, ProgressInfo(None, Seq(), Seq()))
-        }
+        (this, process(m))
       case m: ADProofs =>
-        val dataToInsert = toInsert(m, env)
-        if (dataToInsert.nonEmpty) {
-          historyStorage.insert(m.id, dataToInsert)
-          ???
-        } else {
-          (this, ProgressInfo(None, Seq(), Seq()))
-        }
+        (this, process(m))
       case m: PoPoWProof =>
         //        storage.insert(m)
 

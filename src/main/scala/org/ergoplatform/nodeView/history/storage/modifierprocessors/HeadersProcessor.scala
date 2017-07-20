@@ -11,20 +11,15 @@ trait HeadersProcessor {
 
   protected val historyStorage: HistoryStorage
 
-  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
 
-  def isEmpty: Boolean = historyStorage.db.get(BestHeaderKey).isEmpty
-
-  def bestHeaderId: Array[Byte] = historyStorage.db.get(BestHeaderKey).get.data
-
-  //TODO .get.asInstanceOf ??
-  def bestHeader: Header = historyStorage.modifierById(bestHeaderId).get.asInstanceOf[Header]
+//  //TODO .get.asInstanceOf ??
+//  def bestHeader: Option[Header] = historyStorage.modifierById(historyStorage.bestHeaderId).get.asInstanceOf[Header]
 
   protected def difficultyAt(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerDiffKey(id)).map(b => BigInt(b.data))
 
   protected def scoreOf(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))
 
-  protected def bestHeadersChainScore: BigInt = scoreOf(bestHeaderId).get
+  protected def bestHeadersChainScore: BigInt = scoreOf(historyStorage.bestHeaderId.get).get
 
   protected def headerDiffKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
 
@@ -35,13 +30,13 @@ trait HeadersProcessor {
     val requiredDifficulty = env.requiredDifficulty
     if (h.isGenesis) {
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
-        (BestHeaderKey, ByteArrayWrapper(h.id)),
+        (historyStorage.BestHeaderKey, ByteArrayWrapper(h.id)),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
         (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestHeadersChainScore) {
-        Seq((BestHeaderKey, ByteArrayWrapper(h.id)))
+        Seq((historyStorage.BestHeaderKey, ByteArrayWrapper(h.id)))
       } else {
         Seq()
       }
@@ -59,7 +54,7 @@ trait HeadersProcessor {
 
   def validate(m: Header): Try[Unit] = Try {
     if (m.isGenesis) {
-      require(isEmpty, "Trying to append genesis block to non-empty history")
+      require(historyStorage.bestHeaderId.isEmpty, "Trying to append genesis block to non-empty history")
     } else {
       val parentOpt = historyStorage.modifierById(m.parentId)
       require(parentOpt.isDefined, "Parent header is no defined")

@@ -7,7 +7,7 @@ import scorex.core.serialization.Serializer
 
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
 case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, aDProofs: ADProofs) extends ErgoPersistentModifier {
-  override val modifierTypeId: ModifierTypeId = ???
+  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override def id: ModifierId = ???
 
@@ -16,4 +16,8 @@ case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, a
   override type M = ErgoFullBlock
 
   override def serializer: Serializer[ErgoFullBlock] = ???
+}
+
+object ErgoFullBlock {
+  val modifierTypeId: ModifierTypeId = (-127).toByte
 }

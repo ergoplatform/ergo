@@ -10,6 +10,11 @@ import scala.util.Try
 
 trait HeadersProcessor {
 
+  /**
+    * Id of best header with transactions and proofs. None in regime that do not process transactions
+    */
+  def bestFullBlockId: Option[ModifierId] = None
+
   protected val historyStorage: HistoryStorage
 
   private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))

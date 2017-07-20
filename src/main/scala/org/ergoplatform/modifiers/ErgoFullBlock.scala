@@ -6,7 +6,7 @@ import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
-case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, aDProofs: ADProofs, extension: Map[String, String]) extends ErgoPersistentModifier {
+case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, aDProofs: ADProofs, extension: Map[Array[Byte], Array[Byte]]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override def id: ModifierId = ???

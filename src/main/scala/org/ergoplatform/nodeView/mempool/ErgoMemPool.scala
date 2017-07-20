@@ -7,9 +7,11 @@ import scorex.core.transaction.MemoryPool
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.util.Try
+import scala.concurrent.{Future, Promise}
+import scala.util.{Success, Try}
 
-case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
+case class ErgoMemPool private[mempool](unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction],
+                                        waitedForAssembly: TrieMap[Seq[ModifierId], Promise[Seq[AnyoneCanSpendTransaction]]])
   extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] {
 
   override type NVCT = ErgoMemPool
@@ -32,6 +34,7 @@ case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
 
   override def putWithoutCheck(txs: Iterable[AnyoneCanSpendTransaction]): ErgoMemPool = {
     txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
+    completeAssembly()
     this
   }
 
@@ -51,10 +54,26 @@ case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
   }
 
   override def size: Int = unconfirmed.size
+
+  private def completeAssembly(): Unit = {
+    waitedForAssembly.keys.filter(ids => {
+      ids.forall(contains)
+    }).foreach(assemblyWasCompleted => {
+      waitedForAssembly.remove(assemblyWasCompleted).foreach(promise => {
+        promise complete Success(assemblyWasCompleted.map(id => getById(id).get))
+      })
+    })
+  }
+
+  def waitForAll(ids: Seq[ModifierId]): Future[Seq[AnyoneCanSpendTransaction]] = {
+    val promise = Promise[Seq[AnyoneCanSpendTransaction]]
+    waitedForAssembly.put(ids, promise)
+    promise.future
+  }
 }
 
 object ErgoMemPool {
   type TxKey = scala.collection.mutable.WrappedArray.ofByte
 
-  def empty: ErgoMemPool = new ErgoMemPool(TrieMap())
+  def empty: ErgoMemPool = new ErgoMemPool(TrieMap.empty, TrieMap.empty)
 }

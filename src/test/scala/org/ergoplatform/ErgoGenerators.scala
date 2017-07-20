@@ -50,7 +50,7 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
-    txs <- Gen.listOf(anyoneCanSpendTransactionGen)
+    txs <- Gen.nonEmptyListOf(anyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
   lazy val ADProofsGen: Gen[ADProofs] = for {

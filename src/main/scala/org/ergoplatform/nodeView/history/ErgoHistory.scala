@@ -34,20 +34,16 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
 
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
-  private def bestHeaderIdOpt: Option[Array[Byte]] = historyStorage.bestHeaderId
 
   //It is safe to call this function right after history initialization with genesis block
   def bestHeader: Header = bestHeaderOpt.get
 
-  def bestHeaderOpt: Option[Header] = historyStorage.bestHeaderId.flatMap { id =>
+  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap { id =>
     historyStorage.modifierById(id) match {
       case Some(h: Header) => Some(h)
       case _ => None
     }
   }
-
-  //None if we don't process transactions at all, Some otherwise
-  def bestHeaderIdWithTransactions: Option[ModifierId] = ???
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 

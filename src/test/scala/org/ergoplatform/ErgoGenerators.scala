@@ -46,7 +46,9 @@ trait ErgoGenerators extends CoreGenerators {
     nonce <- Arbitrary.arbitrary[Int]
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce)
+    extensionHash <- genBytesList(Constants.ModifierIdSize)
+    votes <- genBytesList(5)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
 
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)

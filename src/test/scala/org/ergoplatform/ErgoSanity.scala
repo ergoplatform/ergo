@@ -55,6 +55,9 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
-      NetworkTime.time())
+      Array.fill(32)(0.toByte),
+      Array.fill(5)(0.toByte),
+      NetworkTime.time()
+    )
   }
 }

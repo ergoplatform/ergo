@@ -2,7 +2,7 @@ package org.ergoplatform.settings
 
 import scorex.core.block.Block._
 import scorex.crypto.authds.merkle.MerkleTree
-import scorex.crypto.hash.{Blake2b256, CommutativeHash}
+import scorex.crypto.hash.Blake2b256
 
 object Algos {
 
@@ -11,13 +11,12 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
-  val hash = new CommutativeHash(Blake2b256)
+  val hash = Blake2b256
   //TODO replace to concrete mining algorithm
   val miningHash = Blake2b256
 
-  def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] = if (elements.isEmpty) EmptyMerkleTreeRoot
-  else MerkleTree(elements)(hash).rootHash
+  def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] =
+    if (elements.isEmpty) EmptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 
   lazy val EmptyMerkleTreeRoot: Array[Byte] = Algos.hash(Array[Byte]())
-
 }

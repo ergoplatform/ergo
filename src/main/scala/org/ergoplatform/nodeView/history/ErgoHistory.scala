@@ -168,7 +168,6 @@ object ErgoHistory extends ScorexLogging {
           initialState.anyoneCanSpendBoxesAtHeight(0).map(b => (b.proposition, b.value)),
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),
           genesisTimestamp)
-
         val header: Header = Header(0.toByte,
           Array.fill(32)(0.toByte),
           Seq(),
@@ -176,10 +175,13 @@ object ErgoHistory extends ScorexLogging {
           stateRoot: Array[Byte],
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,
-          0)
+          0,
+          Array.fill(32)(0.toByte),
+          Array.fill(5)(0.toByte)
+        )
         val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
         val aDProofs: ADProofs = ADProofs(header.id, Array())
-        ErgoFullBlock(header, blockTransactions, aDProofs)
+        ErgoFullBlock(header, blockTransactions, aDProofs, Map.empty)
       }
 
       val historyWithHeader = history.append(genesis.header).get._1

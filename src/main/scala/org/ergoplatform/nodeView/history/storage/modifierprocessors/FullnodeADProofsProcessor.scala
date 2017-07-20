@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
@@ -15,8 +15,19 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
 
 
   def process(m: ADProofs): ProgressInfo[ErgoPersistentModifier] = {
-    //    Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
-    ???
+    historyStorage.modifierById(m.headerId) match {
+      case Some(header: Header) =>
+        historyStorage.modifierById(header.transactionsRoot) match {
+          case Some(txs: BlockTransactions) =>
+            processFullBlock(header, txs, m, txsAreNew = false)
+          case _ =>
+            val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
+            historyStorage.insert(m.id, modifierRow)
+            ProgressInfo(None, Seq(), Seq())
+        }
+      case _ =>
+        throw new Error(s"Header for modifier $m is no defined")
+    }
   }
 
 

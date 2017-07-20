@@ -5,8 +5,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
-import scorex.core.block.Block._
 import scorex.core.utils.NetworkTime
+import Algos.hashLength
 
 import scala.annotation.tailrec
 
@@ -17,9 +17,9 @@ trait ChainGenerator {
   } else {
     val block = Miner.genHeader(BigInt(1),
       acc.head,
-      Array.fill(32)(0.toByte),
-      Array.fill(32)(0.toByte),
-      Array.fill(32)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
       NetworkTime.time()): Header
     genHeaderChain(height - 1, block +: acc)
   }

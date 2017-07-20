@@ -20,7 +20,10 @@ trait ChainGenerator {
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
-      NetworkTime.time()): Header
+      Array.fill(32)(0.toByte),
+      Array.fill(5)(0.toByte),
+      NetworkTime.time()
+    ): Header
     genHeaderChain(height - 1, block +: acc)
   }
 

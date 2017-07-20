@@ -10,13 +10,6 @@ import scala.util.{Failure, Success}
 
 class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable {
 
-  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(-1))
-
-  val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
-
-  def bestHeaderIdWithTransactions: Option[ModifierId] = db.get(BestFullBlockKey).map(_.data)
-
-  def bestHeaderId: Option[ModifierId] = db.get(BestHeaderKey).map(_.data)
 
   def modifierById(id: ModifierId): Option[HistoryModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {

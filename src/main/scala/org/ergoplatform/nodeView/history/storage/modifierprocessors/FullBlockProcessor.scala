@@ -11,7 +11,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(-1))
 
-  def bestFullBlockId: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
+  override def bestFullBlockId: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
 
   protected def processFullBlock(header: Header,
                                  txs: BlockTransactions,

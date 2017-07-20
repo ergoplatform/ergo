@@ -6,10 +6,11 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
+import org.ergoplatform.settings.Algos.hashLength
 
 trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
-  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(-1))
+  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
 
   override def bestFullBlockId: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
 
@@ -47,5 +48,4 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       ProgressInfo(None, Seq(), Seq())
     }
   }
-
 }

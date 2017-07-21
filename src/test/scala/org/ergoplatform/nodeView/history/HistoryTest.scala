@@ -2,11 +2,12 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.circe
+import io.circe.Json
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
 class HistoryTest extends PropSpec
@@ -16,19 +17,32 @@ class HistoryTest extends PropSpec
   with ErgoGenerators
   with TestkitHelpers
   with ChainGenerator {
-  val fullHistorySettings: ErgoSettings = new ErgoSettings {
-    override def settingsJSON: Map[String, circe.Json] = Map()
-    override val verifyTransactions: Boolean = true
-    override val dataDir: String = s"/tmp/ergo/test-history"
-  }
-  new File(fullHistorySettings.dataDir).mkdirs()
+
+  var fullHistory = generateHistory(verify = true)
+  var lightHistory = generateHistory(verify = false)
+  assert(fullHistory.bestHeader.id sameElements fullHistory.bestFullBlockId.get,
+    s"${fullHistory.bestHeader.encodedId} != ${Base58.encode(fullHistory.bestFullBlockId.get)}")
+  assert(lightHistory.bestFullBlockId.isEmpty)
+
 
   val BlocksInChain = 30
 
-  //TODO write tests for other regimes
-  var fullHistory = ErgoHistory.readOrGenerate(fullHistorySettings)
+  property("Appended headers to best chain in history") {
+    historyTest(Seq(fullHistory, lightHistory)) { historyIn: ErgoHistory =>
+      var history = historyIn
+      val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+      chain.foreach { header =>
+        history.contains(header) shouldBe false
+        history.applicable(header) shouldBe true
 
-  assert(fullHistory.bestHeader.id sameElements fullHistory.bestFullBlockId.get)
+        history = history.append(header).get._1
+
+        history.contains(header) shouldBe true
+        history.applicable(header) shouldBe false
+        history.bestHeader shouldBe header
+      }
+    }
+  }
 
   property("compare()") {
     //TODO what if headers1 > headers2 but fullchain 1 < fullchain2?
@@ -95,20 +109,6 @@ class HistoryTest extends PropSpec
     */
   }
 
-  property("Appended headers to best chain in history") {
-    val chain = genHeaderChain(BlocksInChain, Seq(fullHistory.bestHeader)).tail
-    chain.foreach { header =>
-      fullHistory.contains(header) shouldBe false
-      fullHistory.applicable(header) shouldBe true
-
-      fullHistory = fullHistory.append(header).get._1
-
-      fullHistory.contains(header) shouldBe true
-      fullHistory.applicable(header) shouldBe false
-      fullHistory.bestHeader shouldBe header
-    }
-  }
-
   property("Drop last block from history") {
     /*
         val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
@@ -153,6 +153,19 @@ class HistoryTest extends PropSpec
         }
     */
   }
+
+  private def generateHistory(verify: Boolean): ErgoHistory = {
+    val fullHistorySettings: ErgoSettings = new ErgoSettings {
+      override def settingsJSON: Map[String, Json] = Map()
+
+      override val verifyTransactions: Boolean = verify
+      override val dataDir: String = s"/tmp/ergo/test-history-$verify"
+    }
+    new File(fullHistorySettings.dataDir).mkdirs()
+    ErgoHistory.readOrGenerate(fullHistorySettings)
+  }
+
+  private def historyTest(histories: Seq[ErgoHistory])(fn: ErgoHistory => Unit): Unit = histories.foreach(fn)
 
 
 }

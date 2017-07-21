@@ -34,7 +34,7 @@ trait ErgoGenerators extends CoreGenerators {
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
     idGenerator <- genBytesList(Constants.ModifierIdSize)
-    ids <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(ErgoSyncInfo.MaxBlockIds))
+    ids <- Gen.nonEmptyListOf(idGenerator).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(answer, ids)
 
   lazy val ergoHeaderGen: Gen[Header] = for {

@@ -8,8 +8,8 @@ object HistoryModifierSerializer extends Serializer[HistoryModifier] {
   override def toBytes(obj: HistoryModifier): Array[Byte] = obj match {
     case m: Header =>
       Header.ModifierTypeId +: HeaderSerializer.toBytes(m)
-    case m: ADProofs =>
-      ADProofs.ModifierTypeId +: ADProofsSerializer.toBytes(m)
+    case m: ADProof =>
+      ADProof.ModifierTypeId +: ADProofSerializer.toBytes(m)
     case m: BlockTransactions =>
       BlockTransactions.ModifierTypeId +: BlockTransactionsSerializer.toBytes(m)
     case m =>
@@ -20,8 +20,8 @@ object HistoryModifierSerializer extends Serializer[HistoryModifier] {
     bytes.head match {
       case Header.ModifierTypeId =>
         HeaderSerializer.parseBytes(bytes.tail).get
-      case ADProofs.ModifierTypeId =>
-        ADProofsSerializer.parseBytes(bytes.tail).get
+      case ADProof.ModifierTypeId =>
+        ADProofSerializer.parseBytes(bytes.tail).get
       case BlockTransactions.ModifierTypeId =>
         BlockTransactionsSerializer.parseBytes(bytes.tail).get
       case m =>

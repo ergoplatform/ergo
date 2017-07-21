@@ -21,11 +21,11 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
     * @return boxes, that miner can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO implement correctly
+    //TODO: kushti:  if state is not about UTXO, it is not possible to extract this info even
     IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
   }
 
-  //TODO implement correctly
+  //TODO: kushti: AVL+ root, not Merkle
   def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
 
   //TODO implement correctly

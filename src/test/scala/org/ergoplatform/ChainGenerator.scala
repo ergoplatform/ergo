@@ -2,7 +2,7 @@ package org.ergoplatform
 
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -37,7 +37,7 @@ trait ChainGenerator {
       NetworkTime.time()))
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
-    val proofsRoot = ADProofs.idFromProof(proofs)
+    val proofsRoot = ADProof.idFromProof(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
 
     val header = Miner.genHeader(BigInt(1),
@@ -47,7 +47,7 @@ trait ChainGenerator {
       txsRoot,
       NetworkTime.time()): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
-    val aDProofs: ADProofs = ADProofs(header.id, proofs)
+    val aDProofs: ADProof = ADProof(header.id, proofs)
 
     val block = ErgoFullBlock(header, blockTransactions, aDProofs)
     genChain(height - 1, block +: acc)

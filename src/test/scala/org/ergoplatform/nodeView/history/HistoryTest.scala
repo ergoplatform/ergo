@@ -20,8 +20,7 @@ class HistoryTest extends PropSpec
 
   var fullHistory = generateHistory(verify = true)
   var lightHistory = generateHistory(verify = false)
-  assert(fullHistory.bestHeader.id sameElements fullHistory.bestFullBlockId.get,
-    s"${fullHistory.bestHeader.encodedId} != ${Base58.encode(fullHistory.bestFullBlockId.get)}")
+  assert(fullHistory.bestFullBlockId.isDefined)
   assert(lightHistory.bestFullBlockId.isEmpty)
 
 

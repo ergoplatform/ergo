@@ -41,7 +41,7 @@ trait ErgoHistory
   def bestHeader: Header = bestHeaderOpt.get
 
   //None for light mode, Some for fullnode regime after initial bootstrap
-  def bestFullBlock: Option[ErgoFullBlock] = Try {
+  def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
     val header = typedModifierById[Header](bestFullBlockId.get).get
     val aDProofs = typedModifierById[ADProofs](header.ADProofsRoot).get
     val txs = typedModifierById[BlockTransactions](header.transactionsRoot).get

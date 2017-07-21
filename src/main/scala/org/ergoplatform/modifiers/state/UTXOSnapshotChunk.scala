@@ -1,11 +1,11 @@
 package org.ergoplatform.modifiers.state
 
 import io.circe.Json
-import org.ergoplatform.modifiers.ErgoModifier
-import org.ergoplatform.nodeView.state.StateElement
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import UTXOSnapshotChunk.StateElement
 
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends StateModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
@@ -22,5 +22,7 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 }
 
 object UTXOSnapshotChunk {
+  type StateElement = AnyoneCanSpendNoncedBox
+
   val ModifierTypeId: Byte = 107: Byte
 }

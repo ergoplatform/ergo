@@ -47,7 +47,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
   "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "1.2.2",
-  "org.slf4j" % "slf4j-api" % "1.8.0-alpha2",
+  "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
   "org.typelevel" % "cats-core_2.12" % "0.9.0",
   "org.typelevel" % "cats-kernel_2.12" % "0.9.0",

@@ -26,35 +26,67 @@ class HistoryTest extends PropSpec
   val BlocksInChain = 30
 
   property("Append headers to best chain in history") {
-    historyTest(Seq(fullHistory, lightHistory)) { historyIn: ErgoHistory =>
-      var history = historyIn
-      val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
-      chain.foreach { header =>
-        history.contains(header) shouldBe false
-        history.applicable(header) shouldBe true
+    var history = lightHistory
+    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+    chain.foreach { header =>
+      history.contains(header) shouldBe false
+      history.applicable(header) shouldBe true
 
-        history = history.append(header).get._1
+      history = history.append(header).get._1
 
-        history.contains(header) shouldBe true
-        history.applicable(header) shouldBe false
-        history.bestHeader shouldBe header
-      }
+      history.contains(header) shouldBe true
+      history.applicable(header) shouldBe false
+      history.bestHeader shouldBe header
     }
   }
 
   property("Appended full blocks to best chain in full history") {
-
-    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlock.get)).tail
+    assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)
+    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
     chain.foreach { fullBlock =>
+      val startFullBlock = fullHistory.bestFullBlockOpt.get
       val header = fullBlock.header
+      val txs = fullBlock.blockTransactions
+      val proofs = fullBlock.aDProofs
       fullHistory.contains(header) shouldBe false
+      fullHistory.contains(txs) shouldBe false
+      fullHistory.contains(proofs) shouldBe false
       fullHistory.applicable(header) shouldBe true
+      fullHistory.applicable(proofs) shouldBe false
+      fullHistory.applicable(txs) shouldBe false
 
       fullHistory = fullHistory.append(header).get._1
 
       fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe false
+      fullHistory.contains(proofs) shouldBe false
       fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe true
+      fullHistory.applicable(txs) shouldBe true
       fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe startFullBlock
+
+      fullHistory = fullHistory.append(txs).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe true
+      fullHistory.contains(proofs) shouldBe false
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe true
+      fullHistory.applicable(txs) shouldBe false
+      fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe startFullBlock
+
+      fullHistory = fullHistory.append(proofs).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe true
+      fullHistory.contains(proofs) shouldBe true
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe false
+      fullHistory.applicable(txs) shouldBe false
+      fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe fullBlock
     }
   }
 

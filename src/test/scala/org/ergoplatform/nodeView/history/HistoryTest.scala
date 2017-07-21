@@ -7,7 +7,6 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
 class HistoryTest extends PropSpec
@@ -26,7 +25,7 @@ class HistoryTest extends PropSpec
 
   val BlocksInChain = 30
 
-  property("Appended headers to best chain in history") {
+  property("Append headers to best chain in history") {
     historyTest(Seq(fullHistory, lightHistory)) { historyIn: ErgoHistory =>
       var history = historyIn
       val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
@@ -40,6 +39,22 @@ class HistoryTest extends PropSpec
         history.applicable(header) shouldBe false
         history.bestHeader shouldBe header
       }
+    }
+  }
+
+  property("Appended full blocks to best chain in full history") {
+
+    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlock.get)).tail
+    chain.foreach { fullBlock =>
+      val header = fullBlock.header
+      fullHistory.contains(header) shouldBe false
+      fullHistory.applicable(header) shouldBe true
+
+      fullHistory = fullHistory.append(header).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.bestHeader shouldBe header
     }
   }
 

@@ -2,26 +2,29 @@ package org.ergoplatform
 
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.block.Block._
 import scorex.core.utils.NetworkTime
 
 import scala.annotation.tailrec
+import scala.util.Random
 
 trait ChainGenerator {
   @tailrec
   final def genHeaderChain(height: Int, acc: Seq[Header]): Seq[Header] = if (height == 0) {
     acc.reverse
   } else {
-    val block = Miner.genHeader(BigInt(1),
+    val header = Miner.genHeader(BigInt(1),
       acc.head,
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
       Array.fill(32)(0.toByte),
       NetworkTime.time()): Header
-    genHeaderChain(height - 1, block +: acc)
+    genHeaderChain(height - 1, header +: acc)
   }
 
 
@@ -29,7 +32,24 @@ trait ChainGenerator {
   final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
     acc.reverse
   } else {
-    val block = ???
+    val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq((new AnyoneCanSpendProposition, height.toLong)),
+       IndexedSeq((new AnyoneCanSpendProposition, 1L)),
+      NetworkTime.time()))
+    val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
+    val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
+    val proofsRoot = ADProofs.idFromProof(proofs)
+    val stateRoot = Array.fill(32)(0.toByte)
+
+    val header = Miner.genHeader(BigInt(1),
+      acc.head.header,
+      stateRoot,
+      proofsRoot,
+      txsRoot,
+      NetworkTime.time()): Header
+    val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
+    val aDProofs: ADProofs = ADProofs(header.id, proofs)
+
+    val block = ErgoFullBlock(header, blockTransactions, aDProofs)
     genChain(height - 1, block +: acc)
   }
 

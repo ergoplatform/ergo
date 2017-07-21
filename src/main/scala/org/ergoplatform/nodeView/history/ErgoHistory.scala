@@ -173,7 +173,7 @@ object ErgoHistory extends ScorexLogging {
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),
           genesisTimestamp)
         val proofs = initialState.proofsForTransactions(Seq(genesisTx))
-        val proofsRoot = ADProof.idFromProof(proofs)
+        val proofsRoot = ADProof.proofDigest(proofs)
 
         val header: Header = Header(0.toByte,
           Array.fill(hashLength)(0.toByte),

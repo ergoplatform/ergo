@@ -37,7 +37,7 @@ trait ChainGenerator {
       NetworkTime.time()))
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
-    val proofsRoot = ADProof.idFromProof(proofs)
+    val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
 
     val header = Miner.genHeader(BigInt(1),

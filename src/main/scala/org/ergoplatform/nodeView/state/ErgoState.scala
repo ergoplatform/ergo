@@ -26,7 +26,7 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
   }
 
   //TODO implement correctly
-  def rootHash(): Array[Byte] = Algos.EmptyMerkleTreeRoot
+  def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
 
   //TODO implement correctly
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Array[Byte] = txs.flatMap(_.id).toArray

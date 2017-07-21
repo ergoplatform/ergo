@@ -11,6 +11,8 @@ import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
+import Algos.hashLength
+
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -21,11 +23,12 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
-trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
-  with HeadersProcessor
-  with ADProofsProcessor
-  with BlockTransactionsProcessor
-  with ScorexLogging {
+trait ErgoHistory
+  extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
+    with HeadersProcessor
+    with ADProofsProcessor
+    with BlockTransactionsProcessor
+    with ScorexLogging {
 
   protected val config: HistoryConfig
   protected val storage: LSMStore
@@ -129,6 +132,7 @@ trait ErgoHistory extends History[AnyoneCanSpendProposition, AnyoneCanSpendTrans
         }
       }
     }
+
     if (isEmpty) Seq()
     else loop(count, startBlock, Seq(startBlock)).reverse
   }
@@ -172,7 +176,7 @@ object ErgoHistory extends ScorexLogging {
         val proofsRoot = ADProofs.idFromProof(proofs)
 
         val header: Header = Header(0.toByte,
-          Array.fill(32)(0.toByte),
+          Array.fill(hashLength)(0.toByte),
           Seq(),
           proofsRoot,
           stateRoot: Array[Byte],

@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier._
-
+import Algos.hashLength
 import scala.util.Try
 
 trait HeadersProcessor {
@@ -17,7 +17,7 @@ trait HeadersProcessor {
 
   protected val historyStorage: HistoryStorage
 
-  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(32)(Header.ModifierTypeId))
+  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
 
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 

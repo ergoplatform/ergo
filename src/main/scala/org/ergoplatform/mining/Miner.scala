@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProof, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
@@ -13,11 +13,11 @@ object Miner {
 
 
   def genBlock(difficulty: BigInt,
-                parent: Header,
-                stateRoot: Array[Byte],
-                adProofs: ADProofs,
-                transactions: Seq[AnyoneCanSpendTransaction],
-                timestamp: Timestamp): ErgoFullBlock = {
+               parent: Header,
+               stateRoot: Array[Byte],
+               adProofs: ADProof,
+               transactions: Seq[AnyoneCanSpendTransaction],
+               timestamp: Timestamp): ErgoFullBlock = {
 ???
   }
 

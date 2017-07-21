@@ -12,7 +12,7 @@ import scala.util.Try
 case class ADProofs(headerId: ModifierId, proofBytes: Array[Byte]) extends HistoryModifier {
   override val modifierTypeId: ModifierTypeId = ADProofs.ModifierTypeId
 
-  override lazy val id: ModifierId = Algos.hash(Array(modifierTypeId) ++ headerId ++ proofBytes)
+  override lazy val id: ModifierId = ADProofs.idFromProof(proofBytes)
 
   override type M = ADProofs
 
@@ -26,11 +26,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: Array[Byte]) extends Histo
 object ADProofs {
   val ModifierTypeId: Byte = 104: Byte
 
-  def validate(proof: ADProofs, startingDigest: Array[Byte]): Try[Unit] = {
-    //TODO validate proof relative to starting digest
-    ???
-  }
-
+  def idFromProof(proofBytes: Array[Byte]): Array[Byte] = Algos.hash.prefixedHash(ModifierTypeId, proofBytes)
 }
 
 object ADProofsSerializer extends Serializer[ADProofs] {

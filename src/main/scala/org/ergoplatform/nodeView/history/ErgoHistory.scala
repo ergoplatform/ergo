@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.LSMStore
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, PoPoWProof}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, PoPoWProof}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -43,7 +43,7 @@ trait ErgoHistory
   //None for light mode, Some for fullnode regime after initial bootstrap
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
     val header = typedModifierById[Header](bestFullBlockId.get).get
-    val aDProofs = typedModifierById[ADProofs](header.ADProofsRoot).get
+    val aDProofs = typedModifierById[ADProof](header.ADProofsRoot).get
     val txs = typedModifierById[BlockTransactions](header.transactionsRoot).get
     ErgoFullBlock(header, txs, aDProofs)
   }.toOption
@@ -77,7 +77,7 @@ trait ErgoHistory
         }
       case m: BlockTransactions =>
         (this, process(m))
-      case m: ADProofs =>
+      case m: ADProof =>
         (this, process(m))
       case m: PoPoWProof =>
         //        storage.insert(m)
@@ -110,7 +110,7 @@ trait ErgoHistory
         validate(m)
       case m: BlockTransactions =>
         validate(m)
-      case m: ADProofs =>
+      case m: ADProof =>
         validate(m)
       case m: PoPoWProof =>
         Failure(new NotImplementedError)
@@ -180,7 +180,7 @@ object ErgoHistory extends ScorexLogging {
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),
           genesisTimestamp)
         val proofs = initialState.proofsForTransactions(Seq(genesisTx))
-        val proofsRoot = ADProofs.idFromProof(proofs)
+        val proofsRoot = ADProof.proofDigest(proofs)
 
         val header: Header = Header(0.toByte,
           Array.fill(hashLength)(0.toByte),
@@ -191,7 +191,7 @@ object ErgoHistory extends ScorexLogging {
           genesisTimestamp,
           0)
         val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
-        val aDProofs: ADProofs = ADProofs(header.id, proofs)
+        val aDProofs: ADProof = ADProof(header.id, proofs)
         assert(header.ADProofsRoot sameElements aDProofs.id)
         assert(header.transactionsRoot sameElements blockTransactions.id)
         ErgoFullBlock(header, blockTransactions, aDProofs)

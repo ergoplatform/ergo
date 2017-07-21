@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
@@ -19,7 +19,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsRoot) match {
-          case Some(adProof: ADProofs) =>
+          case Some(adProof: ADProof) =>
             processFullBlock(header, txs, adProof, txsAreNew = true)
           case _ =>
             //TODO what if we do not need ADProofs (e.g. we can generate them by ourselves)

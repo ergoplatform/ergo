@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -21,15 +22,15 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
     * @return boxes, that miner can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO implement correctly
+    //TODO: kushti:  if state is not about UTXO, it is not possible to extract this info even
     IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
   }
 
-  //TODO implement correctly
+  //TODO: kushti: AVL+ root, not Merkle
   def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
 
   //TODO implement correctly
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Array[Byte] = txs.flatMap(_.id).toArray
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation = txs.flatMap(_.id).toArray
 
   //TODO implement correctly
   def stateHeight: Int = 0

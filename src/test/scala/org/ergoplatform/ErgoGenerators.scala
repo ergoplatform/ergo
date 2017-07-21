@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -34,7 +34,7 @@ trait ErgoGenerators extends CoreGenerators {
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
     idGenerator <- genBytesList(Constants.ModifierIdSize)
-    ids <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(ErgoSyncInfo.MaxBlockIds))
+    ids <- Gen.nonEmptyListOf(idGenerator).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(answer, ids)
 
   lazy val ergoHeaderGen: Gen[Header] = for {
@@ -53,10 +53,10 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- Gen.listOf(anyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val ADProofsGen: Gen[ADProofs] = for {
+  lazy val ADProofsGen: Gen[ADProof] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
-  } yield ADProofs(headerId, proof)
+  } yield ADProof(headerId, proof)
 
 
 }

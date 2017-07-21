@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
@@ -16,7 +16,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def processFullBlock(header: Header,
                                  txs: BlockTransactions,
-                                 adProofs: ADProofs,
+                                 adProofs: ADProof,
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val newModRow = if (txsAreNew) {
       (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))

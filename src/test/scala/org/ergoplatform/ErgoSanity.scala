@@ -10,11 +10,12 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.scalacheck.Gen
 import scorex.core.transaction.state.StateChanges
 import scorex.core.utils.NetworkTime
 import scorex.testkit.{BlockchainPerformance, BlockchainSanity}
+import Algos.hashLength
 
 class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
@@ -52,9 +53,9 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
     val bestHeader: Header = ???
     Miner.genHeader(BigInt(1),
       bestHeader,
-      Array.fill(32)(0.toByte),
-      Array.fill(32)(0.toByte),
-      Array.fill(32)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
       NetworkTime.time())
   }
 }

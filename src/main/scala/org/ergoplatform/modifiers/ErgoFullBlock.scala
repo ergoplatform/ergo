@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers
 
 import io.circe.Json
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
@@ -9,13 +10,13 @@ import scorex.core.serialization.Serializer
 case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, aDProofs: ADProof) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override def id: ModifierId = ???
+  override lazy val id: ModifierId = Algos.hash(header.id ++ blockTransactions.id ++ aDProofs.id)
 
-  override def json: Json = ???
+  override lazy val json: Json = ???
 
   override type M = ErgoFullBlock
 
-  override def serializer: Serializer[ErgoFullBlock] = ???
+  override lazy val serializer: Serializer[ErgoFullBlock] = ???
 }
 
 object ErgoFullBlock {

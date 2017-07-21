@@ -47,11 +47,6 @@ case class Header(version: Version,
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
-  override def equals(obj: scala.Any): Boolean = obj match {
-    case that: Header => id sameElements that.id
-    case _ => false
-  }
-
   lazy val isGenesis: Boolean = interlinks.isEmpty
 }
 

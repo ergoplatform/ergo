@@ -10,9 +10,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import Algos.hashLength
-
+import org.ergoplatform.settings.Algos.hashLength
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -20,7 +19,7 @@ import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
 trait ErgoHistory
@@ -41,31 +40,39 @@ trait ErgoHistory
   //It is safe to call this function right after history initialization with genesis block
   def bestHeader: Header = bestHeaderOpt.get
 
-  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap { id =>
-    historyStorage.modifierById(id) match {
-      case Some(h: Header) => Some(h)
-      case _ => None
-    }
-  }
+  //None for light mode, Some for fullnode regime after initial bootstrap
+  def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
+    val header = typedModifierById[Header](bestFullBlockId.get).get
+    val aDProofs = typedModifierById[ADProof](header.ADProofsRoot).get
+    val txs = typedModifierById[BlockTransactions](header.transactionsRoot).get
+    ErgoFullBlock(header, txs, aDProofs)
+  }.toOption
+
+  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
+
+  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
+    case Some(m: T) => Some(m)
+    case _ => None
+  }
+
 
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
+    //TODO calculate or get somewhere
     val env = ModifierProcessorEnvironment(BigInt(1))
     modifier match {
       case m: Header =>
-        assert(isEmpty || (bestHeaderIdOpt sameElements bestHeaderIdOpt), "History is inconsistent")
-        //TODO calculate
         val dataToInsert = toInsert(m, env)
         historyStorage.insert(m.id, dataToInsert)
-        if (bestHeaderIdOpt sameElements bestHeaderIdOpt) {
-          log.info(s"New orphaned header ${m.encodedId}")
-          (this, ProgressInfo(None, Seq(), Seq()))
-        } else {
+        if (isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
           log.info(s"New best header ${m.encodedId}")
           //TODO Notify node view holder that it should download transactions ?
+          (this, ProgressInfo(None, Seq(), Seq()))
+        } else {
+          log.info(s"New orphaned header ${m.encodedId}, best: ${}")
           (this, ProgressInfo(None, Seq(), Seq()))
         }
       case m: BlockTransactions =>
@@ -97,18 +104,18 @@ trait ErgoHistory
 
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
-  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = Try {
+  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
       case m: Header =>
-        validate(m).get
+        validate(m)
       case m: BlockTransactions =>
         validate(m)
       case m: ADProof =>
         validate(m)
       case m: PoPoWProof =>
-        ???
+        Failure(new NotImplementedError)
       case m =>
-        throw new Error(s"Modifier $m have incorrect type")
+        Failure(new Error(s"Modifier $m have incorrect type"))
     }
   }
 

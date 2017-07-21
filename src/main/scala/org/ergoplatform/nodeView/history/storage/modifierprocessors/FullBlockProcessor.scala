@@ -23,8 +23,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       (ByteArrayWrapper(adProofs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofs)))
     }
     val storageVersion = if (txsAreNew) txs.id else adProofs.id
-    val prevBestFullBlockId = bestFullBlockId.get
-    val isNewBest = (scoreOf(prevBestFullBlockId), scoreOf(header.id)) match {
+    val isNewBest = (bestFullBlockId.flatMap(scoreOf), scoreOf(header.id)) match {
       case (_, None) => throw new Error("Score of best block is undefined")
       case (None, b) => true
       case (Some(prevBestScore), Some(curentScore)) if curentScore > prevBestScore => true
@@ -33,8 +32,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
     if(isNewBest) {
       val fullBlock = ErgoFullBlock(header, txs, adProofs)
-      historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, newModRow._1)))
-      if((header.parentId sameElements prevBestFullBlockId) || bestFullBlockId.isEmpty) {
+      val prevBestId = bestFullBlockId
+      historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(header.id))))
+      if(prevBestId.isEmpty || (header.parentId sameElements prevBestId.get)) {
         log.info(s"Got new best header ${header.encodedId} with transactions and proofs")
         ProgressInfo(None, Seq(), Seq(fullBlock))
       } else {

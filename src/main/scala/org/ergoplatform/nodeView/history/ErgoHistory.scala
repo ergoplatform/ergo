@@ -19,7 +19,7 @@ import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
 trait ErgoHistory
@@ -104,18 +104,18 @@ trait ErgoHistory
 
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
-  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = Try {
+  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
       case m: Header =>
-        validate(m).get
+        validate(m)
       case m: BlockTransactions =>
         validate(m)
       case m: ADProofs =>
         validate(m)
       case m: PoPoWProof =>
-        ???
+        Failure(new NotImplementedError)
       case m =>
-        throw new Error(s"Modifier $m have incorrect type")
+        Failure(new Error(s"Modifier $m have incorrect type"))
     }
   }
 

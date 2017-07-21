@@ -21,7 +21,6 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
     "value" -> value.asJson
   ).asJson
 
-
   override val id: Array[Byte] = Algos.hash(Longs.toByteArray(nonce))
 
   override type M = AnyoneCanSpendNoncedBox
@@ -30,19 +29,17 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
 }
 
 object AnyoneCanSpendNoncedBox {
-
   def idFromBox(prop: AnyoneCanSpendProposition, nonce: Long): Array[Byte] =
     Algos.hash(prop.serializer.toBytes(prop) ++ Longs.toByteArray(nonce))
-
 }
 
 object AnyoneCanSpendNoncedBoxSerializer extends Serializer[AnyoneCanSpendNoncedBox] {
+  val Length: Int = AnyoneCanSpendPropositionSerializer.Length + 8 + 8
 
   override def toBytes(obj: AnyoneCanSpendNoncedBox): Array[Byte] =
     obj.proposition.serializer.toBytes(obj.proposition) ++
       Longs.toByteArray(obj.nonce) ++
       Longs.toByteArray(obj.value)
-
 
   override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendNoncedBox] = Try {
     val proposition = AnyoneCanSpendPropositionSerializer.parseBytes(bytes.take(1)).get

@@ -168,17 +168,21 @@ object ErgoHistory extends ScorexLogging {
           initialState.anyoneCanSpendBoxesAtHeight(0).map(b => (b.proposition, b.value)),
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),
           genesisTimestamp)
+        val proofs = initialState.proofsForTransactions(Seq(genesisTx))
+        val proofsRoot = ADProofs.idFromProof(proofs)
 
         val header: Header = Header(0.toByte,
           Array.fill(32)(0.toByte),
           Seq(),
-          Algos.EmptyMerkleTreeRoot,
+          proofsRoot,
           stateRoot: Array[Byte],
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,
           0)
         val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
-        val aDProofs: ADProofs = ADProofs(header.id, Array())
+        val aDProofs: ADProofs = ADProofs(header.id, proofs)
+        assert(header.ADProofsRoot sameElements aDProofs.id)
+        assert(header.transactionsRoot sameElements blockTransactions.id)
         ErgoFullBlock(header, blockTransactions, aDProofs)
       }
 

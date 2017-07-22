@@ -192,8 +192,8 @@ object ErgoHistory extends ScorexLogging {
           0)
         val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
         val aDProofs: ADProof = ADProof(header.id, proofs)
-        assert(header.ADProofsRoot sameElements aDProofs.id)
-        assert(header.transactionsRoot sameElements blockTransactions.id)
+        assert(header.ADProofsRoot sameElements aDProofs.digest)
+        assert(header.transactionsRoot sameElements blockTransactions.digest)
         ErgoFullBlock(header, blockTransactions, aDProofs)
       }
 

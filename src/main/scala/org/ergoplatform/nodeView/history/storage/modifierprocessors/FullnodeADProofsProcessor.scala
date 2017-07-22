@@ -17,7 +17,7 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
   def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.headerId) match {
       case Some(header: Header) =>
-        historyStorage.modifierById(header.transactionsRoot) match {
+        historyStorage.modifierById(header.transactionsId) match {
           case Some(txs: BlockTransactions) =>
             processFullBlock(header, txs, m, txsAreNew = false)
           case _ =>
@@ -37,7 +37,7 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
-        require(h.ADProofsRoot sameElements m.id,
+        require(h.ADProofsRoot sameElements m.digest,
           s"Header ADProofs root ${Base58.encode(h.transactionsRoot)} differs from $m id")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")

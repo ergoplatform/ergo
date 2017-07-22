@@ -2,7 +2,8 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
 import io.circe.Json
-import org.ergoplatform.modifiers.history.ADProof.{ModifierTypeId, ProofRepresentation}
+import org.ergoplatform.modifiers.ModifierWithDigest
+import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -10,11 +11,12 @@ import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends HistoryModifier {
-  override val modifierTypeId: ModifierTypeId = ADProof.ModifierTypeId
+case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends HistoryModifier
+  with ModifierWithDigest {
 
-//  override lazy val id: ModifierId = Algos.hash.prefixedHash(ModifierTypeId, headerId, proofBytes)
-  override lazy val id: ModifierId = ADProof.proofDigest(proofBytes)
+  override def digest: Array[ModifierTypeId] = ADProof.proofDigest(proofBytes)
+
+  override val modifierTypeId: ModifierTypeId = ADProof.ModifierTypeId
 
   override type M = ADProof
 
@@ -30,7 +32,7 @@ object ADProof {
 
   val ModifierTypeId: Byte = 104: Byte
 
-  def proofDigest(proofBytes: ProofRepresentation): Array[Byte] = Algos.hash.prefixedHash(ModifierTypeId, proofBytes)
+  def proofDigest(proofBytes: ProofRepresentation): Array[Byte] = Algos.hash(proofBytes)
 }
 
 object ADProofSerializer extends Serializer[ADProof] {

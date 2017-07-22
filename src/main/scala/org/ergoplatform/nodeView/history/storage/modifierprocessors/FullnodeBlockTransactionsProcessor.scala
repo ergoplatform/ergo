@@ -18,7 +18,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
   override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
-        historyStorage.modifierById(header.ADProofsRoot) match {
+        historyStorage.modifierById(header.ADProofsId) match {
           case Some(adProof: ADProof) =>
             processFullBlock(header, txs, adProof, txsAreNew = true)
           case _ =>
@@ -38,7 +38,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
-        require(h.transactionsRoot sameElements m.id,
+        require(h.transactionsRoot sameElements m.digest,
           s"Header transactions root ${Base58.encode(h.transactionsRoot)} differs from block transactions $m id")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")

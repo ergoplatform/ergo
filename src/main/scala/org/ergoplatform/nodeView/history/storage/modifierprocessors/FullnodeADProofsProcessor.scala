@@ -38,7 +38,7 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
         require(h.ADProofsRoot sameElements m.digest,
-          s"Header ADProofs root ${Base58.encode(h.transactionsRoot)} differs from $m id")
+          s"Header ADProofs root ${Base58.encode(h.ADProofsRoot)} differs from $m digest")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }

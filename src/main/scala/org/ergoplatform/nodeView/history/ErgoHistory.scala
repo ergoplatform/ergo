@@ -43,8 +43,8 @@ trait ErgoHistory
   //None for light mode, Some for fullnode regime after initial bootstrap
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
     val header = typedModifierById[Header](bestFullBlockId.get).get
-    val aDProofs = typedModifierById[ADProof](header.ADProofsRoot).get
-    val txs = typedModifierById[BlockTransactions](header.transactionsRoot).get
+    val aDProofs = typedModifierById[ADProof](header.ADProofsId).get
+    val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs)
   }.toOption
 
@@ -198,7 +198,8 @@ object ErgoHistory extends ScorexLogging {
       }
 
       val historyWithHeader = history.append(genesis.header).get._1
-      if (settings.verifyTransactions) historyWithHeader.append(genesis.aDProofs).get._1.append(genesis.blockTransactions).get._1
+      if (settings.verifyTransactions) historyWithHeader.append(genesis.aDProofs).get._1
+        .append(genesis.blockTransactions).get._1.ensuring(_.bestFullBlockOpt.isDefined)
       else historyWithHeader
     } else {
       log.info("Initialize non-empty history ")

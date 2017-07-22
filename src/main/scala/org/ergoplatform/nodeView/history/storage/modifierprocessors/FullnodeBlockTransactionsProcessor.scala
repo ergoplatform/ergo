@@ -39,7 +39,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
         require(h.transactionsRoot sameElements m.digest,
-          s"Header transactions root ${Base58.encode(h.transactionsRoot)} differs from block transactions $m id")
+          s"Header transactions root ${Base58.encode(h.transactionsRoot)} differs from block transactions $m digest")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }

@@ -105,3 +105,5 @@ object HeaderSerializer extends Serializer[Header] {
     Header(version, parentId, innerlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce)
   }
 }
+
+

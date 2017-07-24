@@ -1,11 +1,13 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Algos.hashLength
 import scorex.core.NodeViewModifier._
-import Algos.hashLength
+
 import scala.util.Try
 
 trait HeadersProcessor {
@@ -25,11 +27,16 @@ trait HeadersProcessor {
 
   protected def scoreOf(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))
 
-  protected def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
+  def heightOf(id: Array[Byte]): Option[Int] = historyStorage.db.get(headerHeightKey(id))
+    .map(b => Ints.fromByteArray(b.data))
 
-  protected def headerDiffKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
+  private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
-  protected def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+  private def headerDiffKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
+
+  private def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+
+  private def headerHeightKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
   def toInsert(h: Header,
                env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
@@ -37,6 +44,7 @@ trait HeadersProcessor {
     if (h.isGenesis) {
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
+        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(1))),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
         (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
@@ -46,9 +54,11 @@ trait HeadersProcessor {
       } else {
         Seq()
       }
-      val scoreRow = Seq((headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray)))
-      val diffRow = Seq((headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
-      Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))) ++ bestRow ++ diffRow ++ scoreRow
+      val scoreRow = (headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray))
+      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(heightOf(h.parentId).get + 1)))
+      val diffRow = (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray))
+      val modifierRow = (ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))
+      Seq(diffRow, scoreRow, heightRow, modifierRow) ++ bestRow
     }
   }
 

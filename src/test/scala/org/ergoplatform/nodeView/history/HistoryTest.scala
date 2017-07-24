@@ -66,6 +66,7 @@ class HistoryTest extends PropSpec
     var history = lightHistory
     val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
     chain.headers.foreach { header =>
+      val inHeight = history.heightOf(header.parentId).get
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true
 
@@ -75,6 +76,7 @@ class HistoryTest extends PropSpec
       history.applicable(header) shouldBe false
       history.bestHeader shouldBe header
       history.openSurfaceIds() shouldEqual Seq(header.id)
+      history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }
 
@@ -146,20 +148,6 @@ class HistoryTest extends PropSpec
         val si = history.syncInfo(answer)
         si.answer shouldBe answer
         si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
-    */
-  }
-
-  property("heightOf() should return height of all blocks") {
-    /*
-        val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-        chain.foreach { block =>
-          val inHeight = history.fullBlocksHeight
-          history = history.append(block.header).get._1.append(block).get._1
-          history.heightOf(block).get shouldBe (inHeight + 1)
-          history.headersHeight shouldBe (inHeight + 1)
-          history.fullBlocksHeight shouldBe (inHeight + 1)
-        }
-        chain.foreach(block => history.heightOf(block).isDefined shouldBe true)
     */
   }
 

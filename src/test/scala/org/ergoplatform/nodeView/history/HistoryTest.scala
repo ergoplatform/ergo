@@ -7,7 +7,6 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
 class HistoryTest extends PropSpec
@@ -25,6 +24,22 @@ class HistoryTest extends PropSpec
 
 
   val BlocksInChain = 30
+
+  property("process fork") {
+    var history = fullHistory
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 0) {
+        val fork1 = genChain(forkLength, Seq(history.bestFullBlockOpt.get)).tail
+        val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlockOpt.get)).tail
+
+        history = applyChain(history, fork1)
+        history.bestHeader shouldBe fork1.last.header
+
+        history = applyChain(history, fork2)
+        history.bestHeader shouldBe fork2.last.header
+      }
+    }
+  }
 
   property("Append headers to best chain in history") {
     var history = lightHistory
@@ -162,25 +177,6 @@ class HistoryTest extends PropSpec
 
           history = history.append(header).get._1.append(block).get._1
 
-        }
-    */
-  }
-
-  property("process fork") {
-    /*
-        forAll(smallInt) { forkLength: Int =>
-          whenever(forkLength > 0) {
-            val fork1 = genChain(forkLength, Seq(history.bestFullBlock)).tail
-            val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlock)).tail
-
-            history = applyChain(history, fork1)
-            history.bestHeader shouldBe fork1.last.header
-            history.bestFullBlock shouldBe fork1.last
-
-            history = applyChain(history, fork2)
-            history.bestHeader shouldBe fork2.last.header
-            history.bestFullBlock shouldBe fork2.last
-          }
         }
     */
   }

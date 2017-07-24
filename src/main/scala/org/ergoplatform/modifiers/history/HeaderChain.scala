@@ -2,7 +2,8 @@ package org.ergoplatform.modifiers.history
 
 case class HeaderChain(headers: Seq[Header]) {
   headers.indices.foreach { i =>
-    if (i > 0) assert(headers(i).parentId sameElements headers(i - 1).id)
+    if (i > 0) assert(headers(i).parentId sameElements headers(i - 1).id,
+      s"Incorrect chain: ${headers(i - 1)},${headers(i)}")
   }
 
   def exists(f: Header => Boolean): Boolean = headers.exists(f)
@@ -20,6 +21,8 @@ case class HeaderChain(headers: Seq[Header]) {
     val commonBlockThenSuffixes = headers.takeRight(headers.length - commonIndex)
     HeaderChain(commonBlockThenSuffixes)
   }
+
+  def size: Int = headers.size
 
   def ++(c: HeaderChain) = HeaderChain(headers ++ c.headers)
 }

@@ -123,7 +123,18 @@ trait ErgoHistory
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
 
-  private def headerChainBack(count: Int, startBlock: Header, until: Header => Boolean): Seq[Header] = {
+  def commonBlockThenSuffixes(otherChain: Seq[Header], startHeader: Header): (Seq[Header], Seq[Header]) = {
+    //TODO how many
+    val limit = 1000
+    def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
+    val ourChain = headerChainBack(limit, startHeader, until)
+    val commonBlock = ourChain.head
+    val commonIndex = otherChain.indexWhere(_.id sameElements commonBlock.id)
+    val commonBlockThenSuffixes = otherChain.takeRight(otherChain.length - commonIndex)
+    (ourChain, commonBlockThenSuffixes)
+  }
+
+  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): Seq[Header] = {
     @tailrec
     def loop(remain: Int, block: Header, acc: Seq[Header]): Seq[Header] = {
       if (until(block) || remain == 0) {
@@ -140,7 +151,7 @@ trait ErgoHistory
     }
 
     if (isEmpty) Seq()
-    else loop(count, startBlock, Seq(startBlock)).reverse
+    else loop(count, startHeader, Seq(startHeader)).reverse
   }
 
   override type NVCT = ErgoHistory

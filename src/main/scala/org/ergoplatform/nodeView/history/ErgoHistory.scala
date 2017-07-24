@@ -57,7 +57,6 @@ trait ErgoHistory
     case _ => None
   }
 
-
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
@@ -100,7 +99,7 @@ trait ErgoHistory
     this
   }
 
-  override def openSurfaceIds(): Seq[ModifierId] = ???
+  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockId.orElse(bestHeaderIdOpt).toSeq
 
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 

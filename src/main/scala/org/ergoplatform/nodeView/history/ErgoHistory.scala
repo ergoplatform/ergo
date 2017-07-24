@@ -44,11 +44,14 @@ trait ErgoHistory
 
   //None for light mode, Some for fullnode regime after initial bootstrap
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
-    val header = typedModifierById[Header](bestFullBlockId.get).get
+    getFullBlock(typedModifierById[Header](bestFullBlockId.get).get)
+  }.toOption
+
+  protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId).get
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs)
-  }.toOption
+  }
 
   def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
@@ -125,9 +128,28 @@ trait ErgoHistory
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
 
-  def commonBlockThenSuffixes(otherChain: HeaderChain, startHeader: Header): (HeaderChain, HeaderChain) = {
+  def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
+    assert(contains(header1))
+    assert(contains(header2))
+    def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
+      val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
+      if (r._1.head == r._2.head) {
+        r
+      } else if (numberBack < MaxRollback) {
+        val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
+        loop(biggerOther.size, biggerOther)
+      } else {
+        throw new Error(s"Common point not found for headers $header1 and $header2")
+      }
+    }
+    loop(2, HeaderChain(Seq(header2)))
+  }
+
+  def commonBlockThenSuffixes(otherChain: HeaderChain,
+                              startHeader: Header,
+                              limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
-    val ourChain = headerChainBack(MaxRollback, startHeader, until)
+    val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head
     val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
     (ourChain, commonBlockThenSuffixes)
@@ -143,7 +165,7 @@ trait ErgoHistory
           case Some(parent: Header) =>
             loop(remain - 1, parent, acc :+ parent)
           case _ =>
-            log.warn(s"No parent header in history for block ${block.encodedId}")
+            log.warn(s"No parent header in history for block $block")
             acc
         }
       }

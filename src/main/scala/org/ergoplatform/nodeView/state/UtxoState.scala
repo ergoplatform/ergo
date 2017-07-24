@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import scorex.core.transaction.state.BoxStateChanges
@@ -23,6 +24,10 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
     //TODO: kushti:  if state is not about UTXO, it is not possible to extract this info even
     IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
   }
+
+  //TODO implement correctly
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
+    txs.flatMap(_.id).toArray
 
   override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] = ???
 

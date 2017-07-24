@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -29,9 +28,6 @@ class ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
 
   //TODO: kushti: AVL+ root, not Merkle
   def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
-
-  //TODO implement correctly
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation = txs.flatMap(_.id).toArray
 
   //TODO implement correctly
   def stateHeight: Int = 0

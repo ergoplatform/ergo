@@ -2,7 +2,7 @@ package org.ergoplatform
 
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -15,8 +15,8 @@ import scala.util.Random
 
 trait ChainGenerator {
   @tailrec
-  final def genHeaderChain(height: Int, acc: Seq[Header]): Seq[Header] = if (height == 0) {
-    acc.reverse
+  final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
+    HeaderChain(acc.reverse)
   } else {
     val header = Miner.genHeader(BigInt(1),
       acc.head,
@@ -51,6 +51,14 @@ trait ChainGenerator {
 
     val block = ErgoFullBlock(header, blockTransactions, aDProofs)
     genChain(height - 1, block +: acc)
+  }
+
+  def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {
+    var history = historyIn
+    chain.headers.foreach { header =>
+      history = history.append(header).get._1
+    }
+    history
   }
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {

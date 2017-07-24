@@ -25,6 +25,27 @@ class HistoryTest extends PropSpec
 
   val BlocksInChain = 30
 
+  property("commonBlockThenSuffixes()") {
+    var history = lightHistory
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 10) {
+
+        val fork1 = genHeaderChain(forkLength, Seq(history.bestHeader)).tail
+        val common = fork1.headers(10)
+        val fork2 = fork1.take(10) ++ genHeaderChain(forkLength + 1, Seq(common))
+
+        history = applyHeaderChain(history, fork1)
+        history.bestHeader shouldBe fork1.last
+
+        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeader)
+        our.head shouldBe their.head
+        our.head shouldBe common
+        our.last shouldBe fork1.last
+        their.last shouldBe fork2.last
+      }
+    }
+  }
+
   property("process fork") {
     var history = fullHistory
     forAll(smallInt) { forkLength: Int =>
@@ -44,7 +65,7 @@ class HistoryTest extends PropSpec
   property("Append headers to best chain in history") {
     var history = lightHistory
     val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
-    chain.foreach { header =>
+    chain.headers.foreach { header =>
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true
 

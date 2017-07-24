@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.transaction.state.{Insertion, StateChanges}
+import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
@@ -28,8 +28,8 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(anyoneCanSpendProposition, nonce, value)
 
-  lazy val stateChangesGen: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
-    .map(b => StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
+  lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
+    .map(b => BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
@@ -57,6 +57,4 @@ trait ErgoGenerators extends CoreGenerators {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
   } yield ADProof(headerId, proof)
-
-
 }

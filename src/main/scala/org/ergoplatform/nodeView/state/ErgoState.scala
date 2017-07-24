@@ -5,26 +5,27 @@ import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
+import scorex.core.transaction.state.MinimalState
 import scorex.core.transaction.state.MinimalState.VersionTag
-import scorex.core.transaction.state.StateChanges
-import scorex.core.transaction.state.authenticated.BoxMinimalState
 import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
+
+/**
+  * State in Ergo could be UTXO or just a single digest.
+  */
+class ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
-  ErgoState] with ScorexLogging {
+  IState]] extends MinimalState[AnyoneCanSpendProposition,
+  AnyoneCanSpendNoncedBox,
+  AnyoneCanSpendTransaction,
+  ErgoPersistentModifier,
+  IState] with ScorexLogging {
 
-  /**
-    * @return boxes, that miner can take to himself when he creates a new block
-    */
-  def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO: kushti:  if state is not about UTXO, it is not possible to extract this info even
-    IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
-  }
+  self: IState =>
 
   //TODO: kushti: AVL+ root, not Merkle
   def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
@@ -35,27 +36,22 @@ class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
   //TODO implement correctly
   def stateHeight: Int = 0
 
-  override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
-
   override def version: VersionTag = ???
 
-  override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] = ???
+  override def validate(mod: ErgoPersistentModifier): Try[Unit] = ???
 
-  override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
+  override def applyModifier(mod: ErgoPersistentModifier): Try[IState] = ???
 
-  override def changes(mod: ErgoPersistentModifier): Try[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
-
-  override def applyChanges(changes: StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], newVersion: VersionTag): Try[ErgoState] = ???
-
-  override def rollbackTo(version: VersionTag): Try[ErgoState] = ???
+  override def rollbackTo(version: VersionTag): Try[IState] = ???
 
   override type NVCT = this.type
 }
 
 object ErgoState {
 
-  def readOrGenerate(settings: ErgoSettings): ErgoState = new ErgoState
+  def readOrGenerate(settings: ErgoSettings) =
+    if(settings.ADState) new DigestState else new UtxoState
 
   //Initial state even before genesis block application
-  val initialState: ErgoState = new ErgoState
+  val initialState: UtxoState = new UtxoState
 }

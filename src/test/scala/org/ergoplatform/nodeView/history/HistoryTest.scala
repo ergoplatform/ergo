@@ -7,6 +7,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
 class HistoryTest extends PropSpec
@@ -37,6 +38,7 @@ class HistoryTest extends PropSpec
       history.contains(header) shouldBe true
       history.applicable(header) shouldBe false
       history.bestHeader shouldBe header
+      history.openSurfaceIds() shouldEqual Seq(header.id)
     }
   }
 
@@ -65,6 +67,7 @@ class HistoryTest extends PropSpec
       fullHistory.applicable(txs) shouldBe true
       fullHistory.bestHeader shouldBe header
       fullHistory.bestFullBlockOpt.get shouldBe startFullBlock
+      fullHistory.openSurfaceIds().head shouldEqual startFullBlock.header.id
 
       fullHistory = fullHistory.append(txs).get._1
 
@@ -87,6 +90,7 @@ class HistoryTest extends PropSpec
       fullHistory.applicable(txs) shouldBe false
       fullHistory.bestHeader shouldBe header
       fullHistory.bestFullBlockOpt.get shouldBe fullBlock
+      fullHistory.openSurfaceIds().head shouldEqual fullBlock.header.id
     }
   }
 
@@ -107,25 +111,6 @@ class HistoryTest extends PropSpec
         si.answer shouldBe answer
         si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
     */
-  }
-
-  property("modifierById() should return correct type") {
-    /*
-        val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-        chain.foreach { block =>
-          history.modifierById(block.id).isDefined shouldBe false
-
-          history = history.append(block.header).get._1
-          history.headerById(block.id).isDefined shouldBe true
-          history.fullBlockById(block.id).isDefined shouldBe false
-          history.modifierById(block.id).isInstanceOf[Some[ErgoHeader]] shouldBe true
-
-          history = history.append(block).get._1
-          history.headerById(block.id).isDefined shouldBe true
-          history.fullBlockById(block.id).isDefined shouldBe true
-          history.modifierById(block.id).isInstanceOf[Some[ErgoFullBlock]] shouldBe true
-        }
-        */
   }
 
   property("heightOf() should return height of all blocks") {

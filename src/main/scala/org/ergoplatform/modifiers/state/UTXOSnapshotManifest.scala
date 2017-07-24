@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.state
 
 import io.circe.Json
-import org.ergoplatform.modifiers.ErgoModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}

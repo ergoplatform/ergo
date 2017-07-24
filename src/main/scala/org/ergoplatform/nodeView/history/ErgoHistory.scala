@@ -180,12 +180,13 @@ object ErgoHistory extends ScorexLogging {
     }
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
+      //todo: real definition of a genesis block, do we need genesis block at all?
       val genesis: ErgoFullBlock = {
         val genesisTimestamp = 1500203225564L
         val initialState = ErgoState.initialState
         val stateRoot = initialState.rootHash()
         val genesisTx = new AnyoneCanSpendTransaction(
-          initialState.anyoneCanSpendBoxesAtHeight(0).map(b => (b.proposition, b.value)),
+          IndexedSeq(new AnyoneCanSpendProposition -> 0L),
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),
           genesisTimestamp)
         val proofs = initialState.proofsForTransactions(Seq(genesisTx))

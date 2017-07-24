@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.modifiers.{ErgoModifier, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition

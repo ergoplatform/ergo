@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
   "org.scorexfoundation" %% "iodb" % "0.3.1",
   "org.scorexfoundation" %% "scrypto" % "1.2.2" exclude("org.slf4j", "slf4j-api"),
-  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC1" % "test",
+  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2-SNAPSHOT" % "test",
   "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC2-SNAPSHOT"
 )
 

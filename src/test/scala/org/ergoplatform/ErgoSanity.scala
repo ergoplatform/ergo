@@ -8,29 +8,30 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.scalacheck.Gen
-import scorex.core.transaction.state.StateChanges
 import scorex.core.utils.NetworkTime
 import scorex.testkit.{BlockchainPerformance, BlockchainSanity}
 import Algos.hashLength
+import scorex.core.transaction.state.BoxStateChanges
 
+//todo: currently this class parametrized with UtxoState, consider DigestState as well
 class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
   ErgoSyncInfo,
   AnyoneCanSpendNoncedBox,
   ErgoMemPool,
-  ErgoState,
+  UtxoState,
   ErgoHistory] with BlockchainPerformance[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
   ErgoSyncInfo,
   AnyoneCanSpendNoncedBox,
   ErgoMemPool,
-  ErgoState,
+  UtxoState,
   ErgoHistory] with ErgoGenerators {
 
   val settings: ErgoSettings = new ErgoSettings {
@@ -42,14 +43,17 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   override val history: ErgoHistory = ErgoHistory.readOrGenerate(settings)
   override val mempool: ErgoMemPool = ErgoMemPool.empty
   override val wallet: ErgoWallet = ErgoWallet.readOrGenerate(settings)
-  override val state: ErgoState = ErgoState.readOrGenerate(settings)
+  override val state = ErgoState.readOrGenerate(settings).asInstanceOf[UtxoState]
 
   //Generators
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = anyoneCanSpendTransactionGen
 
-  override val stateChangesGenerator: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = stateChangesGen
+  override val stateChangesGenerator: Gen[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = stateChangesGen
 
-  override def genValidModifier(history: ErgoHistory): Header = {
+  //todo: fix, last 2 params are ignored for now
+  override def genValidModifier(history: ErgoHistory,
+                                mempoolTransactionFetchOption: Boolean,
+                                noOfTransactionsFromMempool: Int): Header = {
     val bestHeader: Header = ???
     Miner.genHeader(BigInt(1),
       bestHeader,
@@ -58,4 +62,8 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
       Array.fill(hashLength)(0.toByte),
       NetworkTime.time())
   }
+
+  override def genValidTransactionPair(curHistory: ErgoHistory): Seq[AnyoneCanSpendTransaction] = ???
+
+  override def genValidModifierCustomTransactions(curHistory: ErgoHistory, trx: AnyoneCanSpendTransaction): ErgoPersistentModifier = ???
 }

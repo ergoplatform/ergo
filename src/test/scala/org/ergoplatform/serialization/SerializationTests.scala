@@ -1,6 +1,10 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.ErgoGenerators
+import org.ergoplatform.modifiers.history.{ADProofSerializer, BlockTransactionsSerializer, HeaderSerializer}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransactionSerializer
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBoxSerializer
+import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 
@@ -12,27 +16,27 @@ class SerializationTests extends PropSpec
 
 
   property("AnyoneCanSpendBoxGen serialization") {
-    checkSerializationRoundtrip(anyoneCanSpendBoxGen)
+    checkSerializationRoundtrip(anyoneCanSpendBoxGen, AnyoneCanSpendNoncedBoxSerializer)
   }
 
   property("AnyoneCanSpendTransactionGen serialization") {
-    checkSerializationRoundtrip(anyoneCanSpendTransactionGen)
+    checkSerializationRoundtrip(anyoneCanSpendTransactionGen, AnyoneCanSpendTransactionSerializer)
   }
 
   property("ErgoSyncInfo serialization") {
-    checkSerializationRoundtrip(ergoSyncInfoGen)
+    checkSerializationRoundtrip(ergoSyncInfoGen, ErgoSyncInfoSerializer)
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtrip(ergoHeaderGen)
+    checkSerializationRoundtrip(ergoHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {
-    checkSerializationRoundtrip(blockTransactionsGen)
+    checkSerializationRoundtrip(blockTransactionsGen, BlockTransactionsSerializer)
   }
 
   property("ADProofs serialization") {
-    checkSerializationRoundtrip(ADProofsGen)
+    checkSerializationRoundtrip(ADProofsGen, ADProofSerializer)
   }
 
 }

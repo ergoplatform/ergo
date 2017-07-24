@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.LSMStore
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, PoPoWProof}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -31,6 +31,8 @@ trait ErgoHistory
 
   protected val config: HistoryConfig
   protected val storage: LSMStore
+  //TODO what should be the limit?
+  val MaxRollback = 10000
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
@@ -123,18 +125,15 @@ trait ErgoHistory
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
 
-  def commonBlockThenSuffixes(otherChain: Seq[Header], startHeader: Header): (Seq[Header], Seq[Header]) = {
-    //TODO how many
-    val limit = 1000
+  def commonBlockThenSuffixes(otherChain: HeaderChain, startHeader: Header): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
-    val ourChain = headerChainBack(limit, startHeader, until)
+    val ourChain = headerChainBack(MaxRollback, startHeader, until)
     val commonBlock = ourChain.head
-    val commonIndex = otherChain.indexWhere(_.id sameElements commonBlock.id)
-    val commonBlockThenSuffixes = otherChain.takeRight(otherChain.length - commonIndex)
+    val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
     (ourChain, commonBlockThenSuffixes)
   }
 
-  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): Seq[Header] = {
+  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
     def loop(remain: Int, block: Header, acc: Seq[Header]): Seq[Header] = {
       if (until(block) || remain == 0) {
@@ -150,8 +149,8 @@ trait ErgoHistory
       }
     }
 
-    if (isEmpty) Seq()
-    else loop(count, startHeader, Seq(startHeader)).reverse
+    if (isEmpty) HeaderChain(Seq())
+    else HeaderChain(loop(count, startHeader, Seq(startHeader)).reverse)
   }
 
   override type NVCT = ErgoHistory

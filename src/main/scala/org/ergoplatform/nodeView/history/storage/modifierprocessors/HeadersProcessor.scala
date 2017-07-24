@@ -67,6 +67,7 @@ trait HeadersProcessor {
       require(!historyStorage.contains(m.id), "Header is already in history")
       //TODO require(Algos.blockIdDifficulty(m.headerHash) >= difficulty, "Block difficulty is not enough")
       //TODO check timestamp
+      //TODO check that block is not too old to prevent DDoS
     }
   }
 }

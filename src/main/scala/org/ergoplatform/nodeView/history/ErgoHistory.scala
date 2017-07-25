@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -211,7 +211,8 @@ object ErgoHistory extends ScorexLogging {
       val genesis: ErgoFullBlock = {
         val genesisTimestamp = 1500203225564L
         val initialState = ErgoState.initialState
-        val stateRoot = initialState.rootHash()
+        //TODO        val stateRoot = initialState.rootHash()
+        val stateRoot = Algos.hash("Initial state")
         val genesisTx = new AnyoneCanSpendTransaction(
           IndexedSeq(new AnyoneCanSpendProposition -> 0L),
           IndexedSeq((new AnyoneCanSpendProposition, 0L)),

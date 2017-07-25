@@ -8,6 +8,10 @@ import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
 import ADProof.ProofRepresentation
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
+import scorex.core.transaction.state.BoxStateChanges
 
 import scala.util.Try
 
@@ -25,6 +29,8 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
   override lazy val json: Json = ???
 
   override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
+
+  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]): Try[Digest] = ???
 }
 
 object ADProof {

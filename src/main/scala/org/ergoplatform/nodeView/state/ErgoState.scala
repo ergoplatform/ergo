@@ -12,7 +12,12 @@ import scala.util.Try
 
 
 /**
-  * State in Ergo could be UTXO or just a single digest.
+  * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
+  * enough to validate a new blockchain element(e.g. block).
+  * State in Ergo could be UTXO, like in Bitcoin or just a single digest. If the state is about UTXO, transaction set
+  * of a block could be verified with no help of additional data. If the state is about just a digest, then proofs for
+  * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
+  * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 class ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,

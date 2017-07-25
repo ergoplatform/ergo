@@ -9,6 +9,8 @@ import scala.util.Try
 
 trait ADProofsProcessor {
 
+  protected val aDProofsRequired: Boolean
+
   def process(m: ADProof): ProgressInfo[ErgoPersistentModifier]
 
   def toDrop(modifier: ADProof): Seq[ByteArrayWrapper]

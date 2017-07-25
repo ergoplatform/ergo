@@ -11,6 +11,8 @@ import scala.util.{Failure, Try}
   * ADProof processor for regimes, that do not keep ADProofs
   */
 trait EmptyADProofsProcessor extends ADProofsProcessor {
+  protected val aDProofsRequired: Boolean = false
+
   override def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq(), Seq())
 
   override def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq()

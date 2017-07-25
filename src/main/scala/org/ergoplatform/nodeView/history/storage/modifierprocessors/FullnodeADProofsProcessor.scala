@@ -13,6 +13,7 @@ import scala.util.Try
   */
 trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
 
+  protected val aDProofsRequired: Boolean = true
 
   def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.headerId) match {

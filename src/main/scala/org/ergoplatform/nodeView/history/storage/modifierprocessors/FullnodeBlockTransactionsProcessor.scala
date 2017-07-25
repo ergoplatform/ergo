@@ -15,12 +15,16 @@ import scala.util.Try
 trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
+  protected val aDProofsRequired: Boolean
+
   override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
           case Some(adProof: ADProof) =>
             processFullBlock(header, txs, Some(adProof), txsAreNew = true)
+          case None if !aDProofsRequired =>
+            processFullBlock(header, txs, None, txsAreNew = true)
           case _ =>
             //TODO what if we do not need ADProofs (e.g. we can generate them by ourselves)
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))

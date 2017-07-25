@@ -3,9 +3,10 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState
 import scorex.core.transaction.state.MinimalState.VersionTag
+import ErgoState.Digest
 import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
@@ -32,7 +33,7 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   self: IState =>
 
   //TODO: kushti: AVL+ root, not Merkle
-  def rootHash(): Array[Byte]
+  def rootHash(): Digest
 
   //TODO implement correctly
   def stateHeight: Int = 0

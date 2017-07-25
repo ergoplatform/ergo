@@ -48,7 +48,7 @@ trait ErgoHistory
   }.toOption
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
-    val aDProofs = typedModifierById[ADProof](header.ADProofsId).get
+    val aDProofs = typedModifierById[ADProof](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs)
   }
@@ -185,19 +185,26 @@ object ErgoHistory extends ScorexLogging {
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig: HistoryConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
+    val historyConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.ADState,
+      settings.minimalSuffix)
 
-    val history = if (!settings.verifyTransactions) {
+    val history: ErgoHistory = if (!settings.verifyTransactions) {
       new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
       }
-    } else {
+    } else if (historyConfig.ADState) {
       new ErgoHistory with FullnodeADProofsProcessor with FullnodeBlockTransactionsProcessor {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
       }
-    }
+    } else
+      new ErgoHistory with EmptyADProofsProcessor with FullnodeBlockTransactionsProcessor {
+        override protected val config: HistoryConfig = historyConfig
+        override protected val storage: LSMStore = db
+      }
+
+
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
       //todo: real definition of a genesis block, do we need genesis block at all?
@@ -224,18 +231,22 @@ object ErgoHistory extends ScorexLogging {
         val aDProofs: ADProof = ADProof(header.id, proofs)
         assert(header.ADProofsRoot sameElements aDProofs.digest)
         assert(header.transactionsRoot sameElements blockTransactions.digest)
-        ErgoFullBlock(header, blockTransactions, aDProofs)
+        val aDProofsOpt: Option[ADProof] = if (historyConfig.ADState) Some(aDProofs) else None
+        ErgoFullBlock(header, blockTransactions, aDProofsOpt)
       }
 
       val historyWithHeader = history.append(genesis.header).get._1
-      if (settings.verifyTransactions) historyWithHeader.append(genesis.aDProofs).get._1
-        .append(genesis.blockTransactions).get._1.ensuring(_.bestFullBlockOpt.isDefined)
+      if (settings.verifyTransactions) {
+        val historyWithBlocks = historyWithHeader.append(genesis.blockTransactions).get._1
+        genesis.aDProofs.map(p => historyWithBlocks.append(p).get._1).getOrElse(historyWithBlocks)
+      }
       else historyWithHeader
     } else {
       log.info("Initialize non-empty history ")
       history
     }
   }
+
 }
 
 

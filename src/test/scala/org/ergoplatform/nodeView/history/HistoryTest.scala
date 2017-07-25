@@ -17,8 +17,8 @@ class HistoryTest extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
-  var fullHistory = generateHistory(verify = true)
-  var lightHistory = generateHistory(verify = false)
+  var fullHistory = generateHistory(verify = true, adState = true)
+  var lightHistory = generateHistory(verify = false, adState = true)
   assert(fullHistory.bestFullBlockId.isDefined)
   assert(lightHistory.bestFullBlockId.isEmpty)
 
@@ -87,7 +87,7 @@ class HistoryTest extends PropSpec
       val startFullBlock = fullHistory.bestFullBlockOpt.get
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
-      val proofs = fullBlock.aDProofs
+      val proofs = fullBlock.aDProofs.get
       fullHistory.contains(header) shouldBe false
       fullHistory.contains(txs) shouldBe false
       fullHistory.contains(proofs) shouldBe false
@@ -190,11 +190,12 @@ class HistoryTest extends PropSpec
     */
   }
 
-  private def generateHistory(verify: Boolean): ErgoHistory = {
+  private def generateHistory(verify: Boolean, adState: Boolean): ErgoHistory = {
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
       override val verifyTransactions: Boolean = verify
+      override val ADState: Boolean = adState
       override val dataDir: String = s"/tmp/ergo/test-history-$verify"
     }
     new File(fullHistorySettings.dataDir).mkdirs()

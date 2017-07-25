@@ -19,7 +19,7 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
       case Some(header: Header) =>
         historyStorage.modifierById(header.transactionsId) match {
           case Some(txs: BlockTransactions) =>
-            processFullBlock(header, txs, m, txsAreNew = false)
+            processFullBlock(header, txs, Some(m), txsAreNew = false)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
             historyStorage.insert(m.id, modifierRow)

@@ -48,7 +48,7 @@ trait ChainGenerator {
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 
-    val block = ErgoFullBlock(header, blockTransactions, aDProofs)
+    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs))
     genChain(height - 1, block +: acc)
   }
 
@@ -61,11 +61,10 @@ trait ChainGenerator {
   }
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
-    var history = historyIn
-    blocks.foreach { block =>
-      history = history.append(block.header).get._1.append(block.aDProofs).get._1.append(block.blockTransactions).get._1
+    blocks.foldLeft(historyIn) { (history, block) =>
+      val historyWithTxs = history.append(block.header).get._1.append(block.blockTransactions).get._1
+      block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
     }
-    history
   }
 
 }

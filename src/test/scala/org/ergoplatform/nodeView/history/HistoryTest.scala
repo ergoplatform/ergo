@@ -18,6 +18,7 @@ class HistoryTest extends PropSpec
   with ChainGenerator {
 
   var fullHistory = generateHistory(verify = true, adState = true)
+  var txHistory = generateHistory(verify = true, adState = false)
   var lightHistory = generateHistory(verify = false, adState = true)
   assert(fullHistory.bestFullBlockId.isDefined)
   assert(lightHistory.bestFullBlockId.isEmpty)

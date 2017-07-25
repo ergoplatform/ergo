@@ -18,12 +18,12 @@ class DigestState extends ErgoState[DigestState] with ScorexLogging {
 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
-      val txs = fb.transactions.getOrElse(Seq())
+      val txs = fb.blockTransactions.txs
 
       txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
         status.flatMap(_ => tx.semanticValidity)
       }.flatMap(_ => fb.aDProofs.verify(operations(txs)))
-       .flatMap(_ => Success())  
+       .flatMap(_ => Success())
 
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }

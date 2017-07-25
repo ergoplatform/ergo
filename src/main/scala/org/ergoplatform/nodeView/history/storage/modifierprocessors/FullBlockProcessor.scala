@@ -24,6 +24,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                                  txs: BlockTransactions,
                                  adProofsOpt: Option[ADProof],
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
+    assert(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
       (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))
     } else {

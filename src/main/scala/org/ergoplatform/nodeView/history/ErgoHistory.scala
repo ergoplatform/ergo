@@ -185,15 +185,14 @@ object ErgoHistory extends ScorexLogging {
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.ADState,
-      settings.minimalSuffix)
+    val historyConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
 
     val history: ErgoHistory = if (!settings.verifyTransactions) {
       new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
       }
-    } else if (historyConfig.ADState) {
+    } else if (settings.ADState) {
       new ErgoHistory with FullnodeADProofsProcessor with FullnodeBlockTransactionsProcessor {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
@@ -232,7 +231,7 @@ object ErgoHistory extends ScorexLogging {
         val aDProofs: ADProof = ADProof(header.id, proofs)
         assert(header.ADProofsRoot sameElements aDProofs.digest)
         assert(header.transactionsRoot sameElements blockTransactions.digest)
-        val aDProofsOpt: Option[ADProof] = if (historyConfig.ADState) Some(aDProofs) else None
+        val aDProofsOpt: Option[ADProof] = if (settings.ADState) Some(aDProofs) else None
         ErgoFullBlock(header, blockTransactions, aDProofsOpt)
       }
 

@@ -19,7 +19,7 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-class ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
+trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
@@ -32,23 +32,25 @@ class ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   self: IState =>
 
   //TODO: kushti: AVL+ root, not Merkle
-  def rootHash(): Array[Byte] = Algos.emptyMerkleTreeRoot
+  def rootHash(): Array[Byte]
 
   //TODO implement correctly
   def stateHeight: Int = 0
 
-  override def version: VersionTag = ???
+  override def version: VersionTag
 
-  override def validate(mod: ErgoPersistentModifier): Try[Unit] = ???
+  override def validate(mod: ErgoPersistentModifier): Try[Unit]
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[IState] = ???
+  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
-  override def rollbackTo(version: VersionTag): Try[IState] = ???
+  override def rollbackTo(version: VersionTag): Try[IState]
 
   override type NVCT = this.type
 }
 
 object ErgoState {
+
+  type Digest = Array[Byte]
 
   def readOrGenerate(settings: ErgoSettings) =
     if(settings.ADState) new DigestState else new UtxoState

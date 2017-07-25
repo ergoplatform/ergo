@@ -38,4 +38,10 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
   override def applyChanges(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], newVersion: VersionTag): Try[UtxoState] = ???
 
   override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
+
+  override def rootHash(): Array[Byte] = ???
+
+  override def version: VersionTag = ???
+
+  override def rollbackTo(version: VersionTag): Try[UtxoState] = ???
 }

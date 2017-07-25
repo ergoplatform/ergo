@@ -5,7 +5,7 @@ import scorex.core.transaction.state.MinimalState.VersionTag
 import ErgoState.Digest
 import scorex.core.utils.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 /**
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
@@ -17,7 +17,14 @@ class DigestState extends ErgoState[DigestState] with ScorexLogging {
   override def version: VersionTag = ???
 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock => ???
+    case fb: ErgoFullBlock =>
+      val txs = fb.transactions.getOrElse(Seq())
+
+      txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
+        status.flatMap(_ => tx.semanticValidity)
+      }.flatMap(_ => fb.aDProofs.verify(operations(txs)))
+       .flatMap(_ => Success())  
+
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 

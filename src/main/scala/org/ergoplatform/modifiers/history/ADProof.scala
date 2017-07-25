@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Bytes
 import io.circe.Json
 import org.ergoplatform.modifiers.ModifierWithDigest
-import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer

@@ -65,11 +65,9 @@ trait ErgoHistory
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
-    //TODO calculate or get somewhere
-    val env = ModifierProcessorEnvironment(BigInt(1))
     modifier match {
       case m: Header =>
-        val dataToInsert = toInsert(m, env)
+        val dataToInsert = toInsert(m)
         historyStorage.insert(m.id, dataToInsert)
         if (isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
           log.info(s"New best header ${m.encodedId}")

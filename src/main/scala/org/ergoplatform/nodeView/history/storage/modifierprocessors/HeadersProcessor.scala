@@ -38,9 +38,8 @@ trait HeadersProcessor {
 
   private def headerHeightKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
-  def toInsert(h: Header,
-               env: ModifierProcessorEnvironment): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    val requiredDifficulty = env.requiredDifficulty
+  def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+    val requiredDifficulty: BigInt = calculateDifficulty(h)
     if (h.isGenesis) {
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
@@ -75,9 +74,22 @@ trait HeadersProcessor {
       val parentOpt = historyStorage.modifierById(m.parentId)
       require(parentOpt.isDefined, "Parent header is no defined")
       require(!historyStorage.contains(m.id), "Header is already in history")
-      //TODO require(Algos.blockIdDifficulty(m.headerHash) >= difficulty, "Block difficulty is not enough")
+      require(Algos.blockIdDifficulty(m.headerHash) >= calculateDifficulty(m),
+        s"Block difficulty ${Algos.blockIdDifficulty(m.headerHash)} is less than required ${calculateDifficulty(m)}")
       //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS
+    }
+  }
+
+  private val difficultyCalculator = new DifficultyCalculator
+
+  def calculateDifficulty(h: Header): BigInt = {
+    if (h.isGenesis) {
+      BigInt(1)
+    } else if (difficultyCalculator.recalculationRequired(heightOf(h.parentId).get)) {
+      ???
+    } else {
+      difficultyAt(h.parentId).get
     }
   }
 }

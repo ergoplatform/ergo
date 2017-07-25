@@ -6,6 +6,10 @@ import ErgoState.Digest
 import scorex.core.utils.ScorexLogging
 import scala.util.Try
 
+/**
+  * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
+  * See https://eprint.iacr.org/2016/994 for details on this mode.
+  */
 class DigestState extends ErgoState[DigestState] with ScorexLogging {
   override lazy val rootHash: Digest = ???
 

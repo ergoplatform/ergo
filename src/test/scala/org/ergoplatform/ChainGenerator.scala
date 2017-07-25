@@ -4,11 +4,10 @@ import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTime
-import Algos.hashLength
 
 import scala.annotation.tailrec
 import scala.util.Random
@@ -33,7 +32,7 @@ trait ChainGenerator {
     acc.reverse
   } else {
     val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq((new AnyoneCanSpendProposition, height.toLong)),
-       IndexedSeq((new AnyoneCanSpendProposition, 1L)),
+      IndexedSeq((new AnyoneCanSpendProposition, 1L)),
       NetworkTime.time()))
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))

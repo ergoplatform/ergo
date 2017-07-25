@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.settings.Algos.hashLength
+import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.NodeViewModifier._
 
 import scala.util.Try

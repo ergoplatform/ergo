@@ -1,17 +1,16 @@
 package org.ergoplatform.settings
 
-import scorex.core.block.Block._
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Blake2b256
 
 object Algos {
 
-  def blockIdDifficulty(id: Array[Version]): BigInt = {
+  def blockIdDifficulty(id: Array[Byte]): BigInt = {
     val blockTarget = BigInt(1, id)
-    (Constants.MaxTarget / blockTarget) + 1
+    assert(blockTarget <= Constants.MaxTarget, s"Block $blockTarget target is bigger than max ${Constants.MaxTarget}")
+    Constants.MaxTarget / blockTarget
   }
 
-  val hashLength = 32
 
   val hash = Blake2b256
   //TODO replace to concrete mining algorithm

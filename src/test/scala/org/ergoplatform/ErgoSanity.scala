@@ -10,12 +10,12 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
+import scorex.core.transaction.state.BoxStateChanges
 import scorex.core.utils.NetworkTime
 import scorex.testkit.{BlockchainPerformance, BlockchainSanity}
-import Algos.hashLength
-import scorex.core.transaction.state.BoxStateChanges
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,

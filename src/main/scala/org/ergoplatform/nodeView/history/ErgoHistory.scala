@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.Algos.hashLength
+import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History

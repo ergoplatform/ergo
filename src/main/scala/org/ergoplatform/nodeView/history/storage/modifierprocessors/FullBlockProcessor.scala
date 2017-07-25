@@ -22,15 +22,15 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def processFullBlock(header: Header,
                                  txs: BlockTransactions,
-                                 adProofs: ADProof,
+                                 adProofsOpt: Option[ADProof],
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val newModRow = if (txsAreNew) {
       (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))
     } else {
-      (ByteArrayWrapper(adProofs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofs)))
+      (ByteArrayWrapper(adProofsOpt.get.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofsOpt.get)))
     }
-    val storageVersion = if (txsAreNew) txs.id else adProofs.id
-    val fullBlock = ErgoFullBlock(header, txs, adProofs)
+    val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
+    val fullBlock = ErgoFullBlock(header, txs, adProofsOpt)
     (bestFullBlockOpt, bestFullBlockId.flatMap(scoreOf), scoreOf(header.id)) match {
       case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")

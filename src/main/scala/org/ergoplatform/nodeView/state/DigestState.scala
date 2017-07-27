@@ -12,6 +12,7 @@ import scala.util.{Failure, Success, Try}
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
 class DigestState extends ErgoState[DigestState] with ScorexLogging {
+  //todo: persistence for rootHash?
   override lazy val rootHash: Digest = ???
 
   override def version: VersionTag = ???

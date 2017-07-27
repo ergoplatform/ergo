@@ -6,6 +6,7 @@ import io.iohk.iodb.LSMStore
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -82,11 +83,10 @@ trait ErgoHistory
       case m: ADProof =>
         (this, process(m))
       case m: PoPoWProof =>
-        //        storage.insert(m)
-
         ???
-      case m =>
-        throw new Error(s"Modifier $m have incorrect type")
+      case m: UTXOSnapshotChunk =>
+        //add mark that snapshot was applied
+        ???
     }
   }
 

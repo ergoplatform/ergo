@@ -19,17 +19,21 @@ class DigestState extends ErgoState[DigestState] with ScorexLogging {
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       val txs = fb.blockTransactions.txs
+      val declaredHash = fb.header.ADProofsRoot
 
       txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
         status.flatMap(_ => tx.semanticValidity)
-      }.flatMap(_ => fb.aDProofs.map(_.verify(operations(txs))).getOrElse(Failure(new Error("Proofs are empty"))))
-       .flatMap(_ => Success())
+      }.flatMap(_ => fb.aDProofs.map(_.verify(operations(txs), declaredHash))
+        .getOrElse(Failure(new Error("Proofs are empty"))))
 
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
-    case fb: ErgoFullBlock => ???
+    case fb: ErgoFullBlock =>
+      validate(fb).map(_ => new DigestState{
+        override lazy val rootHash = fb.header.ADProofsRoot
+      })
     case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
   }
 

@@ -30,7 +30,7 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
 
   override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
 
-  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]): Try[Digest] = ???
+  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], expectedHash: Digest): Try[Unit] = ???
 }
 
 object ADProof {

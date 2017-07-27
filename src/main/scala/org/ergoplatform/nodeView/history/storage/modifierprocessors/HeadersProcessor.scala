@@ -30,6 +30,9 @@ trait HeadersProcessor {
   def heightOf(id: Array[Byte]): Option[Int] = historyStorage.db.get(headerHeightKey(id))
     .map(b => Ints.fromByteArray(b.data))
 
+  protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
+    .map(_.data).getOrElse(Array()).grouped(32).toSeq
+
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
   private def headerDiffKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
@@ -37,6 +40,8 @@ trait HeadersProcessor {
   private def headerScoreKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
   private def headerHeightKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+
+  private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
   def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: BigInt = calculateDifficulty(h)
@@ -54,10 +59,13 @@ trait HeadersProcessor {
         Seq()
       }
       val scoreRow = (headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray))
-      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(heightOf(h.parentId).get + 1)))
+      val height = heightOf(h.parentId).get + 1
+      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(height)))
+      val headerIdsRow: (ByteArrayWrapper, ByteArrayWrapper) = (heightIdsKey(height),
+        ByteArrayWrapper((headerIdsAtHeight(height) :+ h.id).flatten.toArray))
       val diffRow = (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray))
       val modifierRow = (ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))
-      Seq(diffRow, scoreRow, heightRow, modifierRow) ++ bestRow
+      Seq(diffRow, scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
     }
   }
 

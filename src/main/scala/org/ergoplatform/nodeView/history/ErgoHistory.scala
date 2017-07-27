@@ -98,7 +98,7 @@ trait ErgoHistory
       case h: Header => toDrop(h)
       case _ => ???
     }
-    historyStorage.drop(modifier.id, idsToRemove)
+    historyStorage.remove(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove)
     this
   }
 
@@ -115,6 +115,7 @@ trait ErgoHistory
       case m: ADProof =>
         validate(m)
       case m: PoPoWProof =>
+        require(config.poPoWBootstrap, "Incorrect regime")
         Failure(new NotImplementedError)
       case m =>
         Failure(new Error(s"Modifier $m have incorrect type"))

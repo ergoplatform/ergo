@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history.{Header, HistoryModifier, HistoryModifierSerializer}
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.hash.Blake2b256
@@ -30,9 +31,9 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
       toInsert)
   }
 
-  def drop(id: ModifierId, idsToRemove: Seq[ByteArrayWrapper]): Unit = {
+  def remove(id: ModifierId, idsToRemove: Seq[ByteArrayWrapper]): Unit = {
     db.update(
-      ByteArrayWrapper(Blake2b256(id ++ "drop".getBytes)),
+      ByteArrayWrapper(id),
       ByteArrayWrapper(id) +: idsToRemove,
       Seq())
   }

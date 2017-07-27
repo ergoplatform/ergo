@@ -233,6 +233,7 @@ class HistoryTest extends PropSpec
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
       override val dataDir: String = s"/tmp/ergo/test-history-$verify"
+      override val blocksToKeep: Int = 10000
     }
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)

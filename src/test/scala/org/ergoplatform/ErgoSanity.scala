@@ -54,7 +54,7 @@ class ErgoSanity extends BlockchainSanity[AnyoneCanSpendProposition,
   override def genValidModifier(history: ErgoHistory,
                                 mempoolTransactionFetchOption: Boolean,
                                 noOfTransactionsFromMempool: Int): Header = {
-    val bestHeader: Header = ???
+    val bestHeader: Header = history.bestHeader
     Miner.genHeader(BigInt(1),
       bestHeader,
       Array.fill(hashLength)(0.toByte),

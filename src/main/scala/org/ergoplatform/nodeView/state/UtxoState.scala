@@ -18,10 +18,9 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
   UtxoState] {
 
   /**
-    * @return boxes, that miner can take to himself when he creates a new block
+    * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO: kushti:  if state is not about UTXO, it is not possible to extract this info even
     IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
   }
 

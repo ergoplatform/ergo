@@ -1,13 +1,14 @@
 package org.ergoplatform.modifiers.state
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
-import UTXOSnapshotChunk.StateElement
 
-case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends StateModifier {
+case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
 
   override lazy val id: ModifierId = ???

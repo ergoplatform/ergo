@@ -1,18 +1,17 @@
 package org.ergoplatform.nodeView.history.storage
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.modifiers.history.{Header, HistoryModifier, HistoryModifierSerializer}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success}
 
 class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable {
 
 
-  def modifierById(id: ModifierId): Option[HistoryModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
+  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>
         Some(b)
@@ -24,7 +23,7 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
 
   def contains(id: ModifierId): Boolean = modifierById(id).isDefined
 
-  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper,ByteArrayWrapper)]): Unit = {
+  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
     db.update(
       ByteArrayWrapper(id),
       Seq(),

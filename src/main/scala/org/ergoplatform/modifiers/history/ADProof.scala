@@ -2,19 +2,19 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
 import io.circe.Json
-import org.ergoplatform.modifiers.ModifierWithDigest
+import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
-import scorex.crypto.encode.Base58
-import ADProof.ProofRepresentation
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.nodeView.state.ErgoState.Digest
 import scorex.core.transaction.state.BoxStateChanges
+import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends HistoryModifier
+case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends ErgoPersistentModifier
   with ModifierWithDigest {
 
   override def digest: Array[ModifierTypeId] = ADProof.proofDigest(proofBytes)
@@ -32,7 +32,8 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
   //todo: for tolsi: implement
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).
-    * @param changes - ordered sequence of box operations(remove/insert) to check against a tree with known
+    *
+    * @param changes      - ordered sequence of box operations(remove/insert) to check against a tree with known
     * @param previousHash - hash(from previous block) to apply the proof to.
     * @param expectedHash - expected (declared by miner) hash. A hash after applying proof must be the same.
     * @return

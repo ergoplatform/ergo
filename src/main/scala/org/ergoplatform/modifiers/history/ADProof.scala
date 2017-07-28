@@ -16,7 +16,7 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256Unsafe
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends ErgoPersistentModifier
   with ModifierWithDigest {
@@ -43,23 +43,37 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
     * @param changes      - ordered sequence of box operations(remove/insert) to check against a tree with known
     * @param previousHash - hash(from previous block) to apply the proof to.
     * @param expectedHash - expected (declared by miner) hash. A hash after applying proof must be the same.
-    * @return
+    * @return Success, if verification passed
     */
   def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
              previousHash: Digest,
              expectedHash: Digest): Try[Unit] = {
-    val prover = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, Some(ADProof.VL), maxNumOperations = Some(changes.operations.size))
-    changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
-      t.flatMap(_ => {
-        val avlOperation = o match {
+    def applyChanges(prover: BatchAVLVerifier[Blake2b256Unsafe],
+                     changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]) =
+      changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
+        t.flatMap(_ => {
+          val avlOperation = o match {
             case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
               Insert(i.box.id, Longs.toByteArray(i.box.value))
             case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
               Remove(r.boxId)
           }
           prover.performOneOperation(avlOperation)
-      })
-    } map (_ => ())
+        })
+      }
+
+    val prover = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, Some(ADProof.VL), maxNumOperations = Some(changes.operations.size))
+
+    for {
+      _ <- applyChanges(prover, changes)
+      digest <- prover.digest
+    } yield {
+      if (digest sameElements expectedHash) {
+        Success()
+      } else {
+        Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
+      }
+    }
   }
 }
 

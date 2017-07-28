@@ -1,18 +1,22 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.Bytes
+import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
+import io.circe.syntax._
+import org.ergoplatform.modifiers.ModifierWithDigest
 import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
-import scorex.core.transaction.state.BoxStateChanges
+import scorex.core.transaction.state.{BoxStateChanges, Insertion, Removal}
+import scorex.crypto.authds.avltree.AVLValue
+import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.Blake2b256Unsafe
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends ErgoPersistentModifier
   with ModifierWithDigest {
@@ -25,11 +29,14 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
 
   override lazy val serializer: Serializer[ADProof] = ADProofSerializer
 
-  override lazy val json: Json = ???
+  override lazy val json: Json = Map(
+    "headerId" -> Base58.encode(headerId).asJson,
+    "proofBytes" -> Base58.encode(proofBytes).asJson,
+    "digest" -> Base58.encode(digest).asJson,
+  ).asJson
 
   override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
 
-  //todo: for tolsi: implement
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).
     *
@@ -40,7 +47,20 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
     */
   def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
              previousHash: Digest,
-             expectedHash: Digest): Try[Unit] = ???
+             expectedHash: Digest): Try[Unit] = {
+    val prover = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, Some(ADProof.VL), maxNumOperations = Some(changes.operations.size))
+    changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
+      t.flatMap(_ => {
+        val avlOperation = o match {
+            case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+              Insert(i.box.id, Longs.toByteArray(i.box.value))
+            case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+              Remove(r.boxId)
+          }
+          prover.performOneOperation(avlOperation)
+      })
+    } map (_ => ())
+  }
 }
 
 object ADProof {
@@ -49,6 +69,8 @@ object ADProof {
   val ModifierTypeId: Byte = 104: Byte
 
   def proofDigest(proofBytes: ProofRepresentation): Array[Byte] = Algos.hash(proofBytes)
+
+  val KL = 32
 }
 
 object ADProofSerializer extends Serializer[ADProof] {

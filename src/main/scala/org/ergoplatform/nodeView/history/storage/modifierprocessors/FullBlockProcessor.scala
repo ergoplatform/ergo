@@ -43,7 +43,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     (bestFullBlockOpt, bestFullBlockId.flatMap(scoreOf), scoreOf(header.id)) match {
       case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")
-        pruneOnNewBestBlock(header)
+        if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case (Some(pevBest), Some(prevBestScore), Some(curentScore)) if curentScore >= prevBestScore =>
         log.info(s"Process fork for new best header ${header.encodedId} with transactions and proofs")
@@ -54,9 +54,11 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         val toApply: Seq[ErgoFullBlock] = newChain.tail.headers.map(getFullBlock)
         assert(toRemove.nonEmpty)
         assert(toApply.nonEmpty)
-        val bestHeight: Int = heightOf(toApply.last.header.id).get
-        lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
-        if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
+        if (config.blocksToKeep >= 0) {
+          val bestHeight: Int = heightOf(toApply.last.header.id).get
+          lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
+          if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
+        }
         ProgressInfo(Some(prevChain.head.id), toRemove, toApply)
       case (None, _, _) =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")

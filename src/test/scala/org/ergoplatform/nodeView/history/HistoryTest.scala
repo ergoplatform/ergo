@@ -17,14 +17,37 @@ class HistoryTest extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
-  var fullHistory = generateHistory(verify = true, adState = true)
-  var txHistory = generateHistory(verify = true, adState = false)
-  var lightHistory = generateHistory(verify = false, adState = true)
+  val BlocksToKeep = 21
+
+  var fullHistory = generateHistory(verify = true, adState = true, BlocksToKeep)
+  var txHistory = generateHistory(verify = true, adState = false, BlocksToKeep)
+  var lightHistory = generateHistory(verify = false, adState = true, 0)
   assert(fullHistory.bestFullBlockId.isDefined)
   assert(lightHistory.bestFullBlockId.isEmpty)
 
 
   val BlocksInChain = 30
+
+  property("prune old blocks test") {
+    var history = fullHistory
+    val blocksToPrune = 10
+    val chain = genChain(BlocksToKeep + blocksToPrune, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, chain)
+    history.bestHeader shouldBe chain.last.header
+    history.bestFullBlockOpt.get.header shouldBe chain.last.header
+
+    chain.take(blocksToPrune).foreach { b =>
+      history.modifierById(b.header.transactionsId) shouldBe None
+      history.modifierById(b.header.ADProofsId) shouldBe None
+    }
+    chain.takeRight(BlocksToKeep).foreach { b =>
+      history.modifierById(b.header.transactionsId).isDefined shouldBe true
+      history.modifierById(b.header.ADProofsId).isDefined shouldBe true
+    }
+  }
+
+
 
   property("commonBlockThenSuffixes()") {
     var history = lightHistory
@@ -226,14 +249,14 @@ class HistoryTest extends PropSpec
     */
   }
 
-  private def generateHistory(verify: Boolean, adState: Boolean): ErgoHistory = {
+  private def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int): ErgoHistory = {
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
       override val dataDir: String = s"/tmp/ergo/test-history-$verify"
-      override val blocksToKeep: Int = 10000
+      override val blocksToKeep: Int = toKeep
     }
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)

@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
@@ -9,7 +10,8 @@ import scala.util.Try
 case class PoPoWProof(m: Int,
                       k: Int,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header]) extends Comparable[PoPoWProof] with Ordered[PoPoWProof] with HistoryModifier {
+                      suffix: Seq[Header]) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+  with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.ModifierTypeId
 

@@ -1,11 +1,12 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-object HistoryModifierSerializer extends Serializer[HistoryModifier] {
-  override def toBytes(obj: HistoryModifier): Array[Byte] = obj match {
+object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
+  override def toBytes(obj: ErgoPersistentModifier): Array[Byte] = obj match {
     case m: Header =>
       Header.ModifierTypeId +: HeaderSerializer.toBytes(m)
     case m: ADProof =>
@@ -16,7 +17,7 @@ object HistoryModifierSerializer extends Serializer[HistoryModifier] {
       throw new Error(s"Serialization for unknown modifier: ${m.json.noSpaces}")
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[HistoryModifier] = Try {
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = Try {
     bytes.head match {
       case Header.ModifierTypeId =>
         HeaderSerializer.parseBytes(bytes.tail).get

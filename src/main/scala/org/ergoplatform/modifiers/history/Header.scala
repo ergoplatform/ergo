@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.ModifierWithDigest
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
@@ -21,7 +21,7 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Block.Timestamp,
-                  nonce: Long) extends HistoryModifier {
+                  nonce: Long) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 

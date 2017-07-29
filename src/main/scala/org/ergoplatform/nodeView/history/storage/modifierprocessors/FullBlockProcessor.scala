@@ -24,7 +24,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
-  def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
+  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
   protected def getFullBlock(h: Header): ErgoFullBlock
 

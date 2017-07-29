@@ -127,7 +127,7 @@ trait ErgoHistory
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
 
-  def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
+  protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
     assert(contains(header2))
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
@@ -144,7 +144,7 @@ trait ErgoHistory
     loop(2, HeaderChain(Seq(header2)))
   }
 
-  def commonBlockThenSuffixes(otherChain: HeaderChain,
+  protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
                               startHeader: Header,
                               limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)

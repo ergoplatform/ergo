@@ -1,11 +1,11 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Longs}
+import com.google.common.primitives.Bytes
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.ModifierWithDigest
 import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}

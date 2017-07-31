@@ -54,7 +54,7 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
         t.flatMap(_ => {
           val avlOperation = o match {
             case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
-              Insert(i.box.id, Longs.toByteArray(i.box.value))
+              Insert(i.box.id, i.box.bytes)
             case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
               Remove(r.boxId)
           }
@@ -62,16 +62,18 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
         })
       }
 
-    val prover = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, Some(ADProof.VL), maxNumOperations = Some(changes.operations.size))
+    val verifier = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, None, maxNumOperations = Some(changes.operations.size))
 
-    for {
-      _ <- applyChanges(prover, changes)
-      digest <- prover.digest
-    } yield {
-      if (digest sameElements expectedHash) {
-        Success()
-      } else {
-        Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
+    applyChanges(verifier, changes).flatMap { _ =>
+      verifier.digest match {
+        case Some(digest) =>
+          if (digest sameElements expectedHash) {
+            Success()
+          } else {
+            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
+          }
+        case None =>
+          Failure(new IllegalStateException("Digest is undefined"))
       }
     }
   }

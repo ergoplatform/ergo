@@ -11,7 +11,7 @@ import scala.concurrent.{Future, Promise}
 import scala.util.{Success, Try}
 
 class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction],
-                                   val waitedForAssembly: TrieMap[MemPoolRequest, Promise[MemPoolResponse]])
+                                   val waitedForAssembly: TrieMap[Set[ModifierId], Promise[MemPoolResponse]])
   extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] {
 
   override type NVCT = ErgoMemPool
@@ -61,14 +61,14 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
       ids.forall(contains)
     }).foreach(assemblyWasCompleted => {
       waitedForAssembly.remove(assemblyWasCompleted).foreach(promise => {
-        promise complete Success(assemblyWasCompleted.map(id => getById(id).get))
+        promise complete Success(assemblyWasCompleted.toSeq.map(id => getById(id).get))
       })
     })
   }
 
   def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = {
     val promise = Promise[Seq[AnyoneCanSpendTransaction]]
-    waitedForAssembly.put(ids, promise)
+    waitedForAssembly.put(ids.toSet, promise)
     promise.future
   }
 }

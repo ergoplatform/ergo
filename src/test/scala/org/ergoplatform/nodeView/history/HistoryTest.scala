@@ -29,6 +29,22 @@ class HistoryTest extends PropSpec
 
   val BlocksInChain = 30
 
+  property("continuationIds()") {
+    var history = lightHistory
+    val chain = genHeaderChain(100, Seq(history.bestHeader)).tail
+
+    history = applyHeaderChain(history, chain)
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 1) {
+        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength).id))
+        val continuation = history.continuationIds(si, forkLength).get
+        continuation.length shouldBe forkLength
+        continuation.last._2 shouldEqual chain.last.id
+        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
+      }
+    }
+  }
+
   property("prune old blocks test") {
     var history = fullHistory
     val blocksToPrune = 10
@@ -47,8 +63,6 @@ class HistoryTest extends PropSpec
       history.modifierById(b.header.ADProofsId).isDefined shouldBe true
     }
   }
-
-
 
   property("commonBlockThenSuffixes()") {
     var history = lightHistory
@@ -196,9 +210,6 @@ class HistoryTest extends PropSpec
     //TODO what if headers1 > headers2 but fullchain 1 < fullchain2?
   }
 
-  property("continuationIds()") {
-    //TODO
-  }
 
   property("syncInfo()") {
     /*

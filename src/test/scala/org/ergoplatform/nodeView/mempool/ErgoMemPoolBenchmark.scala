@@ -10,12 +10,13 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 import scala.concurrent.ExecutionContext.Implicits.global
 import org.scalameter.picklers.Implicits._
+import scorex.core.NodeViewModifier
 
 object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
     with ErgoGenerators {
 
-  private val blockSizes = Gen.enumeration("txs in block")(50, 100, 500)
+  private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
   private val r = new Random
 
@@ -45,43 +46,32 @@ object ErgoMemPoolBenchmark
     exec.requireGC -> true
   )
 
+  private def bench(txsByWaitingGroups: Seq[Seq[NodeViewModifier.ModifierId]],txsInIncomeOrder: Seq[AnyoneCanSpendTransaction]) = {
+    val pool = ErgoMemPool.empty
+    val futures = txsByWaitingGroups.map(group => {
+      pool.waitForAll(group)
+    })
+    val resultFuture = Future.sequence(futures)
+    txsInIncomeOrder.foreach(pool.put)
+    Await.result(resultFuture, Duration.Inf)
+  }
+
   performance of "ErgoMemPool awaiting" in {
     performance of "best case" in {
       using(bestCaseGenerator) config(config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) =>
-          val pool = ErgoMemPool.empty
-          val futures = txsByWaitingGroups.map(group => {
-            pool.waitForAll(group)
-          })
-          val resultFuture = Future.sequence(futures)
-          txsInIncomeOrder.foreach(pool.put)
-          Await.result(resultFuture, Duration.Inf)
+        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }
 
     performance of "avg case" in {
       using(avgCaseGenerator) config(config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) =>
-          val pool = ErgoMemPool.empty
-          val futures = txsByWaitingGroups.map(group => {
-            pool.waitForAll(group)
-          })
-          val resultFuture = Future.sequence(futures)
-          txsInIncomeOrder.foreach(pool.put)
-          Await.result(resultFuture, Duration.Inf)
+        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }
 
     performance of "worst case" in {
       using(worstCaseGenerator) config(config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) =>
-          val pool = ErgoMemPool.empty
-          val futures = txsByWaitingGroups.map(group => {
-            pool.waitForAll(group)
-          })
-          val resultFuture = Future.sequence(futures)
-          txsInIncomeOrder.foreach(pool.put)
-          Await.result(resultFuture, Duration.Inf)
+        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }
   }

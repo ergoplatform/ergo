@@ -27,6 +27,8 @@ trait HeadersProcessor {
 
   protected def scoreOf(id: Array[Byte]): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))
 
+  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(0)
+
   def heightOf(id: Array[Byte]): Option[Int] = historyStorage.db.get(headerHeightKey(id))
     .map(b => Ints.fromByteArray(b.data))
 

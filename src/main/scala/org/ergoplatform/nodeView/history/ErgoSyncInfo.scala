@@ -10,10 +10,10 @@ import scorex.core.serialization.Serializer
 import scala.util.Try
 
 
-case class ErgoSyncInfo(answer: Boolean, lastBlockIds: Seq[ModifierId]) extends SyncInfo {
+case class ErgoSyncInfo(answer: Boolean, lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
 
   override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {
-    lastBlockIds.map(b => Header.ModifierTypeId -> b)
+    lastHeaderIds.map(b => Header.ModifierTypeId -> b)
   }
 
   override type M = ErgoSyncInfo
@@ -28,7 +28,7 @@ object ErgoSyncInfo {
 object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
 
   override def toBytes(obj: ErgoSyncInfo): Array[Byte] =
-    (if (obj.answer) 1.toByte else 0.toByte) +: scorex.core.utils.concatFixLengthBytes(obj.lastBlockIds)
+    (if (obj.answer) 1.toByte else 0.toByte) +: scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds)
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = Try {
     val answer = if (bytes.head == 1.toByte) true else false

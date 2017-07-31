@@ -122,7 +122,16 @@ trait ErgoHistory
     }
   }
 
-  override def continuationIds(from: ModifierIds, size: Int): Option[ModifierIds] = ???
+  //TODO it should include branch point?
+  override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
+    val ids = info.startingPoints
+    val lastHeaderInHistory = ids(ids.filter(_._1 == Header.ModifierTypeId).lastIndexWhere(m => contains(m._2)))._2
+    val theirHeight = heightOf(lastHeaderInHistory).get
+    val heightFrom = Math.min(height, theirHeight + size)
+    val startId = headerIdsAtHeight(heightFrom).head
+    headerChainBack(heightFrom - theirHeight, typedModifierById[Header](startId).get, (h: Header) => h.isGenesis)
+      .headers.map(h => Header.ModifierTypeId -> h.id)
+  }.toOption
 
   //TODO last full blocks and last headers
   override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
@@ -145,8 +154,8 @@ trait ErgoHistory
   }
 
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
-                              startHeader: Header,
-                              limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
+                                                 startHeader: Header,
+                                                 limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
     val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head

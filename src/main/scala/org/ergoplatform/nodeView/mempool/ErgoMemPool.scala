@@ -15,7 +15,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
 
   override type NVCT = ErgoMemPool
 
-  private[mempool] var waitedForAssembly: Map[Set[ModifierId], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
+  private[mempool] var waitedForAssembly: Map[Set[TxKey], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
   private def key(id: Array[Byte]): TxKey = new mutable.WrappedArray.ofByte(id)
 
@@ -58,7 +58,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
   override def size: Int = unconfirmed.size
 
   private def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = waitedForAssembly.synchronized {
-    val txsIds = txs.map(_.id)
+    val txsIds = txs.map(tx => key(tx.id))
     val newMap = waitedForAssembly.flatMap(p => {
       val ids = p._1
       val newKey = ids -- txsIds
@@ -75,7 +75,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
 
   def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = waitedForAssembly.synchronized {
     val promise = Promise[Seq[AnyoneCanSpendTransaction]]
-    waitedForAssembly = waitedForAssembly.updated(ids.toSet, (promise, ids))
+    waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
     promise.future
   }
 }

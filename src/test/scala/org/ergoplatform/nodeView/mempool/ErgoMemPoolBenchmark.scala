@@ -30,7 +30,7 @@ object ErgoMemPoolBenchmark
           anyoneCanSpendTransactionGen.sample
         }).flatten
       }
-    (txsByWaitingGroups.map(_.map(_.id)), txIncomeOrder(txsByWaitingGroups))
+    (txsByWaitingGroups.map(_.map(_.id.clone())), txIncomeOrder(txsByWaitingGroups))
   }
 
   private val bestCaseGenerator = waitForTransactionsInSequence(_.flatten)

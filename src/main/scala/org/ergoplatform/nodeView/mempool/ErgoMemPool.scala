@@ -10,8 +10,8 @@ import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.{Success, Try}
 
-case class ErgoMemPool private[mempool](unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction],
-                                        waitedForAssembly: TrieMap[MemPoolRequest, Promise[MemPoolResponse]])
+class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction],
+                                   val waitedForAssembly: TrieMap[MemPoolRequest, Promise[MemPoolResponse]])
   extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] {
 
   override type NVCT = ErgoMemPool
@@ -35,6 +35,7 @@ case class ErgoMemPool private[mempool](unconfirmed: TrieMap[TxKey, AnyoneCanSpe
   override def putWithoutCheck(txs: Iterable[AnyoneCanSpendTransaction]): ErgoMemPool = {
     txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
     completeAssembly()
+    //todo cleanup?
     this
   }
 

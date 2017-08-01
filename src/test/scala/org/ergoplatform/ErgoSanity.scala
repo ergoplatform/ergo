@@ -59,7 +59,10 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
-      NetworkTime.time())
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(5)(0.toByte),
+      NetworkTime.time()
+    )
   }
 
 }

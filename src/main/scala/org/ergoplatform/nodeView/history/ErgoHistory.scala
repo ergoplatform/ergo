@@ -51,7 +51,7 @@ trait ErgoHistory
   protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs)
+    ErgoFullBlock(header, txs, aDProofs, None)
   }
 
   def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
@@ -241,13 +241,16 @@ object ErgoHistory extends ScorexLogging {
           stateRoot: Array[Byte],
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,
-          0)
+          0,
+          Array.fill(32)(0.toByte),
+          Array.fill(5)(0.toByte)
+        )
         val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
         val aDProofs: ADProof = ADProof(header.id, proofs)
         assert(header.ADProofsRoot sameElements aDProofs.digest)
         assert(header.transactionsRoot sameElements blockTransactions.digest)
         val aDProofsOpt: Option[ADProof] = if (settings.ADState) Some(aDProofs) else None
-        ErgoFullBlock(header, blockTransactions, aDProofsOpt)
+        ErgoFullBlock(header, blockTransactions, aDProofsOpt, None)
       }
 
       val historyWithHeader = history.append(genesis.header).get._1

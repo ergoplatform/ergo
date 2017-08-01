@@ -2,17 +2,19 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.ADProof
 import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.Try
 
 trait ADProofsProcessor {
 
-  def process(m: ADProofs): ProgressInfo[ErgoPersistentModifier]
+  protected val aDProofsRequired: Boolean
 
-  def toDrop(modifier: ADProofs): Seq[ByteArrayWrapper]
+  def process(m: ADProof): ProgressInfo[ErgoPersistentModifier]
 
-  def validate(m: ADProofs): Try[Unit]
+  def toDrop(modifier: ADProof): Seq[ByteArrayWrapper]
+
+  def validate(m: ADProof): Try[Unit]
 }
 

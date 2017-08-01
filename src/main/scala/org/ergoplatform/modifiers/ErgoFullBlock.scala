@@ -1,21 +1,26 @@
 package org.ergoplatform.modifiers
 
 import io.circe.Json
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
-case class ErgoFullBlock(header: Header, blockTransactions: BlockTransactions, aDProofs: ADProofs, extension: Map[Array[Byte], Array[Byte]]) extends ErgoPersistentModifier {
+case class ErgoFullBlock(header: Header,
+                         blockTransactions: BlockTransactions,
+                         aDProofs: Option[ADProof],
+                         extension: Map[Array[Byte], Array[Byte]]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override def id: ModifierId = ???
+  override lazy val id: ModifierId = Algos.hash(header.id ++ blockTransactions.id ++
+    aDProofs.map(_.id).getOrElse(Array()))
 
-  override def json: Json = ???
+  override lazy val json: Json = ???
 
   override type M = ErgoFullBlock
 
-  override def serializer: Serializer[ErgoFullBlock] = ???
+  override lazy val serializer: Serializer[ErgoFullBlock] = ???
 }
 
 object ErgoFullBlock {

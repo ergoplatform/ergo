@@ -7,12 +7,20 @@ import scorex.core.transaction.MemoryPool
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.util.Try
+import scala.concurrent.{Future, Promise}
+import scala.util.{Success, Try}
 
-case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
+class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
   extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] {
 
   override type NVCT = ErgoMemPool
+
+  /**
+    * Map stores current state of waiting for query building
+    * value - promise of result and set of all transactions of request
+    * key - set of transactions that are waiting for the assembly
+    */
+  private[mempool] var waitedForAssembly: Map[Set[TxKey], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
   private def key(id: Array[Byte]): TxKey = new mutable.WrappedArray.ofByte(id)
 
@@ -32,6 +40,8 @@ case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
 
   override def putWithoutCheck(txs: Iterable[AnyoneCanSpendTransaction]): ErgoMemPool = {
     txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
+    completeAssembly(txs)
+    //todo cleanup?
     this
   }
 
@@ -51,10 +61,37 @@ case class ErgoMemPool(unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
   }
 
   override def size: Int = unconfirmed.size
+
+  private def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = synchronized {
+    val txsIds = txs.map(tx => key(tx.id))
+    val newMap = waitedForAssembly.flatMap(p => {
+      val ids = p._1
+      val newKey = ids -- txsIds
+      // filtering fully-built queries and completing of a promise
+      if (newKey.isEmpty) {
+        val (promise, allIds) = p._2
+        promise complete Success(allIds.map(id => getById(id).get))
+        None
+      } else {
+        Some(newKey -> p._2)
+      }
+    })
+    waitedForAssembly = newMap
+  }
+
+  def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = synchronized {
+    val promise = Promise[Seq[AnyoneCanSpendTransaction]]
+    waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
+    promise.future
+  }
 }
 
 object ErgoMemPool {
   type TxKey = scala.collection.mutable.WrappedArray.ofByte
 
-  def empty: ErgoMemPool = new ErgoMemPool(TrieMap())
+  type MemPoolRequest = Seq[ModifierId]
+
+  type MemPoolResponse = Seq[AnyoneCanSpendTransaction]
+
+  def empty: ErgoMemPool = new ErgoMemPool(TrieMap.empty)
 }

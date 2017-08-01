@@ -71,7 +71,6 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[(AnyoneCanSpendProposition
     require(fee >= 0)
     require(timestamp >= 0)
   }
-
 }
 
 object AnyoneCanSpendTransaction {

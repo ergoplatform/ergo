@@ -3,55 +3,68 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
+import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.transaction.state.MinimalState.VersionTag
-import scorex.core.transaction.state.StateChanges
-import scorex.core.transaction.state.authenticated.BoxMinimalState
+import ErgoState.Digest
 import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-class ErgoState extends BoxMinimalState[AnyoneCanSpendProposition,
+
+/**
+  * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
+  * enough to validate a new blockchain element(e.g. block).
+  * State in Ergo could be UTXO, like in Bitcoin or just a single digest. If the state is about UTXO, transaction set
+  * of a block could be verified with no help of additional data. If the state is about just a digest, then proofs for
+  * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
+  * a transaction set (see https://eprint.iacr.org/2016/994 for details).
+  */
+trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
-  ErgoState] with ScorexLogging {
+  IState]] extends MinimalState[AnyoneCanSpendProposition,
+  AnyoneCanSpendNoncedBox,
+  AnyoneCanSpendTransaction,
+  ErgoPersistentModifier,
+  IState] with ScorexLogging {
 
-  /**
-    * @return boxes, that miner can take to himself when he creates a new block
-    */
-  def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO implement correctly
-    IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
-  }
+  self: IState =>
 
-  //TODO implement correctly
-  def rootHash(): Array[Byte] = Algos.EmptyMerkleTreeRoot
+  //TODO: kushti: AVL+ root, not Merkle
+  def rootHash(): Digest
 
   //TODO implement correctly
   def stateHeight: Int = 0
 
-  override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
+  /**
+    * Extract ordered sequence of operations on UTXO set from set of transactions
+    */
+  def operations(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =
+    BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](id)) ++
+        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](b))
+    })
 
-  override def version: VersionTag = ???
+  override def version: VersionTag
 
-  override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] = ???
+  override def validate(mod: ErgoPersistentModifier): Try[Unit]
 
-  override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
+  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
-  override def changes(mod: ErgoPersistentModifier): Try[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
-
-  override def applyChanges(changes: StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], newVersion: VersionTag): Try[ErgoState] = ???
-
-  override def rollbackTo(version: VersionTag): Try[ErgoState] = ???
+  override def rollbackTo(version: VersionTag): Try[IState]
 
   override type NVCT = this.type
 }
 
 object ErgoState {
 
-  def readOrGenerate(settings: ErgoSettings): ErgoState = new ErgoState
+  type Digest = Array[Byte]
+
+  def readOrGenerate(settings: ErgoSettings) =
+    if (settings.ADState) new DigestState else new UtxoState
 
   //Initial state even before genesis block application
-  val initialState: ErgoState = new ErgoState
+  val initialState: UtxoState = new UtxoState
 }

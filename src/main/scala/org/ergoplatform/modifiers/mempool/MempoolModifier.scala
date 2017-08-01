@@ -1,5 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.modifiers.ErgoModifier
+import scorex.core.EphemerealNodeViewModifier
 
-trait MempoolModifier extends ErgoModifier
+trait MempoolModifier extends EphemerealNodeViewModifier

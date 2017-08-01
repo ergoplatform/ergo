@@ -12,10 +12,13 @@ class AnyoneCanSpendProposition extends ProofOfKnowledgeProposition[Nothing] {
 }
 
 object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition] {
-  override def toBytes(obj: AnyoneCanSpendProposition): Array[Byte] = Array(-127: Byte)
+  val Length = 1
+  val ByteValue: Array[Byte] = Array.fill(Length)(-127: Byte)
+
+  override def toBytes(obj: AnyoneCanSpendProposition): Array[Byte] = ByteValue
 
   override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendProposition] = bytes match {
-    case b if b sameElements Array(-127.toByte) => Success(new AnyoneCanSpendProposition)
+    case b if b sameElements ByteValue => Success(new AnyoneCanSpendProposition)
     case l => Failure(new Error(s"Incorrect proposition ${l.headOption}"))
   }
 }

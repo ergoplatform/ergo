@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
@@ -13,13 +13,14 @@ import scala.util.Try
   */
 trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
 
+  protected val aDProofsRequired: Boolean = true
 
-  def process(m: ADProofs): ProgressInfo[ErgoPersistentModifier] = {
+  def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.headerId) match {
       case Some(header: Header) =>
-        historyStorage.modifierById(header.transactionsRoot) match {
+        historyStorage.modifierById(header.transactionsId) match {
           case Some(txs: BlockTransactions) =>
-            processFullBlock(header, txs, m, Map.empty, txsAreNew = false)
+            processFullBlock(header, txs, Some(m), Map.empty, txsAreNew = false)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
             historyStorage.insert(m.id, modifierRow)
@@ -31,14 +32,14 @@ trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcesso
   }
 
 
-  override def toDrop(modifier: ADProofs): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(modifier.id))
+  override def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(modifier.id))
 
-  override def validate(m: ADProofs): Try[Unit] = Try {
+  override def validate(m: ADProof): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
-        require(h.ADProofsRoot sameElements m.id,
-          s"Header ADProofs root ${Base58.encode(h.transactionsRoot)} differs from $m id")
+        require(h.ADProofsRoot sameElements m.digest,
+          s"Header ADProofs root ${Base58.encode(h.ADProofsRoot)} differs from $m digest")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }

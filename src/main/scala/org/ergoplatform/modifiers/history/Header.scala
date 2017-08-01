@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Ints, Longs}
+import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
@@ -22,10 +23,15 @@ case class Header(version: Version,
                   timestamp: Block.Timestamp,
                   nonce: Long,
                   extensionHash: Array[Byte],
-                  votes: Array[Byte]) extends HistoryModifier {
+                  votes: Array[Byte]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
   override lazy val id: ModifierId = Algos.hash(bytes)
+
+  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
+
+  lazy val transactionsId: ModifierId =
+    ModifierWithDigest.computeId(BlockTransactions.ModifierTypeId, id, transactionsRoot)
 
   lazy val headerHash = Algos.miningHash(id)
 
@@ -49,11 +55,6 @@ case class Header(version: Version,
   override type M = Header
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
-
-  override def equals(obj: scala.Any): Boolean = obj match {
-    case that: Header => id sameElements that.id
-    case _ => false
-  }
 
   lazy val isGenesis: Boolean = interlinks.isEmpty
 }

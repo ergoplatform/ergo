@@ -1,9 +1,9 @@
 package org.ergoplatform.settings
 
+
 object Constants {
-
-  val MaxTarget = BigInt(1, Array.fill(32)(Byte.MinValue))
+  val hashLength = 32
+  val MaxTarget = BigInt(1, Array.fill(hashLength)((-1).toByte))
   val InitialDifficulty = BigInt(1)
-  val ModifierIdSize = 32
-
+  val ModifierIdSize: Int = hashLength
 }

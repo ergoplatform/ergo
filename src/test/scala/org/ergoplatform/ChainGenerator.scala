@@ -22,7 +22,10 @@ trait ChainGenerator {
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
-      NetworkTime.time()): Header
+      Array.fill(hashLength)(0.toByte),
+      Array.fill(5)(0.toByte),
+      NetworkTime.time()
+    ): Header
     genHeaderChain(height - 1, header +: acc)
   }
 
@@ -38,17 +41,21 @@ trait ChainGenerator {
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
+    val extentionHash = Array.fill(32)(0.toByte)
+    val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(BigInt(1),
       acc.head.header,
       stateRoot,
       proofsRoot,
       txsRoot,
+      extentionHash,
+      votes,
       NetworkTime.time()): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 
-    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs))
+    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
     genChain(height - 1, block +: acc)
   }
 

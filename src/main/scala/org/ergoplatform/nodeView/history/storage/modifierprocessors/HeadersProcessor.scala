@@ -15,11 +15,13 @@ trait HeadersProcessor {
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
     */
-  def bestFullBlockId: Option[ModifierId] = None
+  def bestFullBlockIdOpt: Option[ModifierId] = None
 
   protected val historyStorage: HistoryStorage
 
   private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
+
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
 
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
@@ -79,10 +81,13 @@ trait HeadersProcessor {
     val toRemove = Seq(headerDiffKey(modifierId),
       headerScoreKey(modifierId),
       ByteArrayWrapper(modifierId)) ++ payloadModifiers
-    val toInsert = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
+    val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
       Seq((BestHeaderKey, ByteArrayWrapper(header.parentId)))
     } else Seq()
-    (toRemove, toInsert)
+    val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
+      Seq((BestFullBlockKey, ByteArrayWrapper(header.parentId)))
+    } else Seq()
+    (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
   }
 
   def validate(m: Header): Try[Unit] = Try {

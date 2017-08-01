@@ -45,7 +45,7 @@ trait ErgoHistory
 
   //None for light mode, Some for fullnode regime after initial bootstrap
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
-    getFullBlock(typedModifierById[Header](bestFullBlockId.get).get)
+    getFullBlock(typedModifierById[Header](bestFullBlockIdOpt.get).get)
   }.toOption
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
@@ -100,11 +100,12 @@ trait ErgoHistory
       case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
       case _ => ???
     }
+
     historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     this
   }
 
-  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockId.orElse(bestHeaderIdOpt).toSeq
+  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
 
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 

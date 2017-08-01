@@ -1,12 +1,12 @@
 package org.ergoplatform
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.transaction.state.{Insertion, StateChanges}
+import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
@@ -28,13 +28,13 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(anyoneCanSpendProposition, nonce, value)
 
-  lazy val stateChangesGen: Gen[StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
-    .map(b => StateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
+  lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
+    .map(b => BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
     idGenerator <- genBytesList(Constants.ModifierIdSize)
-    ids <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(ErgoSyncInfo.MaxBlockIds))
+    ids <- Gen.nonEmptyListOf(idGenerator).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(answer, ids)
 
   lazy val ergoHeaderGen: Gen[Header] = for {
@@ -52,13 +52,11 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
-    txs <- Gen.listOf(anyoneCanSpendTransactionGen)
+    txs <- Gen.nonEmptyListOf(anyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val ADProofsGen: Gen[ADProofs] = for {
+  lazy val ADProofsGen: Gen[ADProof] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
-  } yield ADProofs(headerId, proof)
-
-
+  } yield ADProof(headerId, proof)
 }

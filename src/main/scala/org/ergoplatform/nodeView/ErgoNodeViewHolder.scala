@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier.ModifierTypeId
@@ -14,14 +14,13 @@ import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCanSpendProposition,
+abstract class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCanSpendProposition,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier] {
   override val networkChunkSize: Int = settings.networkChunkSize
 
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
-  override type MS = ErgoState
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
@@ -45,4 +44,13 @@ class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCa
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState(): Option[(HIS, MS, VL, MP)] = ???
+}
+
+class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+  override type MS = UtxoState
+}
+
+
+class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+  override type MS = DigestState
 }

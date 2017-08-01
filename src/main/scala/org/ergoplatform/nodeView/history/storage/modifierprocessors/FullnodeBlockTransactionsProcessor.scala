@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
@@ -15,12 +15,16 @@ import scala.util.Try
 trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
+  protected val aDProofsRequired: Boolean
+
   override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
-        historyStorage.modifierById(header.ADProofsRoot) match {
-          case Some(adProof: ADProofs) =>
-            processFullBlock(header, txs, adProof, Map.empty, txsAreNew = true)
+        historyStorage.modifierById(header.ADProofsId) match {
+          case Some(adProof: ADProof) =>
+            processFullBlock(header, txs, Some(adProof), Map.empty, txsAreNew = true)
+          case None if !aDProofsRequired =>
+            processFullBlock(header, txs, None, txsAreNew = true)
           case _ =>
             //TODO what if we do not need ADProofs (e.g. we can generate them by ourselves)
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
@@ -38,8 +42,8 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>
-        require(h.transactionsRoot sameElements m.id,
-          s"Header transactions root ${Base58.encode(h.transactionsRoot)} differs from block transactions $m id")
+        require(h.transactionsRoot sameElements m.digest,
+          s"Header transactions root ${Base58.encode(h.transactionsRoot)} differs from block transactions $m digest")
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }

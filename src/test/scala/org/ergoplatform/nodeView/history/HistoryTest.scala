@@ -2,11 +2,12 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.circe
-import org.ergoplatform.settings.ErgoSettings
+import io.circe.Json
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
 class HistoryTest extends PropSpec
@@ -16,27 +17,199 @@ class HistoryTest extends PropSpec
   with ErgoGenerators
   with TestkitHelpers
   with ChainGenerator {
-  val fullHistorySettings: ErgoSettings = new ErgoSettings {
-    override def settingsJSON: Map[String, circe.Json] = Map()
-    override val verifyTransactions: Boolean = true
-    override val dataDir: String = s"/tmp/ergo/test-history"
-  }
-  new File(fullHistorySettings.dataDir).mkdirs()
+
+  val BlocksToKeep = 21
+
+  var fullHistory = generateHistory(verify = true, adState = true, BlocksToKeep)
+  var txHistory = generateHistory(verify = true, adState = false, BlocksToKeep)
+  var lightHistory = generateHistory(verify = false, adState = true, 0)
+  assert(fullHistory.bestFullBlockId.isDefined)
+  assert(lightHistory.bestFullBlockId.isEmpty)
+
 
   val BlocksInChain = 30
 
-  //TODO write tests for other regimes
-  var fullHistory = ErgoHistory.readOrGenerate(fullHistorySettings)
+  property("continuationIds()") {
+    var history = lightHistory
+    val chain = genHeaderChain(100, Seq(history.bestHeader)).tail
 
-  assert(fullHistory.bestHeader.id sameElements fullHistory.bestFullBlockId.get)
+    history = applyHeaderChain(history, chain)
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 1) {
+        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength).id))
+        val continuation = history.continuationIds(si, forkLength).get
+        continuation.length shouldBe forkLength
+        continuation.last._2 shouldEqual chain.last.id
+        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
+      }
+    }
+  }
+
+  property("prune old blocks test") {
+    var history = fullHistory
+    val blocksToPrune = 10
+    val chain = genChain(BlocksToKeep + blocksToPrune, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, chain)
+    history.bestHeader shouldBe chain.last.header
+    history.bestFullBlockOpt.get.header shouldBe chain.last.header
+
+    chain.take(blocksToPrune).foreach { b =>
+      history.modifierById(b.header.transactionsId) shouldBe None
+      history.modifierById(b.header.ADProofsId) shouldBe None
+    }
+    chain.takeRight(BlocksToKeep).foreach { b =>
+      history.modifierById(b.header.transactionsId).isDefined shouldBe true
+      history.modifierById(b.header.ADProofsId).isDefined shouldBe true
+    }
+  }
+
+  property("commonBlockThenSuffixes()") {
+    var history = lightHistory
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 10) {
+
+        val fork1 = genHeaderChain(forkLength, Seq(history.bestHeader)).tail
+        val common = fork1.headers(10)
+        val fork2 = fork1.take(10) ++ genHeaderChain(forkLength + 1, Seq(common))
+
+        history = applyHeaderChain(history, fork1)
+        history.bestHeader shouldBe fork1.last
+
+        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeader)
+        our.head shouldBe their.head
+        our.head shouldBe common
+        our.last shouldBe fork1.last
+        their.last shouldBe fork2.last
+      }
+    }
+  }
+
+  property("process fork") {
+    var history = fullHistory
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 0) {
+        val fork1 = genChain(forkLength, Seq(history.bestFullBlockOpt.get)).tail
+        val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlockOpt.get)).tail
+
+        history = applyChain(history, fork1)
+        history.bestHeader shouldBe fork1.last.header
+
+        history = applyChain(history, fork2)
+        history.bestHeader shouldBe fork2.last.header
+      }
+    }
+  }
+
+  property("Append headers to best chain in history") {
+    var history = lightHistory
+    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+    chain.headers.foreach { header =>
+      val inHeight = history.heightOf(header.parentId).get
+      history.contains(header) shouldBe false
+      history.applicable(header) shouldBe true
+
+      history = history.append(header).get._1
+
+      history.contains(header) shouldBe true
+      history.applicable(header) shouldBe false
+      history.bestHeader shouldBe header
+      history.openSurfaceIds() shouldEqual Seq(header.id)
+      history.heightOf(header.id).get shouldBe (inHeight + 1)
+    }
+  }
+
+  property("Appended headers and transactions blocks to best chain in tx history") {
+    var history = txHistory
+    assert(history.bestFullBlockOpt.get.header == history.bestHeader)
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    chain.foreach { fullBlock =>
+      val startFullBlock = history.bestFullBlockOpt.get
+      val header = fullBlock.header
+      val txs = fullBlock.blockTransactions
+      history.contains(header) shouldBe false
+      history.contains(txs) shouldBe false
+      history.applicable(header) shouldBe true
+      history.applicable(txs) shouldBe false
+
+      history = history.append(header).get._1
+
+      history.contains(header) shouldBe true
+      history.contains(txs) shouldBe false
+      history.applicable(header) shouldBe false
+      history.applicable(txs) shouldBe true
+      history.bestHeader shouldBe header
+      history.bestFullBlockOpt.get shouldBe startFullBlock
+      history.openSurfaceIds().head shouldEqual startFullBlock.header.id
+
+      history = history.append(txs).get._1
+
+      history.contains(header) shouldBe true
+      history.contains(txs) shouldBe true
+      history.applicable(header) shouldBe false
+      history.applicable(txs) shouldBe false
+      history.bestHeader shouldBe header
+      history.bestFullBlockOpt.get.header shouldBe fullBlock.header
+    }
+  }
+
+
+  property("Appended full blocks to best chain in full history") {
+    assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)
+    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
+    chain.foreach { fullBlock =>
+      val startFullBlock = fullHistory.bestFullBlockOpt.get
+      val header = fullBlock.header
+      val txs = fullBlock.blockTransactions
+      val proofs = fullBlock.aDProofs.get
+      fullHistory.contains(header) shouldBe false
+      fullHistory.contains(txs) shouldBe false
+      fullHistory.contains(proofs) shouldBe false
+      fullHistory.applicable(header) shouldBe true
+      fullHistory.applicable(proofs) shouldBe false
+      fullHistory.applicable(txs) shouldBe false
+
+      fullHistory = fullHistory.append(header).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe false
+      fullHistory.contains(proofs) shouldBe false
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe true
+      fullHistory.applicable(txs) shouldBe true
+      fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe startFullBlock
+      fullHistory.openSurfaceIds().head shouldEqual startFullBlock.header.id
+
+      fullHistory = fullHistory.append(txs).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe true
+      fullHistory.contains(proofs) shouldBe false
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe true
+      fullHistory.applicable(txs) shouldBe false
+      fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe startFullBlock
+
+      fullHistory = fullHistory.append(proofs).get._1
+
+      fullHistory.contains(header) shouldBe true
+      fullHistory.contains(txs) shouldBe true
+      fullHistory.contains(proofs) shouldBe true
+      fullHistory.applicable(header) shouldBe false
+      fullHistory.applicable(proofs) shouldBe false
+      fullHistory.applicable(txs) shouldBe false
+      fullHistory.bestHeader shouldBe header
+      fullHistory.bestFullBlockOpt.get shouldBe fullBlock
+      fullHistory.openSurfaceIds().head shouldEqual fullBlock.header.id
+    }
+  }
 
   property("compare()") {
     //TODO what if headers1 > headers2 but fullchain 1 < fullchain2?
   }
 
-  property("continuationIds()") {
-    //TODO
-  }
 
   property("syncInfo()") {
     /*
@@ -46,39 +219,6 @@ class HistoryTest extends PropSpec
         val si = history.syncInfo(answer)
         si.answer shouldBe answer
         si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
-    */
-  }
-
-  property("modifierById() should return correct type") {
-    /*
-        val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-        chain.foreach { block =>
-          history.modifierById(block.id).isDefined shouldBe false
-
-          history = history.append(block.header).get._1
-          history.headerById(block.id).isDefined shouldBe true
-          history.fullBlockById(block.id).isDefined shouldBe false
-          history.modifierById(block.id).isInstanceOf[Some[ErgoHeader]] shouldBe true
-
-          history = history.append(block).get._1
-          history.headerById(block.id).isDefined shouldBe true
-          history.fullBlockById(block.id).isDefined shouldBe true
-          history.modifierById(block.id).isInstanceOf[Some[ErgoFullBlock]] shouldBe true
-        }
-        */
-  }
-
-  property("heightOf() should return height of all blocks") {
-    /*
-        val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-        chain.foreach { block =>
-          val inHeight = history.fullBlocksHeight
-          history = history.append(block.header).get._1.append(block).get._1
-          history.heightOf(block).get shouldBe (inHeight + 1)
-          history.headersHeight shouldBe (inHeight + 1)
-          history.fullBlocksHeight shouldBe (inHeight + 1)
-        }
-        chain.foreach(block => history.heightOf(block).isDefined shouldBe true)
     */
   }
 
@@ -93,20 +233,6 @@ class HistoryTest extends PropSpec
         lastBlocks.foreach(b => assert(chain.contains(b)))
         lastBlocks.last shouldBe history.bestFullBlock
     */
-  }
-
-  property("Appended headers to best chain in history") {
-    val chain = genHeaderChain(BlocksInChain, Seq(fullHistory.bestHeader)).tail
-    chain.foreach { header =>
-      fullHistory.contains(header) shouldBe false
-      fullHistory.applicable(header) shouldBe true
-
-      fullHistory = fullHistory.append(header).get._1
-
-      fullHistory.contains(header) shouldBe true
-      fullHistory.applicable(header) shouldBe false
-      fullHistory.bestHeader shouldBe header
-    }
   }
 
   property("Drop last block from history") {
@@ -135,24 +261,21 @@ class HistoryTest extends PropSpec
     */
   }
 
-  property("process fork") {
-    /*
-        forAll(smallInt) { forkLength: Int =>
-          whenever(forkLength > 0) {
-            val fork1 = genChain(forkLength, Seq(history.bestFullBlock)).tail
-            val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlock)).tail
+  private def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int): ErgoHistory = {
+    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep))
+    val fullHistorySettings: ErgoSettings = new ErgoSettings {
+      override def settingsJSON: Map[String, Json] = Map()
 
-            history = applyChain(history, fork1)
-            history.bestHeader shouldBe fork1.last.header
-            history.bestFullBlock shouldBe fork1.last
-
-            history = applyChain(history, fork2)
-            history.bestHeader shouldBe fork2.last.header
-            history.bestFullBlock shouldBe fork2.last
-          }
-        }
-    */
+      override val verifyTransactions: Boolean = verify
+      override val ADState: Boolean = adState
+      override val dataDir: String = s"/tmp/ergo/test-history-$paramsHash"
+      override val blocksToKeep: Int = toKeep
+    }
+    new File(fullHistorySettings.dataDir).mkdirs()
+    ErgoHistory.readOrGenerate(fullHistorySettings)
   }
+
+  private def historyTest(histories: Seq[ErgoHistory])(fn: ErgoHistory => Unit): Unit = histories.foreach(fn)
 
 
 }

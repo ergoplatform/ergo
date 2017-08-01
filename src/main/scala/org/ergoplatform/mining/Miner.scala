@@ -1,9 +1,9 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProof, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.block.Block._
 
 import scala.annotation.tailrec
@@ -13,11 +13,11 @@ object Miner {
 
 
   def genBlock(difficulty: BigInt,
-                parent: Header,
-                stateRoot: Array[Byte],
-                adProofs: ADProofs,
-                transactions: Seq[AnyoneCanSpendTransaction],
-                timestamp: Timestamp): ErgoFullBlock = {
+               parent: Header,
+               stateRoot: Array[Byte],
+               adProofs: ADProof,
+               transactions: Seq[AnyoneCanSpendTransaction],
+               timestamp: Timestamp): ErgoFullBlock = {
 ???
   }
 
@@ -42,11 +42,6 @@ object Miner {
     generateHeader()
   }
 
-  private def blockIdDifficulty(id: Array[Version]): BigInt = {
-    val blockTarget = BigInt(1, id)
-    Constants.MaxTarget / blockTarget
-  }
-
   private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
     val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
 
@@ -54,7 +49,7 @@ object Miner {
       if (parent.realDifficulty >= curDifficulty) {
         generateInnerchain(curDifficulty * 2, acc :+ parent.id)
       } else {
-        parent.interlinks.find(pId => blockIdDifficulty(pId) >= curDifficulty) match {
+        parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
           case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
           case _ => acc
         }

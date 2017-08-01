@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -11,13 +12,14 @@ import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction]) extends HistoryModifier {
+case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction]) extends ErgoPersistentModifier
+  with ModifierWithDigest {
 
   assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
 
-  override lazy val id: ModifierId = BlockTransactions.rootHash(txs.map(_.id))
+  override def digest: Array[ModifierTypeId] = BlockTransactions.rootHash(txs.map(_.id))
 
   override type M = BlockTransactions
 

@@ -30,7 +30,6 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
   def update(id: ModifierId,
              idsToRemove: Seq[ByteArrayWrapper],
              toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
-    println("!! toRemove=" + idsToRemove.map(d => Base58.encode(d.data)) + " toInsert=" + toInsert.map(_._1).map(d => Base58.encode(d.data)))
     db.update(
       ByteArrayWrapper(id),
       idsToRemove,

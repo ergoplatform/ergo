@@ -21,8 +21,9 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Block.Timestamp,
-                  nonce: Long) extends ErgoPersistentModifier {
-
+                  nonce: Long,
+                  extensionHash: Array[Byte],
+                  votes: Array[Byte]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
   override lazy val id: ModifierId = Algos.hash(bytes)
@@ -39,12 +40,14 @@ case class Header(version: Version,
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
     "transactionsRoot" -> Base58.encode(transactionsRoot).asJson,
-    //    "interlinksRoot" -> Base58.encode(interlinksRoot).asJson,
+    "interlinks" -> interlinks.map(i => Base58.encode(i).asJson).asJson,
     "ADProofsRoot" -> Base58.encode(ADProofsRoot).asJson,
     "stateRoot" -> Base58.encode(stateRoot).asJson,
     "parentId" -> Base58.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
-    "nonce" -> nonce.asJson
+    "nonce" -> nonce.asJson,
+    "extensionHash" -> Base58.encode(extensionHash).asJson,
+    "votes" -> Base58.encode(votes).asJson
   ).asJson
 
   override lazy val toString: String = s"Header(${json.noSpaces})"
@@ -66,7 +69,7 @@ object HeaderSerializer extends Serializer[Header] {
     val BytesWithoutInterlinksLength = 108
 
     def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(h.parentId, h.ADProofsRoot, h.transactionsRoot,
-      h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce))
+      h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash, h.votes)
 
 
     def interlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
@@ -89,6 +92,8 @@ object HeaderSerializer extends Serializer[Header] {
     val stateRoot = bytes.slice(97, 129)
     val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
     val nonce = Longs.fromByteArray(bytes.slice(137, 145))
+    val extensionHash = bytes.slice(145, 177)
+    val votes = bytes.slice(177, 182)
 
     @tailrec
     def parseInnterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -100,10 +105,8 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val innerlinks = parseInnterlinks(145, Seq())
+    val innerlinks = parseInnterlinks(182, Seq())
 
-    Header(version, parentId, innerlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce)
+    Header(version, parentId, innerlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
   }
 }
-
-

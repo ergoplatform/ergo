@@ -31,6 +31,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   protected def processFullBlock(header: Header,
                                  txs: BlockTransactions,
                                  adProofsOpt: Option[ADProof],
+                                 extensionOpt: Option[Map[Array[Byte], Array[Byte]]],
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     assert(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
@@ -39,7 +40,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       (ByteArrayWrapper(adProofsOpt.get.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofsOpt.get)))
     }
     val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
-    val fullBlock = ErgoFullBlock(header, txs, adProofsOpt)
+    val fullBlock = ErgoFullBlock(header, txs, adProofsOpt, extensionOpt)
     (bestFullBlockOpt, bestFullBlockId.flatMap(scoreOf), scoreOf(header.id)) match {
       case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")

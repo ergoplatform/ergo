@@ -9,7 +9,8 @@ import scorex.core.serialization.Serializer
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProof]) extends ErgoPersistentModifier {
+                         aDProofs: Option[ADProof],
+                         extension: Option[Map[Array[Byte], Array[Byte]]]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override lazy val id: ModifierId = Algos.hash(header.id ++ blockTransactions.id ++

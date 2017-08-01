@@ -25,7 +25,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //with WalletSecretsTest[P, TX, PM]
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
   with MempoolTransactionsTest[P, TX, MPool]
-  with MempoolFilterPerformanceTest[P, TX, MPool]
+//  with MempoolFilterPerformanceTest[P, TX, MPool]
 //  with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
 //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
   with BlockchainPerformance[AnyoneCanSpendProposition,

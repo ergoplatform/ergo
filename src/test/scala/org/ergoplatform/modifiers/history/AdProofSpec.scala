@@ -5,8 +5,8 @@ import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
-import scorex.crypto.authds.avltree.batch.{BatchAVLProver, BatchAVLVerifier, Insert}
-import scorex.crypto.hash.{Blake2b256, Blake2b256Unsafe}
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
+import scorex.crypto.hash.Blake2b256Unsafe
 import scorex.testkit.TestkitHelpers
 
 class AdProofSpec extends PropSpec

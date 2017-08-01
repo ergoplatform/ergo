@@ -15,6 +15,11 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
 
   override type NVCT = ErgoMemPool
 
+  /**
+    * Map stores current state of waiting for query building
+    * value - promise of result and set of all transactions of request
+    * key - set of transactions that are waiting for the assembly
+    */
   private[mempool] var waitedForAssembly: Map[Set[TxKey], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
   private def key(id: Array[Byte]): TxKey = new mutable.WrappedArray.ofByte(id)
@@ -57,11 +62,12 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
 
   override def size: Int = unconfirmed.size
 
-  private def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = waitedForAssembly.synchronized {
+  private def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = synchronized {
     val txsIds = txs.map(tx => key(tx.id))
     val newMap = waitedForAssembly.flatMap(p => {
       val ids = p._1
       val newKey = ids -- txsIds
+      // filtering fully-built queries and completing of a promise
       if (newKey.isEmpty) {
         val (promise, allIds) = p._2
         promise complete Success(allIds.map(id => getById(id).get))
@@ -73,7 +79,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
     waitedForAssembly = newMap
   }
 
-  def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = waitedForAssembly.synchronized {
+  def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = synchronized {
     val promise = Promise[Seq[AnyoneCanSpendTransaction]]
     waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
     promise.future

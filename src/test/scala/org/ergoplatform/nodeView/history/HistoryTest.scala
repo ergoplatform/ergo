@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -23,11 +25,37 @@ class HistoryTest extends PropSpec
   var fullHistory = generateHistory(verify = true, adState = true, BlocksToKeep)
   var txHistory = generateHistory(verify = true, adState = false, BlocksToKeep)
   var lightHistory = generateHistory(verify = false, adState = true, 0)
-  assert(fullHistory.bestFullBlockId.isDefined)
-  assert(lightHistory.bestFullBlockId.isEmpty)
+  assert(fullHistory.bestFullBlockIdOpt.isDefined)
+  assert(lightHistory.bestFullBlockIdOpt.isEmpty)
 
 
   val BlocksInChain = 30
+
+  property("Report invalid for best full block") {
+    assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)
+    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
+    fullHistory = applyChain(fullHistory, chain)
+    chain.foreach { fullBlock =>
+      if(!fullHistory.contains(fullBlock.header.transactionsId)) {
+        throw new Error(s"Missed modifier ${Base58.encode(fullBlock.header.transactionsId)}")
+      }
+      fullHistory.contains(fullBlock.header.ADProofsId) shouldBe true
+    }
+
+    chain.tail.reverse.foreach { fullBlock =>
+
+      fullHistory.bestFullBlockOpt.get.header shouldBe fullHistory.bestHeader
+      fullHistory.bestHeader shouldEqual fullBlock.header
+
+      val parentHeader = fullHistory.typedModifierById[Header](fullBlock.header.parentId).get
+      fullHistory.contains(parentHeader.transactionsId) shouldBe true
+      fullHistory.contains(parentHeader.ADProofsId) shouldBe true
+
+      fullHistory = fullHistory.reportInvalid(fullBlock.blockTransactions)
+      fullHistory.bestFullBlockOpt.get.header shouldBe fullHistory.bestHeader
+      fullHistory.bestHeader shouldBe parentHeader
+    }
+  }
 
   property("continuationIds()") {
     var history = lightHistory
@@ -152,7 +180,6 @@ class HistoryTest extends PropSpec
       history.bestFullBlockOpt.get.header shouldBe fullBlock.header
     }
   }
-
 
   property("Appended full blocks to best chain in full history") {
     assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)

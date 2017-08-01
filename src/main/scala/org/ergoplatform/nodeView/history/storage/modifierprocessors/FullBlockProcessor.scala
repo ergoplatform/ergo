@@ -14,9 +14,7 @@ import scala.util.Try
 
 trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
-  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
-
-  override def bestFullBlockId: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
+  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
 
   protected val config: HistoryConfig
 
@@ -40,7 +38,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
     val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
     val fullBlock = ErgoFullBlock(header, txs, adProofsOpt)
-    (bestFullBlockOpt, bestFullBlockId.flatMap(scoreOf), scoreOf(header.id)) match {
+    (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(header.id)) match {
       case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")
         if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)

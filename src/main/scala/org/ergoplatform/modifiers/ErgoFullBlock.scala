@@ -10,7 +10,7 @@ import scorex.core.serialization.Serializer
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          aDProofs: Option[ADProof],
-                         extension: Map[Array[Byte], Array[Byte]]) extends ErgoPersistentModifier {
+                         extension: Option[Map[Array[Byte], Array[Byte]]]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override lazy val id: ModifierId = Algos.hash(header.id ++ blockTransactions.id ++

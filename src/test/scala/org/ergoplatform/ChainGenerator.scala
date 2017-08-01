@@ -55,7 +55,7 @@ trait ChainGenerator {
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 
-    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs))
+    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
     genChain(height - 1, block +: acc)
   }
 

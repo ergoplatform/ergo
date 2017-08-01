@@ -11,8 +11,6 @@ import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
 
-import scala.reflect.runtime.universe.Type
-
 class ErgoApp(val settingsFilename: String) extends Application {
   override type P = AnyoneCanSpendProposition
   override type TX = AnyoneCanSpendTransaction
@@ -23,7 +21,7 @@ class ErgoApp(val settingsFilename: String) extends Application {
     override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename)
   }
   override val apiRoutes: Seq[ApiRoute] = Seq()
-  override val apiTypes: Seq[Type] = Seq()
+  override val apiTypes: Set[Class[_]] = Set()
   override protected val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
   override val nodeViewHolderRef: ActorRef = ???
   override val nodeViewSynchronizer: ActorRef = ???

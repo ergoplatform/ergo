@@ -48,7 +48,8 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
   def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
              previousHash: Digest,
              expectedHash: Digest): Try[Unit] = {
-    def applyChanges(prover: BatchAVLVerifier[Blake2b256Unsafe],
+
+    def applyChanges(verifier: BatchAVLVerifier[Blake2b256Unsafe],
                      changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]) =
       changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
@@ -58,7 +59,7 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
             case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
               Remove(r.boxId)
           }
-          prover.performOneOperation(avlOperation)
+          verifier.performOneOperation(avlOperation)
         })
       }
 

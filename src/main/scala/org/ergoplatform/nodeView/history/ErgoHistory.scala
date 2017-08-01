@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.LSMStore
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -94,11 +94,13 @@ trait ErgoHistory
 
 
   override def reportInvalid(modifier: ErgoPersistentModifier): ErgoHistory = {
-    val idsToRemove = modifier match {
+    val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
       case h: Header => toDrop(h)
+      case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
+      case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
       case _ => ???
     }
-    historyStorage.remove(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove)
+    historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     this
   }
 
@@ -115,7 +117,9 @@ trait ErgoHistory
       case m: ADProof =>
         validate(m)
       case m: PoPoWProof =>
-        require(config.poPoWBootstrap, "Incorrect regime")
+        if (!config.poPoWBootstrap) Failure(new Error("Incorrect regime"))
+        else Failure(new NotImplementedError)
+      case m: UTXOSnapshotChunk =>
         Failure(new NotImplementedError)
       case m =>
         Failure(new Error(s"Modifier $m have incorrect type"))

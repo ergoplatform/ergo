@@ -71,10 +71,18 @@ trait HeadersProcessor {
     }
   }
 
-  def toDrop(modifier: Header): Seq[ByteArrayWrapper] = {
-    //TODO what if we're dropping best block id ??
-    val modifierId = modifier.id
-    Seq(headerDiffKey(modifierId), headerScoreKey(modifierId))
+  def toDrop(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
+    val modifierId = header.id
+    val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
+      .map(id => ByteArrayWrapper(id))
+
+    val toRemove = Seq(headerDiffKey(modifierId),
+      headerScoreKey(modifierId),
+      ByteArrayWrapper(modifierId)) ++ payloadModifiers
+    val toInsert = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
+      Seq((BestHeaderKey, ByteArrayWrapper(header.parentId)))
+    } else Seq()
+    (toRemove, toInsert)
   }
 
   def validate(m: Header): Try[Unit] = Try {

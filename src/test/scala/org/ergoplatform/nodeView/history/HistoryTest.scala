@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
@@ -35,15 +34,8 @@ class HistoryTest extends PropSpec
     assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)
     val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
     fullHistory = applyChain(fullHistory, chain)
-    chain.foreach { fullBlock =>
-      if(!fullHistory.contains(fullBlock.header.transactionsId)) {
-        throw new Error(s"Missed modifier ${Base58.encode(fullBlock.header.transactionsId)}")
-      }
-      fullHistory.contains(fullBlock.header.ADProofsId) shouldBe true
-    }
 
-    chain.tail.reverse.foreach { fullBlock =>
-
+    chain.takeRight(BlocksToKeep - 2).reverse.foreach { fullBlock =>
       fullHistory.bestFullBlockOpt.get.header shouldBe fullHistory.bestHeader
       fullHistory.bestHeader shouldEqual fullBlock.header
 

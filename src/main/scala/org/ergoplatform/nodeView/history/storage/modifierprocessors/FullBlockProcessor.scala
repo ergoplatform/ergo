@@ -9,6 +9,7 @@ import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.encode.Base58
 
 import scala.util.Try
 

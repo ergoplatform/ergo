@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.storage
 
+import io.iohk.iodb.Store._
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
@@ -23,18 +24,15 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
 
   def contains(id: ModifierId): Boolean = modifierById(id).isDefined
 
-  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
-    db.update(
-      ByteArrayWrapper(id),
-      Seq(),
-      toInsert)
-  }
+  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = update(id, Seq(), toInsert)
 
-  def remove(id: ModifierId, idsToRemove: Seq[ByteArrayWrapper]): Unit = {
+  def update(id: ModifierId,
+             idsToRemove: Seq[ByteArrayWrapper],
+             toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
     db.update(
       ByteArrayWrapper(id),
-      ByteArrayWrapper(id) +: idsToRemove,
-      Seq())
+      idsToRemove,
+      toInsert)
   }
 
 

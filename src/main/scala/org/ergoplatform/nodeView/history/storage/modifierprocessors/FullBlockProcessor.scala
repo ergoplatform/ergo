@@ -80,7 +80,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       .flatMap { h =>
         Seq(ByteArrayWrapper(h.ADProofsId), ByteArrayWrapper(h.transactionsId))
       }
-    historyStorage.remove(id, toRemove)
+    historyStorage.update(id, toRemove, Seq())
   }
 
   private def bestBlockToTheEnd(newModRow: (ByteArrayWrapper, ByteArrayWrapper),

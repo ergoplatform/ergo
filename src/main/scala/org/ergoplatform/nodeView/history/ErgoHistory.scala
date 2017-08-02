@@ -135,8 +135,20 @@ trait ErgoHistory
     val theirHeight = heightOf(lastHeaderInHistory).get
     val heightFrom = Math.min(height, theirHeight + size)
     val startId = headerIdsAtHeight(heightFrom).head
-    headerChainBack(heightFrom - theirHeight, typedModifierById[Header](startId).get, (h: Header) => h.isGenesis)
+    val startHeader = typedModifierById[Header](startId).get
+    val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
       .headers.map(h => Header.ModifierTypeId -> h.id)
+    val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
+      case Some(bestFullBlockHeight) =>
+        val heightFrom = Math.min(height, bestFullBlockHeight + size)
+        val startId = headerIdsAtHeight(heightFrom).head
+        val startHeader = typedModifierById[Header](startId).get
+        val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
+        headers.headers.flatMap(h => Seq((ADProof.ModifierTypeId, h.ADProofsId),
+          (BlockTransactions.ModifierTypeId, h.transactionsId)))
+      case _ => Seq()
+    }
+    headerIds ++ fullBlockContinuation
   }.toOption
 
   //TODO full blocks?

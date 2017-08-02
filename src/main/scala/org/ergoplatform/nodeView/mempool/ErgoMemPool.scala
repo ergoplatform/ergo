@@ -22,7 +22,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
     */
   private[mempool] var waitedForAssembly: Map[Set[TxKey], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
-  private def key(id: Array[Byte]): TxKey = new mutable.WrappedArray.ofByte(id)
+  private def key(id: ModifierId): TxKey = new mutable.WrappedArray.ofByte(id)
 
   override def getById(id: ModifierId): Option[AnyoneCanSpendTransaction] = unconfirmed.get(key(id))
 

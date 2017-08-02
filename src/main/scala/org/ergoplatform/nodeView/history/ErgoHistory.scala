@@ -255,7 +255,7 @@ object ErgoHistory extends ScorexLogging {
           Array.fill(hashLength)(0.toByte),
           Seq(),
           proofsRoot,
-          stateRoot: Array[Byte],
+          stateRoot,
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,
           0,

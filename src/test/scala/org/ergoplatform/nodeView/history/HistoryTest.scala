@@ -33,25 +33,6 @@ class HistoryTest extends PropSpec
   assert(lightHistory.bestFullBlockIdOpt.isEmpty)
 
 
-
-  property("continuationIds() should contain ids of adProofs and blockTransactions") {
-    var history = fullHistory
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
-
-    history = applyChain(history, chain)
-    forAll(smallInt) { forkLength: Int =>
-      whenever(forkLength > 1) {
-        val theirBestFull = Some(chain(chain.size - forkLength).header.id)
-        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
-        val continuation = history.continuationIds(si, forkLength).get
-
-        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength
-        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength
-
-      }
-    }
-  }
-
   property("syncInfo()") {
     val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
     val answer = Random.nextBoolean()
@@ -78,6 +59,24 @@ class HistoryTest extends PropSpec
       fullHistory = fullHistory.reportInvalid(fullBlock.blockTransactions)
       fullHistory.bestFullBlockOpt.get.header shouldBe fullHistory.bestHeader
       fullHistory.bestHeader shouldBe parentHeader
+    }
+  }
+
+  property("continuationIds() should contain ids of adProofs and blockTransactions") {
+    var history = fullHistory
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, chain)
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 1) {
+        val theirBestFull = Some(chain(chain.size - forkLength).header.id)
+        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
+        val continuation = history.continuationIds(si, forkLength).get
+
+        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength
+        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength
+
+      }
     }
   }
 

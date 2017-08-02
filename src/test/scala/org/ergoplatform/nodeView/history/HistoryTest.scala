@@ -11,6 +11,8 @@ import org.scalatest.{Matchers, PropSpec}
 import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
 
+import scala.util.Random
+
 class HistoryTest extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
@@ -29,6 +31,16 @@ class HistoryTest extends PropSpec
 
 
   val BlocksInChain = 30
+
+  property("syncInfo()") {
+    val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
+    val answer = Random.nextBoolean()
+    fullHistory = applyChain(fullHistory, chain)
+    val si = fullHistory.syncInfo(answer)
+    si.answer shouldBe answer
+    si.lastHeaderIds.last shouldEqual chain.last.header.id
+    si.fullBlockIdOpt.get shouldEqual fullHistory.bestFullBlockIdOpt.get
+  }
 
   property("Report invalid for best full block") {
     assert(fullHistory.bestFullBlockOpt.get.header == fullHistory.bestHeader)
@@ -56,7 +68,7 @@ class HistoryTest extends PropSpec
     history = applyHeaderChain(history, chain)
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 1) {
-        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength).id))
+        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength).id), None)
         val continuation = history.continuationIds(si, forkLength).get
         continuation.length shouldBe forkLength
         continuation.last._2 shouldEqual chain.last.id
@@ -229,17 +241,6 @@ class HistoryTest extends PropSpec
     //TODO what if headers1 > headers2 but fullchain 1 < fullchain2?
   }
 
-
-  property("syncInfo()") {
-    /*
-        val chain = genChain(BlocksInChain, Seq(history.bestFullBlock)).tail
-        val answer = Random.nextBoolean()
-        history = applyChain(history, chain)
-        val si = history.syncInfo(answer)
-        si.answer shouldBe answer
-        si.lastBlockIds.flatten shouldEqual history.lastBlocks(Math.max(ErgoSyncInfo.MaxBlockIds, history.fullBlocksHeight)).flatMap(_.id)
-    */
-  }
 
   property("lastBlocks() should return last blocks") {
     /*

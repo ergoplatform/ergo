@@ -3,9 +3,10 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
+import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.crypto.encode.Base58
@@ -21,7 +22,9 @@ class HistoryTest extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
-  val BlocksToKeep = 21
+  val BlocksInChain = 10
+  override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
+  val BlocksToKeep = BlocksInChain + 1
 
   var fullHistory = generateHistory(verify = true, adState = true, BlocksToKeep)
   var txHistory = generateHistory(verify = true, adState = false, BlocksToKeep)
@@ -30,7 +33,24 @@ class HistoryTest extends PropSpec
   assert(lightHistory.bestFullBlockIdOpt.isEmpty)
 
 
-  val BlocksInChain = 10
+
+  property("continuationIds() should contain ids of adProofs and blockTransactions") {
+    var history = fullHistory
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, chain)
+    forAll(smallInt) { forkLength: Int =>
+      whenever(forkLength > 1) {
+        val theirBestFull = Some(chain(chain.size - forkLength).header.id)
+        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
+        val continuation = history.continuationIds(si, forkLength).get
+
+        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength
+        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength
+
+      }
+    }
+  }
 
   property("syncInfo()") {
     val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
@@ -61,9 +81,9 @@ class HistoryTest extends PropSpec
     }
   }
 
-  property("continuationIds()") {
+  property("continuationIds() for light history should contain ids of next headers in our chain") {
     var history = lightHistory
-    val chain = genHeaderChain(21, Seq(history.bestHeader)).tail
+    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
 
     history = applyHeaderChain(history, chain)
     forAll(smallInt) { forkLength: Int =>
@@ -77,9 +97,11 @@ class HistoryTest extends PropSpec
     }
   }
 
+
+
   property("prune old blocks test") {
     var history = fullHistory
-    val blocksToPrune = 10
+    val blocksToPrune = 2
     val chain = genChain(BlocksToKeep + blocksToPrune, Seq(history.bestFullBlockOpt.get)).tail
 
     history = applyChain(history, chain)
@@ -98,12 +120,13 @@ class HistoryTest extends PropSpec
 
   property("commonBlockThenSuffixes()") {
     var history = lightHistory
+    val forkDepth = BlocksInChain / 2
     forAll(smallInt) { forkLength: Int =>
-      whenever(forkLength > 10) {
+      whenever(forkLength > forkDepth) {
 
         val fork1 = genHeaderChain(forkLength, Seq(history.bestHeader)).tail
-        val common = fork1.headers(10)
-        val fork2 = fork1.take(10) ++ genHeaderChain(forkLength + 1, Seq(common))
+        val common = fork1.headers(forkDepth)
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common))
 
         history = applyHeaderChain(history, fork1)
         history.bestHeader shouldBe fork1.last

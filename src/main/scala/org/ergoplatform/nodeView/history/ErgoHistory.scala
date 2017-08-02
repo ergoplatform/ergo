@@ -127,11 +127,9 @@ trait ErgoHistory
     }
   }
 
-  //TODO it should include branch point?
-  //TODO add full block
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     val ids = info.lastHeaderIds
-    val lastHeaderInHistory = ids(ids.lastIndexWhere(m => contains(m)))
+    val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
     val theirHeight = heightOf(lastHeaderInHistory).get
     val heightFrom = Math.min(height, theirHeight + size)
     val startId = headerIdsAtHeight(heightFrom).head

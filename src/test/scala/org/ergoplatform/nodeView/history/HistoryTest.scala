@@ -30,7 +30,7 @@ class HistoryTest extends PropSpec
   assert(lightHistory.bestFullBlockIdOpt.isEmpty)
 
 
-  val BlocksInChain = 30
+  val BlocksInChain = 10
 
   property("syncInfo()") {
     val chain = genChain(BlocksInChain, Seq(fullHistory.bestFullBlockOpt.get)).tail
@@ -63,7 +63,7 @@ class HistoryTest extends PropSpec
 
   property("continuationIds()") {
     var history = lightHistory
-    val chain = genHeaderChain(100, Seq(history.bestHeader)).tail
+    val chain = genHeaderChain(21, Seq(history.bestHeader)).tail
 
     history = applyHeaderChain(history, chain)
     forAll(smallInt) { forkLength: Int =>

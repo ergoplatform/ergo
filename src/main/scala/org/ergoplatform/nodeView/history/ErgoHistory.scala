@@ -96,7 +96,9 @@ trait ErgoHistory
       case h: Header => toDrop(h)
       case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
       case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
-      case _ => ???
+      case m =>
+        log.warn(s"reportInvalid for invalid modifier type: $m")
+        (Seq(ByteArrayWrapper(m.id)), Seq())
     }
 
     historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)

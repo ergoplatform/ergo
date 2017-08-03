@@ -2,7 +2,9 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Constants.hashLength
@@ -11,6 +13,16 @@ import scorex.core.NodeViewModifier._
 import scala.util.Try
 
 trait HeadersProcessor {
+
+  protected val config: HistoryConfig
+
+  def bestFullBlockOpt: Option[ErgoFullBlock]
+
+  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
+
+  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
+
+  protected def getFullBlock(h: Header): ErgoFullBlock
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions

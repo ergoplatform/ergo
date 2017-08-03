@@ -185,7 +185,6 @@ trait ErgoHistory
     headerIds ++ fullBlockContinuation
   }.toOption
 
-  //TODO full blocks?
   override def syncInfo(answer: Boolean): ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(answer, Seq(), None)
   } else {

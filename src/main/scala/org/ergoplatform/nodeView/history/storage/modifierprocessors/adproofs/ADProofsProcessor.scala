@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -9,7 +9,10 @@ import scala.util.Try
 
 trait ADProofsProcessor {
 
-  protected val aDProofsRequired: Boolean
+  /**
+    *  Roothash only is kept in state
+    */
+  protected val adState: Boolean
 
   def process(m: ADProof): ProgressInfo[ErgoPersistentModifier]
 

@@ -61,7 +61,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scala-tools.testing" % "test-interface" % "0.5",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
   "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2-SNAPSHOT",
-  "org.scorexfoundation" % "scrypto_2.12" % "1.2.2",
+  "org.scorexfoundation" % "scrypto_2.12" % "1.2.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
   "org.typelevel" % "cats-core_2.12" % "0.9.0",
@@ -69,7 +69,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.typelevel" % "cats-macros_2.12" % "0.9.0",
   "org.typelevel" % "machinist_2.12" % "0.6.1",
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
-  "org.whispersystems" % "curve25519-java" % "0.3.1",
+  "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH b99eb97c81b5297bfbf7d8440e073620f74430cb
+// LIBRARY_DEPENDENCIES_HASH 83e77fdd8fbd80a91ab9eec804697b3c3b0cd515

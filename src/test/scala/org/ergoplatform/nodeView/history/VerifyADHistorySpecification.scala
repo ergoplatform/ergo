@@ -1,17 +1,36 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 
 import scala.util.Random
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
   var history = generateHistory(verify = true, adState = true, BlocksToKeep)
-  assert(history.bestFullBlockIdOpt.isDefined)
 
+  property("bootstrap from headers and last full blocks") {
+    var history = generateHistory(verify = true, adState = true, BlocksToKeep, System.nanoTime())
+    history.bestHeader shouldBe ErgoFullBlock.genesis.header
+    history.bestFullBlockOpt shouldBe None
+
+    val chain = genChain(BlocksToKeep * 2, Seq(ErgoFullBlock.genesis))
+
+    history = applyHeaderChain(history, HeaderChain(chain.tail.map(_.header)))
+    history.bestHeader shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    val fullBlocksToApply = chain.takeRight(BlocksToKeep)
+
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history.bestFullBlockOpt shouldBe None
+    history = history.append(fullBlocksToApply.head.aDProofs.get).get._1
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
+
+  }
 
   property("syncInfo()") {
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, Seq(bestFullOrGenesis(history))).tail
     val answer = Random.nextBoolean()
     history = applyChain(history, chain)
     val si = history.syncInfo(answer)
@@ -22,7 +41,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("Report invalid for best full block") {
     assert(history.bestFullBlockOpt.get.header == history.bestHeader)
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, Seq(bestFullOrGenesis(history))).tail
     history = applyChain(history, chain)
 
     chain.takeRight(BlocksToKeep - 2).reverse.foreach { fullBlock =>
@@ -40,7 +59,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("continuationIds() should contain ids of adProofs and blockTransactions") {
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, Seq(bestFullOrGenesis(history))).tail
 
     history = applyChain(history, chain)
     forAll(smallInt) { forkLength: Int =>
@@ -58,7 +77,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("prune old blocks test") {
     val blocksToPrune = 2
-    val chain = genChain(BlocksToKeep + blocksToPrune, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksToKeep + blocksToPrune, Seq(bestFullOrGenesis(history))).tail
 
     history = applyChain(history, chain)
     history.bestHeader shouldBe chain.last.header
@@ -75,6 +94,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork") {
+    assert(history.bestFullBlockOpt.isDefined)
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val fork1 = genChain(forkLength, Seq(history.bestFullBlockOpt.get)).tail
@@ -91,7 +111,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("Appended full blocks to best chain in full history") {
     assert(history.bestFullBlockOpt.get.header == history.bestHeader)
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, Seq(bestFullOrGenesis(history))).tail
     chain.foreach { fullBlock =>
       val startFullBlock = history.bestFullBlockOpt.get
       val header = fullBlock.header

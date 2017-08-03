@@ -62,7 +62,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.0",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
   "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2-SNAPSHOT",
-  "org.scorexfoundation" % "scrypto_2.12" % "1.2.3-SNAPSHOT",
+  "org.scorexfoundation" % "scrypto_2.12" % "1.2.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
   "org.typelevel" % "cats-core_2.12" % "0.9.0",
@@ -73,4 +73,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH b9280efa6d43a9da84588557d5862339f3aef5a4
+// LIBRARY_DEPENDENCIES_HASH df7d2fecba56f835a2c15da8dc2969ca9c615f58

@@ -10,7 +10,9 @@ import scorex.core.serialization.Serializer
 import scala.util.Try
 
 
-case class ErgoSyncInfo(answer: Boolean, lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
+case class ErgoSyncInfo(answer: Boolean,
+                        lastHeaderIds: Seq[ModifierId],
+                        fullBlockIdOpt: Option[ModifierId]) extends SyncInfo {
 
   override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {
     lastHeaderIds.map(b => Header.ModifierTypeId -> b)
@@ -27,14 +29,30 @@ object ErgoSyncInfo {
 
 object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
 
-  override def toBytes(obj: ErgoSyncInfo): Array[Byte] =
-    (if (obj.answer) 1.toByte else 0.toByte) +: scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds)
+  override def toBytes(obj: ErgoSyncInfo): Array[Byte] = {
+    val flag: Byte = (obj.answer, obj.fullBlockIdOpt.isDefined) match {
+      case (false, false) => 0
+      case (false, true) => 1
+      case (true, false) => 2
+      case (true, true) => 3
+    }
+    (flag +: obj.fullBlockIdOpt.getOrElse(Array())) ++ scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds)
+  }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = Try {
-    val answer = if (bytes.head == 1.toByte) true else false
-    val ids = bytes.slice(1, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
-    ErgoSyncInfo(answer, ids)
+    val (answer, fullBlockIsDefined) = bytes.head match {
+      case 0 => (false, false)
+      case 1 => (false, true)
+      case 2 => (true, false)
+      case 3 => (true, true)
+      case m => throw new Error(s"Incorrect flag $m")
+    }
+    val fullBlockIdOpt = if (fullBlockIsDefined) Some(bytes.slice(1, 33)) else None
+    val startPosition = if (fullBlockIsDefined) 33 else 1
+    val ids = bytes.slice(startPosition, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
+    ErgoSyncInfo(answer, ids, fullBlockIdOpt)
   }
+
 }
 
 object ErgoSyncInfoMessageSpec extends SyncInfoMessageSpec[ErgoSyncInfo](ErgoSyncInfoSerializer.parseBytes)

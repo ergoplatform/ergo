@@ -15,6 +15,9 @@ import scala.util.Try
 
 trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
+  /**
+    * Id of header that contains transactions and proofs
+    */
   override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
 
   protected val config: HistoryConfig

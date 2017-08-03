@@ -127,19 +127,36 @@ trait ErgoHistory
     }
   }
 
-  //TODO it should include branch point?
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
-    val ids = info.startingPoints
-    val lastHeaderInHistory = ids(ids.filter(_._1 == Header.ModifierTypeId).lastIndexWhere(m => contains(m._2)))._2
+    val ids = info.lastHeaderIds
+    val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
     val theirHeight = heightOf(lastHeaderInHistory).get
     val heightFrom = Math.min(height, theirHeight + size)
     val startId = headerIdsAtHeight(heightFrom).head
-    headerChainBack(heightFrom - theirHeight, typedModifierById[Header](startId).get, (h: Header) => h.isGenesis)
+    val startHeader = typedModifierById[Header](startId).get
+    val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
       .headers.map(h => Header.ModifierTypeId -> h.id)
+    val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
+      case Some(bestFullBlockHeight) =>
+        val heightFrom = Math.min(height, bestFullBlockHeight + size)
+        val startId = headerIdsAtHeight(heightFrom).head
+        val startHeader = typedModifierById[Header](startId).get
+        val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
+        headers.headers.flatMap(h => Seq((ADProof.ModifierTypeId, h.ADProofsId),
+          (BlockTransactions.ModifierTypeId, h.transactionsId)))
+      case _ => Seq()
+    }
+    headerIds ++ fullBlockContinuation
   }.toOption
 
-  //TODO last full blocks and last headers
-  override def syncInfo(answer: Boolean): ErgoSyncInfo = ???
+  //TODO full blocks?
+  override def syncInfo(answer: Boolean): ErgoSyncInfo = if (isEmpty) {
+    ErgoSyncInfo(answer, Seq(), None)
+  } else {
+    ErgoSyncInfo(answer,
+      headerChainBack(ErgoSyncInfo.MaxBlockIds, bestHeader, b => b.isGenesis).headers.map(_.id),
+      bestFullBlockIdOpt)
+  }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
@@ -212,12 +229,12 @@ object ErgoHistory extends ScorexLogging {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
       }
-    } else
+    } else {
       new ErgoHistory with EmptyADProofsProcessor with FullnodeBlockTransactionsProcessor {
         override protected val config: HistoryConfig = historyConfig
         override protected val storage: LSMStore = db
       }
-
+    }
 
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
@@ -238,7 +255,7 @@ object ErgoHistory extends ScorexLogging {
           Array.fill(hashLength)(0.toByte),
           Seq(),
           proofsRoot,
-          stateRoot: Array[Byte],
+          stateRoot,
           BlockTransactions.rootHash(Seq(genesisTx.id)),
           genesisTimestamp,
           0,

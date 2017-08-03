@@ -5,11 +5,10 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.core.transaction.state.BoxStateChanges
 import scorex.testkit.TestkitHelpers
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Success, Try}
 
 class PoPoWProofSpec extends PropSpec
   with PropertyChecks
@@ -19,13 +18,17 @@ class PoPoWProofSpec extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
+  property("Valid PoPoWProof generation") {
+    generatePoPoWProof(5, 5).validate shouldBe 'success
+  }
+
   property("Valid PoPoWProof serialization") {
-    val proof = generateKLS16Proof(5, 5)
+    val proof = generatePoPoWProof(5, 5)
     val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
     PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
   }
 
-  def generateKLS16Proof(m: Int, k: Int): PoPoWProof = {
+  def generatePoPoWProof(m: Int, k: Int): PoPoWProof = {
     constructPoPoWProof(m, k, genHeaderChain(100, Seq(ErgoFullBlock.genesis.header)).headers).get
   }
 

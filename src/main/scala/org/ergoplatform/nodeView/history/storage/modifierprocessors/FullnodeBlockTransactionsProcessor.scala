@@ -15,7 +15,7 @@ import scala.util.Try
 trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
-  protected val aDProofsRequired: Boolean
+  protected val adState: Boolean
 
   override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
@@ -23,7 +23,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
         historyStorage.modifierById(header.ADProofsId) match {
           case Some(adProof: ADProof) =>
             processFullBlock(header, txs, Some(adProof), None, txsAreNew = true)
-          case None if !aDProofsRequired =>
+          case None if !adState =>
             processFullBlock(header, txs, None, txsAreNew = true, extensionOpt = None)
           case _ =>
             //TODO what if we do not need ADProofs (e.g. we can generate them by ourselves)

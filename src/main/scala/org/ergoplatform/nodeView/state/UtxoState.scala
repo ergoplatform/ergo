@@ -1,5 +1,8 @@
 package org.ergoplatform.nodeView.state
 
+import java.io.File
+
+import io.iohk.iodb.LSMStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -7,6 +10,8 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import scorex.core.transaction.state.BoxStateChanges
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.authenticated.BoxMinimalState
+import scorex.crypto.authds.avltree.batch.VersionedIODBAVLStorage
+import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.Try
 
@@ -16,6 +21,15 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
   UtxoState] {
+
+  implicit val hf = new Blake2b256Unsafe
+
+  val dir = new File("/tmp/utxo")
+  dir.mkdirs()
+
+  val store = new LSMStore(dir)
+  val tree = new VersionedIODBAVLStorage(store, keySize = 32, valueSize = 48)
+
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -28,7 +42,8 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
     txs.flatMap(_.id).toArray
 
-  override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] = ???
+  override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] =
+    tree.
 
   override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
 

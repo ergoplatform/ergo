@@ -273,38 +273,7 @@ object ErgoHistory extends ScorexLogging {
 
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
-      //todo: real definition of a genesis block, do we need genesis block at all?
-      val genesis: ErgoFullBlock = {
-        val genesisTimestamp = 1500203225564L
-        val initialState = ErgoState.initialState
-        //TODO        val stateRoot = initialState.rootHash()
-        val stateRoot = Algos.hash("Initial state")
-        val genesisTx = new AnyoneCanSpendTransaction(
-          IndexedSeq(new AnyoneCanSpendProposition -> 0L),
-          IndexedSeq((new AnyoneCanSpendProposition, 0L)),
-          genesisTimestamp)
-        val proofs = initialState.proofsForTransactions(Seq(genesisTx))
-        val proofsRoot = ADProof.proofDigest(proofs)
-
-        val header: Header = Header(0.toByte,
-          Array.fill(hashLength)(0.toByte),
-          Seq(),
-          proofsRoot,
-          stateRoot,
-          BlockTransactions.rootHash(Seq(genesisTx.id)),
-          genesisTimestamp,
-          0,
-          Array.fill(32)(0.toByte),
-          Array.fill(5)(0.toByte)
-        )
-        val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
-        val aDProofs: ADProof = ADProof(header.id, proofs)
-        assert(header.ADProofsRoot sameElements aDProofs.digest)
-        assert(header.transactionsRoot sameElements blockTransactions.digest)
-        val aDProofsOpt: Option[ADProof] = if (settings.ADState) Some(aDProofs) else None
-        ErgoFullBlock(header, blockTransactions, aDProofsOpt, None)
-      }
-
+      val genesis: ErgoFullBlock = ErgoFullBlock.genesis
       val historyWithHeader = history.append(genesis.header).get._1
       if (settings.verifyTransactions) {
         val historyWithBlocks = historyWithHeader.append(genesis.blockTransactions).get._1

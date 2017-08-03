@@ -1,9 +1,10 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 

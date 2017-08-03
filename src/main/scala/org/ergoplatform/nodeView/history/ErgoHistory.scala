@@ -90,9 +90,6 @@ trait ErgoHistory
     }
   }
 
-  override def compare(other: ErgoSyncInfo): HistoryComparisonResult.Value = ???
-
-
   override def reportInvalid(modifier: ErgoPersistentModifier): ErgoHistory = {
     val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
       case h: Header => toDrop(h)
@@ -124,6 +121,42 @@ trait ErgoHistory
         Failure(new NotImplementedError)
       case m =>
         Failure(new Error(s"Modifier $m have incorrect type"))
+    }
+  }
+
+  override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
+    //TODO check that work done is correct
+    bestHeaderIdOpt match {
+      case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
+        //Header chain is equals, compare full blocks
+        (info.fullBlockIdOpt, bestFullBlockIdOpt) match {
+          case (Some(theirBestFull), Some(ourBestFull)) if !(theirBestFull sameElements ourBestFull) =>
+            if (scoreOf(theirBestFull).exists(theirScore => heightOf(ourBestFull).exists(_ > theirScore))) {
+              HistoryComparisonResult.Older
+            } else {
+              HistoryComparisonResult.Younger
+            }
+          case _ =>
+            HistoryComparisonResult.Equal
+        }
+      case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
+        HistoryComparisonResult.Older
+      case Some(id) =>
+        //Compare headers chain
+        val ids = info.lastHeaderIds
+        ids.view.reverse.find(m => contains(m)) match {
+          case Some(lastId) =>
+            val ourDiffOpt = heightOf(lastId).map(h => height - h)
+            if (ourDiffOpt.exists(ourDiff => ourDiff > (ids.length - ids.indexWhere(_ sameElements lastId)))) {
+              HistoryComparisonResult.Younger
+            } else {
+              HistoryComparisonResult.Older
+            }
+          case None => HistoryComparisonResult.Nonsense
+        }
+      case None =>
+        log.warn("Trying to compare with other node while our history is empty")
+        HistoryComparisonResult.Older
     }
   }
 

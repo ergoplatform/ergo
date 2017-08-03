@@ -1,11 +1,28 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.modifiers.history.HeaderChain
+import scorex.core.consensus.History.HistoryComparisonResult
+
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
 
   var history = generateHistory(verify = false, adState = true, 0)
   assert(history.bestFullBlockIdOpt.isEmpty)
 
+  property("Compare headers chain") {
+    def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id), None)
+    val fork1 = genHeaderChain(BlocksInChain, Seq(history.bestHeader))
+    val fork2 = genHeaderChain(BlocksInChain + 1, Seq(history.bestHeader))
+
+    history = applyHeaderChain(history, fork1.tail)
+    history.bestHeader shouldBe fork1.last
+
+    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Older
+    history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
+    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
+    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
+    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
+  }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {
     val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail

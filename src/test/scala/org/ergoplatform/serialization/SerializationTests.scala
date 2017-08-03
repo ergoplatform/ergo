@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.ErgoGenerators
-import org.ergoplatform.modifiers.history.{ADProofSerializer, BlockTransactionsSerializer, HeaderSerializer}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransactionSerializer
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBoxSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
@@ -14,6 +14,14 @@ class SerializationTests extends PropSpec
   with Matchers
   with ErgoGenerators with scorex.testkit.SerializationTests {
 
+  property("HeaderWithoutInterlinks serialization") {
+
+    val serializer = HeaderSerializer
+    forAll(headerGen) { b: Header =>
+      val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
+      recovered shouldBe b
+    }
+  }
 
   property("AnyoneCanSpendBoxGen serialization") {
     checkSerializationRoundtrip(anyoneCanSpendBoxGen, AnyoneCanSpendNoncedBoxSerializer)
@@ -28,7 +36,7 @@ class SerializationTests extends PropSpec
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtrip(ergoHeaderGen, HeaderSerializer)
+    checkSerializationRoundtrip(headerGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {

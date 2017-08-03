@@ -1,0 +1,74 @@
+package org.ergoplatform.modifiers.history
+
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.{ChainGenerator, ErgoGenerators}
+import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import org.scalatest.{Matchers, PropSpec}
+import scorex.core.transaction.state.BoxStateChanges
+import scorex.testkit.TestkitHelpers
+
+import scala.annotation.tailrec
+import scala.util.Try
+
+class PoPoWProofSpec extends PropSpec
+  with PropertyChecks
+  with GeneratorDrivenPropertyChecks
+  with Matchers
+  with ErgoGenerators
+  with TestkitHelpers
+  with ChainGenerator {
+
+  property("Valid PoPoWProof serialization") {
+    val proof = generateKLS16Proof(5, 5)
+    val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
+    PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
+  }
+
+  def generateKLS16Proof(m: Int, k: Int): PoPoWProof = {
+    constructPoPoWProof(m, k, genHeaderChain(100, Seq(ErgoFullBlock.genesis.header)).headers).get
+  }
+
+  /**
+    * Constructs SPV Proof from KLS16 paper
+    *
+    * @param m          - parameter "m" from the paper (minimal length of innerchain to include)
+    * @param k          - parameter "k" from the paper (chain suffix)
+    * @param blockchain - chain of headers to construct a proof from
+    * @return
+    */
+  def constructPoPoWProof(m: Int, k: Int, blockchain: Seq[Header]): Try[PoPoWProof] = Try {
+    require(m > 0 && m < blockchain.length, s"$m > 0 && $m < ${blockchain.length}")
+    require(k > 0 && k < blockchain.length, s"$k > 0 && $k < ${blockchain.length}")
+
+    val (_, suffix: Seq[Header]) = blockchain.splitAt(blockchain.length - k)
+    val firstSuffix = suffix.head
+
+    //TODO make efficient
+    val blockchainMap: Map[ByteArrayWrapper, Header] = blockchain.map(b => ByteArrayWrapper(b.id) -> b).toMap
+
+    def headerById(id: Array[Byte]): Header = blockchainMap(ByteArrayWrapper(id))
+
+    @tailrec
+    def constructProof(i: Int): (Int, Seq[Header]) = {
+      @tailrec
+      def loop(acc: Seq[Header]): Seq[Header] = {
+        val interHeader = acc.head
+        if (interHeader.interlinks.length > i) {
+          val header = headerById(interHeader.interlinks(i))
+          loop(header +: acc)
+        } else {
+          acc.reverse.tail.reverse
+        }
+      }
+
+      val innerchain = loop(Seq(firstSuffix))
+      if (innerchain.length >= m) (i, innerchain) else constructProof(i - 1)
+    }
+
+    val (depth, innerchain) = constructProof(firstSuffix.interlinks.length)
+
+    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix)
+  }
+
+}

@@ -11,8 +11,6 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
-import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -274,12 +272,7 @@ object ErgoHistory extends ScorexLogging {
     if (history.isEmpty) {
       log.info("Initialize empty history with genesis block")
       val genesis: ErgoFullBlock = ErgoFullBlock.genesis
-      val historyWithHeader = history.append(genesis.header).get._1
-      if (settings.verifyTransactions) {
-        val historyWithBlocks = historyWithHeader.append(genesis.blockTransactions).get._1
-        genesis.aDProofs.map(p => historyWithBlocks.append(p).get._1).getOrElse(historyWithBlocks)
-      }
-      else historyWithHeader
+      history.append(genesis.header).get._1
     } else {
       log.info("Initialize non-empty history ")
       history

@@ -6,8 +6,16 @@ import scorex.core.consensus.History.HistoryComparisonResult
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
 
-  var history = generateHistory(verify = false, adState = true, 0)
+  var history = generateHistory(verify = false, adState = true, popow = false,0)
   assert(history.bestFullBlockIdOpt.isEmpty)
+
+
+  property("non-PoPoW history should ignore PoPoWProof proofs") {
+    history = ensureMinimalHeight(history, 100)
+    val proof = history.constructPoPoWProof(5, 5).get
+    val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
+    newHistory.applicable(proof) shouldBe false
+  }
 
   property("constructPoPoWProof() should generate valid proof") {
     history = ensureMinimalHeight(history, 100)

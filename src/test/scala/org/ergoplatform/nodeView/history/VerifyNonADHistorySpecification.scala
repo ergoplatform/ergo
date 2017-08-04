@@ -5,7 +5,7 @@ import scorex.core.consensus.History.HistoryComparisonResult
 
 class VerifyNonADHistorySpecification extends HistorySpecification {
 
-  var history = generateHistory(verify = true, adState = false, BlocksToKeep)
+  var history = generateHistory(verify = true, adState = false, popow = false, BlocksToKeep)
 
   property("compare() for full chain") {
     def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))

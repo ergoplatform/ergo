@@ -22,7 +22,9 @@ case class HeaderChain(headers: Seq[Header]) {
     HeaderChain(commonBlockThenSuffixes)
   }
 
-  def size: Int = headers.size
+  lazy val size: Int = length
+
+  lazy val length: Int = headers.size
 
   def ++(c: HeaderChain) = HeaderChain(headers ++ c.headers)
 }

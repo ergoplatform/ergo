@@ -4,6 +4,7 @@ import java.io.File
 
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
@@ -27,7 +28,22 @@ trait HistorySpecification extends PropSpec
 
   def bestFullOrGenesis(history: ErgoHistory): ErgoFullBlock = history.bestFullBlockOpt.getOrElse(ErgoFullBlock.genesis)
 
-  protected def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int, nonce: Long = 0): ErgoHistory = {
+  def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
+    val historyHeight = history.height
+    if (historyHeight < height) {
+      history match {
+        case h: EmptyBlockTransactionsProcessor =>
+          applyHeaderChain(history, genHeaderChain(height - historyHeight, Seq(history.bestHeader)).tail)
+        case h =>
+          ???
+      }
+
+    } else {
+      history
+    }
+  }
+
+  def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int, nonce: Long = 0): ErgoHistory = {
     val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep))
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()

@@ -9,6 +9,26 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   var history = generateHistory(verify = false, adState = true, 0)
   assert(history.bestFullBlockIdOpt.isEmpty)
 
+  property("constructPoPoWProof() should generate valid proof") {
+    history = ensureMinimalHeight(history, 100)
+    forAll(smallInt, smallInt) { (m, k) =>
+      val proof = history.constructPoPoWProof(m + 1, k + 1).get
+      proof.validate.get
+      proof.validate shouldBe 'success
+    }
+  }
+
+  property("lastHeaders() should return correct number of blocks") {
+    history = ensureMinimalHeight(history, BlocksInChain)
+    forAll(smallInt) { m =>
+      val lastHeaders = history.lastHeaders(m)
+      if (m > 0) {
+        lastHeaders.last shouldBe history.bestHeader
+      }
+      lastHeaders.length shouldBe m
+    }
+  }
+
   property("Compare headers chain") {
     def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id), None)
     val fork1 = genHeaderChain(BlocksInChain, Seq(history.bestHeader))
@@ -25,12 +45,12 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {
-    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+    history = ensureMinimalHeight(history, BlocksInChain + 1)
+    val chain = history.lastHeaders(BlocksInChain)
 
-    history = applyHeaderChain(history, chain)
     forAll(smallInt) { forkLength: Int =>
-      whenever(forkLength > 1) {
-        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength).id), None)
+      whenever(forkLength > 1 && chain.size > forkLength) {
+        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength - 1).id), None)
         val continuation = history.continuationIds(si, forkLength).get
         continuation.length shouldBe forkLength
         continuation.last._2 shouldEqual chain.last.id

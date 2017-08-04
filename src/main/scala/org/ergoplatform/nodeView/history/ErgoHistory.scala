@@ -90,6 +90,47 @@ trait ErgoHistory
     }
   }
 
+  /**
+    * Constructs SPV Proof from KLS16 paper
+    *
+    * @param m - parameter "m" from the paper (minimal length of innerchain to include)
+    * @param k - parameter "k" from the paper (chain suffix)
+    * @return
+    */
+  def constructPoPoWProof(m: Int, k: Int): Try[PoPoWProof] = Try {
+    val currentHeight = height
+    require(m > 0 && m < currentHeight, s"$m > 0 && $m < $currentHeight")
+    require(k > 0 && k < currentHeight, s"$k > 0 && $k < $currentHeight")
+
+    val suffix: HeaderChain = lastHeaders(k)
+    val firstSuffix = suffix.head
+
+
+    def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
+
+    @tailrec
+    def constructProof(i: Int): (Int, Seq[Header]) = {
+      @tailrec
+      def loop(acc: Seq[Header]): Seq[Header] = {
+        val interHeader = acc.head
+        if (interHeader.interlinks.length > i) {
+          val header = headerById(interHeader.interlinks(i))
+          loop(header +: acc)
+        } else {
+          acc.reverse.tail.reverse
+        }
+      }
+
+      val innerchain = loop(Seq(firstSuffix))
+      if (innerchain.length >= m) (i, innerchain) else constructProof(i - 1)
+    }
+
+    val (depth, innerchain) = constructProof(firstSuffix.interlinks.length)
+
+    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
+  }
+
+
   override def reportInvalid(modifier: ErgoPersistentModifier): ErgoHistory = {
     val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
       case h: Header => toDrop(h)
@@ -188,7 +229,7 @@ trait ErgoHistory
     ErgoSyncInfo(answer, Seq(), None)
   } else {
     ErgoSyncInfo(answer,
-      headerChainBack(ErgoSyncInfo.MaxBlockIds, bestHeader, b => b.isGenesis).headers.map(_.id),
+      lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id),
       bestFullBlockIdOpt)
   }
 
@@ -219,15 +260,17 @@ trait ErgoHistory
     (ourChain, commonBlockThenSuffixes)
   }
 
+  def lastHeaders(count: Int): HeaderChain = headerChainBack(count, bestHeader, b => b.isGenesis)
+
   private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
-    def loop(remain: Int, block: Header, acc: Seq[Header]): Seq[Header] = {
-      if (until(block) || remain == 0) {
+    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
+      if (until(block) || (acc.length == count)) {
         acc
       } else {
         modifierById(block.parentId) match {
           case Some(parent: Header) =>
-            loop(remain - 1, parent, acc :+ parent)
+            loop(parent, acc :+ parent)
           case _ =>
             log.warn(s"No parent header in history for block $block")
             acc
@@ -235,8 +278,8 @@ trait ErgoHistory
       }
     }
 
-    if (isEmpty) HeaderChain(Seq())
-    else HeaderChain(loop(count, startHeader, Seq(startHeader)).reverse)
+    if (isEmpty || (count == 0)) HeaderChain(Seq())
+    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
 
   override type NVCT = ErgoHistory

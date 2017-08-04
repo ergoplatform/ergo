@@ -13,8 +13,10 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("PoPoW history should be able to apply PoPoWProof proofs") {
     history = ensureMinimalHeight(history, 100)
     val proof = history.constructPoPoWProof(5, 5).get
-    val newHistory = generateHistory(verify = false, adState = true, popow = true, 0)
+    var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
     newHistory.applicable(proof) shouldBe true
+    newHistory = newHistory.append(proof).get._1
+    newHistory.bestHeader shouldBe history.bestHeader
   }
 
   property("non-PoPoW history should ignore PoPoWProof proofs") {

@@ -23,7 +23,7 @@ case class PoPoWProof(m: Byte,
 
   override type M = PoPoWProof
 
-  override lazy val serializer: Serializer[PoPoWProof] = ???
+  override lazy val serializer: Serializer[PoPoWProof] = PoPoWProofSerializer
 
   override lazy val json: Json = ???
 
@@ -31,6 +31,7 @@ case class PoPoWProof(m: Byte,
 
   lazy val validate: Try[Unit] = Try {
     require(suffix.length == k, s"${suffix.length} == $k")
+    require(k > 0, s"$k > 0")
 
     suffix.foldRight(Array[Byte]()) { (a, b) =>
       if (b.nonEmpty) require(b sameElements a.id)

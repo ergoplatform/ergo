@@ -56,7 +56,7 @@ trait ErgoHistory
     ErgoFullBlock(header, txs, aDProofs, None)
   }
 
-  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
+  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 
@@ -70,16 +70,7 @@ trait ErgoHistory
     applicableTry(modifier).get
     modifier match {
       case m: Header =>
-        val dataToInsert = toInsert(m)
-        historyStorage.insert(m.id, dataToInsert)
-        if (isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
-          log.info(s"New best header ${m.encodedId}")
-          //TODO Notify node view holder that it should download transactions ?
-          (this, ProgressInfo(None, Seq(), Seq()))
-        } else {
-          log.info(s"New orphaned header ${m.encodedId}, best: ${}")
-          (this, ProgressInfo(None, Seq(), Seq()))
-        }
+        (this, process(m))
       case m: BlockTransactions =>
         (this, process(m))
       case m: ADProof =>

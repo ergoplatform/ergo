@@ -43,8 +43,12 @@ trait HistorySpecification extends PropSpec
     }
   }
 
-  def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int, nonce: Long = 0): ErgoHistory = {
-    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep))
+  def generateHistory(verify: Boolean,
+                      adState: Boolean,
+                      popow: Boolean,
+                      toKeep: Int,
+                      nonce: Long = 0): ErgoHistory = {
+    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
@@ -52,6 +56,7 @@ trait HistorySpecification extends PropSpec
       override val ADState: Boolean = adState
       override val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
       override val blocksToKeep: Int = toKeep
+      override val poPoWBootstrap: Boolean = popow
     }
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)

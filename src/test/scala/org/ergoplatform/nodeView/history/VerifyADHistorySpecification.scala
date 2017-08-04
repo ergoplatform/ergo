@@ -68,8 +68,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
         val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
         val continuation = history.continuationIds(si, forkLength).get
 
-        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength
-        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength
+        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength - 1
+        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength - 1
 
       }
     }

@@ -10,8 +10,9 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
@@ -27,6 +28,7 @@ trait ErgoHistory
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with HeadersProcessor
     with ADProofsProcessor
+    with PoPoWProofsProcessor
     with BlockTransactionsProcessor
     with ScorexLogging {
 
@@ -83,7 +85,7 @@ trait ErgoHistory
       case m: ADProof =>
         (this, process(m))
       case m: PoPoWProof =>
-        ???
+        (this, process(m))
       case m: UTXOSnapshotChunk =>
         //add mark that snapshot was applied
         ???
@@ -158,8 +160,7 @@ trait ErgoHistory
       case m: ADProof =>
         validate(m)
       case m: PoPoWProof =>
-        if (!config.poPoWBootstrap) Failure(new Error("Incorrect regime"))
-        else Failure(new NotImplementedError)
+        validate(m)
       case m: UTXOSnapshotChunk =>
         Failure(new NotImplementedError)
       case m =>
@@ -294,23 +295,53 @@ object ErgoHistory extends ScorexLogging {
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig = HistoryConfig(settings.poPoWBootstrap, settings.blocksToKeep, settings.minimalSuffix)
+    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix)
 
-    val history: ErgoHistory = if (!settings.verifyTransactions) {
-      new ErgoHistory with EmptyADProofsProcessor with EmptyBlockTransactionsProcessor {
-        override protected val config: HistoryConfig = historyConfig
-        override protected val storage: LSMStore = db
-      }
-    } else if (settings.ADState) {
-      new ErgoHistory with ADStateProofsProcessor with FullnodeBlockTransactionsProcessor {
-        override protected val config: HistoryConfig = historyConfig
-        override protected val storage: LSMStore = db
-      }
-    } else {
-      new ErgoHistory with FullStateProofsProcessor with FullnodeBlockTransactionsProcessor {
-        override protected val config: HistoryConfig = historyConfig
-        override protected val storage: LSMStore = db
-      }
+    //TODO make easier?
+    val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {
+      case (true, true, true) =>
+        new ErgoHistory with ADStateProofsProcessor
+          with FullnodeBlockTransactionsProcessor
+          with FullPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+      case (true, true, false) =>
+        new ErgoHistory with ADStateProofsProcessor
+          with FullnodeBlockTransactionsProcessor
+          with EmptyPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+      case (false, true, true) =>
+        new ErgoHistory with EmptyADProofsProcessor
+          with FullnodeBlockTransactionsProcessor
+          with FullPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+      case (false, true, false) =>
+        new ErgoHistory with EmptyADProofsProcessor
+          with FullnodeBlockTransactionsProcessor
+          with EmptyPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+      case (true, false, true) =>
+        new ErgoHistory with EmptyADProofsProcessor
+          with EmptyBlockTransactionsProcessor
+          with FullPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+      case (true, false, false) =>
+        new ErgoHistory with EmptyADProofsProcessor
+          with EmptyBlockTransactionsProcessor
+          with EmptyPoPoWProofsProcessor {
+          override protected val config: HistoryConfig = historyConfig
+          override protected val storage: LSMStore = db
+        }
+
     }
 
     if (history.isEmpty) {

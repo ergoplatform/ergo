@@ -6,17 +6,17 @@ import io.iohk.iodb.LSMStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import scorex.core.transaction.state.BoxStateChanges
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.authenticated.BoxMinimalState
-import scorex.crypto.authds.avltree.batch.VersionedIODBAVLStorage
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.hash.Blake2b256Unsafe
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 
-class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpendProposition,
+class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpendProposition,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
@@ -24,12 +24,20 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
 
   implicit val hf = new Blake2b256Unsafe
 
-  val dir = new File("/tmp/utxo")
+  private val dir = new File("/tmp/utxo")
   dir.mkdirs()
 
-  val store = new LSMStore(dir)
-  val tree = new VersionedIODBAVLStorage(store, keySize = 32, valueSize = 48)
+  private val store = new LSMStore(dir)
+  private val storage = new VersionedIODBAVLStorage(store, NodeParameters(keySize = 32, valueSize = 48, labelSize = 32))
 
+  private val prover = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(48))
+
+  private val persistentProver = new PersistentBatchAVLProver(prover, storage)
+
+  /*
+  def withRoot(newRoot: Array[Byte]) = new UtxoState {
+    override val rootHash = newRoot
+  }*/
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -43,17 +51,18 @@ class UtxoState extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpend
     txs.flatMap(_.id).toArray
 
   override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] =
-    tree.
+    persistentProver.unauthenticatedLookup(boxId).map(AnyoneCanSpendNoncedBoxSerializer.parseBytes).flatMap(_.toOption)
 
   override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
 
   override def changes(mod: ErgoPersistentModifier): Try[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
 
-  override def applyChanges(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox], newVersion: VersionTag): Try[UtxoState] = ???
+  override def applyChanges(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
+                            newVersion: VersionTag): Try[UtxoState] = ???
 
-  override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = ???
+  override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = Success()
 
-  override def rootHash(): Array[Byte] = ???
+  //override def rootHash(): Array[Byte] = persistentProver.digest
 
   override def version: VersionTag = ???
 

@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
@@ -24,15 +26,37 @@ trait HistorySpecification extends PropSpec
   val BlocksInChain = 10
   val BlocksToKeep = BlocksInChain + 1
 
-  protected def generateHistory(verify: Boolean, adState: Boolean, toKeep: Int): ErgoHistory = {
-    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep))
+  def bestFullOrGenesis(history: ErgoHistory): ErgoFullBlock = history.bestFullBlockOpt.getOrElse(ErgoFullBlock.genesis)
+
+  def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
+    val historyHeight = history.height
+    if (historyHeight < height) {
+      history match {
+        case h: EmptyBlockTransactionsProcessor =>
+          applyHeaderChain(history, genHeaderChain(height - historyHeight, Seq(history.bestHeader)).tail)
+        case h =>
+          ???
+      }
+
+    } else {
+      history
+    }
+  }
+
+  def generateHistory(verify: Boolean,
+                      adState: Boolean,
+                      popow: Boolean,
+                      toKeep: Int,
+                      nonce: Long = 0): ErgoHistory = {
+    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
-      override val dataDir: String = s"/tmp/ergo/test-history-$paramsHash"
+      override val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
       override val blocksToKeep: Int = toKeep
+      override val poPoWBootstrap: Boolean = popow
     }
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)

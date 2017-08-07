@@ -9,14 +9,11 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.transaction.state.BoxStateChanges
 import scorex.core.utils.NetworkTime
-import scorex.testkit.BlockchainPerformance
 import scorex.testkit.properties._
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
@@ -25,17 +22,10 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //with WalletSecretsTest[P, TX, PM]
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
   with MempoolTransactionsTest[P, TX, MPool]
-//  with MempoolFilterPerformanceTest[P, TX, MPool]
-//  with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
-//  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
-  with BlockchainPerformance[AnyoneCanSpendProposition,
-    AnyoneCanSpendTransaction,
-    ErgoPersistentModifier,
-    ErgoSyncInfo,
-    AnyoneCanSpendNoncedBox,
-    ErgoMemPool,
-    UtxoState,
-    ErgoHistory] with ErgoGenerators {
+  //  with MempoolFilterPerformanceTest[P, TX, MPool]
+  //  with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
+  //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
+  with ErgoGenerators {
 
   val settings: ErgoSettings = new ErgoSettings {
     override def settingsJSON: Map[String, circe.Json] = Map()

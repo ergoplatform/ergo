@@ -20,16 +20,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     */
   override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
 
-  protected val config: HistoryConfig
-
-  def bestFullBlockOpt: Option[ErgoFullBlock]
-
-  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
-
-  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
-
-  protected def getFullBlock(h: Header): ErgoFullBlock
-
   protected def processFullBlock(header: Header,
                                  txs: BlockTransactions,
                                  adProofsOpt: Option[ADProof],

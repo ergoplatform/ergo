@@ -1,9 +1,10 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
@@ -15,7 +16,7 @@ import scala.util.Try
 trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
-  protected val aDProofsRequired: Boolean
+  protected val adState: Boolean
 
   override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
@@ -23,10 +24,9 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
         historyStorage.modifierById(header.ADProofsId) match {
           case Some(adProof: ADProof) =>
             processFullBlock(header, txs, Some(adProof), None, txsAreNew = true)
-          case None if !aDProofsRequired =>
-            processFullBlock(header, txs, None, txsAreNew = true, extensionOpt = None)
+          case None if !adState =>
+            processFullBlock(header, txs, None, None, txsAreNew = true)
           case _ =>
-            //TODO what if we do not need ADProofs (e.g. we can generate them by ourselves)
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
             historyStorage.insert(txs.id, modifierRow)
             ProgressInfo(None, Seq(), Seq())

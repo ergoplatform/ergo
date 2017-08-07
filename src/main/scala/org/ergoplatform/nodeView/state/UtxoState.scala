@@ -16,11 +16,7 @@ import scorex.crypto.hash.Blake2b256Unsafe
 import scala.util.{Success, Try}
 
 
-class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState] with BoxMinimalState[AnyoneCanSpendProposition,
-  AnyoneCanSpendNoncedBox,
-  AnyoneCanSpendTransaction,
-  ErgoPersistentModifier,
-  UtxoState] {
+class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
@@ -34,11 +30,6 @@ class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState]
 
   private val persistentProver = new PersistentBatchAVLProver(prover, storage)
 
-  /*
-  def withRoot(newRoot: Array[Byte]) = new UtxoState {
-    override val rootHash = newRoot
-  }*/
-
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
@@ -50,21 +41,11 @@ class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState]
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
     txs.flatMap(_.id).toArray
 
-  override def closedBox(boxId: Array[Byte]): Option[AnyoneCanSpendNoncedBox] =
-    persistentProver.unauthenticatedLookup(boxId).map(AnyoneCanSpendNoncedBoxSerializer.parseBytes).flatMap(_.toOption)
-
-  override def boxesOf(proposition: AnyoneCanSpendProposition): Seq[AnyoneCanSpendNoncedBox] = ???
-
-  override def changes(mod: ErgoPersistentModifier): Try[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = ???
-
-  override def applyChanges(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
-                            newVersion: VersionTag): Try[UtxoState] = ???
-
-  override def semanticValidity(tx: AnyoneCanSpendTransaction): Try[Unit] = Success()
-
-  //override def rootHash(): Array[Byte] = persistentProver.digest
-
   override def version: VersionTag = ???
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = ???
+
+  override def validate(mod: ErgoPersistentModifier): Try[Unit] = ???
+
+  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = ???
 }

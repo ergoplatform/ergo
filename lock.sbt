@@ -61,7 +61,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scala-tools.testing" % "test-interface" % "0.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.1",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
-  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2",
   "org.scorexfoundation" % "scrypto_2.12" % "1.2.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
@@ -73,4 +73,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 2e852bad9fd5d398bd8cfe5c1d3c30f8e7a69f3e
+// LIBRARY_DEPENDENCIES_HASH 581435168011a0219b88450600b5e5325ed16cdc

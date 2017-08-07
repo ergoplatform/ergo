@@ -24,7 +24,7 @@ class DigestState extends ErgoState[DigestState] with ScorexLogging {
 
       txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
         status.flatMap(_ => tx.semanticValidity)
-      }.flatMap(_ => fb.aDProofs.map(_.verify(operations(txs), ???, declaredHash)) //todo: prev hash
+      }.flatMap(_ => fb.aDProofs.map(_.verify(operations(txs), rootHash, declaredHash))
         .getOrElse(Failure(new Error("Proofs are empty"))))
 
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)

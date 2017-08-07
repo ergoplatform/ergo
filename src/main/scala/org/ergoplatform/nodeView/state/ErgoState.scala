@@ -62,9 +62,11 @@ object ErgoState {
 
   type Digest = Array[Byte]
 
+  val initialDigest = Array.fill(32)(0:Byte)
+
   def readOrGenerate(settings: ErgoSettings) =
-    if (settings.ADState) new DigestState else new UtxoState
+    if (settings.ADState) new DigestState else new UtxoState(initialDigest)
 
   //Initial state even before genesis block application
-  val initialState: UtxoState = new UtxoState
+  val initialState: UtxoState = new UtxoState(initialDigest)
 }

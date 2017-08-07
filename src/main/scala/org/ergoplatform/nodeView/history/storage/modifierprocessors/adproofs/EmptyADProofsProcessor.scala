@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -11,7 +11,7 @@ import scala.util.{Failure, Try}
   * ADProof processor for regimes, that do not keep ADProofs
   */
 trait EmptyADProofsProcessor extends ADProofsProcessor {
-  protected val aDProofsRequired: Boolean = false
+  protected val adState: Boolean = false
 
   override def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq(), Seq())
 

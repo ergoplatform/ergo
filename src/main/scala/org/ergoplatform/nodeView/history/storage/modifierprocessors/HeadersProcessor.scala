@@ -2,15 +2,29 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.NodeViewModifier._
+import scorex.core.consensus.History.ProgressInfo
+import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-trait HeadersProcessor {
+trait HeadersProcessor extends ScorexLogging {
+
+  protected val config: HistoryConfig
+
+  def bestFullBlockOpt: Option[ErgoFullBlock]
+
+  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
+
+  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
+
+  protected def getFullBlock(h: Header): ErgoFullBlock
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -19,7 +33,7 @@ trait HeadersProcessor {
 
   protected val historyStorage: HistoryStorage
 
-  private val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
 
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
 
@@ -39,13 +53,26 @@ trait HeadersProcessor {
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
-  private def headerDiffKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
+  protected def headerDiffKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
 
-  private def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
-  private def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
+
+  def process(m: Header): ProgressInfo[ErgoPersistentModifier] = {
+    val dataToInsert = toInsert(m)
+    historyStorage.insert(m.id, dataToInsert)
+    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
+      log.info(s"New best header ${m.encodedId}")
+      //TODO Notify node view holder that it should download transactions ?
+      ProgressInfo(None, Seq(), Seq(m))
+    } else {
+      log.info(s"New orphaned header ${m.encodedId}, best: ${}")
+      ProgressInfo(None, Seq(), Seq())
+    }
+  }
 
   def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: BigInt = calculateDifficulty(h)

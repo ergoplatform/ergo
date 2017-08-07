@@ -65,12 +65,13 @@ object Header {
 
 
 object HeaderSerializer extends Serializer[Header] {
+  val BytesWithoutInterlinksLength = 108
+
+  def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
+    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash,
+    h.votes)
+
   override def toBytes(h: Header): Array[Version] = {
-    val BytesWithoutInterlinksLength = 108
-
-    def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(h.parentId, h.ADProofsRoot, h.transactionsRoot,
-      h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash, h.votes)
-
 
     def interlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
@@ -81,7 +82,7 @@ object HeaderSerializer extends Serializer[Header] {
         interlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
       }
     }
-    Bytes.concat(Array(h.version), bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
+    Bytes.concat(bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
   }
 
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {

@@ -1,25 +1,30 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
 /**
-  * ADProof processor for fullnode regime
+  * ADProof processor for regime that download ADPrrofs
   */
-trait FullnodeADProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
+trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
 
-  protected val aDProofsRequired: Boolean = true
+  protected val adState: Boolean
 
+  /**
+    *
+    * @return
+    */
   def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.transactionsId) match {
-          case Some(txs: BlockTransactions) =>
+          case Some(txs: BlockTransactions) if adState =>
             processFullBlock(header, txs, Some(m), None, txsAreNew = false)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))

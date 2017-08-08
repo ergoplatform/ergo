@@ -32,7 +32,7 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
 
   self: IState =>
 
-  //TODO: kushti: AVL+ root, not Merkle
+  //TODO: kushti: AVL+ tree root, not Merkle
   def rootHash(): Digest
 
   //TODO implement correctly

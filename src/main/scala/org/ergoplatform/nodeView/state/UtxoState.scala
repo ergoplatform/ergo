@@ -3,17 +3,15 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.LSMStore
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
-import scorex.core.transaction.state.BoxStateChanges
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import scorex.core.transaction.state.MinimalState.VersionTag
-import scorex.core.transaction.state.authenticated.BoxMinimalState
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.hash.Blake2b256Unsafe
 
-import scala.util.{Success, Try}
+import scala.util.Try
 
 
 class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState] {
@@ -45,7 +43,18 @@ class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState]
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = ???
 
-  override def validate(mod: ErgoPersistentModifier): Try[Unit] = ???
+  override def validate(mod: ErgoPersistentModifier): Try[Unit] = Try {
+    assert(mod.parentId.sameElements(version))
+    mod match {
+      case fb: ErgoFullBlock => ???
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = ???
+      case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
+    }
+  }
+
+  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+    case fb: ErgoFullBlock => ???
+
+    case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
+  }
 }

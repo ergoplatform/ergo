@@ -24,12 +24,13 @@ class DigestState extends ErgoState[DigestState] with ScorexLogging {
 
       txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
         status.flatMap(_ => tx.semanticValidity)
-      }.flatMap(_ => fb.aDProofs.map(_.verify(operations(txs), rootHash, declaredHash))
+      }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
         .getOrElse(Failure(new Error("Proofs are empty"))))
 
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 
+  //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock =>
       validate(fb).map(_ => new DigestState{

@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.transaction.state.MinimalState.VersionTag
 import ErgoState.Digest
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.{Failure, Success, Try}
 
@@ -13,18 +14,23 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] with ScorexLogging {
 
+  implicit val hf = new Blake2b256Unsafe
+
   override def version: VersionTag = ???
 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
-      val txs = fb.blockTransactions.txs
-      val declaredHash = fb.header.ADProofsRoot
+      Try {
+        assert(hf(fb.aDProofs.get.bytes).sameElements(fb.header.ADProofsRoot))
 
-      txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-        status.flatMap(_ => tx.semanticValidity)
-      }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
-        .getOrElse(Failure(new Error("Proofs are empty"))))
+        val txs = fb.blockTransactions.txs
+        val declaredHash = fb.header.stateRoot
 
+        txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
+          status.flatMap(_ => tx.semanticValidity)
+        }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
+          .getOrElse(Failure(new Error("Proofs are empty"))))
+      }.flatten
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 

@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.crypto.authds.avltree.AVLValue
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
@@ -15,7 +16,7 @@ import scorex.crypto.hash.Blake2b256Unsafe
 import scala.util.{Failure, Success, Try}
 
 
-class UtxoState(override val rootHash: Array[Byte]) extends ErgoState[UtxoState] {
+class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 

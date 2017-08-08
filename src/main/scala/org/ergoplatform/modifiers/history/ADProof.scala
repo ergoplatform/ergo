@@ -10,9 +10,9 @@ import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
-import scorex.core.transaction.state.{BoxStateChanges, Insertion, Removal}
+import scorex.core.transaction.state.{BoxStateChangeOperation, BoxStateChanges, Insertion, Removal}
 import scorex.crypto.authds.avltree.AVLValue
-import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
+import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256Unsafe
 
@@ -53,13 +53,7 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
                      changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]) =
       changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
-          val avlOperation = o match {
-            case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
-              Insert(i.box.id, i.box.bytes)
-            case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
-              Remove(r.boxId)
-          }
-          verifier.performOneOperation(avlOperation)
+          verifier.performOneOperation(ADProof.changeToMod(o))
         })
       }
 
@@ -85,9 +79,22 @@ object ADProof {
 
   val ModifierTypeId: Byte = 104: Byte
 
+  val KL = 32
+
   def proofDigest(proofBytes: ProofRepresentation): Array[Byte] = Algos.hash(proofBytes)
 
-  val KL = 32
+  /**
+    * Convert operation over a box into an AVL+ tree modification
+    * @param change - operation over a box
+    * @return AVL+ tree modification
+    */
+  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]): Modification =
+    change match {
+      case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+        Insert(i.box.id, i.box.bytes)
+      case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+        Remove(r.boxId)
+    }
 }
 
 object ADProofSerializer extends Serializer[ADProof] {

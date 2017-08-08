@@ -41,7 +41,7 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   /**
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
-  def operations(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =
+  def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =
     BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
       tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](id)) ++
         tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](b))

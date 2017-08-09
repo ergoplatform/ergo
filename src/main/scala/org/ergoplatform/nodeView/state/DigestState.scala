@@ -37,7 +37,7 @@ class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock =>
-      validate(fb).map(_ => new DigestState(fb.header.ADProofsRoot))
+      validate(fb).map(_ => new DigestState(fb.header.stateRoot))
     case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
   }
 

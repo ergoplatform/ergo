@@ -44,7 +44,7 @@ class SerializationTests extends PropSpec
   }
 
   property("ADProofs serialization") {
-    checkSerializationRoundtrip(ADProofsGen, ADProofSerializer)
+    checkSerializationRoundtrip(randomADProofsGen, ADProofSerializer)
   }
 
 }

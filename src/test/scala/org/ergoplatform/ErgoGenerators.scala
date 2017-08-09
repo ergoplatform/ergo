@@ -1,5 +1,6 @@
 package org.ergoplatform
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, PoPoWProof}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
@@ -56,8 +57,15 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- Gen.nonEmptyListOf(anyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val ADProofsGen: Gen[ADProof] = for {
+  lazy val randomADProofsGen: Gen[ADProof] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
   } yield ADProof(headerId, proof)
+
+  lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
+    header <- headerGen
+    txs <- blockTransactionsGen
+    proof <- randomADProofsGen
+  } yield ErgoFullBlock(header, txs, Some(proof), None)
+
 }

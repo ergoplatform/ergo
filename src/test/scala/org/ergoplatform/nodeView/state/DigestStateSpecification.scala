@@ -13,11 +13,25 @@ class DigestStateSpecification extends PropSpec
   with ErgoGenerators
   with TestkitHelpers {
 
-  property("validate()") {
+  property("validate() - valid block") {
 
   }
 
-  property("applyModifier()") {
+  property("validate() - invalid block") {
+    forAll(invalidErgoFullBlockGen){b =>
+      val state = new DigestState(Array.fill(32)(0:Byte))
+      state.validate(b).isFailure shouldBe true
+    }
+  }
 
+  property("applyModifier() - valid block") {
+
+  }
+
+  property("applyModifier() - invalid block") {
+    forAll(invalidErgoFullBlockGen){b =>
+      val state = new DigestState(Array.fill(32)(0:Byte))
+      state.applyModifier(b).isFailure shouldBe true
+    }
   }
 }

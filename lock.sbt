@@ -45,6 +45,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.apache.commons" % "commons-lang3" % "3.4",
   "org.apache.commons" % "commons-math3" % "3.2",
   "org.bitlet" % "weupnp" % "0.1.4",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.57",
   "org.javassist" % "javassist" % "3.21.0-GA",
   "org.joda" % "joda-convert" % "1.2",
   "org.mongodb" % "casbah-commons_2.12.0-RC1" % "3.1.1",
@@ -62,7 +63,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.1",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
   "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2",
-  "org.scorexfoundation" % "scrypto_2.12" % "1.2.4-SNAPSHOT",
+  "org.scorexfoundation" % "scrypto_2.12" % "1.3.0",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
   "org.typelevel" % "cats-core_2.12" % "0.9.0",
@@ -73,4 +74,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 69b75a233d6fff9188566a4388e4e1cae95df8ee
+// LIBRARY_DEPENDENCIES_HASH 1b729c14c004c1545cf1fcc37cbea50ddc3a6990

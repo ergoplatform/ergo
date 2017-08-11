@@ -24,6 +24,9 @@ import scala.annotation.tailrec
 import scala.util.{Failure, Try}
 
 //TODO replace ErgoPersistentModifier to HistoryModifier
+/**
+  * History implementation. It is processing persistent modifiers generated locally or coming from network.
+  */
 trait ErgoHistory
   extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with HeadersProcessor
@@ -34,18 +37,21 @@ trait ErgoHistory
 
   protected val config: HistoryConfig
   protected val storage: LSMStore
+
   //TODO what should be the limit?
+  //TODO: kushti: do we need for the limit at all?
   val MaxRollback = 10000
 
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
-
+  
+  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   //It is safe to call this function right after history initialization with genesis block
   def bestHeader: Header = bestHeaderOpt.get
 
-  //None for light mode, Some for fullnode regime after initial bootstrap
+  //None for an SPV mode, Some() for fullnode regime after initial bootstrap
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
     getFullBlock(typedModifierById[Header](bestFullBlockIdOpt.get).get)
   }.toOption
@@ -55,8 +61,6 @@ trait ErgoHistory
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs, None)
   }
-
-  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 
@@ -228,6 +232,7 @@ trait ErgoHistory
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
     assert(contains(header2))
+
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
       if (r._1.head == r._2.head) {
@@ -239,6 +244,7 @@ trait ErgoHistory
         throw new Error(s"Common point not found for headers $header1 and $header2")
       }
     }
+
     loop(2, HeaderChain(Seq(header2)))
   }
 
@@ -246,6 +252,7 @@ trait ErgoHistory
                                                  startHeader: Header,
                                                  limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
+
     val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head
     val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
@@ -344,7 +351,4 @@ object ErgoHistory extends ScorexLogging {
       history
     }
   }
-
 }
-
-

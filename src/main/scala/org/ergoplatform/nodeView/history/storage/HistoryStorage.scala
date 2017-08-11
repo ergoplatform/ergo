@@ -10,7 +10,6 @@ import scala.util.{Failure, Success}
 
 class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable {
 
-
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
     HistoryModifierSerializer.parseBytes(bBytes.data) match {
       case Success(b) =>
@@ -34,10 +33,8 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
       toInsert)
   }
 
-
   override def close(): Unit = {
     log.info("Closing history storage...")
     db.close()
   }
-
 }

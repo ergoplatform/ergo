@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.Json
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -17,7 +18,7 @@ case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier
 
   override lazy val json: Json = ???
 
-  lazy val rootHash = BlockTransactions.rootHash(ids)
+  lazy val rootHash: Digest = BlockTransactions.rootHash(ids)
 }
 
 object TransactionIdsForHeader {

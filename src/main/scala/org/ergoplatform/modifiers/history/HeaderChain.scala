@@ -16,7 +16,7 @@ case class HeaderChain(headers: Seq[Header]) {
 
   def take(i: Int) = HeaderChain(headers.take(i))
 
-  def takeAfter(h: Header) = {
+  def takeAfter(h: Header): HeaderChain = {
     val commonIndex = headers.indexWhere(_.id sameElements h.id)
     val commonBlockThenSuffixes = headers.takeRight(headers.length - commonIndex)
     HeaderChain(commonBlockThenSuffixes)

@@ -4,12 +4,14 @@ import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.{CryptographicHash, CryptographicHash32}
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -33,7 +35,7 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId =
     ModifierWithDigest.computeId(BlockTransactions.ModifierTypeId, id, transactionsRoot)
 
-  lazy val headerHash = Algos.miningHash(id)
+  lazy val headerHash: Digest = Algos.miningHash(id)
 
   lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
 

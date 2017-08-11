@@ -19,12 +19,9 @@ import scala.util.{Failure, Success, Try}
   * Utxo set implementation.
   * @param rootHash
   */
-class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
+class UtxoState(override val rootHash: Digest, dir: File = new File("/tmp/utxo")) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
-
-  private val dir = new File("/tmp/utxo")
-  dir.mkdirs()
 
   private val store = new LSMStore(dir)
   private val storage = new VersionedIODBAVLStorage(store, NodeParameters(keySize = 32, valueSize = 48, labelSize = 32))

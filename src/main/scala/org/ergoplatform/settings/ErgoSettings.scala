@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import scorex.core.settings.Settings
 
 trait ErgoSettings extends Settings {
-  val dataDir: String = dataDirOpt.getOrElse("/tmp/ergo")
+  lazy val dataDir: String = dataDirOpt.getOrElse("/tmp/ergo")
   //todo read all from settings file
 
   /**

@@ -54,7 +54,7 @@ trait HistorySpecification extends PropSpec
 
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
-      override val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
+      override lazy val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
       override val blocksToKeep: Int = toKeep
       override val poPoWBootstrap: Boolean = popow
     }

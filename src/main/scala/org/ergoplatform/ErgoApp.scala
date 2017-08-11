@@ -18,7 +18,7 @@ class ErgoApp(val settingsFilename: String) extends Application {
   override type NVHT = ErgoNodeViewHolder
 
   implicit lazy val settings: ErgoSettings = new ErgoSettings {
-    override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename)
+    override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename).ensuring(_.nonEmpty)
   }
 
   override val apiRoutes: Seq[ApiRoute] = Seq()

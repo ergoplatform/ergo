@@ -49,7 +49,7 @@ class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
-    p.rollback(version).map { p =>
+    p.rollback(version).map { _ =>
       new UtxoState(version) {
         override protected val persistentProver = p
       }

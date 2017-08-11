@@ -45,7 +45,7 @@ trait ErgoHistory
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
-  
+
   private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   //It is safe to call this function right after history initialization with genesis block

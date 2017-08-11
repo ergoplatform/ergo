@@ -16,7 +16,8 @@ class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] 
 
   implicit val hf = new Blake2b256Unsafe
 
-  override def version: VersionTag = ???
+  //todo: or hash(rootHash || headerHash)?
+  override def version: VersionTag = rootHash
 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
@@ -41,5 +42,5 @@ class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] 
     case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
   }
 
-  override def rollbackTo(version: VersionTag): Try[DigestState] = ???
+  override def rollbackTo(version: VersionTag): Try[DigestState] = Success(new DigestState(rootHash = version))
 }

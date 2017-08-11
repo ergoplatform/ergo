@@ -3,13 +3,10 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
 
 import scala.util.Try
 

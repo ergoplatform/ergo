@@ -11,7 +11,6 @@ import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
-import scorex.crypto.hash.{CryptographicHash, CryptographicHash32}
 
 import scala.annotation.tailrec
 import scala.util.Try

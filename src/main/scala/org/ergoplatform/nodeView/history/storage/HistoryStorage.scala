@@ -1,12 +1,10 @@
 package org.ergoplatform.nodeView.history.storage
 
-import com.fasterxml.jackson.databind.JsonSerializable.Base
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
 
 import scala.util.{Failure, Success}
 

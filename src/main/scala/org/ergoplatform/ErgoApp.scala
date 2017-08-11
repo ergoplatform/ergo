@@ -20,6 +20,7 @@ class ErgoApp(val settingsFilename: String) extends Application {
   implicit lazy val settings: ErgoSettings = new ErgoSettings {
     override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename)
   }
+
   override val apiRoutes: Seq[ApiRoute] = Seq()
   override val apiTypes: Set[Class[_]] = Set()
   override protected val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()

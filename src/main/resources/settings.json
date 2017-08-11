@@ -1,0 +1,25 @@
+{
+  "p2p": {
+    "name": "node1",
+    "bindAddress": "127.0.0.1",
+    "upnp": false,
+    "upnpGatewayTimeout": 7000,
+    "upnpDiscoverTimeout": 3000,
+    "port": 9084,
+    "knownPeers": [
+      "127.0.0.2:9088"
+    ],
+    "addedMaxDelay": 0,
+    "maxConnections": 10,
+    "handshakeTimeout": 2000
+  },
+  "walletDir": "/tmp/ergo/data/wallet",
+  "dataDir": "/tmp/ergo/data/blockchain",
+  "logDir": "/tmp/ergo/data/log",
+  "rpcPort": 9085,
+  "rpcAllowed": [],
+  "offlineGeneration": false,
+  "cors": false,
+  "agent": "Ergaki",
+  "version": [0, 0, 1]
+}

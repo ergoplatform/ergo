@@ -15,7 +15,10 @@ import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.{Failure, Success, Try}
 
-
+/**
+  * Utxo set implementation.
+  * @param rootHash
+  */
 class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
@@ -28,7 +31,7 @@ class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
 
   private val prover = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(48))
 
-  private val persistentProver = new PersistentBatchAVLProver(prover, storage)
+  protected val persistentProver = new PersistentBatchAVLProver(prover, storage)
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -41,9 +44,17 @@ class UtxoState(override val rootHash: Digest) extends ErgoState[UtxoState] {
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
     txs.flatMap(_.id).toArray
 
-  override def version: VersionTag = ???
+  //todo: the same question as with DigestState.version
+  override def version: VersionTag = rootHash
 
-  override def rollbackTo(version: VersionTag): Try[UtxoState] = ???
+  override def rollbackTo(version: VersionTag): Try[UtxoState] = {
+    val p = persistentProver
+    p.rollback(version).map { p =>
+      new UtxoState(version) {
+        override protected val persistentProver = p
+      }
+    }
+  }
 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] =
     Failure(new Exception("validate() is not implemented for UtxoState as it requires for costly provers' rollback"))

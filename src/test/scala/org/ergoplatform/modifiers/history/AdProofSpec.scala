@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.{ChainGenerator, ErgoGenerators}
+import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
@@ -21,10 +22,15 @@ class AdProofSpec extends PropSpec
   type Digest = Array[Byte]
   type Proof = Array[Byte]
 
-  private def createEnv(): (Seq[Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]], Digest, Digest, Proof) = {
+  type PrevDigest = Digest
+  type NewDigest = Digest
+
+  private def createEnv(howMany: Int = 10):
+    (Seq[Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
+
     val prover = new BatchAVLProver[Blake2b256Unsafe](KL, None)
     val prevDigest = prover.digest
-    val boxes = (0 until 10) map { i => AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, i, 1L) }
+    val boxes = (0 until howMany) map { i => AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, i, 1L) }
     boxes.foreach(kv => prover.performOneOperation(Insert(kv.id, kv.bytes)))
     val pf = prover.generateProof()
     val newDigest = prover.digest
@@ -34,9 +40,13 @@ class AdProofSpec extends PropSpec
   }
 
   property("verify should be success in simple case") {
-    val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
-    proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'success
+    forAll(Gen.choose(0, 1000)){s =>
+      whenever(s >=0 ){
+        val (operations, prevDigest, newDigest, pf) = createEnv(s)
+        val proof = ADProof(Array.fill(32)(0.toByte), pf)
+        proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'success
+      }
+    }
   }
 
   property("verify should be failed if first operation is missed") {
@@ -74,6 +84,7 @@ class AdProofSpec extends PropSpec
     proof.verify(BoxStateChanges(operationsInDifferentOrder), prevDigest, newDigest) shouldBe 'failure
   }
 
+  //todo: what to do with that?
   ignore("verify should be failed if there are more proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProof(Array.fill(32)(0.toByte), pf :+ 't'.toByte)

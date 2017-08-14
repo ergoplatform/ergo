@@ -51,10 +51,6 @@ trait ErgoHistory
   protected val config: HistoryConfig
   protected val storage: LSMStore
 
-  //TODO what should be the limit?
-  //TODO: kushti: do we need for the limit at all?
-  val MaxRollback = 10000
-
   lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
@@ -244,17 +240,21 @@ trait ErgoHistory
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
-    assert(contains(header2))
+    val otherHeightOpt = heightOf(header2.id)
+    assert(otherHeightOpt.isDefined)
+    val otherHeight = otherHeightOpt.get
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
       if (r._1.head == r._2.head) {
         r
-      } else if (numberBack < MaxRollback) {
-        val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
-        loop(biggerOther.size, biggerOther)
       } else {
-        throw new Error(s"Common point not found for headers $header1 and $header2")
+        val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
+        if (biggerOther.length < otherHeight) {
+          loop(biggerOther.size, biggerOther)
+        } else {
+          throw new Error(s"Common point not found for headers $header1 and $header2")
+        }
       }
     }
 

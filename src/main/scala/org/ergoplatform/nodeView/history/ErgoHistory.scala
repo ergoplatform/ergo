@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -325,14 +325,14 @@ object ErgoHistory extends ScorexLogging {
           override protected val storage: LSMStore = db
         }
       case (false, true, true) =>
-        new ErgoHistory with EmptyADProofsProcessor
+        new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val config: HistoryConfig = historyConfig
           override protected val storage: LSMStore = db
         }
       case (false, true, false) =>
-        new ErgoHistory with EmptyADProofsProcessor
+        new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val config: HistoryConfig = historyConfig

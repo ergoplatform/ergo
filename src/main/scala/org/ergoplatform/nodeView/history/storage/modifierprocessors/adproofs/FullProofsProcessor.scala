@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
@@ -25,7 +25,7 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
       case Some(header: Header) =>
         historyStorage.modifierById(header.transactionsId) match {
           case Some(txs: BlockTransactions) if adState =>
-            processFullBlock(header, txs, Some(m), None, txsAreNew = false)
+            processFullBlock(ErgoFullBlock(header, txs, Some(m), None), txsAreNew = false)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
             historyStorage.insert(m.id, modifierRow)

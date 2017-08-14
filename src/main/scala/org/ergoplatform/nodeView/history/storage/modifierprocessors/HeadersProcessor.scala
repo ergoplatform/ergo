@@ -90,7 +90,9 @@ trait HeadersProcessor extends ScorexLogging {
   protected def validate(m: Header): Try[Unit] = {
     lazy val parentOpt = historyStorage.modifierById(m.parentId)
     lazy val diff = Algos.blockIdDifficulty(m.powHash)
-    if (m.isGenesis && bestHeaderIdOpt.isDefined) {
+    if (m.isGenesis && bestHeaderIdOpt.isEmpty) {
+      Success()
+    } else if (m.isGenesis) {
       Failure(new Error("Trying to append genesis block to non-empty history"))
     } else if (parentOpt.isEmpty) {
       Failure(new Error("Parent header is no defined"))

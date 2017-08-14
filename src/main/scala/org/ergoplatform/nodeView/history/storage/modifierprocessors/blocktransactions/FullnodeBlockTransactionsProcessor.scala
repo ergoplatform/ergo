@@ -11,14 +11,14 @@ import scorex.crypto.encode.Base58
 import scala.util.Try
 
 /**
-  * BlockTransactions processor for fullnode regime
+  * BlockTransactions processor for settings with verifyTransactions=true
   */
 trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
   protected val adState: Boolean
 
-  override def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
+  override protected def process(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
@@ -36,9 +36,9 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     }
   }
 
-  override def toDrop(m: BlockTransactions): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(m.id))
+  override protected def toDrop(m: BlockTransactions): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(m.id))
 
-  override def validate(m: BlockTransactions): Try[Unit] = Try {
+  override protected def validate(m: BlockTransactions): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>

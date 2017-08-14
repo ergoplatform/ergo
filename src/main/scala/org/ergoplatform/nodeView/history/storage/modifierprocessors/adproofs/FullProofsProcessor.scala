@@ -10,17 +10,13 @@ import scorex.crypto.encode.Base58
 import scala.util.Try
 
 /**
-  * ADProof processor for regime that download ADPrrofs
+  * ADProof processor for node regime with DigestState
   */
 trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
 
   protected val adState: Boolean
 
-  /**
-    *
-    * @return
-    */
-  def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
+  override protected def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.transactionsId) match {
@@ -36,10 +32,9 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
     }
   }
 
+  override protected def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(modifier.id))
 
-  override def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(modifier.id))
-
-  override def validate(m: ADProof): Try[Unit] = Try {
+  override protected def validate(m: ADProof): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
       case Some(h: Header) =>

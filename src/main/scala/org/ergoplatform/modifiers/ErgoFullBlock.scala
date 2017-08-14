@@ -36,9 +36,8 @@ object ErgoFullBlock {
     val genesisTimestamp = 1500203225564L
     val stateRoot = ErgoState.initialDigest
     val genesisTx = new AnyoneCanSpendTransaction(
-      IndexedSeq(new AnyoneCanSpendProposition -> 0L),
-      IndexedSeq((new AnyoneCanSpendProposition, 0L)),
-      genesisTimestamp)
+      IndexedSeq(0L),
+      IndexedSeq(0L))
     //TODO where can we get it???
     val proofs = ErgoState.genesisProofs
     val proofsRoot = ADProof.proofDigest(proofs)

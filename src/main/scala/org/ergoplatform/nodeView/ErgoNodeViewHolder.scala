@@ -14,9 +14,9 @@ import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-abstract class ErgoNodeViewHolder(settings: ErgoSettings) extends NodeViewHolder[AnyoneCanSpendProposition,
-  AnyoneCanSpendTransaction,
-  ErgoPersistentModifier] {
+abstract class ErgoNodeViewHolder(settings: ErgoSettings)
+  extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
+
   override val networkChunkSize: Int = settings.networkChunkSize
 
   override type SI = ErgoSyncInfo

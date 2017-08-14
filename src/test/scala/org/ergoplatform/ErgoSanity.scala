@@ -38,7 +38,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override val mempool: ErgoMemPool = ErgoMemPool.empty
 
   //Generators
-  override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = anyoneCanSpendTransactionGen
+  override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
 
   //todo: fix, last 2 params are ignored for now
   override def genValidModifier(history: ErgoHistory,
@@ -59,7 +59,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 }
 
 object ErgoSanity {
-  type P = AnyoneCanSpendProposition
+  type P = AnyoneCanSpendProposition.type
   type TX = AnyoneCanSpendTransaction
   type B = AnyoneCanSpendNoncedBox
   type PM = ErgoPersistentModifier

@@ -41,7 +41,7 @@ import scala.util.{Failure, Try}
   *   2. Be ignored by history (verifyTransactions == false)
   */
 trait ErgoHistory
-  extends History[AnyoneCanSpendProposition, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
+  extends History[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with HeadersProcessor
     with ADProofsProcessor
     with PoPoWProofsProcessor

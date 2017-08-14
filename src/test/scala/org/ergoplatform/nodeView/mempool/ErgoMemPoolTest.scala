@@ -13,7 +13,7 @@ class ErgoMemPoolTest extends PropSpec
   with Matchers
   with ErgoGenerators {
   property("wait for the appearance of transactions") {
-    forAll(blockTransactionsGen) { blockTransactions =>
+    forAll(invalidBlockTransactionsGen) { blockTransactions =>
       val memPool = ErgoMemPool.empty
       val ids = blockTransactions.txs.map(_.id)
       val transactionsFuture = memPool.waitForAll(ids)

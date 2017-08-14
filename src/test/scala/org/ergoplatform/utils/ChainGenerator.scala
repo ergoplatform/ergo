@@ -1,4 +1,4 @@
-package org.ergoplatform
+package org.ergoplatform.utils
 
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -41,7 +41,7 @@ trait ChainGenerator {
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
-    val extentionHash = Array.fill(32)(0.toByte)
+    val extensionHash = Array.fill(32)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(BigInt(1),
@@ -49,7 +49,7 @@ trait ChainGenerator {
       stateRoot,
       proofsRoot,
       txsRoot,
-      extentionHash,
+      extensionHash,
       votes,
       NetworkTime.time()): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)

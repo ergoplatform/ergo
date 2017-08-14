@@ -1,7 +1,7 @@
-package org.ergoplatform
+package org.ergoplatform.utils
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, PoPoWProof}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -39,7 +39,7 @@ trait ErgoGenerators extends CoreGenerators {
     fullBlockOpt <- Gen.option(idGenerator)
   } yield ErgoSyncInfo(answer, ids, fullBlockOpt)
 
-  lazy val headerGen: Gen[Header] = for {
+  lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- genBytesList(Constants.ModifierIdSize)
     stateRoot <- genBytesList(Constants.ModifierIdSize)
@@ -52,6 +52,12 @@ trait ErgoGenerators extends CoreGenerators {
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
 
+  /*
+  def validHeaderGen(parent: Header): Gen[Header] = for {
+    version <- Arbitrary.arbitrary[Byte]
+    parentId <- parent.id
+  }*/
+
   lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
     txs <- Gen.nonEmptyListOf(anyoneCanSpendTransactionGen)
@@ -63,7 +69,7 @@ trait ErgoGenerators extends CoreGenerators {
   } yield ADProof(headerId, proof)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
-    header <- headerGen
+    header <- invalidHeaderGen
     txs <- blockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof), None)

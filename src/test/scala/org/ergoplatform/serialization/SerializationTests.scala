@@ -1,10 +1,10 @@
 package org.ergoplatform.serialization
 
-import org.ergoplatform.ErgoGenerators
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransactionSerializer
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBoxSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 
@@ -17,7 +17,7 @@ class SerializationTests extends PropSpec
   property("HeaderWithoutInterlinks serialization") {
 
     val serializer = HeaderSerializer
-    forAll(headerGen) { b: Header =>
+    forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
       recovered shouldBe b
     }
@@ -36,7 +36,7 @@ class SerializationTests extends PropSpec
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtrip(headerGen, HeaderSerializer)
+    checkSerializationRoundtrip(invalidHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {

@@ -15,6 +15,8 @@ object Algos {
   //TODO replace to concrete mining algorithm
   val miningHash = Blake2b256
 
+  val initialDifficulty = 1
+
   def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] =
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 

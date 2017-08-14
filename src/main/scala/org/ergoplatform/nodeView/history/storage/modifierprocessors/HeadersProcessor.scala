@@ -117,6 +117,8 @@ trait HeadersProcessor extends ScorexLogging {
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
   }
 
+  //todo: avoid using require/ensuring, as they can be turned off by a compiler flag
+  //todo: also, their intended semantics is different from what we're doing in this method
   def validate(m: Header): Try[Unit] = Try {
     if (m.isGenesis) {
       require(bestHeaderIdOpt.isEmpty, "Trying to append genesis block to non-empty history")
@@ -135,7 +137,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   def calculateDifficulty(h: Header): BigInt = {
     if (h.isGenesis) {
-      BigInt(1)
+      BigInt(Algos.initialDifficulty)
     } else if (difficultyCalculator.recalculationRequired(heightOf(h.parentId).get)) {
       ???
     } else {

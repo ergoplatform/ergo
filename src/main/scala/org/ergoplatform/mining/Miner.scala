@@ -29,8 +29,7 @@ object Miner {
                 extensionHash: Array[Byte],
                 votes: Array[Byte],
                 timestamp: Timestamp): Header = {
-    val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent)
-    else Seq(parent.id)
+    val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
 
     @tailrec
     def generateHeader(): Header = {

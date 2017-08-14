@@ -26,24 +26,10 @@ class BoxesStorage(initialBoxes: Seq[AnyoneCanSpendNoncedBox]) {
   def take(howMany: Int): Seq[AnyoneCanSpendNoncedBox] = boxes.take(howMany).values.toSeq
 }
 
-object BoxesStorage {
-  val howMany = 1000000
-
-  /*todo: impl
-  def generate(): BoxesStorage = {
-    (1 to howMany) map {_ =>
-      AnyoneCanSpendNoncedBox()
-    }
-  }*/
-}
 
 trait ErgoGenerators extends CoreGenerators {
 
   val anyoneCanSpendProposition = AnyoneCanSpendProposition
-
-  lazy val pGen: Gen[(AnyoneCanSpendProposition.type, Long)] = for {
-    long <- positiveLongGen
-  } yield (anyoneCanSpendProposition, long)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
     from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
@@ -54,6 +40,8 @@ trait ErgoGenerators extends CoreGenerators {
     nonce <- positiveLongGen
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
+
+  lazy val boxesStorageGen: Gen[BoxesStorage] = Gen.listOfN(1000000, anyoneCanSpendBoxGen).map(l => new BoxesStorage(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))

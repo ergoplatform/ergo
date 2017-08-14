@@ -14,6 +14,9 @@ import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
+/**
+  * Contains all functions required by History to process Headers.
+  */
 trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig

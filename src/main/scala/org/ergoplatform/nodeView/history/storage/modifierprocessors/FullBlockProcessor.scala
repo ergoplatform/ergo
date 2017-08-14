@@ -10,6 +10,10 @@ import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
+/**
+  * Contains functions required by History to process Transactions and Proofs when we have them.
+  * Prune modifiers older then blocksToKeep.
+  */
 trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   /**
@@ -21,11 +25,19 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
-  protected def processFullBlock(header: Header,
-                                 txs: BlockTransactions,
-                                 adProofsOpt: Option[ADProof],
-                                 extensionOpt: Option[Map[Array[Byte], Array[Byte]]],
+  /**
+    * Process full block when we have one.
+    *
+    * @param fullBlock - block to process
+    * @param txsAreNew - flag, that transactions where added last
+    * @return ProgressInfo required for State to process to be consistent with History
+    */
+  protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
+    val header: Header = fullBlock.header
+    val txs: BlockTransactions = fullBlock.blockTransactions
+    val adProofsOpt: Option[ADProof] = fullBlock.aDProofs
+
     assert(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
       (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))
@@ -33,7 +45,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       (ByteArrayWrapper(adProofsOpt.get.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofsOpt.get)))
     }
     val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
-    val fullBlock = ErgoFullBlock(header, txs, adProofsOpt, extensionOpt)
     (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(header.id)) match {
       case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")

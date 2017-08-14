@@ -5,7 +5,15 @@ import scorex.crypto.hash.CryptographicHash32
 
 import scala.util.Random
 
-
+/**
+  * Hash-like function which generates a random(and deterministic) 256-bits value which starts with defined
+  * number of zero bits
+  *
+  * This is not a cryptographic hash function!
+  *
+  * @param minZeroBits - number of zero bits
+  */
+//todo: do we need this at all?
 class FakeHash(minZeroBits: Int) extends CryptographicHash32 {
   override def hash(input: Message): Digest = {
     val seedBytesUnsafe = if(input.length <= 4) input else input.take(4)
@@ -16,10 +24,4 @@ class FakeHash(minZeroBits: Int) extends CryptographicHash32 {
     val zeroBytesCnt = 32 - data.length
     Array.fill(zeroBytesCnt)(0:Byte) ++ data
   }
-}
-
-
-object FakeHashTester extends App {
-  val fh = new FakeHash(64)
-  println(fh.hash(Array.fill(4)(Random.nextInt(100).toByte)).mkString("-"))
 }

@@ -16,10 +16,6 @@ import scala.util.Try
 /**
   * Transaction without any lockers and unlockers
   */
-/*
-  from: IndexedSeq[(AnyoneCanSpendProposition, Value)],
-  to: IndexedSeq[(AnyoneCanSpendProposition, Nonce)]
- */
 case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce],
                                      to: IndexedSeq[Value]) extends
   Transaction[AnyoneCanSpendProposition.type] with MempoolModifier {

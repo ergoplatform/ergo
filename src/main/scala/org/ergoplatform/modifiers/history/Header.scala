@@ -30,14 +30,14 @@ case class Header(version: Version,
 
   override lazy val id: ModifierId = Algos.hash(bytes)
 
+  lazy val headerHash: Digest = Algos.miningHash(id)
+
+  lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
+
   lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
 
   lazy val transactionsId: ModifierId =
     ModifierWithDigest.computeId(BlockTransactions.ModifierTypeId, id, transactionsRoot)
-
-  lazy val headerHash: Digest = Algos.miningHash(id)
-
-  lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
@@ -99,17 +99,17 @@ object HeaderSerializer extends Serializer[Header] {
     val votes = bytes.slice(177, 182)
 
     @tailrec
-    def parseInnterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
+    def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
       val link: Array[Byte] = bytes.slice(index + 1, index + 33)
       val links: Seq[Array[Byte]] = Array.fill(repeatN)(link)
-      parseInnterlinks(index + 33, acc ++ links)
+      parseInterlinks(index + 33, acc ++ links)
     } else {
       acc
     }
 
-    val innerlinks = parseInnterlinks(182, Seq())
+    val interlinks = parseInterlinks(182, Seq())
 
-    Header(version, parentId, innerlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
+    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
   }
 }

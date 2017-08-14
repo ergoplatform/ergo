@@ -11,7 +11,6 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
-
   val hash = Blake2b256
   //TODO replace to concrete mining algorithm
   val miningHash = Blake2b256

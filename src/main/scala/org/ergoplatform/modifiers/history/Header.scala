@@ -25,6 +25,7 @@ case class Header(version: Version,
                   nonce: Long,
                   extensionHash: Array[Byte],
                   votes: Array[Byte]) extends ErgoPersistentModifier {
+
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
   override lazy val id: ModifierId = Algos.hash(bytes)

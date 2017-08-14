@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.ErgoGenerators
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
 

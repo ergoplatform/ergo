@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
 import scorex.testkit.properties._

@@ -2,7 +2,8 @@ package org.ergoplatform.modifiers.history
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.{ChainGenerator, ErgoGenerators}
+import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.testkit.TestkitHelpers

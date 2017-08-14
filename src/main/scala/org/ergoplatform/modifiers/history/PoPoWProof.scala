@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
-import scorex.crypto.encode.Base58
 
 import scala.util.Try
 

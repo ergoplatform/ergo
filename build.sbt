@@ -17,10 +17,9 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
   "org.scorexfoundation" %% "iodb" % "0.3.1",
-  "org.scorexfoundation" %% "scrypto" % "1.3.0" exclude("org.slf4j", "slf4j-api"),
   "org.scorexfoundation" %% "avl-iodb" % "0.2.1",
   "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2" % "test",
-  "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC2",
+  "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
   "com.storm-enroute" %% "scalameter" % "0.8.2"
 )
 

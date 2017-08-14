@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.ErgoGenerators
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 

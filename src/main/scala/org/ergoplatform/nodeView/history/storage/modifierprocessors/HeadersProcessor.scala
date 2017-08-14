@@ -75,7 +75,7 @@ trait HeadersProcessor extends ScorexLogging {
   }
 
   def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    val requiredDifficulty: BigInt = calculateDifficulty(h)
+    val requiredDifficulty: BigInt = expectedDifficulty(h)
     if (h.isGenesis) {
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
@@ -126,8 +126,8 @@ trait HeadersProcessor extends ScorexLogging {
       val parentOpt = historyStorage.modifierById(m.parentId)
       require(parentOpt.isDefined, "Parent header is no defined")
       require(!historyStorage.contains(m.id), "Header is already in history")
-      require(Algos.blockIdDifficulty(m.headerHash) >= calculateDifficulty(m),
-        s"Block difficulty ${Algos.blockIdDifficulty(m.headerHash)} is less than required ${calculateDifficulty(m)}")
+      require(Algos.blockIdDifficulty(m.powHash) >= expectedDifficulty(m),
+        s"Block difficulty ${Algos.blockIdDifficulty(m.powHash)} is less than required ${expectedDifficulty(m)}")
       //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS
     }
@@ -135,7 +135,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   private val difficultyCalculator = new DifficultyCalculator
 
-  def calculateDifficulty(h: Header): BigInt = {
+  def expectedDifficulty(h: Header): BigInt = {
     if (h.isGenesis) {
       BigInt(Algos.initialDifficulty)
     } else if (difficultyCalculator.recalculationRequired(heightOf(h.parentId).get)) {

@@ -30,7 +30,7 @@ case class Header(version: Version,
 
   override lazy val id: ModifierId = Algos.hash(bytes)
 
-  lazy val headerHash: Digest = Algos.miningHash(id)
+  lazy val powHash: Digest = Algos.miningHash(id)
 
   lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
 

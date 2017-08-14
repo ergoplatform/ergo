@@ -12,7 +12,7 @@ import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
 
 class ErgoApp(val settingsFilename: String) extends Application {
-  override type P = AnyoneCanSpendProposition
+  override type P = AnyoneCanSpendProposition.type
   override type TX = AnyoneCanSpendTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder

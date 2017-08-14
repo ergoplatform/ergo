@@ -10,10 +10,11 @@ import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendProposition,
-                                   nonce: Long,
-                                   override val value: Long
-                                  ) extends Box[AnyoneCanSpendProposition] with JsonSerializable {
+case class AnyoneCanSpendNoncedBox(nonce: Long,
+                                   override val value: Long)
+  extends Box[AnyoneCanSpendProposition.type] with JsonSerializable {
+
+  override val proposition = AnyoneCanSpendProposition
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
@@ -29,23 +30,19 @@ case class AnyoneCanSpendNoncedBox(override val proposition: AnyoneCanSpendPropo
 }
 
 object AnyoneCanSpendNoncedBox {
-  def idFromBox(prop: AnyoneCanSpendProposition, nonce: Long): Array[Byte] =
-    Algos.hash(prop.serializer.toBytes(prop) ++ Longs.toByteArray(nonce))
+  def idFromBox(nonce: Long): Array[Byte] =
+    Algos.hash(Longs.toByteArray(nonce))
 }
 
 object AnyoneCanSpendNoncedBoxSerializer extends Serializer[AnyoneCanSpendNoncedBox] {
-  val Length: Int = AnyoneCanSpendPropositionSerializer.Length + 8 + 8
+  val Length: Int = 8 + 8
 
   override def toBytes(obj: AnyoneCanSpendNoncedBox): Array[Byte] =
-    obj.proposition.serializer.toBytes(obj.proposition) ++
-      Longs.toByteArray(obj.nonce) ++
-      Longs.toByteArray(obj.value)
+    Longs.toByteArray(obj.nonce) ++ Longs.toByteArray(obj.value)
 
   override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendNoncedBox] = Try {
-    val proposition = AnyoneCanSpendPropositionSerializer.parseBytes(bytes.take(1)).get
-    val nonce = Longs.fromByteArray(bytes.slice(1, 9))
-    val value = Longs.fromByteArray(bytes.slice(9, 17))
-    AnyoneCanSpendNoncedBox(proposition, nonce, value)
+    val nonce = Longs.fromByteArray(bytes.slice(0, 8))
+    val value = Longs.fromByteArray(bytes.slice(8, 16))
+    AnyoneCanSpendNoncedBox(nonce, value)
   }
 }
-

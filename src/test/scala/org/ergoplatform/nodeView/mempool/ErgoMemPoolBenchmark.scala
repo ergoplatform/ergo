@@ -27,7 +27,7 @@ object ErgoMemPoolBenchmark
     val txsByWaitingGroups = for {_ <- 0 until waitingSize}
       yield {
         (for {_ <- 0 until transactionsPerBlock} yield {
-          anyoneCanSpendTransactionGen.sample
+          invalidAnyoneCanSpendTransactionGen.sample
         }).flatten
       }
     (txsByWaitingGroups.map(_.map(_.id.clone())), txIncomeOrder(txsByWaitingGroups))

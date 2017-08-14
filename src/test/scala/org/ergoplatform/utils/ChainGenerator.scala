@@ -34,9 +34,7 @@ trait ChainGenerator {
   final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
     acc.reverse
   } else {
-    val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq((new AnyoneCanSpendProposition, height.toLong)),
-      IndexedSeq((new AnyoneCanSpendProposition, 1L)),
-      NetworkTime.time()))
+    val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq(height.toLong), IndexedSeq(1L)))
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)

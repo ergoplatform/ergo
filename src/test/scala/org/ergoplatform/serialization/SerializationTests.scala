@@ -15,7 +15,6 @@ class SerializationTests extends PropSpec
   with ErgoGenerators with scorex.testkit.SerializationTests {
 
   property("HeaderWithoutInterlinks serialization") {
-
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
@@ -28,8 +27,15 @@ class SerializationTests extends PropSpec
   }
 
   property("AnyoneCanSpendTransactionGen serialization") {
-    checkSerializationRoundtrip(anyoneCanSpendTransactionGen, AnyoneCanSpendTransactionSerializer)
+    checkSerializationRoundtrip(invalidAnyoneCanSpendTransactionGen, AnyoneCanSpendTransactionSerializer)
   }
+
+  property("AnyoneCanSpendTransactionGen serialization - .bytes") {
+    forAll(invalidAnyoneCanSpendTransactionGen){tx =>
+      AnyoneCanSpendTransactionSerializer.parseBytes(tx.bytes).get == tx
+    }
+  }
+
 
   property("ErgoSyncInfo serialization") {
     checkSerializationRoundtrip(ergoSyncInfoGen, ErgoSyncInfoSerializer)
@@ -40,7 +46,13 @@ class SerializationTests extends PropSpec
   }
 
   property("BlockTransactions serialization") {
-    checkSerializationRoundtrip(blockTransactionsGen, BlockTransactionsSerializer)
+    checkSerializationRoundtrip(invalidBlockTransactionsGen, BlockTransactionsSerializer)
+  }
+
+  property("BlockTransactions serialization - .bytes") {
+    forAll(invalidBlockTransactionsGen){bt =>
+      BlockTransactionsSerializer.parseBytes(bt.bytes).get == bt
+    }
   }
 
   property("ADProofs serialization") {

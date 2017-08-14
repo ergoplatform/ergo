@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.ErgoGenerators
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.testkit.TestkitHelpers

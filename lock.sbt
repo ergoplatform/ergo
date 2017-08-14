@@ -20,7 +20,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "com.thoughtworks.paranamer" % "paranamer" % "2.8",
   "com.typesafe" % "config" % "1.3.0",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.1",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.4.19",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.4.20",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.0.9",
   "com.typesafe.akka" % "akka-http_2.12" % "10.0.9",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.0.9",
@@ -62,7 +62,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scala-tools.testing" % "test-interface" % "0.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.1",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
-  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC2",
+  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "1.3.0",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
@@ -74,4 +74,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 1b729c14c004c1545cf1fcc37cbea50ddc3a6990
+// LIBRARY_DEPENDENCIES_HASH f68ffd38c19d21b9ddedf53dd6eddf32eee58849

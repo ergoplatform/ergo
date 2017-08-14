@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import scorex.core.NodeViewModifier._
 import scorex.core.PersistentNodeViewModifier
 
-trait ErgoPersistentModifier extends PersistentNodeViewModifier[AnyoneCanSpendProposition, AnyoneCanSpendTransaction] {
+trait ErgoPersistentModifier extends PersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   //TODO do we need version field for all modifiers?
   //val version: Version

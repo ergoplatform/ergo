@@ -5,20 +5,20 @@ import scorex.core.transaction.box.proposition.ProofOfKnowledgeProposition
 
 import scala.util.{Failure, Success, Try}
 
-class AnyoneCanSpendProposition extends ProofOfKnowledgeProposition[Nothing] {
-  override type M = AnyoneCanSpendProposition
+object AnyoneCanSpendProposition extends ProofOfKnowledgeProposition[Nothing] {
+  override type M = AnyoneCanSpendProposition.type
 
-  override lazy val serializer: Serializer[AnyoneCanSpendProposition] = AnyoneCanSpendPropositionSerializer
+  override lazy val serializer: Serializer[AnyoneCanSpendProposition.type] = AnyoneCanSpendPropositionSerializer
 }
 
-object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition] {
+object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition.type] {
   val Length = 1
   val ByteValue: Array[Byte] = Array.fill(Length)(-127: Byte)
 
-  override def toBytes(obj: AnyoneCanSpendProposition): Array[Byte] = ByteValue
+  override def toBytes(obj: AnyoneCanSpendProposition.type): Array[Byte] = ByteValue
 
-  override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendProposition] = bytes match {
-    case b if b sameElements ByteValue => Success(new AnyoneCanSpendProposition)
+  override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendProposition.type] = bytes match {
+    case b if b sameElements ByteValue => Success(AnyoneCanSpendProposition)
     case l => Failure(new Error(s"Incorrect proposition ${l.headOption}"))
   }
 }

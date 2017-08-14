@@ -15,7 +15,7 @@ class HistoryStorage(val db: LSMStore) extends ScorexLogging with AutoCloseable 
       case Success(b) =>
         Some(b)
       case Failure(e) =>
-        log.warn("Failed to parse block from db", e)
+        log.warn(s"Failed to parse block from db (bytes are: ${bBytes.data.mkString("-")}): ", e)
         None
     }
   }

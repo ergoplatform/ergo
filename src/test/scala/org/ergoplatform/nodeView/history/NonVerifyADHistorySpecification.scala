@@ -88,7 +88,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
         history = applyHeaderChain(history, fork1)
         history.bestHeader shouldBe fork1.last
 
-        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeader)
+        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeader, 1000)
         our.head shouldBe their.head
         our.head shouldBe common
         our.last shouldBe fork1.last

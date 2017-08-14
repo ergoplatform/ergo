@@ -19,7 +19,7 @@ import scala.util.{Failure, Success, Try}
   * Utxo set implementation.
   * @param rootHash
   */
-class UtxoState(override val rootHash: Digest, dir: File = new File("/tmp/utxo")) extends ErgoState[UtxoState] {
+class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
@@ -47,7 +47,7 @@ class UtxoState(override val rootHash: Digest, dir: File = new File("/tmp/utxo")
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     p.rollback(version).map { _ =>
-      new UtxoState(version) {
+      new UtxoState(version, dir) {
         override protected val persistentProver = p
       }
     }
@@ -78,7 +78,7 @@ class UtxoState(override val rootHash: Digest, dir: File = new File("/tmp/utxo")
           val proofBytes = prover.generateProof()
           val proofHash = hf(proofBytes)
           assert(fb.header.ADProofsRoot.sameElements(proofHash))
-          new UtxoState(persistentProver.digest)
+          new UtxoState(persistentProver.digest, dir)
         }
 
       case a: Any =>

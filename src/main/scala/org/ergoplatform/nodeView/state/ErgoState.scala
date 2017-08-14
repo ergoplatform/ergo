@@ -1,12 +1,15 @@
 package org.ergoplatform.nodeView.state
 
+import java.io.File
+
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.transaction.state.MinimalState.VersionTag
-import ErgoState.Digest
+import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
@@ -42,10 +45,10 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
   def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =
-    BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](id)) ++
-        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](b))
-    })
+  BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](id)) ++
+      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](b))
+  })
 
   override def version: VersionTag
 
@@ -62,11 +65,13 @@ object ErgoState {
 
   type Digest = Array[Byte]
 
-  val initialDigest: Digest = Array.fill(32)(0:Byte)
+  val initialDigest: Digest = Array.fill(32)(0: Byte)
+  val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)
 
-  def readOrGenerate(settings: ErgoSettings) =
-    if (settings.ADState) new DigestState(initialDigest) else new UtxoState(initialDigest)
-
-  //Initial state even before genesis block application
-  val initialState: UtxoState = new UtxoState(initialDigest)
+  def readOrGenerate(settings: ErgoSettings) = {
+    val stateDir = new File(s"${settings.dataDir}/state")
+    stateDir.mkdirs()
+    //TODO read from file if state already exists
+    if (settings.ADState) new DigestState(initialDigest) else new UtxoState(initialDigest, stateDir)
+  }
 }

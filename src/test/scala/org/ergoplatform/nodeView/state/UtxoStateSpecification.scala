@@ -42,7 +42,7 @@ class UtxoStateSpecification extends PropSpec
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       withDir("/tmp/utxotest4") { dir =>
-        val state = new UtxoState(Array.fill(32)(0: Byte))
+        val state = new UtxoState(Array.fill(32)(0: Byte), dir)
         state.applyModifier(b).isFailure shouldBe true
       }
     }

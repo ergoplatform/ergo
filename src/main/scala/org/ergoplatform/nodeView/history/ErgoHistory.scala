@@ -263,7 +263,7 @@ trait ErgoHistory
 
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
                                                  startHeader: Header,
-                                                 limit: Int = MaxRollback): (HeaderChain, HeaderChain) = {
+                                                 limit: Int): (HeaderChain, HeaderChain) = {
     def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
 
     val ourChain = headerChainBack(limit, startHeader, until)

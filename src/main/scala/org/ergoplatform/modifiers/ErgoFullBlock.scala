@@ -33,32 +33,31 @@ object ErgoFullBlock {
   //TODO testnet genesis?
   //todo: real definition of a genesis block, do we need genesis block at all?
   lazy val genesis = {
-      val genesisTimestamp = 1500203225564L
-      val initialState = ErgoState.initialState
-      //TODO        val stateRoot = initialState.rootHash()
-      val stateRoot = Algos.hash("Initial state")
-      val genesisTx = new AnyoneCanSpendTransaction(
-        IndexedSeq(new AnyoneCanSpendProposition -> 0L),
-        IndexedSeq((new AnyoneCanSpendProposition, 0L)),
-        genesisTimestamp)
-      val proofs = initialState.proofsForTransactions(Seq(genesisTx))
-      val proofsRoot = ADProof.proofDigest(proofs)
+    val genesisTimestamp = 1500203225564L
+    val stateRoot = ErgoState.initialDigest
+    val genesisTx = new AnyoneCanSpendTransaction(
+      IndexedSeq(new AnyoneCanSpendProposition -> 0L),
+      IndexedSeq((new AnyoneCanSpendProposition, 0L)),
+      genesisTimestamp)
+    //TODO where can we get it???
+    val proofs = ErgoState.genesisProofs
+    val proofsRoot = ADProof.proofDigest(proofs)
 
-      val header: Header = Header(0.toByte,
-        Array.fill(hashLength)(0.toByte),
-        Seq(),
-        proofsRoot,
-        stateRoot,
-        BlockTransactions.rootHash(Seq(genesisTx.id)),
-        genesisTimestamp,
-        0,
-        Array.fill(32)(0.toByte),
-        Array.fill(5)(0.toByte)
-      )
-      val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
-      val aDProofs: ADProof = ADProof(header.id, proofs)
-      assert(header.ADProofsRoot sameElements aDProofs.digest)
-      assert(header.transactionsRoot sameElements blockTransactions.digest)
-      ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
-    }
+    val header: Header = Header(0.toByte,
+      Array.fill(hashLength)(0.toByte),
+      Seq(),
+      proofsRoot,
+      stateRoot,
+      BlockTransactions.rootHash(Seq(genesisTx.id)),
+      genesisTimestamp,
+      0,
+      Array.fill(32)(0.toByte),
+      Array.fill(5)(0.toByte)
+    )
+    val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
+    val aDProofs: ADProof = ADProof(header.id, proofs)
+    assert(header.ADProofsRoot sameElements aDProofs.digest)
+    assert(header.transactionsRoot sameElements blockTransactions.digest)
+    ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
+  }
 }

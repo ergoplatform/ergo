@@ -12,7 +12,7 @@ import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains all functions required by History to process Headers.
@@ -84,23 +84,24 @@ trait HeadersProcessor extends ScorexLogging {
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
   /**
-    * todo: avoid using require/ensuring, as they can be turned off by a compiler flag
-    * todo: also, their intended semantics is different from what we're doing in this method
-    *
     * @param m - header to validate
     * @return Succes() if header is valid, Failure(error) otherwise
     */
-  protected def validate(m: Header): Try[Unit] = Try {
-    if (m.isGenesis) {
-      require(bestHeaderIdOpt.isEmpty, "Trying to append genesis block to non-empty history")
+  protected def validate(m: Header): Try[Unit] = {
+    lazy val parentOpt = historyStorage.modifierById(m.parentId)
+    lazy val diff = Algos.blockIdDifficulty(m.powHash)
+    if (m.isGenesis && bestHeaderIdOpt.isDefined) {
+      Failure(new Error("Trying to append genesis block to non-empty history"))
+    } else if (parentOpt.isEmpty) {
+      Failure(new Error("Parent header is no defined"))
+    } else if (historyStorage.contains(m.id)) {
+      Failure(new Error("Header is already in history"))
+    } else if (diff < expectedDifficulty(m)) {
+      Failure(new Error(s"Block difficulty $diff is less than required ${expectedDifficulty(m)}"))
     } else {
-      val parentOpt = historyStorage.modifierById(m.parentId)
-      require(parentOpt.isDefined, "Parent header is no defined")
-      require(!historyStorage.contains(m.id), "Header is already in history")
-      require(Algos.blockIdDifficulty(m.powHash) >= expectedDifficulty(m),
-        s"Block difficulty ${Algos.blockIdDifficulty(m.powHash)} is less than required ${expectedDifficulty(m)}")
       //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS
+      Success()
     }
   }
 

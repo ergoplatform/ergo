@@ -53,6 +53,7 @@ trait ErgoGenerators extends CoreGenerators {
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
 
   /*
+  todo: finish
   def validHeaderGen(parent: Header): Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- parent.id

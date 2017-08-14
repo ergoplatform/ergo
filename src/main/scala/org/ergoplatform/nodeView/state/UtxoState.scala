@@ -34,7 +34,7 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    IndexedSeq(AnyoneCanSpendNoncedBox(new AnyoneCanSpendProposition, height, height))
+    IndexedSeq(AnyoneCanSpendNoncedBox(height, height))
   }
 
   //TODO implement correctly

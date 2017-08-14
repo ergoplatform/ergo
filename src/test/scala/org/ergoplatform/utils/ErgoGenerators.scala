@@ -10,27 +10,53 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.CoreGenerators
 
+import scala.collection.mutable
+
+class BoxesStorage(initialBoxes: Seq[AnyoneCanSpendNoncedBox]) {
+  private val boxes = mutable.Map[Array[Byte], AnyoneCanSpendNoncedBox](initialBoxes.map(b => b.id -> b): _*)
+
+  def removeBoxes(ids: Seq[Array[Byte]]): Unit = {
+    ids.foreach(id => boxes.remove(id))
+  }
+
+  def addBoxes(bs: Seq[AnyoneCanSpendNoncedBox]): Unit = {
+    bs.foreach(bs => boxes.put(bs.id, bs))
+  }
+
+  def take(howMany: Int): Seq[AnyoneCanSpendNoncedBox] = boxes.take(howMany).values.toSeq
+}
+
+object BoxesStorage {
+  val howMany = 1000000
+
+  /*todo: impl
+  def generate(): BoxesStorage = {
+    (1 to howMany) map {_ =>
+      AnyoneCanSpendNoncedBox()
+    }
+  }*/
+}
+
 trait ErgoGenerators extends CoreGenerators {
 
-  val anyoneCanSpendProposition = new AnyoneCanSpendProposition
+  val anyoneCanSpendProposition = AnyoneCanSpendProposition
 
-  lazy val pGen: Gen[(AnyoneCanSpendProposition, Long)] = for {
+  lazy val pGen: Gen[(AnyoneCanSpendProposition.type, Long)] = for {
     long <- positiveLongGen
   } yield (anyoneCanSpendProposition, long)
 
-  lazy val anyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
-    timestamp <- positiveLongGen
-    from: IndexedSeq[(AnyoneCanSpendProposition, Long)] <- smallInt.flatMap(i => Gen.listOfN(i + 1, pGen).map(_.toIndexedSeq))
-    to: IndexedSeq[(AnyoneCanSpendProposition, Long)] <- smallInt.flatMap(i => Gen.listOfN(i, pGen).map(_.toIndexedSeq))
-  } yield AnyoneCanSpendTransaction(from, to, timestamp)
+  lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
+    from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
+    to: IndexedSeq[Long]   <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
+  } yield AnyoneCanSpendTransaction(from, to)
 
   lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
     nonce <- positiveLongGen
     value <- positiveLongGen
-  } yield AnyoneCanSpendNoncedBox(anyoneCanSpendProposition, nonce, value)
+  } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
-    .map(b => BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
+  lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
+    .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
@@ -52,17 +78,39 @@ trait ErgoGenerators extends CoreGenerators {
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
 
-  /*
-  todo: finish
-  def validHeaderGen(parent: Header): Gen[Header] = for {
-    version <- Arbitrary.arbitrary[Byte]
-    parentId <- parent.id
+/*
+todo: finish
+
+  def validHeaderGen(parent: Header): Gen[Header] = {
+    val parentId = parent.id
+    for {
+      version <- Arbitrary.arbitrary[Byte]
+      stateRoot <- ???
+      adRoot <- ???
+      transactionsRoot <- genBytesList(Constants.ModifierIdSize)
+      nonce <- Arbitrary.arbitrary[Int]
+      interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
+      timestamp <- positiveLongGen
+      extensionHash <- genBytesList(Constants.ModifierIdSize)
+      votes <- genBytesList(5)
+    } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
   }*/
 
-  lazy val blockTransactionsGen: Gen[BlockTransactions] = for {
+  lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
-    txs <- Gen.nonEmptyListOf(anyoneCanSpendTransactionGen)
+    txs <- Gen.nonEmptyListOf(invalidAnyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
+
+  def validTransactionsGen(boxesStorage: BoxesStorage): Gen[AnyoneCanSpendTransaction] = {
+    val num = 100
+
+    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
+
+    for {
+      from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
+      to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
+    } yield AnyoneCanSpendTransaction(from, to)
+  }
 
   lazy val randomADProofsGen: Gen[ADProof] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
@@ -71,8 +119,7 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen
-    txs <- blockTransactionsGen
+    txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof), None)
-
 }

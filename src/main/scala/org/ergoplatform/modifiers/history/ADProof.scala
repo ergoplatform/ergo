@@ -45,12 +45,12 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
     * @param expectedHash - expected (declared by miner) hash. A hash after applying proof must be the same.
     * @return Success, if verification passed
     */
-  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox],
+  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox],
              previousHash: Digest,
              expectedHash: Digest): Try[Unit] = {
 
     def applyChanges(verifier: BatchAVLVerifier[Blake2b256Unsafe],
-                     changes: BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]) =
+                     changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]) =
       changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
           verifier.performOneOperation(ADProof.changeToMod(o))
@@ -88,11 +88,11 @@ object ADProof {
     * @param change - operation over a box
     * @return AVL+ tree modification
     */
-  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox]): Modification =
+  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]): Modification =
     change match {
-      case i: Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+      case i: Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
         Insert(i.box.id, i.box.bytes)
-      case r: Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =>
+      case r: Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
         Remove(r.boxId)
     }
 }

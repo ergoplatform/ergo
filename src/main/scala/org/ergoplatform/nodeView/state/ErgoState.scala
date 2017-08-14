@@ -23,11 +23,11 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
+trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
-  IState]] extends MinimalState[AnyoneCanSpendProposition,
+  IState]] extends MinimalState[AnyoneCanSpendProposition.type,
   AnyoneCanSpendNoncedBox,
   AnyoneCanSpendTransaction,
   ErgoPersistentModifier,
@@ -44,10 +44,10 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition,
   /**
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
-  def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox] =
-  BoxStateChanges[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](id)) ++
-      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition, AnyoneCanSpendNoncedBox](b))
+  def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
+  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
+      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
   })
 
   override def version: VersionTag

@@ -32,6 +32,8 @@ class PoPoWProofSpec extends PropSpec
     PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
   }
 
+  //todo: interlink check test
+
   /**
     * Constructs SPV Proof from KLS16 paper
     *

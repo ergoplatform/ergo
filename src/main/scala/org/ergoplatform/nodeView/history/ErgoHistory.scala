@@ -51,33 +51,47 @@ trait ErgoHistory
   protected val config: HistoryConfig
   protected val storage: LSMStore
 
-  lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
+  protected lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
+  override type NVCT = ErgoHistory
+
+  /**
+    * Is there's no history, even genesis block
+    */
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
-  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
-
-  //It is safe to call this function right after history initialization with genesis block
+  /**
+    * Header of best Header chain.
+    * It is safe to call this function right after history initialization with genesis block or PoPoWProof.
+    * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
+    * it) call bestFullBlockOpt.
+    */
   def bestHeader: Header = bestHeaderOpt.get
 
-  //None for an SPV mode, Some() for fullnode regime after initial bootstrap
+  /**
+    * Complete block of the best chain with transactions.
+    * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
+    */
   def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
     getFullBlock(typedModifierById[Header](bestFullBlockIdOpt.get).get)
   }.toOption
 
-  protected def getFullBlock(header: Header): ErgoFullBlock = {
-    val aDProofs = typedModifierById[ADProof](header.ADProofsId)
-    val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs, None)
-  }
-
+  /**
+    * Get ErgoPersistentModifier by it's id if it is in history
+    */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
 
+  /**
+    * Get ErgoPersistentModifier of type T by it's id if it is in history
+    */
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
-    case Some(m: T) => Some(m)
+    case Some(m: T@unchecked) if m.isInstanceOf[T] => Some(m)
     case _ => None
   }
 
+  /**
+    * Append ErgoPersistentModifier to History if valid
+    */
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).get
@@ -97,46 +111,8 @@ trait ErgoHistory
   }
 
   /**
-    * Constructs SPV Proof from KLS16 paper
-    *
-    * @param m - parameter "m" from the paper (minimal length of innerchain to include)
-    * @param k - parameter "k" from the paper (chain suffix)
-    * @return
+    * Report some modifier as invalid after application (e.g. it's invalid from State point of view)
     */
-  def constructPoPoWProof(m: Int, k: Int): Try[PoPoWProof] = Try {
-    val currentHeight = height
-    require(m > 0 && m < currentHeight, s"$m > 0 && $m < $currentHeight")
-    require(k > 0 && k < currentHeight, s"$k > 0 && $k < $currentHeight")
-
-    val suffix: HeaderChain = lastHeaders(k)
-    val firstSuffix = suffix.head
-
-
-    def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
-
-    @tailrec
-    def constructProof(i: Int): (Int, Seq[Header]) = {
-      @tailrec
-      def loop(acc: Seq[Header]): Seq[Header] = {
-        val interHeader = acc.head
-        if (interHeader.interlinks.length > i) {
-          val header = headerById(interHeader.interlinks(i))
-          loop(header +: acc)
-        } else {
-          acc.reverse.tail.reverse
-        }
-      }
-
-      val innerchain = loop(Seq(firstSuffix))
-      if (innerchain.length >= m) (i, innerchain) else constructProof(i - 1)
-    }
-
-    val (depth, innerchain) = constructProof(firstSuffix.interlinks.length)
-
-    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
-  }
-
-
   override def reportInvalid(modifier: ErgoPersistentModifier): ErgoHistory = {
     val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
       case h: Header => toDrop(h)
@@ -151,27 +127,22 @@ trait ErgoHistory
     this
   }
 
+  /**
+    * Id of best block to mine
+    */
   override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
 
+  /**
+    * Check, that it's possible to apply modifier to history
+    */
   override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
-  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
-    modifier match {
-      case m: Header =>
-        validate(m)
-      case m: BlockTransactions =>
-        validate(m)
-      case m: ADProof =>
-        validate(m)
-      case m: PoPoWProof =>
-        validate(m)
-      case m: UTXOSnapshotChunk =>
-        Failure(new NotImplementedError)
-      case m =>
-        Failure(new Error(s"Modifier $m have incorrect type"))
-    }
-  }
-
+  /**
+    * Whether another's node syncinfo shows that another node is ahead or behind ours
+    *
+    * @param info other's node sync info
+    * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
+    */
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
     //TODO check that work done is correct
     bestHeaderIdOpt match {
@@ -208,6 +179,11 @@ trait ErgoHistory
     }
   }
 
+  /**
+    * @param info other's node sync info
+    * @param size max return size
+    * @return Ids of modifiers, that node with info should download and apply to synchronize
+    */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     val ids = info.lastHeaderIds
     val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
@@ -230,12 +206,67 @@ trait ErgoHistory
     headerIds ++ fullBlockContinuation
   }.toOption
 
+  /**
+    *
+    * @param answer - whether it is answer to other node request or not
+    * @return Node ErgoSyncInfo
+    */
   override def syncInfo(answer: Boolean): ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(answer, Seq(), None)
   } else {
     ErgoSyncInfo(answer,
       lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id),
       bestFullBlockIdOpt)
+  }
+
+  /**
+    * Return last count headers from best headers chain if exist or chain up to genesis otherwise
+    */
+  def lastHeaders(count: Int): HeaderChain = headerChainBack(count, bestHeader, b => b.isGenesis)
+
+  private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+    modifier match {
+      case m: Header =>
+        validate(m)
+      case m: BlockTransactions =>
+        validate(m)
+      case m: ADProof =>
+        validate(m)
+      case m: PoPoWProof =>
+        validate(m)
+      case m: UTXOSnapshotChunk =>
+        Failure(new NotImplementedError)
+      case m =>
+        Failure(new Error(s"Modifier $m have incorrect type"))
+    }
+  }
+
+  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
+
+  protected def getFullBlock(header: Header): ErgoFullBlock = {
+    val aDProofs = typedModifierById[ADProof](header.ADProofsId)
+    val txs = typedModifierById[BlockTransactions](header.transactionsId).get
+    ErgoFullBlock(header, txs, aDProofs, None)
+  }
+
+  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
+    @tailrec
+    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
+      if (until(block) || (acc.length == count)) {
+        acc
+      } else {
+        modifierById(block.parentId) match {
+          case Some(parent: Header) =>
+            loop(parent, acc :+ parent)
+          case _ =>
+            log.warn(s"No parent header in history for block $block")
+            acc
+        }
+      }
+    }
+
+    if (isEmpty || (count == 0)) HeaderChain(Seq())
+    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
@@ -271,30 +302,6 @@ trait ErgoHistory
     val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
     (ourChain, commonBlockThenSuffixes)
   }
-
-  def lastHeaders(count: Int): HeaderChain = headerChainBack(count, bestHeader, b => b.isGenesis)
-
-  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
-    @tailrec
-    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
-      if (until(block) || (acc.length == count)) {
-        acc
-      } else {
-        modifierById(block.parentId) match {
-          case Some(parent: Header) =>
-            loop(parent, acc :+ parent)
-          case _ =>
-            log.warn(s"No parent header in history for block $block")
-            acc
-        }
-      }
-    }
-
-    if (isEmpty || (count == 0)) HeaderChain(Seq())
-    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
-  }
-
-  override type NVCT = ErgoHistory
 
 }
 
@@ -352,7 +359,9 @@ object ErgoHistory extends ScorexLogging {
           override protected val config: HistoryConfig = historyConfig
           override protected val storage: LSMStore = db
         }
-
+      case m =>
+        throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +
+          s"poPoWBootstrap==${m._1}")
     }
 
     if (history.isEmpty) {

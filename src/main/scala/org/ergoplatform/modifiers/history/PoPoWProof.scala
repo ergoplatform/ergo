@@ -85,7 +85,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
       val bytes = HeaderSerializer.bytesWithoutInterlinks(h)
       Bytes.concat(Shorts.toByteArray(bytes.length.toShort), bytes)
     })
-    val interchainBytes = scorex.core.utils.concatBytes(obj.innerchain.map { h =>
+    val innerchainBytes = scorex.core.utils.concatBytes(obj.innerchain.map { h =>
       val bytes = h.bytes
       Bytes.concat(Shorts.toByteArray(bytes.length.toShort), bytes)
     })
@@ -94,7 +94,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
       obj.suffix.head.bytes,
       suffixTailBytes,
       Shorts.toByteArray(obj.innerchain.length.toShort),
-      interchainBytes)
+      innerchainBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[PoPoWProof] = Try {
@@ -113,9 +113,9 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
       }
     }
     var (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
-    val interchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
+    val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
     index = index + 2
-    val innerchain = (0 until interchainLength) map { _ =>
+    val innerchain = (0 until innerchainLength) map { _ =>
       val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
       val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
       index = index + 2 + l

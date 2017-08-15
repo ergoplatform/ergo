@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
@@ -64,6 +64,8 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
 object ErgoState {
 
   type Digest = Array[Byte]
+
+  val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
   val initialDigest: Digest = Array.fill(32)(0: Byte)
   val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)

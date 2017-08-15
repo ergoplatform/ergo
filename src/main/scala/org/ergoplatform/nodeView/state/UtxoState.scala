@@ -10,13 +10,14 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.crypto.authds.avltree.AVLValue
-import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
+import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.{Failure, Success, Try}
 
 /**
   * Utxo set implementation.
+  *
   * @param rootHash
   */
 class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[UtxoState] {
@@ -24,11 +25,11 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
   implicit val hf = new Blake2b256Unsafe
 
   private val store = new LSMStore(dir)
-  private val storage = new VersionedIODBAVLStorage(store, NodeParameters(keySize = 32, valueSize = 48, labelSize = 32))
+  private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
+  protected val storage = new VersionedIODBAVLStorage(store, np)
 
-  private val prover = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(48))
-
-  protected val persistentProver = new PersistentBatchAVLProver(prover, storage)
+  protected val persistentProver =
+    new PersistentBatchAVLProver(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage)
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -75,7 +76,8 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
           }
           assert(fb.header.stateRoot.sameElements(persistentProver.digest), "digest after txs application is wrong")
 
-          val proofBytes = prover.generateProof()
+          //todo: persistentProver.prover().generateProof(), or implement persistentProver.generateProof()
+          val proofBytes: Array[Byte] = ???
           val proofHash = hf(proofBytes)
           assert(fb.header.ADProofsRoot.sameElements(proofHash))
           new UtxoState(persistentProver.digest, dir)
@@ -85,4 +87,15 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
         log.info(s"Unhandled modifier: $a")
         Failure(new Exception("unknown modifier"))
     }
+}
+
+object UtxoState {
+  def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
+    val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)))
+
+    new UtxoState(p.digest, dir) {
+      override val persistentProver = new PersistentBatchAVLProver(p, storage)
+    }
+  }
 }

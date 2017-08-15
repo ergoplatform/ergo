@@ -2,16 +2,19 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{Header, HistoryModifierSerializer}
+import org.ergoplatform.mining.difficulty.{DifficultyCalculator, LinearDifficultyControl}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -20,6 +23,8 @@ import scala.util.{Failure, Success, Try}
 trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig
+
+  protected lazy val difficultyCalculator: DifficultyCalculator = new LinearDifficultyControl(config.blockInterval)
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -89,7 +94,6 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def validate(m: Header): Try[Unit] = {
     lazy val parentOpt = historyStorage.modifierById(m.parentId)
-    lazy val diff = Algos.blockIdDifficulty(m.powHash)
     if (m.isGenesis && bestHeaderIdOpt.isEmpty) {
       Success()
     } else if (m.isGenesis) {
@@ -98,8 +102,12 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Parent header is no defined"))
     } else if (historyStorage.contains(m.id)) {
       Failure(new Error("Header is already in history"))
-    } else if (diff < expectedDifficulty(m)) {
-      Failure(new Error(s"Block difficulty $diff is less than required ${expectedDifficulty(m)}"))
+    } else if (m.realDifficulty < m.requiredDifficulty) {
+      Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
+    } else if (m.requiredDifficulty != expectedDifficulty(m)) {
+      //TODO
+      //      Failure(new Error(s"Block required difficulty ${m.realDifficulty} is not equal to expected ${expectedDifficulty(m)}"))
+      Success()
     } else {
       //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS
@@ -117,7 +125,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.db.get(headerScoreKey(id)).map(b => BigInt(b.data))
+  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.db.get(headerScoreKey(id))
+    .map(b => BigInt(b.data))
 
   /**
     * @param height - block height
@@ -129,6 +138,35 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
     .map(_.data).getOrElse(Array()).grouped(32).toSeq
 
+  //TODO ensure it is from the best chain
+  protected def bestChainHeaderIdsAtHeight(height: Int): Option[ModifierId] = headerIdsAtHeight(height).lastOption
+
+  /**
+    * @param limit       - maximum length of resulting HeaderChain
+    * @param startHeader - header to start
+    * @param until       - stop condition
+    * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
+    */
+  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
+    @tailrec
+    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
+      if (until(block) || (acc.length == limit)) {
+        acc
+      } else {
+        typedModifierById[Header](block.parentId) match {
+          case Some(parent: Header) =>
+            loop(parent, acc :+ parent)
+          case _ =>
+            log.warn(s"No parent header in history for block $block")
+            acc
+        }
+      }
+    }
+
+    if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
+    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+  }
+
   protected def headerDiffKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
 
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
@@ -138,11 +176,13 @@ trait HeadersProcessor extends ScorexLogging {
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    val requiredDifficulty: BigInt = expectedDifficulty(h)
+    val requiredDifficulty: Difficulty = expectedDifficulty(h)
     if (h.isGenesis) {
+      val genesisHeight = 1
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
-        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(1))),
+        (heightIdsKey(genesisHeight), ByteArrayWrapper(h.id)),
+        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(genesisHeight))),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
         (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
@@ -165,18 +205,19 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  private val difficultyCalculator = new DifficultyCalculator
 
-  private def expectedDifficulty(h: Header): BigInt = {
+  private def expectedDifficulty(h: Header): Difficulty = {
     if (h.isGenesis) {
-      BigInt(Algos.initialDifficulty)
-    } else if (difficultyCalculator.recalculationRequired(heightOf(h.parentId).get)) {
-      ???
+      Constants.InitialDifficulty
     } else {
-      difficultyAt(h.parentId).get
+      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(h.parentId).get + 1)
+      val previousDifficulties = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
+        .flatMap(id => difficultyAt(id)).map(difficulty => height -> difficulty))
+      difficultyCalculator.calculate(previousDifficulties)
     }
   }
 
-  private def difficultyAt(id: ModifierId): Option[BigInt] = historyStorage.db.get(headerDiffKey(id)).map(b => BigInt(b.data))
+  private def difficultyAt(id: ModifierId): Option[Difficulty] = historyStorage.db.get(headerDiffKey(id))
+    .map(b => BigInt(b.data))
 
 }

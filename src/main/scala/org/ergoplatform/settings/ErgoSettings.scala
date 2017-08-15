@@ -2,6 +2,8 @@ package org.ergoplatform.settings
 
 import scorex.core.settings.Settings
 
+import scala.concurrent.duration._
+
 trait ErgoSettings extends Settings {
   lazy val dataDir: String = dataDirOpt.getOrElse("/tmp/ergo")
   //todo read all from settings file
@@ -28,4 +30,8 @@ trait ErgoSettings extends Settings {
     */
   val minimalSuffix: Int = 10
 
+  /**
+    * Desired time interval between blocks
+    */
+  val blockInterval: FiniteDuration = 1.minute
 }

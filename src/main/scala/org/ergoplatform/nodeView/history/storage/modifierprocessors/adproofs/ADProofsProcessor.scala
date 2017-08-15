@@ -14,10 +14,22 @@ trait ADProofsProcessor {
     */
   protected val adState: Boolean
 
-  def process(m: ADProof): ProgressInfo[ErgoPersistentModifier]
+  /**
+    * @param m - modifier to process
+    * @return ProgressInfo - info required for State to be consistent with History
+    */
+  protected def process(m: ADProof): ProgressInfo[ErgoPersistentModifier]
 
-  def toDrop(modifier: ADProof): Seq[ByteArrayWrapper]
+  /**
+    * @param modifier - modifier we're going to remove from history
+    * @return ids to remove, new data to apply
+    */
+  protected def toDrop(modifier: ADProof): Seq[ByteArrayWrapper]
 
-  def validate(m: ADProof): Try[Unit]
+  /**
+    * @param m - ADProof to validate
+    * @return Succes() if ADProof is valid from History point of view, Failure(error) otherwise
+    */
+  protected def validate(m: ADProof): Try[Unit]
 }
 

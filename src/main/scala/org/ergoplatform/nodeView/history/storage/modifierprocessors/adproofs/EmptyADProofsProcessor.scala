@@ -13,9 +13,9 @@ import scala.util.{Failure, Try}
 trait EmptyADProofsProcessor extends ADProofsProcessor {
   protected val adState: Boolean = false
 
-  override def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq(), Seq())
+  override protected def process(m: ADProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq(), Seq())
 
-  override def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq()
+  override protected def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq()
 
-  override def validate(m: ADProof): Try[Unit] = Failure(new Error("Regime that do not process ADProofs"))
+  override protected def validate(m: ADProof): Try[Unit] = Failure(new Error("Regime that do not process ADProofs"))
 }

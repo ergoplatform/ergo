@@ -2,12 +2,9 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import scorex.testkit.TestkitHelpers
-
-import scala.reflect.io.Path
 
 
 class UtxoStateSpecification extends PropSpec
@@ -15,14 +12,7 @@ class UtxoStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
-  with TestkitHelpers {
-
-  def withDir(dirName: String)(action: File => Any): Unit = {
-    val dir = new File(dirName)
-    dir.mkdirs()
-    action(dir)
-    Path.apply(dir).deleteRecursively()
-  }
+  with ErgoTestHelpers {
 
   property("fromBoxHolder") {
     forAll(boxesStorageGen){ bh =>

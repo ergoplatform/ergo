@@ -20,7 +20,18 @@ class UtxoStateSpecification extends PropSpec
     val dir = new File(dirName)
     dir.mkdirs()
     action(dir)
-    dir.delete()
+    dir.delete() //todo: recursive deletion
+  }
+
+  property("fromBoxHolder") {
+    forAll(boxesStorageGen){ bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.take(10)._1.foreach {box =>
+          us.boxById(box.id) shouldBe Some(box)
+        }
+      }
+    }
   }
 
   property("validate() - valid block") {
@@ -29,7 +40,7 @@ class UtxoStateSpecification extends PropSpec
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      withDir("/tmp/utxotest2") { dir =>
+      withDir("/tmp/utxotest3") { dir =>
         val state = new UtxoState(Array.fill(32)(0: Byte), dir)
         state.validate(b).isFailure shouldBe true
       }
@@ -41,7 +52,7 @@ class UtxoStateSpecification extends PropSpec
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      withDir("/tmp/utxotest4") { dir =>
+      withDir("/tmp/utxotest5") { dir =>
         val state = new UtxoState(Array.fill(32)(0: Byte), dir)
         state.applyModifier(b).isFailure shouldBe true
       }

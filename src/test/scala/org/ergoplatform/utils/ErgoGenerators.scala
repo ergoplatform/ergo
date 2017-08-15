@@ -26,7 +26,7 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesStorageGen: Gen[BoxHolder] = Gen.listOfN(1000000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesStorageGen: Gen[BoxHolder] = Gen.listOfN(50000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))

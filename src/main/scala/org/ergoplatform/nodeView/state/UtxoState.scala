@@ -59,29 +59,33 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   override def validate(mod: ErgoPersistentModifier): Try[Unit] =
     Failure(new Exception("validate() is not implemented for UtxoState as it requires for costly provers' rollback"))
 
+  //todo: don't use assert
+  protected def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction],
+                                  expectedDigest: Digest) = Try {
+
+    transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
+
+    val mods = boxChanges(transactions).operations.map(ADProof.changeToMod)
+    mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
+      t.flatMap(_ => {
+        persistentProver.performOneOperation(m)
+      })
+    }.ensuring(_.isSuccess)
+
+    assert(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
+  }
+
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] =
     mod match {
       case fb: ErgoFullBlock =>
-        Try {
-          assert(fb.parentId.sameElements(version))
-
-          val transactions = fb.blockTransactions.txs
-
-          transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
-
-          val mods = boxChanges(transactions).operations.map(ADProof.changeToMod)
-          mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
-            t.flatMap(_ => {
-              persistentProver.performOneOperation(m)
-            })
+        Try(assert(fb.parentId.sameElements(version))).flatMap { _ =>
+          checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
+            val proofBytes: Array[Byte] = persistentProver.generateProof
+            val proofHash = hf(proofBytes)
+            assert(fb.header.ADProofsRoot.sameElements(proofHash))
+            new UtxoState(dir)
           }
-          assert(fb.header.stateRoot.sameElements(persistentProver.digest), "digest after txs application is wrong")
-
-          val proofBytes: Array[Byte] = persistentProver.generateProof
-          val proofHash = hf(proofBytes)
-          assert(fb.header.ADProofsRoot.sameElements(proofHash))
-          new UtxoState(dir)
         }
 
       case a: Any =>

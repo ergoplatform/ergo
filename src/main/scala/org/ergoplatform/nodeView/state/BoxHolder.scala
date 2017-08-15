@@ -12,21 +12,21 @@ import scala.collection.immutable.SortedMap
   *
   * @param boxes - immutable sorted collection of boxes (organized as box.key -> box map)
   */
-case class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
+class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
 
   def removeBoxes(ids: Seq[ByteArrayWrapper]): Unit =
-    BoxHolder(boxes.filterKeys(k => !ids.contains(k)))
+    new BoxHolder(boxes.filterKeys(k => !ids.contains(k)))
 
   def addBoxes(bs: Seq[AnyoneCanSpendNoncedBox]): BoxHolder =
-    BoxHolder(boxes ++ bs.map(b => ByteArrayWrapper(b.id) -> b))
+    new BoxHolder(boxes ++ bs.map(b => ByteArrayWrapper(b.id) -> b))
 
   def take(howMany: Int): (Seq[AnyoneCanSpendNoncedBox], BoxHolder) =
-    (boxes.take(howMany).values.toSeq, BoxHolder(boxes.drop(howMany)))
+    (boxes.take(howMany).values.toSeq, new BoxHolder(boxes.drop(howMany)))
 
   def sortedBoxes: Set[AnyoneCanSpendNoncedBox] = boxes.keySet.map(k => boxes(k))
 }
 
 object BoxHolder {
   def apply(initialBoxes: Seq[AnyoneCanSpendNoncedBox]): BoxHolder =
-    BoxHolder(SortedMap(initialBoxes.map(b => ByteArrayWrapper(b.id) -> b): _*))
+    new BoxHolder(SortedMap(initialBoxes.map(b => ByteArrayWrapper(b.id) -> b): _*))
 }

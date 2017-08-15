@@ -7,6 +7,8 @@ import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.testkit.TestkitHelpers
 
+import scala.reflect.io.Path
+
 
 class UtxoStateSpecification extends PropSpec
   with PropertyChecks
@@ -16,18 +18,17 @@ class UtxoStateSpecification extends PropSpec
   with TestkitHelpers {
 
   def withDir(dirName: String)(action: File => Any): Unit = {
-
     val dir = new File(dirName)
     dir.mkdirs()
     action(dir)
-    dir.delete() //todo: recursive deletion
+    Path.apply(dir).deleteRecursively()
   }
 
   property("fromBoxHolder") {
     forAll(boxesStorageGen){ bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
-        bh.take(10)._1.foreach {box =>
+        bh.take(1000)._1.foreach {box =>
           us.boxById(box.id) shouldBe Some(box)
         }
       }

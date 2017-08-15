@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.state
 
-import java.io.File
-
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -32,7 +30,7 @@ class UtxoStateSpecification extends PropSpec
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       withDir("/tmp/utxotest3") { dir =>
-        val state = new UtxoState(Array.fill(32)(0: Byte), dir)
+        val state = new UtxoState(dir)
         state.validate(b).isFailure shouldBe true
       }
     }
@@ -44,10 +42,9 @@ class UtxoStateSpecification extends PropSpec
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       withDir("/tmp/utxotest5") { dir =>
-        val state = new UtxoState(Array.fill(32)(0: Byte), dir)
+        val state = new UtxoState(dir)
         state.applyModifier(b).isFailure shouldBe true
       }
     }
   }
 }
-

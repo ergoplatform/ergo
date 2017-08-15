@@ -11,9 +11,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.{Base16, Base64}
-
-import scala.collection.immutable
+import scorex.crypto.encode.Base16
 import scala.util.Try
 
 
@@ -92,10 +90,15 @@ object ErgoState extends ScorexLogging {
   val initialDigest: Digest = Array.fill(32)(0: Byte)
   val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)
 
-  def readOrGenerate(settings: ErgoSettings) = {
+  def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
     val stateDir = new File(s"${settings.dataDir}/state")
     stateDir.mkdirs()
-    //TODO read from file if state already exists
-    if (settings.ADState) new DigestState(initialDigest) else new UtxoState(initialDigest, stateDir)
+
+    //todo: read digest state from the database
+    if(stateDir.listFiles().isEmpty) {
+      if (settings.ADState) generateGenesisDigestState(stateDir) else generateGenesisUtxoState(stateDir)
+    } else {
+      if (settings.ADState) ??? else new UtxoState(stateDir)
+    }
   }
 }

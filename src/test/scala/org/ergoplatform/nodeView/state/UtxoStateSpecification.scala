@@ -1,11 +1,8 @@
 package org.ergoplatform.nodeView.state
 
-import java.io.File
-
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import scorex.testkit.TestkitHelpers
 
 
 class UtxoStateSpecification extends PropSpec
@@ -13,14 +10,17 @@ class UtxoStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
-  with TestkitHelpers {
+  with ErgoTestHelpers {
 
-  def withDir(dirName: String)(action: File => Any): Unit = {
-
-    val dir = new File(dirName)
-    dir.mkdirs()
-    action(dir)
-    dir.delete()
+  property("fromBoxHolder") {
+    forAll(boxesStorageGen){ bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.take(1000)._1.foreach {box =>
+          us.boxById(box.id) shouldBe Some(box)
+        }
+      }
+    }
   }
 
   property("validate() - valid block") {
@@ -29,8 +29,8 @@ class UtxoStateSpecification extends PropSpec
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      withDir("/tmp/utxotest2") { dir =>
-        val state = new UtxoState(Array.fill(32)(0: Byte), dir)
+      withDir("/tmp/utxotest3") { dir =>
+        val state = new UtxoState(dir)
         state.validate(b).isFailure shouldBe true
       }
     }
@@ -41,11 +41,10 @@ class UtxoStateSpecification extends PropSpec
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      withDir("/tmp/utxotest4") { dir =>
-        val state = new UtxoState(Array.fill(32)(0: Byte), dir)
+      withDir("/tmp/utxotest5") { dir =>
+        val state = new UtxoState(dir)
         state.applyModifier(b).isFailure shouldBe true
       }
     }
   }
 }
-

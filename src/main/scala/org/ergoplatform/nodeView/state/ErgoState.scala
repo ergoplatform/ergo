@@ -5,13 +5,13 @@ import java.io.File
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
-
+import scorex.crypto.encode.Base16
 import scala.util.Try
 
 
@@ -45,10 +45,10 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
   def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-  })
+    BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
+        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
+    })
 
   override def version: VersionTag
 
@@ -61,17 +61,44 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
   override type NVCT = this.type
 }
 
-object ErgoState {
+object ErgoState extends ScorexLogging {
 
   type Digest = Array[Byte]
+
+  val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
+
+  def generateGenesisUtxoState(stateDir: File): UtxoState = {
+    log.info("Generating genesis UTXO state")
+    lazy val genesisSeed = Long.MaxValue
+    lazy val rndGen = new scala.util.Random(genesisSeed)
+    lazy val initialBoxesNumber = 1000000
+
+    lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
+      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 100))
+
+    val bh = BoxHolder(initialBoxes)
+
+    UtxoState.fromBoxHolder(bh, stateDir).ensuring(_ => {
+      log.info("Genesis UTXO state generated"); true
+    })
+  }
+
+  def generateGenesisDigestState(stateDir: File): DigestState = {
+    new DigestState(Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918"))
+  }
 
   val initialDigest: Digest = Array.fill(32)(0: Byte)
   val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)
 
-  def readOrGenerate(settings: ErgoSettings) = {
+  def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
     val stateDir = new File(s"${settings.dataDir}/state")
     stateDir.mkdirs()
-    //TODO read from file if state already exists
-    if (settings.ADState) new DigestState(initialDigest) else new UtxoState(initialDigest, stateDir)
+
+    //todo: read digest state from the database
+    if(stateDir.listFiles().isEmpty) {
+      if (settings.ADState) generateGenesisDigestState(stateDir) else generateGenesisUtxoState(stateDir)
+    } else {
+      if (settings.ADState) ??? else new UtxoState(stateDir)
+    }
   }
 }

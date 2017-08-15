@@ -1,9 +1,8 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import scorex.testkit.TestkitHelpers
 
 
 class DigestStateSpecification extends PropSpec
@@ -11,7 +10,7 @@ class DigestStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
-  with TestkitHelpers {
+  with ErgoTestHelpers {
 
   property("validate() - valid block") {
 

@@ -6,29 +6,30 @@ import io.iohk.iodb.LSMStore
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.crypto.authds.avltree.AVLValue
-import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
+import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.{Failure, Success, Try}
 
 /**
   * Utxo set implementation.
-  * @param rootHash
+  *
+  * @param dir - folder where persistent UTXO set authenticated with the help of an AVL+ tree is located
   */
-class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[UtxoState] {
+class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
   private val store = new LSMStore(dir)
-  private val storage = new VersionedIODBAVLStorage(store, NodeParameters(keySize = 32, valueSize = 48, labelSize = 32))
+  private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
+  protected val storage = new VersionedIODBAVLStorage(store, np)
 
-  private val prover = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(48))
-
-  protected val persistentProver = new PersistentBatchAVLProver(prover, storage)
+  protected lazy val persistentProver =
+    new PersistentBatchAVLProver(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage)
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -41,14 +42,16 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
     txs.flatMap(_.id).toArray
 
+  override val rootHash: Digest = persistentProver.digest
+
   //todo: the same question as with DigestState.version
   override def version: VersionTag = rootHash
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     p.rollback(version).map { _ =>
-      new UtxoState(version, dir) {
-        override protected val persistentProver = p
+      new UtxoState(dir) {
+        override protected lazy val persistentProver = p
       }
     }
   }
@@ -75,14 +78,33 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
           }
           assert(fb.header.stateRoot.sameElements(persistentProver.digest), "digest after txs application is wrong")
 
-          val proofBytes = prover.generateProof()
+          val proofBytes: Array[Byte] = persistentProver.generateProof
           val proofHash = hf(proofBytes)
           assert(fb.header.ADProofsRoot.sameElements(proofHash))
-          new UtxoState(persistentProver.digest, dir)
+          new UtxoState(dir)
         }
 
       case a: Any =>
         log.info(s"Unhandled modifier: $a")
         Failure(new Exception("unknown modifier"))
     }
+
+  def boxById(id: Digest): Option[AnyoneCanSpendNoncedBox] =
+    persistentProver
+      .unauthenticatedLookup(id)
+      .map(AnyoneCanSpendNoncedBoxSerializer.parseBytes)
+      .flatMap(_.toOption)
+}
+
+object UtxoState {
+  def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
+    val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
+
+    new UtxoState(dir) {
+      override protected lazy val persistentProver = new PersistentBatchAVLProver(p, storage)
+
+      println(storage.version.mkString)
+    }
+  }
 }

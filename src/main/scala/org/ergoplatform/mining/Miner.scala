@@ -34,7 +34,8 @@ object Miner {
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextInt
-      val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
+      val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
+        difficulty, extensionHash, votes)
       if (correctWorkDone(header.id, difficulty)) header
       else generateHeader()
     }

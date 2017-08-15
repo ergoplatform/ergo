@@ -4,17 +4,17 @@ import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
 
 import scala.concurrent.duration.FiniteDuration
 
-class LinearDifficultyControl(val desiredInterval: FiniteDuration) extends DifficultyCalculator {
+class LinearDifficultyControl(val desiredInterval: FiniteDuration,
+                              epochLength: Int) extends DifficultyCalculator {
 
-  private val RecalculationPeriod: Int = 100
   private val UseLastEpochs: Int = 4
 
   /**
     * @return heights of previous headers required for block recalculation
     */
   override def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
-    if (height % RecalculationPeriod == 0 && height > RecalculationPeriod * UseLastEpochs) {
-      (0 until UseLastEpochs).map(i => height - i * RecalculationPeriod - RecalculationPeriod / 2)
+    if (height % epochLength == 0 && height > epochLength * UseLastEpochs) {
+      (0 until UseLastEpochs).map(i => height - i * epochLength - epochLength / 2)
     } else {
       Seq(height - 1)
     }
@@ -28,7 +28,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration) extends Diffi
     */
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
     if (previousDifficulties.size >= UseLastEpochs) {
-      interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + RecalculationPeriod)
+      interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + epochLength)
     } else previousDifficulties.maxBy(_._1)._2
   }
 

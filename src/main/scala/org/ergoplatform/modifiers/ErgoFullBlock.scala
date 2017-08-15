@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Constants._
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -50,6 +50,7 @@ object ErgoFullBlock {
       BlockTransactions.rootHash(Seq(genesisTx.id)),
       genesisTimestamp,
       0,
+      Constants.InitialDifficulty,
       Array.fill(32)(0.toByte),
       Array.fill(5)(0.toByte)
     )

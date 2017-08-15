@@ -297,7 +297,8 @@ object ErgoHistory extends ScorexLogging {
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval)
+    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval,
+      settings.epochLength)
 
     //TODO make easier?
     val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {

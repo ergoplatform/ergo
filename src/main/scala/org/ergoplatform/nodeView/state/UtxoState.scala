@@ -18,9 +18,9 @@ import scala.util.{Failure, Success, Try}
 /**
   * Utxo set implementation.
   *
-  * @param rootHash
+  * @param dir - folder where persistent UTXO set authenticated with the help of an AVL+ tree is located
   */
-class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[UtxoState] {
+class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
@@ -42,13 +42,15 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
     txs.flatMap(_.id).toArray
 
+  override val rootHash: Digest = persistentProver.digest
+
   //todo: the same question as with DigestState.version
   override def version: VersionTag = rootHash
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     p.rollback(version).map { _ =>
-      new UtxoState(version, dir) {
+      new UtxoState(dir) {
         override protected lazy val persistentProver = p
       }
     }
@@ -79,7 +81,7 @@ class UtxoState(override val rootHash: Digest, dir: File) extends ErgoState[Utxo
           val proofBytes: Array[Byte] = persistentProver.generateProof
           val proofHash = hf(proofBytes)
           assert(fb.header.ADProofsRoot.sameElements(proofHash))
-          new UtxoState(persistentProver.digest, dir)
+          new UtxoState(dir)
         }
 
       case a: Any =>
@@ -99,7 +101,7 @@ object UtxoState {
     val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
 
-    new UtxoState(p.digest, dir) {
+    new UtxoState(dir) {
       override protected lazy val persistentProver = new PersistentBatchAVLProver(p, storage)
 
       println(storage.version.mkString)

@@ -1,9 +1,11 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+
 
 object Constants {
-  val hashLength = 32
-  val MaxTarget = BigInt(1, Array.fill(hashLength)((-1).toByte))
-  val InitialDifficulty = BigInt(1)
+  val hashLength: Int = 32
+  val MaxTarget: BigInt = BigInt(1, Array.fill(hashLength)((-1).toByte))
+  val InitialDifficulty: Difficulty = BigInt(1)
   val ModifierIdSize: Int = hashLength
 }

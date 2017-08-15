@@ -249,26 +249,6 @@ trait ErgoHistory
     ErgoFullBlock(header, txs, aDProofs, None)
   }
 
-  private def headerChainBack(count: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
-    @tailrec
-    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
-      if (until(block) || (acc.length == count)) {
-        acc
-      } else {
-        modifierById(block.parentId) match {
-          case Some(parent: Header) =>
-            loop(parent, acc :+ parent)
-          case _ =>
-            log.warn(s"No parent header in history for block $block")
-            acc
-        }
-      }
-    }
-
-    if (isEmpty || (count == 0)) HeaderChain(Seq())
-    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
-  }
-
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
     val otherHeightOpt = heightOf(header2.id)
@@ -307,13 +287,17 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
+  type Height = Int
+  type Score = BigInt
+  type Difficulty = BigInt
+
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
     val dataDir = settings.dataDir
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix)
+    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval)
 
     //TODO make easier?
     val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {

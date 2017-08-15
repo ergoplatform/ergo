@@ -4,10 +4,10 @@ import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
-import scorex.core.block.Block
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
@@ -21,7 +21,7 @@ case class Header(version: Version,
                   ADProofsRoot: Array[Byte],
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
-                  timestamp: Block.Timestamp,
+                  timestamp: Timestamp,
                   nonce: Long,
                   extensionHash: Array[Byte],
                   votes: Array[Byte]) extends ErgoPersistentModifier {
@@ -32,7 +32,10 @@ case class Header(version: Version,
 
   lazy val powHash: Digest = Algos.miningHash(id)
 
-  lazy val realDifficulty: BigInt = Algos.blockIdDifficulty(id)
+  lazy val realDifficulty: Difficulty = Algos.blockIdDifficulty(id)
+
+  //TODO get from extension
+  lazy val requiredDifficulty: Difficulty = realDifficulty
 
   lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
 

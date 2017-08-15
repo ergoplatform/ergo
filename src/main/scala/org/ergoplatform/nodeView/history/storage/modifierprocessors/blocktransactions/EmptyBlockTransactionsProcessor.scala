@@ -12,11 +12,12 @@ import scala.util.{Failure, Try}
   */
 trait EmptyBlockTransactionsProcessor extends BlockTransactionsProcessor {
 
-  def toDrop(modifier: BlockTransactions): Seq[ByteArrayWrapper] = Seq()
+  override protected def toDrop(modifier: BlockTransactions): Seq[ByteArrayWrapper] = Seq()
 
-  override def validate(m: BlockTransactions): Try[Unit] =
+  override protected def validate(m: BlockTransactions): Try[Unit] =
     Failure(new Error("Regime that do not process BlockTransactions"))
 
-  override def process(m: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq(), Seq())
+  override protected def process(m: BlockTransactions): ProgressInfo[ErgoPersistentModifier] =
+    ProgressInfo(None, Seq(), Seq())
 }
 

@@ -10,7 +10,7 @@ import scala.util.Try
 trait ADProofsProcessor {
 
   /**
-    *  Roothash only is kept in state
+    *  Root hash only is kept in state
     */
   protected val adState: Boolean
 
@@ -28,7 +28,7 @@ trait ADProofsProcessor {
 
   /**
     * @param m - ADProof to validate
-    * @return Succes() if ADProof is valid from History point of view, Failure(error) otherwise
+    * @return Success() if ADProof is valid from History point of view, Failure(error) otherwise
     */
   protected def validate(m: ADProof): Try[Unit]
 }

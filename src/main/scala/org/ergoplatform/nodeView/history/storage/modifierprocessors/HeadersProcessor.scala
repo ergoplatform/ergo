@@ -90,7 +90,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   /**
     * @param m - header to validate
-    * @return Succes() if header is valid, Failure(error) otherwise
+    * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(m: Header): Try[Unit] = {
     lazy val parentOpt = historyStorage.modifierById(m.parentId)

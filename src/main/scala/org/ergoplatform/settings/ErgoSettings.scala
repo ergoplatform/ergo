@@ -9,7 +9,7 @@ trait ErgoSettings extends Settings {
   //todo read all from settings file
 
   /**
-    * Keep state roothash only and validate transactions via ADProofs
+    * Keep state root hash only and validate transactions via ADProofs
     */
   val ADState: Boolean = false
   /**
@@ -22,7 +22,7 @@ trait ErgoSettings extends Settings {
     */
   val blocksToKeep: Int = 10
   /**
-    * Download PoPoW proof on node bootstrtap
+    * Download PoPoW proof on node bootstrap
     */
   val poPoWBootstrap: Boolean = false
   /**

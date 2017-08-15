@@ -21,7 +21,7 @@ trait BlockTransactionsProcessor extends ScorexLogging {
 
   /**
     * @param m - BlockTransactions to validate
-    * @return Succes() if BlockTransactions is valid from History point of view, Failure(error) otherwise
+    * @return Success() if BlockTransactions is valid from History point of view, Failure(error) otherwise
     */
   protected def validate(m: BlockTransactions): Try[Unit]
 

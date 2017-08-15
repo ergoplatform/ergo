@@ -34,4 +34,9 @@ trait ErgoSettings extends Settings {
     * Desired time interval between blocks
     */
   val blockInterval: FiniteDuration = 1.minute
+
+  /**
+    * EpochLength
+    */
+  val epochLength: Int = 100
 }

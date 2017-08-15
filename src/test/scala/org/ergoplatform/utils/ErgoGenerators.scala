@@ -72,11 +72,13 @@ trait ErgoGenerators extends CoreGenerators {
     adRoot <- genBytesList(Constants.ModifierIdSize)
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
+    requiredDifficulty <- Arbitrary.arbitrary[Int]
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- genBytesList(Constants.ModifierIdSize)
     votes <- genBytesList(5)
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce,
+    requiredDifficulty, extensionHash, votes)
 
 /*
 todo: finish

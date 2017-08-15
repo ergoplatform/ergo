@@ -52,6 +52,7 @@ trait HistorySpecification extends PropSpec
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
+      override val epochLength: Int = Int.MaxValue
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
       override lazy val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"

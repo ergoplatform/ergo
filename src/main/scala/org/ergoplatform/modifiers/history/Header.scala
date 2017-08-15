@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Longs}
+import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
@@ -23,6 +23,7 @@ case class Header(version: Version,
                   transactionsRoot: Array[Byte],
                   timestamp: Timestamp,
                   nonce: Long,
+                  requiredDifficulty: Difficulty, //TODO think how to store it
                   extensionHash: Array[Byte],
                   votes: Array[Byte]) extends ErgoPersistentModifier {
 
@@ -33,9 +34,6 @@ case class Header(version: Version,
   lazy val powHash: Digest = Algos.miningHash(id)
 
   lazy val realDifficulty: Difficulty = Algos.blockIdDifficulty(id)
-
-  //TODO get from extension
-  lazy val requiredDifficulty: Difficulty = realDifficulty
 
   lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
 
@@ -70,11 +68,19 @@ object Header {
 
 
 object HeaderSerializer extends Serializer[Header] {
-  val BytesWithoutInterlinksLength = 108
+
+  private object RequiredDifficultySerializer extends Serializer[Difficulty] {
+
+    //TODO implement compact algorithm from bitcoin
+
+    override def toBytes(obj: Difficulty): Array[Version] = Ints.toByteArray((obj % Int.MaxValue).toInt)
+
+    override def parseBytes(bytes: Array[Version]): Try[Difficulty] = Try(Ints.fromByteArray(bytes))
+  }
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
     h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash,
-    h.votes)
+    h.votes, RequiredDifficultySerializer.toBytes(h.requiredDifficulty))
 
   override def toBytes(h: Header): Array[Version] = {
 
@@ -100,6 +106,7 @@ object HeaderSerializer extends Serializer[Header] {
     val nonce = Longs.fromByteArray(bytes.slice(137, 145))
     val extensionHash = bytes.slice(145, 177)
     val votes = bytes.slice(177, 182)
+    val requiredDifficulty = RequiredDifficultySerializer.parseBytes(bytes.slice(182, 186)).get
 
     @tailrec
     def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -111,8 +118,10 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinks = parseInterlinks(182, Seq())
+    val interlinks = parseInterlinks(186, Seq())
 
-    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce, extensionHash, votes)
+
+    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
+      requiredDifficulty, extensionHash, votes)
   }
 }

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.mining.difficulty.{DifficultyCalculator, LinearDifficultyControl}
+import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -24,7 +24,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig
 
-  protected lazy val difficultyCalculator: DifficultyCalculator = new LinearDifficultyControl(config.blockInterval)
+  protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -99,7 +99,7 @@ trait HeadersProcessor extends ScorexLogging {
     } else if (m.isGenesis) {
       Failure(new Error("Trying to append genesis block to non-empty history"))
     } else if (parentOpt.isEmpty) {
-      Failure(new Error("Parent header is no defined"))
+      Failure(new Error(s"Parent header with id ${m.parentId} s not defined"))
     } else if (historyStorage.contains(m.id)) {
       Failure(new Error("Header is already in history"))
     } else if (m.realDifficulty < m.requiredDifficulty) {

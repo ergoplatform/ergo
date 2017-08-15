@@ -47,10 +47,10 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
   def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-  })
+    BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
+        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
+    })
 
   override def version: VersionTag
 
@@ -63,7 +63,7 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
   override type NVCT = this.type
 }
 
-object ErgoState extends ScorexLogging{
+object ErgoState extends ScorexLogging {
 
   type Digest = Array[Byte]
 
@@ -80,7 +80,9 @@ object ErgoState extends ScorexLogging{
 
     val bh = BoxHolder(initialBoxes)
 
-    UtxoState.fromBoxHolder(bh, stateDir).ensuring(_ => {log.info("Genesis UTXO state generated"); true})
+    UtxoState.fromBoxHolder(bh, stateDir).ensuring(_ => {
+      log.info("Genesis UTXO state generated"); true
+    })
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {

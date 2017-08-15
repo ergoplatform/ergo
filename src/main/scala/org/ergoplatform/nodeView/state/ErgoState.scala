@@ -11,7 +11,9 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.encode.{Base16, Base64}
 
+import scala.collection.immutable
 import scala.util.Try
 
 
@@ -61,11 +63,29 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
   override type NVCT = this.type
 }
 
-object ErgoState {
+object ErgoState extends ScorexLogging{
 
   type Digest = Array[Byte]
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
+
+  def generateGenesisUtxoState(stateDir: File): UtxoState = {
+    log.info("Generating genesis UTXO state")
+    lazy val genesisSeed = Long.MaxValue
+    lazy val rndGen = new scala.util.Random(genesisSeed)
+    lazy val initialBoxesNumber = 1000000
+
+    lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
+      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 100))
+
+    val bh = BoxHolder(initialBoxes)
+
+    UtxoState.fromBoxHolder(bh, stateDir).ensuring(_ => {log.info("Genesis UTXO state generated"); true})
+  }
+
+  def generateGenesisDigestState(stateDir: File): DigestState = {
+    new DigestState(Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918"))
+  }
 
   val initialDigest: Digest = Array.fill(32)(0: Byte)
   val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)

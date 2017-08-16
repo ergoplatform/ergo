@@ -39,5 +39,24 @@ class LinearDifficultyControlSpecification extends PropSpec
     Try(control.calculate(previousDifficulties.map(i => (i._1 * 2, i._2)))) shouldBe 'failure
   }
 
+  property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
+    forAll { h: Int =>
+      whenever(h > 0) {
+        val previousDifficulties = control.previousHeadersRequiredForRecalculation(h).map(i => (i, BigInt(i)))
+        Try(control.calculate(previousDifficulties)) shouldBe 'success
+      }
+    }
+  }
+
+  property("calculate() for constant hashrate") {
+    val precision = 0.0001
+    forAll { (startEpoch: Int, diff: BigInt) =>
+      whenever(BigDecimal(diff) > BigDecimal(1 / precision) && startEpoch >= 0 && startEpoch < Int.MaxValue - 4) {
+        val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff))
+        val newDiff = control.calculate(previousDifficulties)
+        (BigDecimal(newDiff - diff) / BigDecimal(diff)).toDouble should be < precision
+      }
+    }
+  }
 
 }

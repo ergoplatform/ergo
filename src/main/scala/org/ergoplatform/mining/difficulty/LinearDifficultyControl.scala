@@ -29,7 +29,8 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
     if (previousDifficulties.size == UseLastEpochs) {
       require((1 until UseLastEpochs)
-        .forall(i => previousDifficulties(i)._1 - previousDifficulties(i - 1)._1 == epochLength))
+        .forall(i => previousDifficulties(i)._1 - previousDifficulties(i - 1)._1 == epochLength),
+        s"Heights step in previousDifficulties=$previousDifficulties should equal epochLength=$epochLength")
       interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + epochLength)
     } else previousDifficulties.maxBy(_._1)._2
   }

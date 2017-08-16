@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.state
 
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -13,12 +15,42 @@ class UtxoStateSpecification extends PropSpec
   with ErgoTestHelpers {
 
   property("fromBoxHolder") {
-    forAll(boxesStorageGen){ bh =>
+    forAll(boxesStorageGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
-        bh.take(1000)._1.foreach {box =>
+        bh.take(1000)._1.foreach { box =>
           us.boxById(box.id) shouldBe Some(box)
         }
+      }
+    }
+  }
+
+  property("fromBoxHolder  + proofsForTransactions") {
+    forAll(boxesStorageGen) { bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        val boxes = bh.take(1000)._1
+        val tx = AnyoneCanSpendTransaction(boxes.map(_.nonce).toIndexedSeq, IndexedSeq(boxes.map(_.value).sum))
+        us.proofsForTransactions(Seq(tx)).isSuccess shouldBe true
+      }
+    }
+  }
+
+  property("checkTransactions()") {
+    val bhGen = boxesStorageGen
+
+    forAll(bhGen) { bh =>
+      val txs = validTransactions(bh)._1
+
+      val boxIds = txs.flatMap(_.boxIdsToOpen)
+      boxIds.foreach(id => assert(bh.get(ByteArrayWrapper(id)).isDefined))
+      assert(boxIds.distinct.size == boxIds.size)
+
+      withDir(s"/tmp/utxotest-${bh.hashCode()}-${txs.hashCode()}") { dir =>
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+        val digest = us.proofsForTransactions(txs).get._2
+        us.checkTransactions(txs, digest).isSuccess shouldBe true
       }
     }
   }

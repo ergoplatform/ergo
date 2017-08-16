@@ -26,7 +26,7 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesStorageGen: Gen[BoxHolder] = Gen.listOfN(50000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesStorageGen: Gen[BoxHolder] = Gen.listOfN(20000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
@@ -80,11 +80,10 @@ trait ErgoGenerators extends CoreGenerators {
   } yield BlockTransactions(headerId, txs)
 
 
-  def validTransactionsGen(boxesStorageGen: Gen[BoxHolder]): (Gen[(Seq[AnyoneCanSpendTransaction], BoxHolder)]) = {
+  def validTransactions(bStorage: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
 
-    val num = 100
+    val num = 10
 
-    boxesStorageGen.map{bStorage =>
       val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
 
       val (boxes, bs) = bStorage.take(spentBoxesCounts.sum)
@@ -96,7 +95,7 @@ trait ErgoGenerators extends CoreGenerators {
         (remainder, tx +: ts)
       }
       txs -> bs
-    }
+
   }
 
   lazy val randomADProofsGen: Gen[ADProof] = for {

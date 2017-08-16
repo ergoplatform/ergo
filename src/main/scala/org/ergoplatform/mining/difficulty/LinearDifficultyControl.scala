@@ -23,11 +23,13 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   /**
     *
-    * @param previousDifficulties - headers at chosen heights
-    * @return
+    * @param previousDifficulties - difficulties at chosen heights
+    * @return difficulty for the next epoch
     */
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
-    if (previousDifficulties.size >= UseLastEpochs) {
+    if (previousDifficulties.size == UseLastEpochs) {
+      require((1 until UseLastEpochs)
+        .forall(i => previousDifficulties(i)._1 - previousDifficulties(i - 1)._1 == epochLength))
       interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + epochLength)
     } else previousDifficulties.maxBy(_._1)._2
   }

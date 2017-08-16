@@ -1,10 +1,12 @@
 package org.ergoplatform.mining.difficulty
 
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 
 import scala.concurrent.duration._
+import scala.util.Try
 
 class LinearDifficultyControlSpecification extends PropSpec
   with PropertyChecks
@@ -28,6 +30,13 @@ class LinearDifficultyControlSpecification extends PropSpec
     control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs) shouldBe Seq(Epoch * UseLastEpochs - 1)
     control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs * 2 + 1) shouldBe
       Seq(Epoch * UseLastEpochs * 2)
+  }
+
+  property("calculate() should require correct heights") {
+    val diff = Constants.InitialDifficulty
+    val previousDifficulties = (0 until UseLastEpochs * Epoch by Epoch).map(i => (i, diff))
+    Try(control.calculate(previousDifficulties)) shouldBe 'success
+    Try(control.calculate(previousDifficulties.map(i => (i._1 * 2, i._2)))) shouldBe 'failure
   }
 
 

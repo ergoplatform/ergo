@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
                               epochLength: Int) extends DifficultyCalculator {
 
-  private val UseLastEpochs: Int = 4
+  private[difficulty] val UseLastEpochs: Int = 4
 
   /**
     * @return heights of previous headers required for block recalculation
@@ -23,11 +23,14 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   /**
     *
-    * @param previousDifficulties - headers at chosen heights
-    * @return
+    * @param previousDifficulties - difficulties at chosen heights
+    * @return difficulty for the next epoch
     */
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
-    if (previousDifficulties.size >= UseLastEpochs) {
+    if (previousDifficulties.size == UseLastEpochs) {
+      require((1 until UseLastEpochs)
+        .forall(i => previousDifficulties(i)._1 - previousDifficulties(i - 1)._1 == epochLength),
+        s"Heights step in previousDifficulties=$previousDifficulties should equal epochLength=$epochLength")
       interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + epochLength)
     } else previousDifficulties.maxBy(_._1)._2
   }

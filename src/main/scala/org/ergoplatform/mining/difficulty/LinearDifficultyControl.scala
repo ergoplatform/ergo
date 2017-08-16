@@ -7,7 +7,7 @@ import scala.concurrent.duration.FiniteDuration
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
                               epochLength: Int) extends DifficultyCalculator {
 
-  private val UseLastEpochs: Int = 4
+  private[difficulty] val UseLastEpochs: Int = 4
 
   /**
     * @return heights of previous headers required for block recalculation

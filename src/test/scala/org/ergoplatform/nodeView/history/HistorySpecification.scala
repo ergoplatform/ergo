@@ -47,12 +47,13 @@ trait HistorySpecification extends PropSpec
                       adState: Boolean,
                       popow: Boolean,
                       toKeep: Int,
-                      nonce: Long = 0): ErgoHistory = {
+                      nonce: Long = 0,
+                      epoch: Int = Int.MaxValue): ErgoHistory = {
     val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()
 
-      override val epochLength: Int = Int.MaxValue
+      override val epochLength: Int = epoch
       override val verifyTransactions: Boolean = verify
       override val ADState: Boolean = adState
       override lazy val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"

@@ -74,8 +74,7 @@ trait HeadersProcessor extends ScorexLogging {
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))
 
-    val toRemove = Seq(headerDiffKey(modifierId),
-      headerScoreKey(modifierId),
+    val toRemove = Seq(headerScoreKey(modifierId),
       ByteArrayWrapper(modifierId)) ++ payloadModifiers
     val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
       Seq((BestHeaderKey, ByteArrayWrapper(header.parentId)))
@@ -167,8 +166,6 @@ trait HeadersProcessor extends ScorexLogging {
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
 
-  protected def headerDiffKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("diff".getBytes ++ id))
-
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
@@ -183,8 +180,7 @@ trait HeadersProcessor extends ScorexLogging {
         (BestHeaderKey, ByteArrayWrapper(h.id)),
         (heightIdsKey(genesisHeight), ByteArrayWrapper(h.id)),
         (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(genesisHeight))),
-        (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestHeadersChainScore) {
@@ -197,9 +193,8 @@ trait HeadersProcessor extends ScorexLogging {
       val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(height)))
       val headerIdsRow: (ByteArrayWrapper, ByteArrayWrapper) = (heightIdsKey(height),
         ByteArrayWrapper((headerIdsAtHeight(height) :+ h.id).flatten.toArray))
-      val diffRow = (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray))
       val modifierRow = (ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))
-      Seq(diffRow, scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
+      Seq(scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
     }
   }
 
@@ -209,14 +204,13 @@ trait HeadersProcessor extends ScorexLogging {
     .getOrElse(Constants.InitialDifficulty)
 
   def requiredDifficultyAfter(parentId: ModifierId): Difficulty = {
-    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(parentId).get + 1)
+    val parentHeight = heightOf(parentId).get
+    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+    assert(heights.last == parentHeight, s"${heights.last} == $parentHeight")
     val previousHeaders = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
       .flatMap(id => typedModifierById[Header](id)).map(header => height -> header))
     assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
     difficultyCalculator.calculate(previousHeaders)
   }
-
-  private def difficultyAt(id: ModifierId): Option[Difficulty] = historyStorage.db.get(headerDiffKey(id))
-    .map(b => BigInt(b.data))
 
 }

@@ -23,14 +23,12 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
     val headers = m.innerchain ++ m.suffix
     val bestHeader = m.suffix.last
     val headersRows: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = headers.zipWithIndex.flatMap { case (h, i) =>
-      //TODO howto?
-      val requiredDifficulty: BigInt = Constants.InitialDifficulty
+      val requiredDifficulty: BigInt = h.requiredDifficulty
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         //TODO howto?
         (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(2 + i))),
         //TODO howto?
-        (headerScoreKey(h.id), ByteArrayWrapper((requiredDifficulty * (1 + i)).toByteArray)),
-        (headerDiffKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+        (headerScoreKey(h.id), ByteArrayWrapper((requiredDifficulty * (1 + i)).toByteArray)))
     }
     val bestHeaderRow = (BestHeaderKey, ByteArrayWrapper(bestHeader.id))
     historyStorage.insert(bestHeader.id, bestHeaderRow +: headersRows)

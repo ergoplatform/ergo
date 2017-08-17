@@ -104,9 +104,9 @@ trait HeadersProcessor extends ScorexLogging {
     } else if (m.realDifficulty < m.requiredDifficulty) {
       Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
     } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
-      //TODO
-      //      Failure(new Error(s"Block required difficulty ${m.realDifficulty} is not equal to expected ${expectedDifficulty(m)}"))
-      Success()
+      Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
+    } else if (m.timestamp <= parentOpt.get.timestamp) {
+      Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
     } else {
       //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS

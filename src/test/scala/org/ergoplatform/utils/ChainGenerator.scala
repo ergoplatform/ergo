@@ -48,7 +48,7 @@ trait ChainGenerator {
       txsRoot,
       extensionHash,
       votes,
-      NetworkTime.time()): Header
+      Math.max(NetworkTime.time(), acc.head.header.timestamp + 1)): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 

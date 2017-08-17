@@ -12,7 +12,7 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{NetworkTime, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -99,16 +99,17 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Trying to append genesis block to non-empty history"))
     } else if (parentOpt.isEmpty) {
       Failure(new Error(s"Parent header with id ${m.parentId} s not defined"))
+    } else if (m.timestamp - NetworkTime.time() > 10 * config.blockInterval.toMillis) {
+      Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
+    } else if (m.timestamp <= parentOpt.get.timestamp) {
+      Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
     } else if (historyStorage.contains(m.id)) {
       Failure(new Error("Header is already in history"))
     } else if (m.realDifficulty < m.requiredDifficulty) {
       Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
     } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
-    } else if (m.timestamp <= parentOpt.get.timestamp) {
-      Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
     } else {
-      //TODO check timestamp
       //TODO check that block is not too old to prevent DDoS
       Success()
     }

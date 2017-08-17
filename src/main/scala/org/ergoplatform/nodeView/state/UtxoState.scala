@@ -24,7 +24,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
-  private val store = new LSMStore(dir)
+  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number
   private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
@@ -38,9 +38,25 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     IndexedSeq(AnyoneCanSpendNoncedBox(height, height))
   }
 
-  //TODO implement correctly
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): ADProof.ProofRepresentation =
-    txs.flatMap(_.id).toArray
+  //TODO not efficient at all
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(ADProof.ProofRepresentation, Digest)] = Try {
+    require(persistentProver.digest.sameElements(rootHash))
+    require(storage.version.sameElements(rootHash))
+    require(store.lastVersionID.get.data.sameElements(rootHash))
+
+    val mods = boxChanges(txs).operations.map(ADProof.changeToMod)
+    mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
+      t.flatMap(_ => {
+        persistentProver.performOneOperation(m)
+      })
+    }.ensuring(_.isSuccess)
+
+    val proof = persistentProver.generateProof
+    val digest = persistentProver.digest
+
+    persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+    proof -> digest
+  }
 
   override val rootHash: Digest = persistentProver.digest
 
@@ -60,8 +76,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     Failure(new Exception("validate() is not implemented for UtxoState as it requires for costly provers' rollback"))
 
   //todo: don't use assert
-  protected def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction],
-                                  expectedDigest: Digest) = Try {
+  private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: Digest) = Try {
 
     transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
 
@@ -108,7 +123,7 @@ object UtxoState {
     new UtxoState(dir) {
       override protected lazy val persistentProver = new PersistentBatchAVLProver(p, storage)
 
-      println(storage.version.mkString)
+      assert(persistentProver.digest.sameElements(storage.version))
     }
   }
 }

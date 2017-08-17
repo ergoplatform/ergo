@@ -14,6 +14,8 @@ import scala.collection.immutable.SortedMap
   */
 class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
 
+  def get(id: ByteArrayWrapper) = boxes.get(id)
+
   def removeBoxes(ids: Seq[ByteArrayWrapper]): Unit =
     new BoxHolder(boxes.filterKeys(k => !ids.contains(k)))
 

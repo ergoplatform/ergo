@@ -92,7 +92,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(m: Header): Try[Unit] = {
-    lazy val parentOpt = historyStorage.modifierById(m.parentId)
+    lazy val parentOpt = typedModifierById[Header](m.parentId)
     if (m.isGenesis && bestHeaderIdOpt.isEmpty) {
       Success()
     } else if (m.isGenesis) {
@@ -103,7 +103,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Header is already in history"))
     } else if (m.realDifficulty < m.requiredDifficulty) {
       Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
-    } else if (m.requiredDifficulty != requiredDifficultyAfter(m.parentId)) {
+    } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       //TODO
       //      Failure(new Error(s"Block required difficulty ${m.realDifficulty} is not equal to expected ${expectedDifficulty(m)}"))
       Success()
@@ -200,17 +200,24 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficulty: Difficulty = bestHeaderIdOpt.map(id => requiredDifficultyAfter(id))
-    .getOrElse(Constants.InitialDifficulty)
+  def requiredDifficulty: Difficulty = bestHeaderIdOpt.flatMap(id => typedModifierById[Header](id))
+    .map(h => requiredDifficultyAfter(h)).getOrElse(Constants.InitialDifficulty)
 
-  def requiredDifficultyAfter(parentId: ModifierId): Difficulty = {
+  def requiredDifficultyAfter(parent: Header): Difficulty = {
+    val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
     assert(heights.last == parentHeight, s"${heights.last} == $parentHeight")
-    val previousHeaders = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
-      .flatMap(id => typedModifierById[Header](id)).map(header => height -> header))
-    assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
-    difficultyCalculator.calculate(previousHeaders)
+    if (heights.length == 1) {
+      difficultyCalculator.calculate(Seq((parentHeight, parent)))
+    } else {
+      val chain = headerChainBack(heights.max - heights.min + 1, parent, (h: Header) => false)
+      assert(chain.length == (heights.min to heights.max).length, s"${chain.length} == ${(heights.min to heights.max).length}")
+      val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
+      assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
+      difficultyCalculator.calculate(previousHeaders)
+
+    }
   }
 
 }

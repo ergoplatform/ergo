@@ -4,7 +4,6 @@ import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTime
@@ -24,7 +23,7 @@ trait ChainGenerator {
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
-      NetworkTime.time()
+      Math.max(NetworkTime.time(), acc.head.timestamp + 1)
     ): Header
     genHeaderChain(height - 1, header +: acc)
   }

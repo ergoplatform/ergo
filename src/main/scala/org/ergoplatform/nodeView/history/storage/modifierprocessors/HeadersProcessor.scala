@@ -8,8 +8,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
@@ -178,7 +178,7 @@ trait HeadersProcessor extends ScorexLogging {
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
-      val genesisHeight = 1
+      val genesisHeight = 0
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
         (heightIdsKey(genesisHeight), ByteArrayWrapper(h.id)),
@@ -205,10 +205,14 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
+  def requiredDifficulty: Difficulty = bestHeaderIdOpt.map(id => requiredDifficultyAfter(id))
+    .getOrElse(Constants.InitialDifficulty)
+
   def requiredDifficultyAfter(parentId: ModifierId): Difficulty = {
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(parentId).get + 1)
     val previousHeaders = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
       .flatMap(id => typedModifierById[Header](id)).map(header => height -> header))
+    assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
     difficultyCalculator.calculate(previousHeaders)
   }
 

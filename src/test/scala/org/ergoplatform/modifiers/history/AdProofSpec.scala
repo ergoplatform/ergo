@@ -27,13 +27,18 @@ class AdProofSpec extends PropSpec
   type NewDigest = Digest
 
   private def createEnv(howMany: Int = 10):
-    (Seq[Insertion[AnyoneCanSpendProposition.type , AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
+    (Seq[Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Blake2b256Unsafe](KL, None)
+    val zeroBox = AnyoneCanSpendNoncedBox(0, 0L)
+    prover.performOneOperation(Insert(zeroBox.id, zeroBox.bytes))
+    prover.generateProof()
+
     val prevDigest = prover.digest
-    val boxes = (0 until howMany) map { i => AnyoneCanSpendNoncedBox(i, 1L) }
-    boxes.foreach(kv => prover.performOneOperation(Insert(kv.id, kv.bytes)))
+    val boxes = (1 to howMany) map { i => AnyoneCanSpendNoncedBox(i, 1L) }
+    boxes.foreach(box => prover.performOneOperation(Insert(box.id, box.bytes)))
     val pf = prover.generateProof()
+
     val newDigest = prover.digest
     val operations: Seq[Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] =
       boxes.map(box => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](box))
@@ -66,7 +71,7 @@ class AdProofSpec extends PropSpec
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProof(Array.fill(32)(0.toByte), pf)
     val moreInsertions = operations :+
-      Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(10L, 1L))
+      Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(11L, 1L))
     proof.verify(BoxStateChanges(moreInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
@@ -74,7 +79,7 @@ class AdProofSpec extends PropSpec
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProof(Array.fill(32)(0.toByte), pf)
     val differentInsertions = operations.init :+
-      Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(10L, 1L))
+      Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(11L, 1L))
     proof.verify(BoxStateChanges(differentInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
@@ -103,5 +108,12 @@ class AdProofSpec extends PropSpec
     pf.update(4, 6.toByte)
     val proof = ADProof(Array.fill(32)(0.toByte), pf)
     proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'failure
+  }
+
+  property("proof is deterministic") {
+    val (operations1, prevDigest1, newDigest1, pf1) = createEnv()
+    val (operations2, prevDigest2, newDigest2, pf2) = createEnv()
+
+    ADProof.proofDigest(pf1) shouldBe ADProof.proofDigest(pf2)
   }
 }

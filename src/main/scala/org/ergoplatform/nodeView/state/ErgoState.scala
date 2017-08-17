@@ -84,11 +84,11 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
-    new DigestState(Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918"))
+    new DigestState(afterGenesisStateDigest)
   }
 
-  val initialDigest: Digest = Array.fill(32)(0: Byte)
-  val genesisProofs: ProofRepresentation = Array.fill(32)(0: Byte)
+  val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)
+  val afterGenesisStateDigest = Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918")
 
   def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
     val stateDir = new File(s"${settings.dataDir}/state")

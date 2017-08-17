@@ -74,9 +74,10 @@ trait ErgoGenerators extends CoreGenerators {
   def validFullBlock(parent: Header, utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
     val (transactions, updHolder) = validTransactions(boxHolder)
-    val txsRoot = BlockTransactions.rootHash(transactions.map(_.id))
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
+
+    val txsRoot = BlockTransactions.rootHash(transactions.map(_.id))
 
     val adProofhash = ADProof.proofDigest(adProofBytes)
 

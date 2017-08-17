@@ -24,7 +24,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
-  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number
+  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, fix
   private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
@@ -91,22 +91,21 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   }
 
   //todo: utxo snapshot could go here
+  //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] =
-    mod match {
-      case fb: ErgoFullBlock =>
-        Try(assert(fb.parentId.sameElements(version))).flatMap { _ =>
-          checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
-            val proofBytes: Array[Byte] = persistentProver.generateProof
-            val proofHash = hf(proofBytes)
-            assert(fb.header.ADProofsRoot.sameElements(proofHash))
-            new UtxoState(dir)
-          }
-        }
+  mod match {
+    case fb: ErgoFullBlock =>
+      checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
+        val proofBytes: Array[Byte] = persistentProver.generateProof
+        val proofHash = ADProof.proofDigest(proofBytes)
+        assert(fb.header.ADProofsRoot.sameElements(proofHash))
+        new UtxoState(dir)
+      }
 
-      case a: Any =>
-        log.info(s"Unhandled modifier: $a")
-        Failure(new Exception("unknown modifier"))
-    }
+    case a: Any =>
+      log.info(s"Unhandled modifier: $a")
+      Failure(new Exception("unknown modifier"))
+  }
 
   def boxById(id: Digest): Option[AnyoneCanSpendNoncedBox] =
     persistentProver

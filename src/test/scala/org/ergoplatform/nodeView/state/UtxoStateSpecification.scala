@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
@@ -36,17 +38,30 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
+  /*
+  property("proofsForTransactions() replay") {
+    forAll(boxesHolderGen) { bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        val txs = validTransactions(bh)._1
+        val (proof1, digest1) = us.proofsForTransactions(txs).get
+        val (proof2, digest2) = us.proofsForTransactions(txs).get
+
+        ADProof.proofDigest(proof1) shouldBe ADProof.proofDigest(proof2)
+        digest1 shouldBe digest2
+      }
+    }
+  } */
+
   property("checkTransactions()") {
-    val bhGen = boxesHolderGen
+    forAll(boxesHolderGen) { bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
+        val txs = validTransactions(bh)._1
 
-    forAll(bhGen) { bh =>
-      val txs = validTransactions(bh)._1
+        val boxIds = txs.flatMap(_.boxIdsToOpen)
+        boxIds.foreach(id => assert(bh.get(ByteArrayWrapper(id)).isDefined))
+        assert(boxIds.distinct.size == boxIds.size)
 
-      val boxIds = txs.flatMap(_.boxIdsToOpen)
-      boxIds.foreach(id => assert(bh.get(ByteArrayWrapper(id)).isDefined))
-      assert(boxIds.distinct.size == boxIds.size)
-
-      withDir(s"/tmp/utxotest-${bh.hashCode()}-${txs.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
         val digest = us.proofsForTransactions(txs).get._2
@@ -55,7 +70,7 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("validate() - valid block") {
+  property("validate() - valid block after genesis") {
 
   }
 
@@ -68,8 +83,21 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
+  /*
   property("applyModifier() - valid block") {
-  }
+    forAll(boxesHolderGen) { bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
+
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
+        val block = validFullBlock(parent, us, bh)
+        assert(us.rootHash.sameElements(parent.stateRoot))
+        us.applyModifier(block).get // .isSuccess shouldBe true
+      }
+    }
+  } */
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>

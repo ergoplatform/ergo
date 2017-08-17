@@ -26,6 +26,8 @@ class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNon
     (boxes.take(howMany).values.toSeq, new BoxHolder(boxes.drop(howMany)))
 
   def sortedBoxes: Set[AnyoneCanSpendNoncedBox] = boxes.keySet.map(k => boxes(k))
+
+  override def toString = s"BoxHolder(${boxes.size} boxes inside)"
 }
 
 object BoxHolder {

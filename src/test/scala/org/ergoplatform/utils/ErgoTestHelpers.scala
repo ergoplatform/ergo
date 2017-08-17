@@ -9,8 +9,9 @@ import scala.reflect.io.Path
 trait ErgoTestHelpers extends TestkitHelpers {
   def withDir(dirName: String)(action: File => Any): Unit = {
     val dir = new File(dirName)
+    Path(dir).deleteRecursively()
     dir.mkdirs()
     action(dir)
-    Path.apply(dir).deleteRecursively()
+    Path(dir).deleteRecursively()
   }
 }

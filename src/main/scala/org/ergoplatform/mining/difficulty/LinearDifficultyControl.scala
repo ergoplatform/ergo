@@ -7,7 +7,9 @@ import scala.concurrent.duration.FiniteDuration
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
                               epochLength: Int) extends DifficultyCalculator {
 
+
   private[difficulty] val UseLastEpochs: Int = 4
+  private[difficulty] val PrecisionConstant: Int = 1000000000
 
   /**
     * @return heights of previous headers required for block recalculation
@@ -23,7 +25,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   /**
     *
-    * @param previousDifficulties - difficulties at chosen heights
+    * @param previousDifficulties - real difficulties at chosen heights
     * @return difficulty for the next epoch
     */
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
@@ -39,19 +41,19 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   def interpolate(data: Seq[(Int, Difficulty)]): (Int) => Difficulty = {
     val size = data.size
     val xy: Iterable[BigInt] = data.map(d => d._1 * d._2)
-    val x: Iterable[Int] = data.map(d => d._1)
-    val x2: Iterable[Int] = data.map(d => d._1 * d._1)
+    val x: Iterable[BigInt] = data.map(d => BigInt(d._1))
+    val x2: Iterable[BigInt] = data.map(d => BigInt(d._1) * d._1)
     val y: Iterable[BigInt] = data.map(d => d._2)
-    //TODO remove BigDecimal to achieve cross platform compatibility
-    val xyMean = BigDecimal(xy.sum) / size
-    val x2Mean = BigDecimal(x2.sum) / size
-    val yMean = BigDecimal(y.sum) / y.size
-    val xMean = BigDecimal(x.sum) / x.size
+    val xySum = xy.sum
+    val x2Sum = x2.sum
+    val ySum = y.sum
+    val xSum = x.sum
 
-    val k: BigDecimal = (xyMean - xMean * yMean) / (x2Mean - xMean * xMean)
-    val b: BigDecimal = yMean - k * xMean
+    val k: BigInt = (xySum * size - xSum * ySum) * PrecisionConstant / (x2Sum * size - xSum * xSum)
+    val b: BigInt = (ySum * PrecisionConstant - k * xSum) / size / PrecisionConstant
+
     (point: Int) => {
-      (b + k * point).toBigInt()
+      b + k * point / PrecisionConstant
     }
   }
 

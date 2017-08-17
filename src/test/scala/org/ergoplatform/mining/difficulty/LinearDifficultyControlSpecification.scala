@@ -104,8 +104,6 @@ class LinearDifficultyControlSpecification extends PropSpec
   } yield diff
 
 
-  def epochGen: Gen[Int] = for {
-    epoch <- Arbitrary.arbitrary[Int] if epoch > 0 && epoch < Int.MaxValue - 4
-  } yield epoch
+  def epochGen: Gen[Int] = Gen.choose(1, Int.MaxValue - UseLastEpochs)
 
 }

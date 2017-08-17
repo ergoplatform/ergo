@@ -1,11 +1,12 @@
 package org.ergoplatform.mining.difficulty
 
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
 
 import scala.concurrent.duration.FiniteDuration
 
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
-                              epochLength: Int) extends DifficultyCalculator {
+                              epochLength: Int) {
 
 
   private[difficulty] val UseLastEpochs: Int = 4
@@ -14,31 +15,29 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   /**
     * @return heights of previous headers required for block recalculation
     */
-  override def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
+  def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
     if (height % epochLength == 0 && height > epochLength * UseLastEpochs) {
-      (0 until UseLastEpochs).map(i => height - i * epochLength - epochLength / 2)
+      (0 to UseLastEpochs).map(i => height - i * epochLength).reverse
     } else {
       Seq(height - 1)
     }
   }
 
-
-  /**
-    *
-    * @param previousDifficulties - real difficulties at chosen heights
-    * @return difficulty for the next epoch
-    */
-  override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {
-    if (previousDifficulties.size == UseLastEpochs) {
-      require((1 until UseLastEpochs)
-        .forall(i => previousDifficulties(i)._1 - previousDifficulties(i - 1)._1 == epochLength),
-        s"Heights step in previousDifficulties=$previousDifficulties should equal epochLength=$epochLength")
-      interpolate(previousDifficulties)(previousDifficulties.map(_._1).max + epochLength)
-    } else previousDifficulties.maxBy(_._1)._2
+  def calculate(previousHeaders: Seq[(Int, Header)]): Difficulty = {
+    if (previousHeaders.size == UseLastEpochs + 1) {
+      val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
+        val start = d.head
+        val end = d.last
+        require(end._1 - start._1 == epochLength, s"Incorrect heights interval for $d")
+        val diff = end._2.requiredDifficulty * desiredInterval.toMillis / (end._2.timestamp - start._2.timestamp)
+        (end._1 + start._1 / 2, diff)
+      }
+      interpolate(data)
+    } else previousHeaders.maxBy(_._1)._2.requiredDifficulty
   }
 
   //y = a + bx
-  def interpolate(data: Seq[(Int, Difficulty)]): (Int) => Difficulty = {
+  private[difficulty] def interpolate(data: Seq[(Int, Difficulty)]): Difficulty = {
     val size = data.size
     val xy: Iterable[BigInt] = data.map(d => d._1 * d._2)
     val x: Iterable[BigInt] = data.map(d => BigInt(d._1))
@@ -52,9 +51,8 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
     val k: BigInt = (xySum * size - xSum * ySum) * PrecisionConstant / (x2Sum * size - xSum * xSum)
     val b: BigInt = (ySum * PrecisionConstant - k * xSum) / size / PrecisionConstant
 
-    (point: Int) => {
-      b + k * point / PrecisionConstant
-    }
+    val point = data.map(_._1).max + epochLength
+    b + k * point / PrecisionConstant
   }
 
 }

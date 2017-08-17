@@ -1,6 +1,6 @@
 package org.ergoplatform.mining.difficulty
 
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -22,9 +22,9 @@ class LinearDifficultyControlSpecification extends PropSpec
   val UseLastEpochs = control.UseLastEpochs
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
-    control.previousHeadersRequiredForRecalculation(Epoch * (UseLastEpochs + 1)) shouldEqual
-      Seq(Epoch * (UseLastEpochs + 1) - Epoch / 2, Epoch * (UseLastEpochs + 1) - 3 * Epoch / 2,
-        Epoch * (UseLastEpochs + 1) - 5 * Epoch / 2, Epoch * (UseLastEpochs + 1) - 7 * Epoch / 2)
+    val height = Epoch * (UseLastEpochs + 1)
+    control.previousHeadersRequiredForRecalculation(height) shouldEqual
+      Seq(height - 4 * Epoch, height - 3 * Epoch, height - 2 * Epoch, height - Epoch, height)
   }
 
   property("previousHeadersRequiredForRecalculation() should return previous block if there should not be difficulty recalculation") {
@@ -35,31 +35,36 @@ class LinearDifficultyControlSpecification extends PropSpec
       Seq(Epoch * UseLastEpochs * 2)
   }
 
-  property("calculate() should require correct heights") {
-    val diff = Constants.InitialDifficulty
-    val previousDifficulties = (0 until UseLastEpochs * Epoch by Epoch).map(i => (i, diff))
-    Try(control.calculate(previousDifficulties)) shouldBe 'success
-    Try(control.calculate(previousDifficulties.map(i => (i._1 * 2, i._2)))) shouldBe 'failure
+  property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
+    forAll(Gen.choose(1, Int.MaxValue), invalidHeaderGen) { (height: Int, header: Header) =>
+      val previousHeaders = control.previousHeadersRequiredForRecalculation(height)
+        .map(i => (i, header.copy(timestamp = header.timestamp + i)))
+
+      Try(control.calculate(previousHeaders)) shouldBe 'success
+    }
   }
 
-  property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
-    forAll { h: Int =>
-      whenever(h > 0) {
-        val previousDifficulties = control.previousHeadersRequiredForRecalculation(h).map(i => (i, BigInt(i)))
-        Try(control.calculate(previousDifficulties)) shouldBe 'success
-      }
+
+  property("calculate() should require correct heights") {
+    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (i: Int, header: Header) =>
+      val previousHeaders = control.previousHeadersRequiredForRecalculation(i * Epoch)
+        .map(i => (i, header.copy(timestamp = header.timestamp + i)))
+      previousHeaders.length shouldBe UseLastEpochs + 1
+
+      Try(control.calculate(previousHeaders)) shouldBe 'success
+      Try(control.calculate(previousHeaders.map(i => (i._1 * 2, i._2)))) shouldBe 'failure
     }
   }
 
   property("calculate() vectors") {
     val diff = BigInt("675204474840679645414180963439886534428")
-    control.calculate(Seq((799167010, diff), (799167133, diff), (799167256, diff), (799167379, diff))) shouldBe diff
+    control.interpolate(Seq((799167010, diff), (799167133, diff), (799167256, diff), (799167379, diff))) shouldBe diff
 
-    control.calculate(Seq((123, diff), (246, diff), (369, diff), (492, diff))) shouldBe diff
+    control.interpolate(Seq((123, diff), (246, diff), (369, diff), (492, diff))) shouldBe diff
 
-    control.calculate(Vector((123, diff), (246, diff * 2), (369, diff * 2), (492, diff))) shouldBe (diff * 3 / 2)
+    control.interpolate(Vector((123, diff), (246, diff * 2), (369, diff * 2), (492, diff))) shouldBe (diff * 3 / 2)
 
-    control.calculate(Vector((123, diff), (246, diff * 2), (369, diff * 3), (492, diff * 4))) shouldBe BigInt("3376022374203398227070904817199432672139")
+    control.interpolate(Vector((123, diff), (246, diff * 2), (369, diff * 3), (492, diff * 4))) shouldBe BigInt("3376022374203398227070904817199432672139")
 
   }
 
@@ -67,7 +72,7 @@ class LinearDifficultyControlSpecification extends PropSpec
     forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
       exitOnError {
         val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff))
-        val newDiff = control.calculate(previousDifficulties)
+        val newDiff = control.interpolate(previousDifficulties)
         (BigDecimal(newDiff - diff) / BigDecimal(diff)).toDouble should be < precision
       }
     }
@@ -78,7 +83,7 @@ class LinearDifficultyControlSpecification extends PropSpec
     forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
       exitOnError {
         val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff * i))
-        val newDiff = control.calculate(previousDifficulties)
+        val newDiff = control.interpolate(previousDifficulties)
         val expected = previousDifficulties.map(_._2).max + diff
         equalsWithPrecision(expected, newDiff)
       }

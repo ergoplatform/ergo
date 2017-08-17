@@ -207,9 +207,9 @@ trait HeadersProcessor extends ScorexLogging {
 
   def requiredDifficultyAfter(parentId: ModifierId): Difficulty = {
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(parentId).get + 1)
-    val previousDifficulties = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
-      .flatMap(id => difficultyAt(id)).map(difficulty => height -> difficulty))
-    difficultyCalculator.calculate(previousDifficulties)
+    val previousHeaders = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
+      .flatMap(id => typedModifierById[Header](id)).map(header => height -> header))
+    difficultyCalculator.calculate(previousHeaders)
   }
 
   private def difficultyAt(id: ModifierId): Option[Difficulty] = historyStorage.db.get(headerDiffKey(id))

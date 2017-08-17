@@ -8,8 +8,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
@@ -104,7 +104,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Header is already in history"))
     } else if (m.realDifficulty < m.requiredDifficulty) {
       Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
-    } else if (m.requiredDifficulty != expectedDifficulty(m)) {
+    } else if (m.requiredDifficulty != requiredDifficultyAfter(m.parentId)) {
       //TODO
       //      Failure(new Error(s"Block required difficulty ${m.realDifficulty} is not equal to expected ${expectedDifficulty(m)}"))
       Success()
@@ -176,7 +176,7 @@ trait HeadersProcessor extends ScorexLogging {
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    val requiredDifficulty: Difficulty = expectedDifficulty(h)
+    val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
       val genesisHeight = 1
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
@@ -205,16 +205,11 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-
-  private def expectedDifficulty(h: Header): Difficulty = {
-    if (h.isGenesis) {
-      Constants.InitialDifficulty
-    } else {
-      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(h.parentId).get + 1)
-      val previousDifficulties = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
-        .flatMap(id => difficultyAt(id)).map(difficulty => height -> difficulty))
-      difficultyCalculator.calculate(previousDifficulties)
-    }
+  def requiredDifficultyAfter(parentId: ModifierId): Difficulty = {
+    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(heightOf(parentId).get + 1)
+    val previousDifficulties = heights.flatMap(height => bestChainHeaderIdsAtHeight(height)
+      .flatMap(id => difficultyAt(id)).map(difficulty => height -> difficulty))
+    difficultyCalculator.calculate(previousDifficulties)
   }
 
   private def difficultyAt(id: ModifierId): Option[Difficulty] = historyStorage.db.get(headerDiffKey(id))

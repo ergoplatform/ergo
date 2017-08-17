@@ -15,7 +15,7 @@ class UtxoStateSpecification extends PropSpec
   with ErgoTestHelpers {
 
   property("fromBoxHolder") {
-    forAll(boxesStorageGen) { bh =>
+    forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
         bh.take(1000)._1.foreach { box =>
@@ -26,7 +26,7 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("fromBoxHolder  + proofsForTransactions") {
-    forAll(boxesStorageGen) { bh =>
+    forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
         val boxes = bh.take(1000)._1
@@ -37,7 +37,7 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("checkTransactions()") {
-    val bhGen = boxesStorageGen
+    val bhGen = boxesHolderGen
 
     forAll(bhGen) { bh =>
       val txs = validTransactions(bh)._1

@@ -15,6 +15,7 @@ import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 
 import scala.annotation.tailrec
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -23,6 +24,8 @@ import scala.util.{Failure, Success, Try}
 trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig
+
+  protected lazy val MaxRollback = 30.days.toMillis / config.blockInterval.toMillis
 
   protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
 
@@ -109,8 +112,9 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
     } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
+    } else if (!heightOf(m.parentId).exists(h => height - h < MaxRollback)) {
+      Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(m.parentId)}"))
     } else {
-      //TODO check that block is not too old to prevent DDoS
       Success()
     }
   }

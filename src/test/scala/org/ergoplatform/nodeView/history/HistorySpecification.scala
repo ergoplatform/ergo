@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
+import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -48,7 +49,7 @@ trait HistorySpecification extends PropSpec
                       popow: Boolean,
                       toKeep: Int,
                       nonce: Long = 0,
-                      epoch: Int = Int.MaxValue): ErgoHistory = {
+                      epoch: Int = 100000000): ErgoHistory = {
     val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
     val fullHistorySettings: ErgoSettings = new ErgoSettings {
       override def settingsJSON: Map[String, Json] = Map()

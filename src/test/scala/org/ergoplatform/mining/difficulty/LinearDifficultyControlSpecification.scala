@@ -22,17 +22,16 @@ class LinearDifficultyControlSpecification extends PropSpec
   val UseLastEpochs = LinearDifficultyControl.UseLastEpochs
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
-    val height = Epoch * (UseLastEpochs + 1)
+    val height = Epoch * (UseLastEpochs + 1) + 1
     control.previousHeadersRequiredForRecalculation(height) shouldEqual
-      Seq(height - 4 * Epoch, height - 3 * Epoch, height - 2 * Epoch, height - Epoch, height)
+      Seq(height - 4 * Epoch - 1, height - 3 * Epoch - 1, height - 2 * Epoch - 1, height - Epoch - 1, height - 1)
   }
 
   property("previousHeadersRequiredForRecalculation() should return previous block if there should not be difficulty recalculation") {
-    control.previousHeadersRequiredForRecalculation(Epoch / 2) shouldBe Seq(Epoch / 2 - 1)
-    control.previousHeadersRequiredForRecalculation(Epoch) shouldBe Seq(Epoch - 1)
+    control.previousHeadersRequiredForRecalculation(Epoch / 2 + 1) shouldBe Seq(Epoch / 2)
+    control.previousHeadersRequiredForRecalculation(Epoch + 1) shouldBe Seq(Epoch)
     control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs) shouldBe Seq(Epoch * UseLastEpochs - 1)
-    control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs * 2 + 1) shouldBe
-      Seq(Epoch * UseLastEpochs * 2)
+    control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs + 2) shouldBe Seq(Epoch * UseLastEpochs + 1)
   }
 
   property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
@@ -47,7 +46,7 @@ class LinearDifficultyControlSpecification extends PropSpec
 
   property("calculate() should require correct heights") {
     forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (i: Int, header: Header) =>
-      val previousHeaders = control.previousHeadersRequiredForRecalculation(i * Epoch)
+      val previousHeaders = control.previousHeadersRequiredForRecalculation(i * Epoch + 1)
         .map(i => (i, header.copy(timestamp = header.timestamp + i)))
       previousHeaders.length shouldBe UseLastEpochs + 1
 

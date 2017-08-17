@@ -25,7 +25,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   /**
     *
-    * @param previousDifficulties - difficulties at chosen heights
+    * @param previousDifficulties - real difficulties at chosen heights
     * @return difficulty for the next epoch
     */
   override def calculate(previousDifficulties: Seq[(Int, Difficulty)]): Difficulty = {

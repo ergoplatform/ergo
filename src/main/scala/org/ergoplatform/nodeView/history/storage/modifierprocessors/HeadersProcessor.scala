@@ -146,9 +146,6 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
     .map(_.data).getOrElse(Array()).grouped(32).toSeq
 
-  //TODO ensure it is from the best chain
-  protected def bestChainHeaderIdsAtHeight(height: Int): Option[ModifierId] = headerIdsAtHeight(height).lastOption
-
   /**
     * @param limit       - maximum length of resulting HeaderChain
     * @param startHeader - header to start

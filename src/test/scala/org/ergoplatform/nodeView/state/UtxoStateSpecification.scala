@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
@@ -85,8 +86,7 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  /*
-  property("applyModifier() - valid block") {
+  property("applyModifier() - valid full block") {
     forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
 
@@ -96,10 +96,10 @@ class UtxoStateSpecification extends PropSpec
         val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
         val block = validFullBlock(parent, us, bh)
         assert(us.rootHash.sameElements(parent.stateRoot))
-        us.applyModifier(block).get // .isSuccess shouldBe true
+        us.applyModifier(block).isSuccess shouldBe true
       }
     }
-  } */
+  }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>

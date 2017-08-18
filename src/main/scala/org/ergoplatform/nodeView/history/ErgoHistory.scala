@@ -45,6 +45,7 @@ trait ErgoHistory
     with HeadersProcessor
     with ADProofsProcessor
     with PoPoWProofsProcessor
+    with UTXOSnapshotChunkProcessor
     with BlockTransactionsProcessor
     with ScorexLogging {
 
@@ -105,8 +106,7 @@ trait ErgoHistory
       case m: PoPoWProof =>
         (this, process(m))
       case m: UTXOSnapshotChunk =>
-        //add mark that snapshot was applied
-        ???
+        (this, process(m))
     }
   }
 
@@ -118,6 +118,7 @@ trait ErgoHistory
       case h: Header => toDrop(h)
       case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
       case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
+      case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
       case m =>
         log.warn(s"reportInvalid for invalid modifier type: $m")
         (Seq(ByteArrayWrapper(m.id)), Seq())
@@ -235,7 +236,7 @@ trait ErgoHistory
       case m: PoPoWProof =>
         validate(m)
       case m: UTXOSnapshotChunk =>
-        Failure(new NotImplementedError)
+        validate(m)
       case m =>
         Failure(new Error(s"Modifier $m have incorrect type"))
     }

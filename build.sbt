@@ -13,14 +13,15 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/")
 
 libraryDependencies ++= Seq(
+  "org.scorexfoundation" %% "iodb" % "0.3.1",
+  "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
+  "org.scorexfoundation" %% "avl-iodb" % "0.2.3",
+  "com.storm-enroute" %% "scalameter" % "0.8.2",
+
   "org.scalactic" %% "scalactic" % "3.0.1" % "test",
   "org.scalatest" %% "scalatest" % "3.0.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
-  "org.scorexfoundation" %% "iodb" % "0.3.1",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.1",
-  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2" % "test",
-  "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
-  "com.storm-enroute" %% "scalameter" % "0.8.2"
+  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2" % "test"
 )
 
 javaOptions in run ++= Seq("-Xmx2G")

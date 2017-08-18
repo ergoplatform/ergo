@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
+import scorex.crypto.hash.Blake2b256Unsafe
 
 
 class UtxoStateSpecification extends PropSpec
@@ -38,20 +39,21 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  /*
-  property("proofsForTransactions() replay") {
+  property("proofsForTransactions() to be deterministic") {
     forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
         val txs = validTransactions(bh)._1
+
         val (proof1, digest1) = us.proofsForTransactions(txs).get
+
         val (proof2, digest2) = us.proofsForTransactions(txs).get
 
         ADProof.proofDigest(proof1) shouldBe ADProof.proofDigest(proof2)
         digest1 shouldBe digest2
       }
     }
-  } */
+  }
 
   property("checkTransactions()") {
     forAll(boxesHolderGen) { bh =>

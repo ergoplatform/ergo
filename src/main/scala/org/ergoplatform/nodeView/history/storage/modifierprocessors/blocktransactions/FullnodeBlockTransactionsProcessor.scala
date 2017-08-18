@@ -36,8 +36,6 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     }
   }
 
-  override protected def toDrop(m: BlockTransactions): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(m.id))
-
   override protected def validate(m: BlockTransactions): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {

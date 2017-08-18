@@ -6,6 +6,9 @@ import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Try}
 
+/**
+  * Contains all functions required by History to process PoPoWProofs for regime that do not accept them.
+  */
 trait EmptyPoPoWProofsProcessor extends PoPoWProofsProcessor {
 
   def validate(m: PoPoWProof): Try[Unit] = Failure(new Error("Regime that do not process PoPoWProof"))

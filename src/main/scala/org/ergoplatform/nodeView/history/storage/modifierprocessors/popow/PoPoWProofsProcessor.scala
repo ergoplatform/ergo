@@ -9,6 +9,9 @@ import scorex.core.utils.ScorexLogging
 import scala.annotation.tailrec
 import scala.util.Try
 
+/**
+  * Contains all functions required by History to process PoPoWProofs and generate them.
+  */
 trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
   def validate(m: PoPoWProof): Try[Unit]

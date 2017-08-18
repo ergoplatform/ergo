@@ -10,6 +10,9 @@ import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Contains all functions required by History to process PoPoWProofs for regime that accept them.
+  */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
   def validate(m: PoPoWProof): Try[Unit] = m.validate.map { _ =>

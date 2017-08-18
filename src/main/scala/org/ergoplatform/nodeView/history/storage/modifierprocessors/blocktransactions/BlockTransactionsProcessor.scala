@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.consensus.History.ProgressInfo
@@ -12,12 +11,6 @@ import scala.util.Try
   * Contains all functions required by History to process BlockTransactions.
   */
 trait BlockTransactionsProcessor extends ScorexLogging {
-
-  /**
-    * @param modifier - modifier we're going to remove from history
-    * @return ids to remove, new data to apply
-    */
-  protected def toDrop(modifier: BlockTransactions): Seq[ByteArrayWrapper]
 
   /**
     * @param m - BlockTransactions to validate

@@ -25,7 +25,11 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig
 
+  //TODO better DDoS protection
   protected lazy val MaxRollback = 30.days.toMillis / config.blockInterval.toMillis
+
+  //Maximum time in future block header main contain
+  protected lazy val MaxTimeDrift = 10 * config.blockInterval.toMillis
 
   protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
 
@@ -102,7 +106,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Trying to append genesis block to non-empty history"))
     } else if (parentOpt.isEmpty) {
       Failure(new Error(s"Parent header with id ${m.parentId} s not defined"))
-    } else if (m.timestamp - NetworkTime.time() > 10 * config.blockInterval.toMillis) {
+    } else if (m.timestamp - NetworkTime.time() > MaxTimeDrift) {
       Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
     } else if (m.timestamp <= parentOpt.get.timestamp) {
       Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))

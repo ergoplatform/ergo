@@ -32,8 +32,6 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
     }
   }
 
-  override protected def toDrop(modifier: ADProof): Seq[ByteArrayWrapper] = Seq(ByteArrayWrapper(modifier.id))
-
   override protected def validate(m: ADProof): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {

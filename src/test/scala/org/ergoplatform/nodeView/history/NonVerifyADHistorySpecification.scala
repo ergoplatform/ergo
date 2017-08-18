@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
 
@@ -12,13 +13,21 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   assert(history.bestFullBlockIdOpt.isEmpty)
 
 
+  property("Should apply UTXOSnapshotChunks") {
+    forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
+      history.applicable(snapshot) shouldBe true
+      val processInfo = history.append(snapshot).get._2
+      processInfo.toApply shouldEqual Seq(snapshot)
+      history.applicable(snapshot) shouldBe false
+    }
+  }
+
   property("Should calculate difficulty correctly") {
     val epochLength = 2
     val blocksBeforeRecalculate = epochLength * LinearDifficultyControl.UseLastEpochs
     var history = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime(), epochLength)
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, Seq(history.bestHeader)).tail)
     history.requiredDifficulty should not be Constants.InitialDifficulty
-
   }
 
   property("PoPoW history should be able to apply PoPoWProof proofs") {

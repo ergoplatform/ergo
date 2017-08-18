@@ -7,11 +7,13 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import scorex.utils.Random
 
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
 
-  override lazy val id: ModifierId = ???
+  //TODO implement correctly
+  override lazy val id: ModifierId = Random.randomBytes(32)
 
   override type M = UTXOSnapshotChunk
 

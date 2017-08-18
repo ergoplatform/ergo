@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
@@ -103,6 +104,11 @@ trait ErgoGenerators extends CoreGenerators {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
   } yield ADProof(headerId, proof)
+
+  lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
+    index: Short <- Arbitrary.arbitrary[Short]
+    stateElements: Seq[AnyoneCanSpendNoncedBox] <- Gen.listOf(anyoneCanSpendBoxGen)
+  } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

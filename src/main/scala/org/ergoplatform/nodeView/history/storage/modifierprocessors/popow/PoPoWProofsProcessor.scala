@@ -56,6 +56,5 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
     PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
   }
-
 }
 

@@ -29,7 +29,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
   protected lazy val persistentProver =
-    new PersistentBatchAVLProver(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage)
+    PersistentBatchAVLProver.create(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage).get
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -44,6 +44,8 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     require(storage.version.sameElements(rootHash))
     require(store.lastVersionID.get.data.sameElements(rootHash))
 
+    persistentProver.checkTree(true)
+
     val mods = boxChanges(txs).operations.map(ADProof.changeToMod)
     mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
@@ -54,7 +56,12 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     val proof = persistentProver.generateProof
     val digest = persistentProver.digest
 
+    persistentProver.checkTree(true)
+
     persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+
+    persistentProver.checkTree(true)
+
     proof -> digest
   }
 
@@ -119,10 +126,12 @@ object UtxoState {
     val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
 
+
     new UtxoState(dir) {
-      override protected lazy val persistentProver = new PersistentBatchAVLProver(p, storage)
+      override protected lazy val persistentProver = PersistentBatchAVLProver.create(p, storage).get
 
       assert(persistentProver.digest.sameElements(storage.version))
+      persistentProver.checkTree(true)
     }
   }
 }

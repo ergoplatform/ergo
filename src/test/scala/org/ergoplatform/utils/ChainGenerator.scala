@@ -22,6 +22,7 @@ trait ChainGenerator {
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
       Math.max(NetworkTime.time(), acc.head.timestamp + 1)
     ): Header
@@ -39,6 +40,7 @@ trait ChainGenerator {
     val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
     val extensionHash = Array.fill(32)(0.toByte)
+    val solutions = Array.fill(32)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(BigInt(1),
@@ -46,6 +48,7 @@ trait ChainGenerator {
       stateRoot,
       proofsRoot,
       txsRoot,
+      solutions,
       extensionHash,
       votes,
       Math.max(NetworkTime.time(), acc.head.header.timestamp + 1)): Header

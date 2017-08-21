@@ -59,6 +59,7 @@ object ErgoFullBlock {
       genesisTimestamp,
       0,
       Constants.InitialDifficulty,
+      Array.fill(1)(0.toByte),
       Array.fill(32)(0.toByte),
       Array.fill(5)(0.toByte)
     )

@@ -42,11 +42,10 @@ object Equihash {
   }
 
   private val log = LoggerFactory.getLogger(getClass)
+  private val wordSize = 32
+  private val wordMask = BigInteger.ONE.shiftLeft(wordSize).subtract(BigInteger.ONE)
 
   def expandArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Int] = {
-    val wordSize = 32
-    val wordMask = BigInteger.ONE.shiftLeft(wordSize).subtract(BigInteger.ONE)
-
     assert(bitLen >= 8 && wordSize >= 7 + bitLen)
 
     val outWidth = (bitLen + 7) / 8 + bytePad
@@ -71,13 +70,49 @@ object Equihash {
         for (x <- bytePad until outWidth)
           out.update(j + x, {
             // Big-endian
-            accValue.shiftRight(accBits + (8 * (outWidth - x - 1))).and(
-              // Apply bitLenMask across byte boundaries
-              bitLenMask.shiftRight(8 * (outWidth - x - 1)).and(byteMask)).intValueExact()
+            val a = accValue.shiftRight(accBits + (8 * (outWidth - x - 1)))
+            val b =
+            // Apply bitLenMask across byte boundaries
+              bitLenMask.shiftRight(8 * (outWidth - x - 1)).and(byteMask)
+            val v = a.and(b)
+            v.intValueExact()
           })
-
         j += outWidth
       }
+    }
+
+    out
+  }
+
+  def compressArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Int] = {
+    assert(bitLen >= 8 && wordSize >= 7 + bitLen)
+
+    val inWidth = (bitLen + 7) / 8 + bytePad
+    assert(outLen == bitLen * inp.length / (8 * inWidth))
+    val out = new Array[Int](outLen)
+
+    val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
+
+    // The acc_bits least-significant bits of acc_value represent a bit sequence in big-endian order.
+    var accBits = 0
+    var accValue = BigInteger.ZERO
+
+    var j = 0
+    for (i <- 0 until outLen) {
+      // When we have fewer than 8 bits left in the accumulator, read the next input element.
+      if (accBits < 8) {
+        accValue = accValue.shiftLeft(bitLen).and(wordMask).or(BigInteger.valueOf((inp(j) & 0xFF).toLong))
+        for (x <- bytePad until inWidth) {
+          // Apply bit_len_mask across byte boundaries
+          val b = BigInteger.valueOf(inp(j + x) & 0xFF).and(bitLenMask.shiftRight(8 * (inWidth - x - 1)).and(BigInteger.valueOf(0xFF))).shiftLeft(8 * (inWidth - x - 1))
+          accValue = accValue.or(b) //Big - endian
+        }
+        j += inWidth
+        accBits += bitLen
+      }
+
+      accBits -= 8
+      out(i) = accValue.shiftRight(accBits).and(BigInteger.valueOf(0xFF)).intValueExact()
     }
 
     out

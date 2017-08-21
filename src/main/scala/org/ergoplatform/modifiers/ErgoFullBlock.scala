@@ -58,7 +58,7 @@ object ErgoFullBlock {
       BlockTransactions.rootHash(Seq(genesisTx.id)),
       genesisTimestamp,
       0,
-      Constants.InitialDifficulty,
+      Constants.InitialNBits,
       Array.fill(32)(0.toByte),
       Array.fill(5)(0.toByte)
     )

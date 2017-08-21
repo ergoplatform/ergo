@@ -291,6 +291,7 @@ object ErgoHistory extends ScorexLogging {
   type Height = Int
   type Score = BigInt
   type Difficulty = BigInt
+  type NBits = Long
 
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
     val dataDir = settings.dataDir

@@ -72,7 +72,18 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("validate() - valid block after genesis") {
+    val bh = boxesHolderGen.sample.get
 
+    withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
+
+      val us = UtxoState.fromBoxHolder(bh, dir)
+      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+      val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
+      val block = validFullBlock(parent, us, bh)
+      assert(us.rootHash.sameElements(parent.stateRoot))
+      us.validate(block).isFailure shouldBe true
+    }
   }
 
   property("validate() - invalid block") {

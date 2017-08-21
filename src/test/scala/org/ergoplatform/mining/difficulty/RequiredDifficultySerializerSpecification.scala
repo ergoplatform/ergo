@@ -13,7 +13,7 @@ class RequiredDifficultySerializerSpecification extends PropSpec
 
   property("external vectors from BitcoinJ") {
     val longs = Seq(402731232, 402759343, 402836551, 403108008, 410792019, 436591499, 453248203, 471907495, 486604799)
-    val calculated: Seq[BigInt] = longs.map(nBits => RequiredDifficultySerializer.decodeCompactBits(nBits))
+    val calculated: Seq[BigInt] = longs.map(nBits => RequiredDifficulty.decodeCompactBits(nBits))
     val bigInts: Seq[BigInt] = Seq(BigInt("29201223626342991605750065618903157022235193117232857088"),
       BigInt("39718797393257298660757754408019939605415460564426031104"),
       BigInt("68605739707508652902977299640495787127103841947617329152"),

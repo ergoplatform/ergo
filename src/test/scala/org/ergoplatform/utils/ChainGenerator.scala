@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTime
 
@@ -16,7 +17,7 @@ trait ChainGenerator {
   final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
     HeaderChain(acc.reverse)
   } else {
-    val header = Miner.genHeader(BigInt(1),
+    val header = Miner.genHeader(Constants.InitialNBits,
       acc.head,
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
@@ -41,7 +42,7 @@ trait ChainGenerator {
     val extensionHash = Array.fill(32)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
-    val header = Miner.genHeader(BigInt(1),
+    val header = Miner.genHeader(Constants.InitialNBits,
       acc.head.header,
       stateRoot,
       proofsRoot,

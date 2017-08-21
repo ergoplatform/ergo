@@ -2,18 +2,17 @@ package org.ergoplatform.mining.difficulty
 
 import java.math.BigInteger
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.nodeView.history.ErgoHistory._
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-object RequiredDifficultySerializer extends Serializer[Difficulty] {
+object RequiredDifficulty extends Serializer[NBits] {
 
-  override def toBytes(obj: Difficulty): Array[Version] = Ints.toByteArray((obj % Int.MaxValue).toInt)
+  override def toBytes(obj: NBits): Array[Version] = uint32ToByteArrayBE(obj)
 
-  override def parseBytes(bytes: Array[Version]): Try[Difficulty] = Try(Ints.fromByteArray(bytes))
+  override def parseBytes(bytes: Array[Version]): Try[NBits] = Try(readUint32BE(bytes))
 
   /**
     * <p>The "compact" format is a representation of a whole number N using an unsigned 32 bit number similar to a
@@ -41,7 +40,8 @@ object RequiredDifficultySerializer extends Serializer[Difficulty] {
   /**
     * @see Utils#decodeCompactBits(long)
     */
-  def encodeCompactBits(value: BigInteger): Long = {
+  def encodeCompactBits(requiredDifficulty: BigInt): Long = {
+    val value = requiredDifficulty.bigInteger
     var result: Long = 0L
     var size: Int = value.toByteArray.length
     if (size <= 3) result = value.longValue << 8 * (3 - size)
@@ -59,7 +59,11 @@ object RequiredDifficultySerializer extends Serializer[Difficulty] {
   }
 
   /** Parse 4 bytes from the byte array (starting at the offset) as unsigned 32-bit integer in big endian format. */
-  private def readUint32BE(bytes: Array[Byte], offset: Int): Long = ((bytes(offset) & 0xffl) << 24) | ((bytes(offset + 1) & 0xffl) << 16) | ((bytes(offset + 2) & 0xffl) << 8) | (bytes(offset + 3) & 0xffl)
+  private def readUint32BE(bytes: Array[Byte]): Long = ((bytes(0) & 0xffl) << 24) | ((bytes(1) & 0xffl) << 16) | ((bytes(2) & 0xffl) << 8) | (bytes(3) & 0xffl)
+
+  private def uint32ToByteArrayBE(value: Long): Array[Byte] = {
+    Array(0xFF & (value >> 24), 0xFF & (value >> 16), 0xFF & (value >> 8), 0xFF & value).map(_.toByte)
+  }
 
   /**
     * MPI encoded numbers are produced by the OpenSSL BN_bn2mpi function. They consist of
@@ -71,7 +75,7 @@ object RequiredDifficultySerializer extends Serializer[Difficulty] {
   private def decodeMPI(mpi: Array[Byte], hasLength: Boolean): BigInteger = {
     var buf: Array[Byte] = null
     if (hasLength) {
-      val length: Int = readUint32BE(mpi, 0).toInt
+      val length: Int = readUint32BE(mpi).toInt
       buf = new Array[Byte](length)
       System.arraycopy(mpi, 4, buf, 0, length)
     }

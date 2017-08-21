@@ -86,7 +86,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val fakeExtensionHash = Array.fill(32)(0.toByte)
 
-    val header = Miner.genHeader(Constants.InitialDifficulty, parent, updStateDigest, adProofhash, txsRoot,
+    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
       fakeExtensionHash, Array.fill(5)(0.toByte), time)
 
     val blockTransactions = BlockTransactions(header.id, transactions)

@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Ints, Longs}
+import com.google.common.primitives.{Bytes, Longs}
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.mining.difficulty.RequiredDifficultySerializer
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
@@ -68,15 +69,6 @@ object Header {
 
 
 object HeaderSerializer extends Serializer[Header] {
-
-  private object RequiredDifficultySerializer extends Serializer[Difficulty] {
-
-    //TODO implement compact algorithm from bitcoin
-
-    override def toBytes(obj: Difficulty): Array[Version] = Ints.toByteArray((obj % Int.MaxValue).toInt)
-
-    override def parseBytes(bytes: Array[Version]): Try[Difficulty] = Try(Ints.fromByteArray(bytes))
-  }
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
     h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash,

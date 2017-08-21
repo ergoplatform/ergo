@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.utils.ErgoGenerators
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
@@ -27,9 +28,9 @@ class AdProofSpec extends PropSpec
   type NewDigest = Digest
 
   private def createEnv(howMany: Int = 10):
-    (Seq[Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
+  (Seq[Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
 
-    val prover = new BatchAVLProver[Blake2b256Unsafe](KL, None)
+    val prover = new BatchAVLProver[Blake2b256Unsafe](KL, Some(ErgoState.BoxSize))
     val zeroBox = AnyoneCanSpendNoncedBox(0, 0L)
     prover.performOneOperation(Insert(zeroBox.id, zeroBox.bytes))
     prover.generateProof()
@@ -46,8 +47,8 @@ class AdProofSpec extends PropSpec
   }
 
   property("verify should be success in simple case") {
-    forAll(Gen.choose(0, 1000)){s =>
-      whenever(s >=0 ){
+    forAll(Gen.choose(0, 1000)) { s =>
+      whenever(s >= 0) {
         val (operations, prevDigest, newDigest, pf) = createEnv(s)
         val proof = ADProof(Array.fill(32)(0.toByte), pf)
         proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'success

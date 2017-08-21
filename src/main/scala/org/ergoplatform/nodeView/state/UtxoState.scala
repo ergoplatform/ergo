@@ -24,11 +24,11 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
-  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, fix
+  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
   private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
-  protected lazy val persistentProver =
+  protected lazy val persistentProver: PersistentBatchAVLProver[Blake2b256Unsafe] =
     PersistentBatchAVLProver.create(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage).get
 
   /**

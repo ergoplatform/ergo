@@ -58,4 +58,8 @@ class DigestStateSpecification extends PropSpec
       state.applyModifier(b).isFailure shouldBe true
     }
   }
+
+  property("rollback") {
+    //todo: implement
+  }
 }

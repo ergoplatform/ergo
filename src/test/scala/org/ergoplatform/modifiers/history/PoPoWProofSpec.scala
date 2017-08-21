@@ -23,7 +23,7 @@ class PoPoWProofSpec extends PropSpec
   }
 
   property("Valid PoPoWProof generation") {
-    generatePoPoWProof(5, 5).validate shouldBe 'success
+    PoPoWProof.validate(generatePoPoWProof(5, 5)) shouldBe 'success
   }
 
   property("Valid PoPoWProof serialization") {

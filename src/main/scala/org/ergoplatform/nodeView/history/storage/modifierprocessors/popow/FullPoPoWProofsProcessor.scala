@@ -15,7 +15,7 @@ import scala.util.{Failure, Success, Try}
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
-  def validate(m: PoPoWProof): Try[Unit] = m.validate.map { _ =>
+  def validate(m: PoPoWProof): Try[Unit] = PoPoWProof.validate(m).map { _ =>
     //TODO what if we trying to apply better popow proof?
     //TODO validate difficulty for suffix
     if (height > 1) Failure(new Error("Trying to apply PoPoW proof to nonempty history"))

@@ -2,6 +2,7 @@ package org.ergoplatform.crypto
 
 import java.math.BigInteger
 
+import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.slf4j.LoggerFactory
 
@@ -9,7 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.ergoplatform.utils.LittleEndianBytes._
 
 object Equihash {
-  def hashNonce(digest: Blake2bDigest, nonce: BigInt): Blake2bDigest = {
+  def hashNonce[T <: Digest](digest: T, nonce: BigInt): T = {
     for (i <- 0 to 7) {
       val arr = leIntToByteArray((nonce >> 32 * i).intValue())
       digest.update(arr, 0, arr.length)
@@ -17,15 +18,15 @@ object Equihash {
     digest
   }
 
-  def hashXi(digest: Blake2bDigest, xi: Int): Blake2bDigest = {
+  def hashXi[T <: Digest](digest: T, xi: Int): T = {
     val arr = leIntToByteArray(xi)
     digest.update(arr, 0, arr.length)
     digest
   }
 
+  private val byteSize = 8
   def countLeadingZeroes(bytes: Array[Int]): Int = {
-    val byteSize = 8
-    (0 until byteSize * bytes.size).foldLeft(0) {
+    (0 until byteSize * bytes.length).foldLeft(0) {
       case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => res + 1
       case (res, _) => return res
     }

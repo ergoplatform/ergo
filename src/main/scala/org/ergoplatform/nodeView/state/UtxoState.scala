@@ -24,11 +24,11 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
-  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, fix
+  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
   private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
-  protected lazy val persistentProver =
+  protected lazy val persistentProver: PersistentBatchAVLProver[Blake2b256Unsafe] =
     PersistentBatchAVLProver.create(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage).get
 
   /**
@@ -41,7 +41,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(ADProof.ProofRepresentation, Digest)] = Try {
     require(persistentProver.digest.sameElements(rootHash))
-    require(storage.version.sameElements(rootHash))
+    require(storage.version.get.sameElements(rootHash))
     require(store.lastVersionID.get.data.sameElements(rootHash))
 
     persistentProver.checkTree(true)
@@ -126,11 +126,10 @@ object UtxoState {
     val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
 
-
     new UtxoState(dir) {
       override protected lazy val persistentProver = PersistentBatchAVLProver.create(p, storage).get
 
-      assert(persistentProver.digest.sameElements(storage.version))
+      assert(persistentProver.digest.sameElements(storage.version.get))
       persistentProver.checkTree(true)
     }
   }

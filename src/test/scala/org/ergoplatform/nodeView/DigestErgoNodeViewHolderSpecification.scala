@@ -14,7 +14,6 @@ class DigestErgoNodeViewHolderSpecification extends PropSpec
   with ErgoGenerators
   with TestkitHelpers {
 
-
   lazy val settings: ErgoSettings = new ErgoSettings {
     override def settingsJSON: Map[String, circe.Json] = Map()
   }

@@ -7,8 +7,6 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
-import scorex.crypto.hash.Blake2b256Unsafe
 
 
 class UtxoStateSpecification extends PropSpec

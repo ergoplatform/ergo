@@ -3,8 +3,8 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.transaction.state.MinimalState.VersionTag
 import ErgoState.Digest
+import org.ergoplatform.modifiers.history.ADProof
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.hash.Blake2b256Unsafe
 
 import scala.util.{Failure, Success, Try}
 
@@ -12,10 +12,8 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-//todo: dir parameter
+//todo: dir parameter, digest persistence
 class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] with ScorexLogging {
-
-  implicit val hf = new Blake2b256Unsafe
 
   //todo: or hash(rootHash || headerHash)?
   override def version: VersionTag = rootHash
@@ -23,7 +21,7 @@ class DigestState(override val rootHash: Digest) extends ErgoState[DigestState] 
   override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        assert(hf(fb.aDProofs.get.bytes).sameElements(fb.header.ADProofsRoot))
+        assert(ADProof.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
 
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot

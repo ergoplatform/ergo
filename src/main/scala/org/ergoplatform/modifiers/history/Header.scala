@@ -26,7 +26,6 @@ case class Header(version: Version,
                   nonce: Long,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
-                  extensionHash: Array[Byte],
                   votes: Array[Byte]) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
@@ -55,7 +54,6 @@ case class Header(version: Version,
     "nonce" -> nonce.asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
-    "extensionHash" -> Base58.encode(extensionHash).asJson,
     "votes" -> Base58.encode(votes).asJson
   ).asJson
 
@@ -76,8 +74,8 @@ object Header {
 object HeaderSerializer extends Serializer[Header] {
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
-    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash,
-    h.votes, RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height))
+    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.votes,
+    RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height))
 
   override def toBytes(h: Header): Array[Version] = {
 
@@ -101,10 +99,9 @@ object HeaderSerializer extends Serializer[Header] {
     val stateRoot = bytes.slice(97, 129)
     val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
     val nonce = Longs.fromByteArray(bytes.slice(137, 145))
-    val extensionHash = bytes.slice(145, 177)
-    val votes = bytes.slice(177, 182)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(182, 186)).get
-    val height = Ints.fromByteArray(bytes.slice(186, 190))
+    val votes = bytes.slice(145, 150)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(150, 154)).get
+    val height = Ints.fromByteArray(bytes.slice(154, 158))
 
     @tailrec
     def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -116,10 +113,10 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinks = parseInterlinks(190, Seq())
+    val interlinks = parseInterlinks(158, Seq())
 
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-      nBits, height, extensionHash, votes)
+      nBits, height, votes)
   }
 }

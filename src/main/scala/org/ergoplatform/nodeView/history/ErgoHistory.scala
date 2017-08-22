@@ -245,7 +245,7 @@ trait ErgoHistory
   protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs, None)
+    ErgoFullBlock(header, txs, aDProofs)
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {

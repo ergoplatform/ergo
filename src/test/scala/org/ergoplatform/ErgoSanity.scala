@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
@@ -46,9 +46,8 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
                                 mempoolTransactionFetchOption: Boolean,
                                 noOfTransactionsFromMempool: Int): Header = {
     val bestHeader: Header = history.bestHeader
-    Miner.genHeader(BigInt(1),
+    Miner.genHeader(Constants.InitialNBits,
       bestHeader,
-      Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),

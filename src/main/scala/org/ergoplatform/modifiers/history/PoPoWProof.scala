@@ -7,7 +7,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class PoPoWProof(m: Byte,
                       k: Byte,
@@ -28,37 +28,34 @@ case class PoPoWProof(m: Byte,
 
   override def compare(that: PoPoWProof): Int = ???
 
-  lazy val validate: Try[Unit] = Try {
-    require(suffix.length == k, s"${suffix.length} == $k")
-    require(k > 0, s"$k > 0")
-
-    suffix.foldRight(Array[Byte]()) { (a, b) =>
-      if (b.nonEmpty) require(b sameElements a.id)
-      a.parentId
-    }
-
-    require(suffix.head.interlinks(i) sameElements innerchain.last.id)
-
-    val difficulty: BigInt = Constants.InitialDifficulty * Math.pow(2, i).toInt
-    require(innerchain.length >= m, s"${innerchain.length} >= $m")
-    innerchain.foreach(b => require(b.realDifficulty >= difficulty, s"$b: ${b.realDifficulty} >= $difficulty"))
-
-    innerchain.foldRight(Array[Byte]()) { (a, b) =>
-      if (b.nonEmpty) {
-        require(b sameElements a.id)
-
-      }
-      //last element may not contain a.interlinks(i)
-      Try(a.interlinks(i)).getOrElse(Array.fill(32)(0.toByte))
-    }
-
-    //TODO check that genesis links are correct
-  }
-
 }
 
 object PoPoWProof {
   val ModifierTypeId: Byte = 105: Byte
+
+  def validate(proof: PoPoWProof): Try[Unit] = {
+    val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
+    if (proof.suffix.length != proof.k) {
+      Failure(new Error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}"))
+    } else if (proof.k < 1) {
+      Failure(new Error(s"k should positive, ${proof.k} given"))
+    } else if (proof.m < 1) {
+      Failure(new Error(s"m should positive, ${proof.m} given"))
+    } else if (!(proof.suffix.head.interlinks(proof.i) sameElements proof.innerchain.last.id)) {
+      Failure(new Error(s"Incorrect link form sufffix to innerchain in $proof"))
+    } else if (proof.innerchain.length < proof.m) {
+      Failure(new Error(s"Innerchain length is not enough in $proof"))
+    } else if (!proof.innerchain.forall(_.realDifficulty >= innerDifficulty)) {
+      Failure(new Error(s"Innerchain difficulty is not enough in $proof"))
+    } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId sameElements s.head.id)) {
+      Failure(new Error(s"Suffix links are incorrect in $proof"))
+    } else if (!proof.innerchain.sliding(2).filter(_.length == 2)
+      .forall(s => s(1).interlinks(proof.i) sameElements s.head.id)) {
+      Failure(new Error(s"Innerchain links are incorrect in $proof"))
+    } else {
+      Success()
+    }
+  }
 
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
     val genesisId = parent.interlinks.head

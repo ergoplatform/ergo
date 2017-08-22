@@ -6,6 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
@@ -57,7 +58,8 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
         })
       }
 
-    val verifier = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL, None, maxNumOperations = Some(changes.operations.size))
+    val verifier = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL,
+      Some(ErgoState.BoxSize), maxNumOperations = Some(changes.operations.size))
 
     applyChanges(verifier, changes).flatMap { _ =>
       verifier.digest match {

@@ -28,7 +28,7 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(20000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(5000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
@@ -48,13 +48,14 @@ trait ErgoGenerators extends CoreGenerators {
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[Int]
+    height <- Gen.choose(1, Int.MaxValue)
     equihashSolutions <- genBytesList(Constants.ModifierIdSize)
+    height <- Gen.choose(1, Int.MaxValue)
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
-    extensionHash <- genBytesList(Constants.ModifierIdSize)
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce,
-    requiredDifficulty, equihashSolutions, extensionHash, votes)
+    equihashSolutions, requiredDifficulty, height, votes)
 
 
   def validTransactions(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
@@ -85,17 +86,15 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val fakeExtensionHash = Array.fill(32)(0.toByte)
-
     val fakeEquihashSolutions = Array.fill(32)(0.toByte)
 
-    val header = Miner.genHeader(Constants.InitialDifficulty, parent, updStateDigest, adProofhash, txsRoot, fakeEquihashSolutions,
-      fakeExtensionHash, Array.fill(5)(0.toByte), time)
+    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot, fakeEquihashSolutions,
+      Array.fill(5)(0.toByte), time)
 
     val blockTransactions = BlockTransactions(header.id, transactions)
     val adProof = ADProof(header.id, adProofBytes)
 
-    ErgoFullBlock(header, blockTransactions, Some(adProof), None)
+    ErgoFullBlock(header, blockTransactions, Some(adProof))
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
@@ -117,5 +116,5 @@ trait ErgoGenerators extends CoreGenerators {
     header <- invalidHeaderGen
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
-  } yield ErgoFullBlock(header, txs, Some(proof), None)
+  } yield ErgoFullBlock(header, txs, Some(proof))
 }

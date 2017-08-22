@@ -1,7 +1,9 @@
 package org.ergoplatform.mining
 
+
 import org.bouncycastle.crypto.digests.{Blake2bDigest, SHA256Digest}
 import org.ergoplatform.crypto.Equihash
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -46,7 +48,7 @@ object Miner extends ScorexLogging {
                transactions: Seq[AnyoneCanSpendTransaction],
                timestamp: Timestamp,
                n: Int, k: Int): ErgoFullBlock = {
-    val bytesPerWord = n / 8
+val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson(n, k))
@@ -71,22 +73,23 @@ object Miner extends ScorexLogging {
     }
   }
 
-  def genHeader(difficulty: BigInt,
+  def genHeader(nBits: Long,
                 parent: Header,
                 stateRoot: Array[Byte],
                 adProofsRoot: Array[Byte],
                 transactionsRoot: Array[Byte],
                 equihashSolutions: Array[Byte],
-                extensionHash: Array[Byte],
                 votes: Array[Byte],
                 timestamp: Timestamp): Header = {
     val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
+    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+    val height = parent.height + 1
 
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextInt
       val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-        difficulty, equihashSolutions, extensionHash, votes)
+        equihashSolutions, nBits, height, votes)
       if (correctWorkDone(header.id, difficulty)) header
       else generateHeader()
     }

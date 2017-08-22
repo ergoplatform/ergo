@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.history.{HeaderChain, PoPoWProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
@@ -50,8 +50,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = ensureMinimalHeight(history, 100)
     forAll(smallInt, smallInt) { (m, k) =>
       val proof = history.constructPoPoWProof(m + 1, k + 1).get
-      proof.validate.get
-      proof.validate shouldBe 'success
+      PoPoWProof.validate(proof) shouldBe 'success
     }
   }
 

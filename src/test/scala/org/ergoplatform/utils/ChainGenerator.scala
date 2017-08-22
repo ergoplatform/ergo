@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTime
 
@@ -16,9 +17,8 @@ trait ChainGenerator {
   final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
     HeaderChain(acc.reverse)
   } else {
-    val header = Miner.genHeader(BigInt(1),
+    val header = Miner.genHeader(Constants.InitialNBits,
       acc.head,
-      Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
@@ -39,23 +39,21 @@ trait ChainGenerator {
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32)(0.toByte)
-    val extensionHash = Array.fill(32)(0.toByte)
     val solutions = Array.fill(32)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
-    val header = Miner.genHeader(BigInt(1),
+    val header = Miner.genHeader(Constants.InitialNBits,
       acc.head.header,
       stateRoot,
       proofsRoot,
       txsRoot,
       solutions,
-      extensionHash,
       votes,
       Math.max(NetworkTime.time(), acc.head.header.timestamp + 1)): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 
-    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
+    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs))
     genChain(height - 1, block +: acc)
   }
 

@@ -20,7 +20,6 @@ import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, Prog
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
-import scala.annotation.tailrec
 import scala.util.{Failure, Try}
 
 /**
@@ -145,7 +144,6 @@ trait ErgoHistory
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
     */
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
-    //TODO check that work done is correct
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
         //Header chain is equals, compare full blocks
@@ -247,7 +245,7 @@ trait ErgoHistory
   protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs, None)
+    ErgoFullBlock(header, txs, aDProofs)
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
@@ -291,6 +289,7 @@ object ErgoHistory extends ScorexLogging {
   type Height = Int
   type Score = BigInt
   type Difficulty = BigInt
+  type NBits = Long
 
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
     val dataDir = settings.dataDir
@@ -301,7 +300,6 @@ object ErgoHistory extends ScorexLogging {
     val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval,
       settings.epochLength)
 
-    //TODO make easier?
     val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {
       case (true, true, true) =>
         new ErgoHistory with ADStateProofsProcessor

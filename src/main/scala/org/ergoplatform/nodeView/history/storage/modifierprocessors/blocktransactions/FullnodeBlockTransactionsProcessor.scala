@@ -23,9 +23,9 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
           case Some(adProof: ADProof) =>
-            processFullBlock(ErgoFullBlock(header, txs, Some(adProof), None), txsAreNew = true)
+            processFullBlock(ErgoFullBlock(header, txs, Some(adProof)), txsAreNew = true)
           case None if !adState =>
-            processFullBlock(ErgoFullBlock(header, txs, None, None), txsAreNew = true)
+            processFullBlock(ErgoFullBlock(header, txs, None), txsAreNew = true)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
             historyStorage.insert(txs.id, modifierRow)

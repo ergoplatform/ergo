@@ -30,8 +30,8 @@ class DigestStateSpecification extends PropSpec
   }
 
   property("validate() - invalid block") {
-    forAll(invalidErgoFullBlockGen){b =>
-      val state = new DigestState(Array.fill(32)(0:Byte))
+    forAll(invalidErgoFullBlockGen) { b =>
+      val state = new DigestState(Array.fill(32)(0: Byte))
       state.validate(b).isFailure shouldBe true
     }
   }
@@ -53,8 +53,8 @@ class DigestStateSpecification extends PropSpec
   }
 
   property("applyModifier() - invalid block") {
-    forAll(invalidErgoFullBlockGen){b =>
-      val state = new DigestState(Array.fill(32)(0:Byte))
+    forAll(invalidErgoFullBlockGen) { b =>
+      val state = new DigestState(Array.fill(32)(0: Byte))
       state.applyModifier(b).isFailure shouldBe true
     }
   }

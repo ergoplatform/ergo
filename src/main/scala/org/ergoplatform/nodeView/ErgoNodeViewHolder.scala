@@ -9,14 +9,14 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.ErgoSettingsT
 import scorex.core.NodeViewModifier.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-abstract class ErgoNodeViewHolder(settings: ErgoSettings)
+abstract class ErgoNodeViewHolder(settings: ErgoSettingsT)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override val networkChunkSize: Int = settings.networkChunkSize
@@ -38,7 +38,7 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   }
 }
 
-class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+class UtxoErgoNodeViewHolder(settings: ErgoSettingsT) extends ErgoNodeViewHolder(settings){
   override type MS = UtxoState
 
   /**
@@ -54,7 +54,7 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(
 }
 
 
-class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+class DigestErgoNodeViewHolder(settings: ErgoSettingsT) extends ErgoNodeViewHolder(settings){
   override type MS = DigestState
 
   /**

@@ -1,42 +1,28 @@
 package org.ergoplatform.settings
 
+import com.typesafe.config.Config
+import io.circe
+import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import scorex.core.settings.Settings
 
-import scala.concurrent.duration._
+case class ErgoSettings(directory: String,
+                        nodeSettings: NodeConfigurationSettings,
+                        legacySettings: Settings)
 
-trait ErgoSettings extends Settings {
-  lazy val dataDir: String = dataDirOpt.getOrElse("/tmp/ergo")
+object ErgoSettings {
 
-  //todo read all from settings file
-  /**
-    * Keep state root hash only and validate transactions via ADProofs
-    */
-  val ADState: Boolean = false
-  /**
-    * Download block transactions and verify them (requires BlocksToKeep == 0)
-    */
-  val verifyTransactions: Boolean = true
-  /**
-    * Number of last blocks to keep with transactions and ADproofs, for all other blocks only header will be stored.
-    * Keep all blocks from genesis if negative
-    */
-  val blocksToKeep: Int = 10
-  /**
-    * Download PoPoW proof on node bootstrap
-    */
-  val poPoWBootstrap: Boolean = false
-  /**
-    * Minimal suffix size for PoPoW proof (may be pre-defined constant or settings parameter)
-    */
-  val minimalSuffix: Int = 10
+  val configPath: String = "ergo"
 
-  /**
-    * Desired time interval between blocks
-    */
-  val blockInterval: FiniteDuration = 1.minute
+  def fromConfig(config: Config): ErgoSettings = {
+    val directory = config.as[String](s"$configPath.directory")
+    val settingsFilename = config.as[String](s"$configPath.legacySettingsFilename")
 
-  /**
-    * EpochLength
-    */
-  val epochLength: Int = 100
+    val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
+    val legacySettings = new Settings {
+      override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename).ensuring(_.nonEmpty)
+    }
+
+    ErgoSettings(directory, nodeSettings, legacySettings)
+  }
 }

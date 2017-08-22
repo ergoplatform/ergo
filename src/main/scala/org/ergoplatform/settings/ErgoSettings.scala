@@ -6,8 +6,8 @@ import scala.concurrent.duration._
 
 trait ErgoSettings extends Settings {
   lazy val dataDir: String = dataDirOpt.getOrElse("/tmp/ergo")
-  //todo read all from settings file
 
+  //todo read all from settings file
   /**
     * Keep state root hash only and validate transactions via ADProofs
     */

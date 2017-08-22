@@ -17,8 +17,7 @@ import scorex.core.serialization.Serializer
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProof],
-                         extension: Option[Map[Array[Byte], Array[Byte]]]) extends ErgoPersistentModifier {
+                         aDProofs: Option[ADProof]) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override val parentId = header.parentId
@@ -59,7 +58,7 @@ object ErgoFullBlock {
       genesisTimestamp,
       0,
       Constants.InitialNBits,
-      Array.fill(32)(0.toByte),
+      0,
       Array.fill(5)(0.toByte)
     )
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
@@ -68,7 +67,7 @@ object ErgoFullBlock {
     //todo: fix
     assert(header.ADProofsRoot sameElements aDProofs.digest)
     assert(header.transactionsRoot sameElements blockTransactions.digest)
-    ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
+    ErgoFullBlock(header, blockTransactions, Some(aDProofs))
   }
 
   lazy val genesis: ErgoFullBlock = genesisWithStateDigest(Array.fill(32)(0:Byte))//ErgoState.afterGenesisStateDigest)

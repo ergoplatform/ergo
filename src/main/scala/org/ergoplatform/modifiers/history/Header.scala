@@ -53,6 +53,8 @@ case class Header(version: Version,
     "parentId" -> Base58.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
     "nonce" -> nonce.asJson,
+    "nBits" -> nBits.asJson,
+    "height" -> height.asJson,
     "extensionHash" -> Base58.encode(extensionHash).asJson,
     "votes" -> Base58.encode(votes).asJson
   ).asJson

@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import io.iohk.iodb.QuickStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
@@ -11,6 +12,7 @@ import scorex.core.transaction.state.MinimalState.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base16
+
 import scala.util.Try
 
 
@@ -57,6 +59,8 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
 
   override def rollbackTo(version: VersionTag): Try[IState]
 
+  def rollbackVersions: Iterable[Digest]
+
   override type NVCT = this.type
 }
 
@@ -83,7 +87,7 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
-    new DigestState(afterGenesisStateDigest)
+    DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
   }
 
   val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)

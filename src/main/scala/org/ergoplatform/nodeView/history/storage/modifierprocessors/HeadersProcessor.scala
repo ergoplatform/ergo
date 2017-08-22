@@ -146,9 +146,6 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
     .map(_.data).getOrElse(Array()).grouped(32).toSeq
 
-  //TODO ensure it is from the best chain
-  protected def bestChainHeaderIdsAtHeight(height: Int): Option[ModifierId] = headerIdsAtHeight(height).lastOption
-
   /**
     * @param limit       - maximum length of resulting HeaderChain
     * @param startHeader - header to start
@@ -181,14 +178,15 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
+  protected val GenesisHeight = 0
+
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
-      val genesisHeight = 0
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
         (BestHeaderKey, ByteArrayWrapper(h.id)),
-        (heightIdsKey(genesisHeight), ByteArrayWrapper(h.id)),
-        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(genesisHeight))),
+        (heightIdsKey(GenesisHeight), ByteArrayWrapper(h.id)),
+        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(GenesisHeight))),
         (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty

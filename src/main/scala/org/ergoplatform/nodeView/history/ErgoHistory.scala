@@ -145,7 +145,6 @@ trait ErgoHistory
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
     */
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
-    //TODO check that work done is correct
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
         //Header chain is equals, compare full blocks
@@ -291,6 +290,7 @@ object ErgoHistory extends ScorexLogging {
   type Height = Int
   type Score = BigInt
   type Difficulty = BigInt
+  type NBits = Long
 
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
     val dataDir = settings.dataDir
@@ -301,7 +301,6 @@ object ErgoHistory extends ScorexLogging {
     val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval,
       settings.epochLength)
 
-    //TODO make easier?
     val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {
       case (true, true, true) =>
         new ErgoHistory with ADStateProofsProcessor

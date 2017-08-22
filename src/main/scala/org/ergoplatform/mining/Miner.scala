@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -18,10 +19,10 @@ object Miner {
                adProofs: ADProof,
                transactions: Seq[AnyoneCanSpendTransaction],
                timestamp: Timestamp): ErgoFullBlock = {
-???
+    ???
   }
 
-    def genHeader(difficulty: BigInt,
+  def genHeader(nBits: Long,
                 parent: Header,
                 stateRoot: Array[Byte],
                 adProofsRoot: Array[Byte],
@@ -30,12 +31,13 @@ object Miner {
                 votes: Array[Byte],
                 timestamp: Timestamp): Header = {
     val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
+    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextInt
       val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-        difficulty, extensionHash, votes)
+        nBits, extensionHash, votes)
       if (correctWorkDone(header.id, difficulty)) header
       else generateHeader()
     }

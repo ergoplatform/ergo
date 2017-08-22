@@ -59,6 +59,7 @@ object ErgoFullBlock {
       genesisTimestamp,
       0,
       Constants.InitialNBits,
+      0,
       Array.fill(32)(0.toByte),
       Array.fill(5)(0.toByte)
     )

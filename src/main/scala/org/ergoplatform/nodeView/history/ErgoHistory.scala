@@ -20,7 +20,6 @@ import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, Prog
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
-import scala.annotation.tailrec
 import scala.util.{Failure, Try}
 
 /**

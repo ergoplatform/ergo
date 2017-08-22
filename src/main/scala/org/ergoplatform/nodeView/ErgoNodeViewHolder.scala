@@ -61,7 +61,8 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
   override protected def genesisState: (ErgoHistory, DigestState, ErgoWallet, ErgoMemPool) = {
-    val dir = new File("/tmp/view")
+    val dir = new File(settings.dataDir)
+    dir.mkdirs()
 
     val digestState = ErgoState.generateGenesisDigestState(dir)
 

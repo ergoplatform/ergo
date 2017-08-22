@@ -100,16 +100,22 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def validate(m: Header): Try[Unit] = {
     lazy val parentOpt = typedModifierById[Header](m.parentId)
-    if (m.isGenesis && bestHeaderIdOpt.isEmpty) {
-      Success()
-    } else if (m.isGenesis) {
-      Failure(new Error("Trying to append genesis block to non-empty history"))
+    if (m.isGenesis) {
+      if (bestHeaderIdOpt.nonEmpty) {
+        Failure(new Error("Trying to append genesis block to non-empty history"))
+      } else if (m.height != GenesisHeight) {
+        Failure(new Error(s"Height of genesis block $m is incorrect"))
+      } else {
+        Success()
+      }
     } else if (parentOpt.isEmpty) {
       Failure(new Error(s"Parent header with id ${m.parentId} s not defined"))
     } else if (m.timestamp - NetworkTime.time() > MaxTimeDrift) {
       Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
     } else if (m.timestamp <= parentOpt.get.timestamp) {
       Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
+    } else if (m.height != parentOpt.get.height + 1) {
+      Failure(new Error(s"Header height ${m.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
     } else if (historyStorage.contains(m.id)) {
       Failure(new Error("Header is already in history"))
     } else if (m.realDifficulty < m.requiredDifficulty) {
@@ -196,10 +202,9 @@ trait HeadersProcessor extends ScorexLogging {
         Seq()
       }
       val scoreRow = (headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray))
-      val height = heightOf(h.parentId).get + 1
-      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(height)))
-      val headerIdsRow: (ByteArrayWrapper, ByteArrayWrapper) = (heightIdsKey(height),
-        ByteArrayWrapper((headerIdsAtHeight(height) :+ h.id).flatten.toArray))
+      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(h.height)))
+      val headerIdsRow: (ByteArrayWrapper, ByteArrayWrapper) = (heightIdsKey(h.height),
+        ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
       val modifierRow = (ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))
       Seq(scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
     }

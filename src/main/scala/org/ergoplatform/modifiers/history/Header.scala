@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Longs}
+import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -24,7 +24,8 @@ case class Header(version: Version,
                   transactionsRoot: Array[Byte],
                   timestamp: Timestamp,
                   nonce: Long,
-                  nBits: Long,
+                  nBits: Long, //actually it is unsigned int
+                  height: Int,
                   extensionHash: Array[Byte],
                   votes: Array[Byte]) extends ErgoPersistentModifier {
 
@@ -62,7 +63,7 @@ case class Header(version: Version,
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = interlinks.isEmpty
+  lazy val isGenesis: Boolean = height == 0
 }
 
 object Header {
@@ -74,7 +75,7 @@ object HeaderSerializer extends Serializer[Header] {
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
     h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.extensionHash,
-    h.votes, RequiredDifficulty.toBytes(h.nBits))
+    h.votes, RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height))
 
   override def toBytes(h: Header): Array[Version] = {
 
@@ -101,6 +102,7 @@ object HeaderSerializer extends Serializer[Header] {
     val extensionHash = bytes.slice(145, 177)
     val votes = bytes.slice(177, 182)
     val nBits = RequiredDifficulty.parseBytes(bytes.slice(182, 186)).get
+    val height = Ints.fromByteArray(bytes.slice(186, 190))
 
     @tailrec
     def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -112,10 +114,10 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinks = parseInterlinks(186, Seq())
+    val interlinks = parseInterlinks(190, Seq())
 
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-      nBits, extensionHash, votes)
+      nBits, height, extensionHash, votes)
   }
 }

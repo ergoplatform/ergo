@@ -140,6 +140,8 @@ class UtxoStateSpecification extends PropSpec
         bh.sortedBoxes.take(100).map(_.id).foreach{boxId =>
           us3.boxById(boxId).isDefined shouldBe true
         }
+
+        us3.applyModifier(block).get.rootHash shouldBe us2.rootHash
       }
     }
   }

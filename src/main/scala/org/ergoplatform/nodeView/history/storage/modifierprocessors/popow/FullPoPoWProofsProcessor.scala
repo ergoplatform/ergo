@@ -5,7 +5,6 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{HistoryModifierSerializer, PoPoWProof}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
-import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Success, Try}
@@ -15,11 +14,23 @@ import scala.util.{Failure, Success, Try}
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
-  def validate(m: PoPoWProof): Try[Unit] = m.validate.map { _ =>
-    //TODO what if we trying to apply better popow proof?
-    //TODO validate difficulty for suffix
-    if (height > 1) Failure(new Error("Trying to apply PoPoW proof to nonempty history"))
-    else Success()
+  def validate(m: PoPoWProof): Try[Unit] = PoPoWProof.validate(m).map { _ =>
+    bestHeaderIdOpt match {
+      case Some(genesisId) =>
+        heightOf(genesisId) match {
+          case Some(GenesisHeight) =>
+            if (!(m.suffix ++ m.innerchain).forall(_.interlinks.head sameElements genesisId)) {
+              Failure(new Error(s"Genesis id is incorrect for $m"))
+            } else Success()
+          case height =>
+            //TODO what if we trying to apply better popow proof to non-empty history?
+            Failure(new Error(s"Trying to apply PoPoW proof to history with height $height"))
+        }
+      case None =>
+        Failure(new Error("Trying to apply PoPoW proof to history with unknown genesis"))
+    }
+
+
   }
 
   def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = {

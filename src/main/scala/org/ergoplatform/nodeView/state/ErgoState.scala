@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState.Digest
@@ -90,15 +89,15 @@ object ErgoState extends ScorexLogging {
   val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)
   val afterGenesisStateDigest = Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918")
 
-  def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
+  def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.dataDir}/state")
     stateDir.mkdirs()
 
     //todo: read digest state from the database
     if(stateDir.listFiles().isEmpty) {
-      if (settings.ADState) generateGenesisDigestState(stateDir) else generateGenesisUtxoState(stateDir)
+      None
     } else {
-      if (settings.ADState) ??? else new UtxoState(stateDir)
+      if (settings.ADState) Some(???) else Some(new UtxoState(stateDir))
     }
   }
 }

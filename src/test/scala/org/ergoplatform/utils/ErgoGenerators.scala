@@ -48,12 +48,12 @@ trait ErgoGenerators extends CoreGenerators {
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[Int]
+    height <- Gen.choose(1, Int.MaxValue)
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
-    extensionHash <- genBytesList(Constants.ModifierIdSize)
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce,
-    requiredDifficulty, extensionHash, votes)
+    requiredDifficulty, height, votes)
 
 
   def validTransactions(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
@@ -84,15 +84,13 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val fakeExtensionHash = Array.fill(32)(0.toByte)
-
     val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
-      fakeExtensionHash, Array.fill(5)(0.toByte), time)
+      Array.fill(5)(0.toByte), time)
 
     val blockTransactions = BlockTransactions(header.id, transactions)
     val adProof = ADProof(header.id, adProofBytes)
 
-    ErgoFullBlock(header, blockTransactions, Some(adProof), None)
+    ErgoFullBlock(header, blockTransactions, Some(adProof))
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
@@ -114,5 +112,5 @@ trait ErgoGenerators extends CoreGenerators {
     header <- invalidHeaderGen
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
-  } yield ErgoFullBlock(header, txs, Some(proof), None)
+  } yield ErgoFullBlock(header, txs, Some(proof))
 }

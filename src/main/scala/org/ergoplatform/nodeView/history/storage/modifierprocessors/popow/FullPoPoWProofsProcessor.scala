@@ -38,9 +38,9 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
     val bestHeader = m.suffix.last
     val headersRows: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = headers.zipWithIndex.flatMap { case (h, i) =>
       val requiredDifficulty: BigInt = h.requiredDifficulty
+      val headerHeight: Int = h.height
       Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
-        //TODO howto?
-        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(2 + i))),
+        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(headerHeight))),
         //TODO howto?
         (headerScoreKey(h.id), ByteArrayWrapper((requiredDifficulty * (1 + i)).toByteArray)))
     }

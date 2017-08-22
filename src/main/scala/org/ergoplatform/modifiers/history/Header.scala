@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Ints, Longs, Shorts}
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
@@ -22,10 +23,10 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Timestamp,
-                  nonce: BigInt,
-                  requiredDifficulty: Difficulty,
+                  nonce: Long,
                   equihashSolutions: Array[Byte],
-                  extensionHash: Array[Byte],
+                  nBits: Long, //actually it is unsigned int
+                  height: Int,
                   votes: Array[Byte]) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
@@ -35,6 +36,8 @@ case class Header(version: Version,
   lazy val powHash: Digest = Algos.miningHash(id)
 
   lazy val realDifficulty: Difficulty = Algos.blockIdDifficulty(id)
+
+  lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
   lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
 
@@ -51,7 +54,8 @@ case class Header(version: Version,
     "timestamp" -> timestamp.asJson,
     "nonce" -> nonce.asJson,
     "equihashSolutions" -> equihashSolutions.asJson,
-    "extensionHash" -> Base58.encode(extensionHash).asJson,
+    "nBits" -> nBits.asJson,
+    "height" -> height.asJson,
     "votes" -> Base58.encode(votes).asJson
   ).asJson
 
@@ -61,7 +65,7 @@ case class Header(version: Version,
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = interlinks.isEmpty
+  lazy val isGenesis: Boolean = height == 0
 }
 
 object Header {
@@ -71,18 +75,9 @@ object Header {
 
 object HeaderSerializer extends Serializer[Header] {
 
-  private object RequiredDifficultySerializer extends Serializer[Difficulty] {
-
-    //TODO implement compact algorithm from bitcoin
-    //TODO serializing BigInt to Int?!
-    override def toBytes(obj: Difficulty): Array[Version] = Ints.toByteArray((obj % Int.MaxValue).toInt)
-
-    override def parseBytes(bytes: Array[Version]): Try[Difficulty] = Try(Ints.fromByteArray(bytes))
-  }
-
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
-    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Shorts.toByteArray(h.nonce.toByteArray.length.toShort), h.nonce.toByteArray, h.extensionHash,
-    h.votes, RequiredDifficultySerializer.toBytes(h.requiredDifficulty), Shorts.toByteArray(h.equihashSolutions.length.toShort), h.equihashSolutions)
+    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Shorts.toByteArray(h.nonce.toByteArray.length.toShort), h.nonce.toByteArray, h.votes,
+    RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height), Shorts.toByteArray(h.equihashSolutions.length.toShort), h.equihashSolutions)
 
   override def toBytes(h: Header): Array[Version] = {
 
@@ -105,13 +100,12 @@ object HeaderSerializer extends Serializer[Header] {
     val transactionsRoot = bytes.slice(65, 97)
     val stateRoot = bytes.slice(97, 129)
     val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
-    val nonceBytesSize = Shorts.fromByteArray(bytes.slice(137, 139))
-    val nonce = BigInt(bytes.slice(139, 139 + nonceBytesSize))
-    val extensionHash = bytes.slice(nonceBytesSize + 139, nonceBytesSize + 171)
-    val votes = bytes.slice(nonceBytesSize + 171, nonceBytesSize + 176)
-    val requiredDifficulty = RequiredDifficultySerializer.parseBytes(bytes.slice(nonceBytesSize + 176, nonceBytesSize + 180)).get
-    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(nonceBytesSize + 180, nonceBytesSize + 182))
-    val equihashSolutions = bytes.slice(nonceBytesSize + 182, nonceBytesSize + 182 + equihashSolutionsBytesSize)
+    val nonce = Longs.fromByteArray(bytes.slice(137, 145))
+    val votes = bytes.slice(145, 150)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(150, 154)).get
+    val height = Ints.fromByteArray(bytes.slice(154, 158))
+    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(158, 160))
+    val equihashSolutions = bytes.slice(160, 160 + equihashSolutionsBytesSize)
 
     @tailrec
     def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -123,9 +117,10 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinks = parseInterlinks(nonceBytesSize + 182 + equihashSolutionsBytesSize, Seq())
+    val interlinks = parseInterlinks(160 + equihashSolutionsBytesSize, Seq())
+
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-      requiredDifficulty, equihashSolutions, extensionHash, votes)
+      equihashSolutions, nBits, height, votes)
   }
 }

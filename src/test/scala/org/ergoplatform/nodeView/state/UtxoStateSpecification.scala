@@ -38,20 +38,21 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  /*
-  property("proofsForTransactions() replay") {
+  property("proofsForTransactions() to be deterministic") {
     forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}") { dir =>
         val us = UtxoState.fromBoxHolder(bh, dir)
         val txs = validTransactions(bh)._1
+
         val (proof1, digest1) = us.proofsForTransactions(txs).get
+
         val (proof2, digest2) = us.proofsForTransactions(txs).get
 
         ADProof.proofDigest(proof1) shouldBe ADProof.proofDigest(proof2)
         digest1 shouldBe digest2
       }
     }
-  } */
+  }
 
   property("checkTransactions()") {
     forAll(boxesHolderGen) { bh =>
@@ -71,7 +72,18 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("validate() - valid block after genesis") {
+    val bh = boxesHolderGen.sample.get
 
+    withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
+
+      val us = UtxoState.fromBoxHolder(bh, dir)
+      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+      val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
+      val block = validFullBlock(parent, us, bh)
+      assert(us.rootHash.sameElements(parent.stateRoot))
+      us.validate(block).isFailure shouldBe true
+    }
   }
 
   property("validate() - invalid block") {
@@ -83,8 +95,7 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  /*
-  property("applyModifier() - valid block") {
+  property("applyModifier() - valid full block") {
     forAll(boxesHolderGen) { bh =>
       withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
 
@@ -94,16 +105,43 @@ class UtxoStateSpecification extends PropSpec
         val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
         val block = validFullBlock(parent, us, bh)
         assert(us.rootHash.sameElements(parent.stateRoot))
-        us.applyModifier(block).get // .isSuccess shouldBe true
+        us.applyModifier(block).isSuccess shouldBe true
       }
     }
-  } */
+  }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       withDir("/tmp/utxotest5") { dir =>
         val state = new UtxoState(dir)
         state.applyModifier(b).isFailure shouldBe true
+      }
+    }
+  }
+
+  property("rollback - 1 block back") {
+    forAll(boxesHolderGen) { bh =>
+      withDir(s"/tmp/utxotest-${bh.hashCode()}}") { dir =>
+
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
+        val block = validFullBlock(parent, us, bh)
+        assert(us.rootHash.sameElements(parent.stateRoot))
+        val us2 = us.applyModifier(block).get
+
+        us.rootHash.sameElements(us2.rootHash) shouldBe false
+
+        val us3 = us2.rollbackTo(us.rootHash).get
+        us3.rootHash shouldBe us.rootHash
+        us3.version shouldBe us.version
+
+        bh.sortedBoxes.take(100).map(_.id).foreach{boxId =>
+          us3.boxById(boxId).isDefined shouldBe true
+        }
+
+        us3.applyModifier(block).get.rootHash shouldBe us2.rootHash
       }
     }
   }

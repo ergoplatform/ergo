@@ -80,5 +80,18 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
-  override def restoreState(): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = ???
+  override def restoreState(): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = {
+    ErgoState.readOrGenerate(settings).map {
+      case ds: DigestState =>
+        //todo: ensure that history is in certain mode
+        val history = ErgoHistory.readOrGenerate(settings)
+
+        val wallet = ErgoWallet.readOrGenerate(settings)
+
+        val memPool = ErgoMemPool.empty
+
+        (history, ds, wallet, memPool)
+      case _ => ???
+    }
+  }
 }

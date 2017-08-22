@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.transaction.state.MinimalState.VersionTag
 import ErgoState.Digest
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, QuickStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.ADProof
 import scorex.core.utils.ScorexLogging
 
@@ -54,12 +54,23 @@ class DigestState private (override val rootHash: Digest, store: Store) extends 
 }
 
 object DigestState {
-  def create(rootHash: Digest, dir: File): Try[DigestState] = Try {
+  def create(rootHashOpt: Option[Digest], dir: File): Try[DigestState] = Try {
     val store = new LSMStore(dir, keepVersions = 10)
-    if(store.lastVersionID.isDefined) {
-      new DigestState(rootHash, store)
-    } else {
-      new DigestState(rootHash, store).update(rootHash).get //sync store
-    }.ensuring(store.lastVersionID.get.data.sameElements(rootHash))
+
+    rootHashOpt match {
+
+      case Some(rootHash) =>
+        if (store.lastVersionID.isDefined) {
+          new DigestState(rootHash, store)
+        } else {
+          new DigestState(rootHash, store).update(rootHash).get //sync store
+        }.ensuring(store.lastVersionID.get.data.sameElements(rootHash))
+
+      case None =>
+        val rootHash = store.lastVersionID.get.data
+        new DigestState(rootHash, store)
+    }
   }
+
+  def create(rootHash: Digest, dir: File): Try[DigestState] = create(Some(rootHash), dir)
 }

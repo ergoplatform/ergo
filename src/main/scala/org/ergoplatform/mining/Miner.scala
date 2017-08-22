@@ -27,7 +27,6 @@ object Miner {
                 stateRoot: Array[Byte],
                 adProofsRoot: Array[Byte],
                 transactionsRoot: Array[Byte],
-                extensionHash: Array[Byte],
                 votes: Array[Byte],
                 timestamp: Timestamp): Header = {
     val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
@@ -38,7 +37,7 @@ object Miner {
     def generateHeader(): Header = {
       val nonce = Random.nextInt
       val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-        nBits, height, extensionHash, votes)
+        nBits, height, votes)
       if (correctWorkDone(header.id, difficulty)) header
       else generateHeader()
     }

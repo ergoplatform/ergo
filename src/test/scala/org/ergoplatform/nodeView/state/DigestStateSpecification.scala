@@ -60,6 +60,25 @@ class DigestStateSpecification extends PropSpec
   }
 
   property("rollback") {
-    //todo: implement
+    forAll(boxesHolderGen) { bh =>
+      withDir(s"/tmp/digest-test-${bh.hashCode()}}") { dir =>
+
+        val us = UtxoState.fromBoxHolder(bh, dir)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
+        val block = validFullBlock(parent, us, bh)
+
+        val ds = new DigestState(us.rootHash)
+        val ds2 = ds.applyModifier(block).get
+
+        ds2.rootHash.sameElements(ds.rootHash) shouldBe false
+
+        val ds3 = ds2.rollbackTo(ds.rootHash).get
+        ds3.rootHash shouldBe ds.rootHash
+
+        ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash
+      }
+    }
   }
 }

@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettingsT}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -291,7 +291,7 @@ object ErgoHistory extends ScorexLogging {
   type Difficulty = BigInt
   type NBits = Long
 
-  def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
+  def readOrGenerate(settings: ErgoSettingsT): ErgoHistory = {
     val dataDir = settings.dataDir
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()

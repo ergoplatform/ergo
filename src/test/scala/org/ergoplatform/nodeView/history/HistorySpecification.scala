@@ -6,7 +6,7 @@ import io.circe.Json
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettingsT}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -51,7 +51,7 @@ trait HistorySpecification extends PropSpec
                       nonce: Long = 0,
                       epoch: Int = 100000000): ErgoHistory = {
     val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
-    val fullHistorySettings: ErgoSettings = new ErgoSettings {
+    val fullHistorySettings: ErgoSettingsT = new ErgoSettingsT {
       override def settingsJSON: Map[String, Json] = Map()
 
       override val epochLength: Int = epoch

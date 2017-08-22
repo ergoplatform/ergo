@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettingsT}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
@@ -29,7 +29,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
   with ErgoGenerators {
 
-  val settings: ErgoSettings = new ErgoSettings {
+  val settings: ErgoSettingsT = new ErgoSettingsT {
     override def settingsJSON: Map[String, circe.Json] = Map()
   }
 

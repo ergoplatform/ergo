@@ -1,7 +1,9 @@
 package org.ergoplatform
 
+import java.io.File
+
 import akka.actor.ActorRef
-import io.circe
+import com.typesafe.config.{Config, ConfigFactory}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -10,16 +12,18 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
+import scorex.core.settings.Settings
 
-class ErgoApp(val settingsFilename: String) extends Application {
+class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
   override type TX = AnyoneCanSpendTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder
 
-  implicit lazy val settings: ErgoSettings = new ErgoSettings {
-    override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename).ensuring(_.nonEmpty)
-  }
+  val config:Config = readConfig(args.headOption)
+  val ergoSettings = ErgoSettings.fromConfig(config)
+
+  implicit lazy val settings: Settings = ergoSettings.legacySettings
 
   override val apiRoutes: Seq[ApiRoute] = Seq()
   override val apiTypes: Set[Class[_]] = Set()
@@ -27,9 +31,41 @@ class ErgoApp(val settingsFilename: String) extends Application {
   override val nodeViewHolderRef: ActorRef = ???
   override val nodeViewSynchronizer: ActorRef = ???
   override val localInterface: ActorRef = ???
+
+  def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
+
+  private def readConfig(userConfigPath: Option[String]): Config = {
+    val maybeConfigFile = for {
+      maybeFilename <- userConfigPath
+      file = new File(maybeFilename)
+      if file.exists
+    } yield file
+
+    val config = maybeConfigFile match {
+      // if no user config is supplied, the library will handle overrides/application/reference automatically
+      case None =>
+        log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS FOR TESTNET!")
+        ConfigFactory.load()
+      // application config needs to be resolved wrt both system properties *and* user-supplied config.
+      case Some(file) =>
+        val cfg = ConfigFactory.parseFile(file)
+        if (!cfg.hasPath("ergo")) {
+          log.error("Malformed configuration file was provided! Aborting!")
+          forceStopApplication()
+        }
+        ConfigFactory
+          .defaultOverrides()
+          .withFallback(cfg)
+          .withFallback(ConfigFactory.defaultApplication())
+          .withFallback(ConfigFactory.defaultReference())
+          .resolve()
+    }
+
+    config
+  }
+
 }
 
 object ErgoApp extends App {
-  val settingsFilename = args.headOption.getOrElse("settings.json")
-  new ErgoApp(settingsFilename).run()
+  new ErgoApp(args).run()
 }

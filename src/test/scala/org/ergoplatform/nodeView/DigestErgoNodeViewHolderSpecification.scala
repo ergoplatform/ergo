@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import io.circe
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.ErgoSettingsT
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -14,7 +14,7 @@ class DigestErgoNodeViewHolderSpecification extends PropSpec
   with ErgoGenerators
   with TestkitHelpers {
 
-  lazy val settings: ErgoSettings = new ErgoSettings {
+  lazy val settings: ErgoSettingsT = new ErgoSettingsT {
     override def settingsJSON: Map[String, circe.Json] = Map()
   }
 

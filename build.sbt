@@ -21,7 +21,8 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.0.1" % "test",
   "org.scalatest" %% "scalatest" % "3.0.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
-  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2" % "test"
+  "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC2" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test"
 )
 
 javaOptions in run ++= Seq("-Xmx2G")

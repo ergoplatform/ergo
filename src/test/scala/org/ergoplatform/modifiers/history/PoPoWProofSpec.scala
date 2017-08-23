@@ -20,15 +20,19 @@ class PoPoWProofSpec extends PropSpec
     generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong(), epoch = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 900)
+  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 200)
 
+  //todo: why .map not .get?
   property("Valid PoPoWProof generation") {
-    PoPoWProof.validate(popowHistory.constructPoPoWProof(5, 5).get) shouldBe 'success
+    popowHistory.constructPoPoWProof(5, 5).map{proof =>
+      PoPoWProof.validate(proof) shouldBe 'success
+    }
   }
 
   property("Valid PoPoWProof serialization") {
-    val proof = popowHistory.constructPoPoWProof(5, 5).get
-    val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
-    PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
+    popowHistory.constructPoPoWProof(5, 5).map { proof =>
+      val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
+      PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
+    }
   }
 }

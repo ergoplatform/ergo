@@ -79,9 +79,7 @@ class UtxoStateSpecification extends PropSpec
       val us = UtxoState.fromBoxHolder(bh, dir)
       bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-      val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-      val block = validFullBlock(parent, us, bh)
-      assert(us.rootHash.sameElements(parent.stateRoot))
+      val block = validFullBlock(parentOpt = None, us, bh)
       us.validate(block).isFailure shouldBe true
     }
   }
@@ -102,9 +100,7 @@ class UtxoStateSpecification extends PropSpec
         val us = UtxoState.fromBoxHolder(bh, dir)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-        val block = validFullBlock(parent, us, bh)
-        assert(us.rootHash.sameElements(parent.stateRoot))
+        val block = validFullBlock(parentOpt = None, us, bh)
         us.applyModifier(block).isSuccess shouldBe true
       }
     }
@@ -126,9 +122,7 @@ class UtxoStateSpecification extends PropSpec
         val us = UtxoState.fromBoxHolder(bh, dir)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-        val block = validFullBlock(parent, us, bh)
-        assert(us.rootHash.sameElements(parent.stateRoot))
+        val block = validFullBlock(parentOpt = None, us, bh)
         val us2 = us.applyModifier(block).get
 
         us.rootHash.sameElements(us2.rootHash) shouldBe false

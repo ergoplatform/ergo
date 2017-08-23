@@ -6,14 +6,17 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
 
+import scala.util.Random
+
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
-
-  var history = generateHistory(verify = false, adState = true, popow = false,0)
-  assert(history.bestFullBlockIdOpt.isEmpty)
-
+  def genHistory() =
+    generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong())
+      .ensuring(_.bestFullBlockOpt.isEmpty)
 
   property("Should apply UTXOSnapshotChunks") {
+    var history = genHistory()
+
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       history.applicable(snapshot) shouldBe true
       val processInfo = history.append(snapshot).get._2
@@ -24,30 +27,39 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   property("Should calculate difficulty correctly") {
     val epochLength = 2
-    val blocksBeforeRecalculate = epochLength * LinearDifficultyControl.UseLastEpochs
-    var history = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime(), epochLength)
-    history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, Seq(history.bestHeader)).tail)
+    val blocksBeforeRecalculate = epochLength * LinearDifficultyControl.UseLastEpochs + 1
+
+    var history = generateHistory(verify = false, adState = true, popow = false, toKeep = 0,
+      nonce = Random.nextLong(), epoch = epochLength)
+
+    history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
     history.requiredDifficulty should not be Constants.InitialDifficulty
   }
 
+
   property("PoPoW history should be able to apply PoPoWProof proofs") {
-    history = ensureMinimalHeight(history, 100)
-    val proof = history.constructPoPoWProof(5, 5).get
+    var history = genHistory()
+
+    history = ensureMinimalHeight(history, 200)
+    val proof = history.constructPoPoWProof(2, 5).get
     var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
     newHistory.applicable(proof) shouldBe true
     newHistory = newHistory.append(proof).get._1
-    newHistory.bestHeader shouldBe history.bestHeader
+    newHistory.bestHeaderOpt.isDefined shouldBe true
   }
 
   property("non-PoPoW history should ignore PoPoWProof proofs") {
+    var history = genHistory()
     history = ensureMinimalHeight(history, 100)
-    val proof = history.constructPoPoWProof(5, 5).get
+    val proof = history.constructPoPoWProof(2, 5).get
     val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
     newHistory.applicable(proof) shouldBe false
   }
 
   property("constructPoPoWProof() should generate valid proof") {
-    history = ensureMinimalHeight(history, 100)
+    var history = genHistory()
+
+    history = ensureMinimalHeight(history, 300)
     forAll(smallInt, smallInt) { (m, k) =>
       val proof = history.constructPoPoWProof(m + 1, k + 1).get
       PoPoWProof.validate(proof) shouldBe 'success
@@ -55,23 +67,31 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("lastHeaders() should return correct number of blocks") {
-    history = ensureMinimalHeight(history, BlocksInChain)
+    var history = genHistory()
+
+    history = ensureMinimalHeight(history, BlocksInChain + 1)
     forAll(smallInt) { m =>
       val lastHeaders = history.lastHeaders(m)
       if (m > 0) {
-        lastHeaders.last shouldBe history.bestHeader
+        lastHeaders.last shouldBe history.bestHeaderOpt.get
       }
       lastHeaders.length shouldBe m
     }
   }
 
   property("Compare headers chain") {
+    var history = genHistory()
+
     def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id), None)
-    val fork1 = genHeaderChain(BlocksInChain, Seq(history.bestHeader))
-    val fork2 = genHeaderChain(BlocksInChain + 1, Seq(history.bestHeader))
+
+    val common = genHeaderChain(BlocksInChain, history)
+    history = applyHeaderChain(history, common)
+
+    val fork1 = genHeaderChain(BlocksInChain, history)
+    val fork2 = genHeaderChain(BlocksInChain + 1, history)
 
     history = applyHeaderChain(history, fork1.tail)
-    history.bestHeader shouldBe fork1.last
+    history.bestHeaderOpt.get shouldBe fork1.last
 
     history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Older
     history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
@@ -81,6 +101,8 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {
+    var history = genHistory()
+
     history = ensureMinimalHeight(history, BlocksInChain + 1)
     val chain = history.lastHeaders(BlocksInChain)
 
@@ -96,18 +118,22 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("commonBlockThenSuffixes()") {
+    var history = genHistory()
+
+    history = ensureMinimalHeight(history, BlocksInChain + 1)
+
     val forkDepth = BlocksInChain / 2
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > forkDepth) {
 
-        val fork1 = genHeaderChain(forkLength, Seq(history.bestHeader)).tail
+        val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common))
 
         history = applyHeaderChain(history, fork1)
-        history.bestHeader shouldBe fork1.last
+        history.bestHeaderOpt.get shouldBe fork1.last
 
-        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeader, 1000)
+        val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeaderOpt.get, 1000)
         our.head shouldBe their.head
         our.head shouldBe common
         our.last shouldBe fork1.last
@@ -117,9 +143,13 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Append headers to best chain in history") {
-    val chain = genHeaderChain(BlocksInChain, Seq(history.bestHeader)).tail
+    var history = genHistory()
+
+    val chain = genHeaderChain(BlocksInChain, history)
+
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).get
+      val inHeight = history.heightOf(header.parentId).getOrElse(-1)
+
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true
 
@@ -127,10 +157,9 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
       history.contains(header) shouldBe true
       history.applicable(header) shouldBe false
-      history.bestHeader shouldBe header
+      history.bestHeaderOpt.get shouldBe header
       history.openSurfaceIds() shouldEqual Seq(header.id)
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }
-
 }

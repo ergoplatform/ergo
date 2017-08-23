@@ -72,7 +72,7 @@ trait ErgoGenerators extends CoreGenerators {
     txs -> bs
   }
 
-  def validFullBlock(parent: Header, utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
     val (transactions, updHolder) = validTransactions(boxHolder)
 
@@ -84,7 +84,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
+    val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
       Array.fill(5)(0.toByte), time)
 
     val blockTransactions = BlockTransactions(header.id, transactions)

@@ -45,14 +45,16 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override def genValidModifier(history: ErgoHistory,
                                 mempoolTransactionFetchOption: Boolean,
                                 noOfTransactionsFromMempool: Int): Header = {
-    val bestHeader: Header = history.bestHeader
+
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
+
     Miner.genHeader(Constants.InitialNBits,
-      bestHeader,
+      history.bestHeaderOpt,
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
-      Math.max(NetworkTime.time(), bestHeader.timestamp + 1)
+      Math.max(NetworkTime.time(), bestTimestamp)
     )
   }
 

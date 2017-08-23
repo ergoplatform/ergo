@@ -60,6 +60,8 @@ trait ErgoHistory
     */
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
+  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
+
   /**
     * Header of best Header chain.
     * It is safe to call this function right after history initialization with genesis block or PoPoWProof.
@@ -159,7 +161,7 @@ trait ErgoHistory
         }
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
         HistoryComparisonResult.Older
-      case Some(id) =>
+      case Some(_) =>
         //Compare headers chain
         val ids = info.lastHeaderIds
         ids.view.reverse.find(m => contains(m)) match {
@@ -236,11 +238,9 @@ trait ErgoHistory
       case m: UTXOSnapshotChunk =>
         validate(m)
       case m =>
-        Failure(new Error(s"Modifier $m have incorrect type"))
+        Failure(new Error(s"Modifier $m has incorrect type"))
     }
   }
-
-  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId)

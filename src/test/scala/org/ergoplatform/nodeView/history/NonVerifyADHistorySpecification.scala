@@ -10,12 +10,12 @@ import scala.util.Random
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
-  def genHistory() =
+  private def genHistory() =
     generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong())
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   property("Should apply UTXOSnapshotChunks") {
-    var history = genHistory()
+    val history = genHistory()
 
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       history.applicable(snapshot) shouldBe true
@@ -40,8 +40,8 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("PoPoW history should be able to apply PoPoWProof proofs") {
     var history = genHistory()
 
-    history = ensureMinimalHeight(history, 200)
-    val proof = history.constructPoPoWProof(2, 5).get
+    history = ensureMinimalHeight(history, 100)
+    val proof = history.constructPoPoWProof(5, 5).get
     var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
     newHistory.applicable(proof) shouldBe true
     newHistory = newHistory.append(proof).get._1
@@ -51,7 +51,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("non-PoPoW history should ignore PoPoWProof proofs") {
     var history = genHistory()
     history = ensureMinimalHeight(history, 100)
-    val proof = history.constructPoPoWProof(2, 5).get
+    val proof = history.constructPoPoWProof(5, 5).get
     val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
     newHistory.applicable(proof) shouldBe false
   }
@@ -59,7 +59,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("constructPoPoWProof() should generate valid proof") {
     var history = genHistory()
 
-    history = ensureMinimalHeight(history, 300)
+    history = ensureMinimalHeight(history, 100)
     forAll(smallInt, smallInt) { (m, k) =>
       val proof = history.constructPoPoWProof(m + 1, k + 1).get
       PoPoWProof.validate(proof) shouldBe 'success

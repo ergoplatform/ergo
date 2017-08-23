@@ -39,12 +39,12 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
 
     @tailrec
-    def constructProof(i: Int): (Int, Seq[Header]) = {
+    def constructProof(depth: Int): (Int, Seq[Header]) = {
       @tailrec
       def loop(acc: Seq[Header]): Seq[Header] = {
         val interHeader = acc.head
-        if (interHeader.interlinks.length > i && i > -1) {
-          val header = headerById(interHeader.interlinks(i))
+        if (interHeader.interlinks.length > depth) {
+          val header = headerById(interHeader.interlinks(depth))
           loop(header +: acc)
         } else {
           acc.dropRight(1)
@@ -52,7 +52,9 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
       }
 
       val innerchain = loop(Seq(suffixFirstHeader))
-      if (innerchain.length >= m) (i, innerchain) else constructProof(i - 1)
+
+      //todo: this code below could reach depth = -1, then ArrayIndexOutOfBoundException
+      if (innerchain.length >= m) (depth, innerchain) else constructProof(depth - 1)
     }
 
     val (depth, innerchain) = constructProof(suffixFirstHeader.interlinks.length)
@@ -60,4 +62,3 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
   }
 }
-

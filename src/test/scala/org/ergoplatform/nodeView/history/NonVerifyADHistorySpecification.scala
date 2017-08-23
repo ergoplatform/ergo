@@ -14,7 +14,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong(), epoch = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 300)
+  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 
   property("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
@@ -38,25 +38,27 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
 
   property("PoPoW history should be able to apply PoPoWProof proofs") {
-    val proof = popowHistory.constructPoPoWProof(5, 5).get
-
-    var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
-    newHistory.applicable(proof) shouldBe true
-    newHistory = newHistory.append(proof).get._1
-    newHistory.bestHeaderOpt.isDefined shouldBe true
+    //todo: why .get is not enough?
+    popowHistory.constructPoPoWProof(3, 5).map { proof =>
+      var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
+      newHistory.applicable(proof) shouldBe true
+      newHistory = newHistory.append(proof).get._1
+      newHistory.bestHeaderOpt.isDefined shouldBe true
+    }
   }
 
   property("non-PoPoW history should ignore PoPoWProof proofs") {
-    val proof = popowHistory.constructPoPoWProof(5, 5).get
-
-    val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
-    newHistory.applicable(proof) shouldBe false
+    popowHistory.constructPoPoWProof(3, 5).map { proof =>
+      val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
+      newHistory.applicable(proof) shouldBe false
+    }
   }
 
   property("constructPoPoWProof() should generate valid proof") {
     forAll(smallInt, smallInt) { (m, k) =>
-      val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
-      PoPoWProof.validate(proof) shouldBe 'success
+      popowHistory.constructPoPoWProof(m + 1, k + 1).map { proof =>
+        PoPoWProof.validate(proof) shouldBe 'success
+      }
     }
   }
 

@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -60,7 +61,8 @@ object PoPoWProof {
   }
 
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    if (parent.height == 0) {                            //genesis block
+    if (parent.height == ErgoHistory.GenesisHeight) {
+      //initialize interlink vector at first block after genesis
       Seq(parent.id)
     } else {
 

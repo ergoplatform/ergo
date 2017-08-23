@@ -19,6 +19,8 @@ import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
+import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
+
 /**
   * Contains all functions required by History to process Headers.
   */
@@ -184,8 +186,6 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
-
-  protected val GenesisHeight = 0
 
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty

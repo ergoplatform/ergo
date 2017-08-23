@@ -24,53 +24,29 @@ object Miner extends ScorexLogging {
     digest.update(prevHash, 0, prevHash.length)
     Equihash.hashNonce(digest, nonce)
     soln.foreach(s => Equihash.hashXi(digest, s))
-    val h = new Array[Byte](16)
+    val h = new Array[Byte](32)
     digest.doFinal(h, 0)
     val secondDigest = new SHA256Digest()
     secondDigest.update(h, 0, h.length)
-    val result = new Array[Byte](16)
+    val result = new Array[Byte](32)
     secondDigest.doFinal(result, 0)
     result
   }
 
-  def difficultyFilter(prevHash: Array[Byte], nonce: BigInt, soln: Seq[Int], d: BigInt): Boolean = {
-    val h = blockHash(prevHash, nonce, soln)
-    val count = Equihash.countLeadingZeroes(h.map(_ & 0xFF))
-    count >= d
-  }
+  // add chain byte?
+  private def ergoPerson(n: Int, k: Int): Array[Byte] = "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
 
-  private def ergoPerson(n: Int, k: Int): Array[Byte] = "ERGOPoW".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
-
-  def genBlock(difficulty: BigInt,
+  def genBlock(nBits: Long,
                parent: Header,
                stateRoot: Array[Byte],
                adProofs: ADProof,
                transactions: Seq[AnyoneCanSpendTransaction],
                timestamp: Timestamp,
+               votes: Array[Byte],
                n: Int, k: Int): ErgoFullBlock = {
-val bytesPerWord = n / 8
-    val wordsPerHash = 512 / n
-
-    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson(n, k))
-    digest.update(parent.id, 0, parent.id.length)
-    val solutionOpt = (BigInt(0) until BigInt("2923003274661805836407369665432566039311865085952")).view.map(nonce => {
-      val currentDigest = new Blake2bDigest(digest)
-      Equihash.hashNonce(currentDigest, nonce)
-      val solutions = Equihash.gbpBasic(currentDigest, n, k)
-      val suitableSolution = solutions.find(solutions => difficultyFilter(parent.id, nonce, solutions, difficulty))
-      suitableSolution
-    }).find(_.isDefined).map(_.get)
-    solutionOpt match {
-      case Some(solution) =>
-        val h = genHeader(difficulty,
-          parent, stateRoot, adProofs.proofBytes, ???,
-          // todo omg
-          solution.map(_.toByte).toArray, ???, ???, ???
-        )
-        new ErgoFullBlock(h, BlockTransactions(h.id, transactions), None, None)
-      case None =>
-        throw new IllegalStateException("Solution wasn't found!")
-    }
+    val h = genHeader(nBits,
+      parent, stateRoot, adProofs.proofBytes, BlockTransactions.rootHash(transactions.map(_.id)), votes, timestamp, n, k)
+    new ErgoFullBlock(h, BlockTransactions(h.id, transactions), None)
   }
 
   def genHeader(nBits: Long,
@@ -78,20 +54,36 @@ val bytesPerWord = n / 8
                 stateRoot: Array[Byte],
                 adProofsRoot: Array[Byte],
                 transactionsRoot: Array[Byte],
-                equihashSolutions: Array[Byte],
                 votes: Array[Byte],
-                timestamp: Timestamp): Header = {
+                timestamp: Timestamp,
+                n: Int, k: Int): Header = {
     val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
     val height = parent.height + 1
 
+    val bytesPerWord = n / 8
+    val wordsPerHash = 512 / n
+
+    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson(n, k))
+    digest.update(parent.id, 0, parent.id.length)
     @tailrec
     def generateHeader(): Header = {
-      val nonce = Random.nextInt
-      val header = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-        equihashSolutions, nBits, height, votes)
-      if (correctWorkDone(header.id, difficulty)) header
-      else generateHeader()
+      val nonce = Random.nextLong()
+      val currentDigest = new Blake2bDigest(digest)
+      Equihash.hashNonce(currentDigest, nonce)
+      val solutions = Equihash.gbpBasic(currentDigest, n, k)
+      val suitableSolution = solutions.find(solution => {
+        val h = blockHash(parent.id, nonce, solution)
+        correctWorkDone(h, difficulty)
+      })
+      suitableSolution match {
+        case Some(foundSolution) =>
+          Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
+            // todo
+            foundSolution.map(_.toByte).toArray, nBits, height, votes)
+        case None =>
+          generateHeader()
+      }
     }
 
     generateHeader()
@@ -114,7 +106,7 @@ val bytesPerWord = n / 8
     genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
   }
 
-  def correctWorkDone(id: Array[Version], difficulty: BigInt): Boolean = {
+  def correctWorkDone(id: Array[Byte], difficulty: BigInt): Boolean = {
     val target = Constants.MaxTarget / difficulty
     BigInt(1, id) < target
   }

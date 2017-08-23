@@ -76,7 +76,7 @@ object Header {
 object HeaderSerializer extends Serializer[Header] {
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
-    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Shorts.toByteArray(h.nonce.toByteArray.length.toShort), h.nonce.toByteArray, h.votes,
+    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.votes,
     RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height), Shorts.toByteArray(h.equihashSolutions.length.toShort), h.equihashSolutions)
 
   override def toBytes(h: Header): Array[Version] = {

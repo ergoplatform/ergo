@@ -299,7 +299,7 @@ object ErgoHistory extends ScorexLogging {
 
     val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
+    val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (true, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor

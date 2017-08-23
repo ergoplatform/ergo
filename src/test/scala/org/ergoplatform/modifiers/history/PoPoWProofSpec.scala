@@ -20,7 +20,7 @@ class PoPoWProofSpec extends PropSpec
     generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong(), epoch = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 500)
+  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 900)
 
   property("Valid PoPoWProof generation") {
     PoPoWProof.validate(popowHistory.constructPoPoWProof(5, 5).get) shouldBe 'success

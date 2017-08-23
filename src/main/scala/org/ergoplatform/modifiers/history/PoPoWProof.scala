@@ -60,20 +60,25 @@ object PoPoWProof {
   }
 
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    val genesisId = parent.interlinks.head
+    if (parent.height == 0) {                            //genesis block
+      Seq(parent.id)
+    } else {
 
-    def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-      if (parent.realDifficulty >= curDifficulty) {
-        generateInnerchain(curDifficulty * 2, acc :+ parent.id)
-      } else {
-        parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-          case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
-          case _ => acc
+      val genesisId = parent.interlinks.head
+
+      def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
+        if (parent.realDifficulty >= curDifficulty) {
+          generateInnerchain(curDifficulty * 2, acc :+ parent.id)
+        } else {
+          parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
+            case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
+            case _ => acc
+          }
         }
       }
-    }
 
-    genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+      genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    }
   }
 
 }
@@ -102,6 +107,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
     val i = bytes(2)
     val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
     val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
+
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
       if (acc.length == k) (index, acc.reverse)
       else {
@@ -111,6 +117,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
     }
+
     var (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
     val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
     index = index + 2

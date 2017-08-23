@@ -25,8 +25,5 @@ class RequiredDifficultySerializerSpecification extends PropSpec
       BigInt("26959535291011309493156476344723991336010898738574164086137773096960"))
 
     calculated shouldEqual bigInts
-
   }
-
-
 }

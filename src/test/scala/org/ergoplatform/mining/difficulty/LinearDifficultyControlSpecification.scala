@@ -16,8 +16,9 @@ class LinearDifficultyControlSpecification extends PropSpec
   with ErgoGenerators {
 
   val precision = 0.0001
-  val minDiff = (BigDecimal(1) / precision).toBigInt()
+  val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
   val Epoch = 123
+
   val control = new LinearDifficultyControl(1.minute, Epoch)
   val UseLastEpochs = LinearDifficultyControl.UseLastEpochs
 

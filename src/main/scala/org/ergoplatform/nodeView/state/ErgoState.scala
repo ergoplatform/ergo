@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
@@ -58,6 +57,8 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
 
   override def rollbackTo(version: VersionTag): Try[IState]
 
+  def rollbackVersions: Iterable[Digest]
+
   override type NVCT = this.type
 }
 
@@ -78,28 +79,28 @@ object ErgoState extends ScorexLogging {
 
     val bh = BoxHolder(initialBoxes)
 
-    UtxoState.fromBoxHolder(bh, stateDir).ensuring(_ => {
-      log.info("Genesis UTXO state generated");
-      true
+    UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
+      log.info("Genesis UTXO state generated")
+      us.rootHash.sameElements(afterGenesisStateDigest)
     })
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
-    new DigestState(afterGenesisStateDigest)
+    DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
   }
 
   val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)
-  val afterGenesisStateDigest = Base16.decode("86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918")
+  val afterGenesisStateDigestHex: String = "86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918"
+  val afterGenesisStateDigest: Digest = Base16.decode(afterGenesisStateDigestHex)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.dataDir}/state")
     stateDir.mkdirs()
 
-    //todo: read digest state from the database
     if (stateDir.listFiles().isEmpty) {
       None
     } else {
-      if (settings.nodeSettings.ADState) Some(???) else Some(new UtxoState(stateDir))
+      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption else Some(new UtxoState(stateDir))
     }
   }
 }

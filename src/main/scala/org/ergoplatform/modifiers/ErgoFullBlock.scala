@@ -34,41 +34,4 @@ case class ErgoFullBlock(header: Header,
 
 object ErgoFullBlock {
   val modifierTypeId: ModifierTypeId = (-127).toByte
-
-
-  //TODO testnet genesis?
-  //todo: real definition of a genesis block, do we need genesis block at all?
-  def genesisWithStateDigest(stateRoot: Digest): ErgoFullBlock = {
-    val genesisTimestamp = 1500203225564L
-
-    //todo: fix
-    val genesisTx = new AnyoneCanSpendTransaction(
-      IndexedSeq(0L),
-      IndexedSeq(0L))
-    //TODO where can we get it???
-    val proofs = Array.fill(32)(0: Byte)
-    val proofsRoot = ADProof.proofDigest(proofs)
-
-    val header: Header = Header(0.toByte,
-      Array.fill(hashLength)(0.toByte),
-      Seq(),
-      proofsRoot,
-      stateRoot,
-      BlockTransactions.rootHash(Seq(genesisTx.id)),
-      genesisTimestamp,
-      0,
-      Constants.InitialNBits,
-      0,
-      Array.fill(5)(0.toByte)
-    )
-    val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
-    val aDProofs: ADProof = ADProof(header.id, proofs)
-
-    //todo: fix
-    assert(header.ADProofsRoot sameElements aDProofs.digest)
-    assert(header.transactionsRoot sameElements blockTransactions.digest)
-    ErgoFullBlock(header, blockTransactions, Some(aDProofs))
-  }
-
-  lazy val genesis: ErgoFullBlock = genesisWithStateDigest(Array.fill(32)(0:Byte))//ErgoState.afterGenesisStateDigest)
 }

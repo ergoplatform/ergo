@@ -33,7 +33,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     require(k > 0 && k < currentHeight, s"$k > 0 && $k < $currentHeight")
 
     val suffix: HeaderChain = lastHeaders(k)
-    val firstSuffix = suffix.head
+    val suffixFirstHeader = suffix.head
 
 
     def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
@@ -43,19 +43,19 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
       @tailrec
       def loop(acc: Seq[Header]): Seq[Header] = {
         val interHeader = acc.head
-        if (interHeader.interlinks.length > i) {
+        if (interHeader.interlinks.length > i && i > -1) {
           val header = headerById(interHeader.interlinks(i))
           loop(header +: acc)
         } else {
-          acc.reverse.tail.reverse
+          acc.dropRight(1)
         }
       }
 
-      val innerchain = loop(Seq(firstSuffix))
+      val innerchain = loop(Seq(suffixFirstHeader))
       if (innerchain.length >= m) (i, innerchain) else constructProof(i - 1)
     }
 
-    val (depth, innerchain) = constructProof(firstSuffix.interlinks.length)
+    val (depth, innerchain) = constructProof(suffixFirstHeader.interlinks.length)
 
     PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
   }

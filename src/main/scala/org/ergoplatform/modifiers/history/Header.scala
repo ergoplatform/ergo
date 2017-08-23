@@ -7,7 +7,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
@@ -19,9 +19,9 @@ import scala.util.Try
 case class Header(version: Version,
                   override val parentId: BlockId,
                   interlinks: Seq[Array[Byte]],
-                  ADProofsRoot: Array[Byte],
-                  stateRoot: Array[Byte],
-                  transactionsRoot: Array[Byte],
+                  ADProofsRoot: Digest,
+                  stateRoot: Digest,
+                  transactionsRoot: Digest,
                   timestamp: Timestamp,
                   nonce: Long,
                   nBits: Long, //actually it is unsigned int
@@ -68,6 +68,8 @@ case class Header(version: Version,
 
 object Header {
   val ModifierTypeId: Byte = 101: Byte
+
+  lazy val GenesisParentId: Digest = Array.fill(Constants.hashLength)(0: Byte)
 }
 
 

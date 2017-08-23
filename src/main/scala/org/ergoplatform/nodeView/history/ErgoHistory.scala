@@ -67,15 +67,6 @@ trait ErgoHistory
     */
   def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
-  /*
-  /**
-    * Header of best Header chain.
-    * It is safe to call this function right after history initialization with genesis block or PoPoWProof.
-    * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
-    * it) call bestFullBlockOpt.
-    */
-  def bestHeader: Header = bestHeaderOpt.get*/
-
   /**
     * Complete block of the best chain with transactions.
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
@@ -357,17 +348,6 @@ object ErgoHistory extends ScorexLogging {
         throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +
           s"poPoWBootstrap==${m._1}")
     }
-
-    /*
-    todo: remove
-    if (history.isEmpty) {
-      log.info("Initialize empty history with genesis block")
-      val genesis: ErgoFullBlock = ErgoFullBlock.genesis
-      history.append(genesis.header).get._1
-    } else {
-      log.info("Initialize non-empty history ")
-      history
-    }*/
 
     history
   }

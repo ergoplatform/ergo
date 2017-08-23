@@ -25,8 +25,8 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val config: HistoryConfig
 
-  //TODO better DDoS protection
-  protected lazy val MaxRollback = 30.days.toMillis / config.blockInterval.toMillis
+  //TODO alternative DDoS protection
+  protected lazy val MaxRollback = 600.days.toMillis / config.blockInterval.toMillis
 
   //Maximum time in future block header main contain
   protected lazy val MaxTimeDrift = 10 * config.blockInterval.toMillis
@@ -36,6 +36,8 @@ trait HeadersProcessor extends ScorexLogging {
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
+
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -91,8 +93,6 @@ trait HeadersProcessor extends ScorexLogging {
     } else Seq()
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
   }
-
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
   /**
     * @param m - header to validate

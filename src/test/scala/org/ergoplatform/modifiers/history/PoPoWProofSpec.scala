@@ -58,11 +58,11 @@ class PoPoWProofSpec extends PropSpec
       @tailrec
       def loop(acc: Seq[Header]): Seq[Header] = {
         val interHeader = acc.head
-        if (interHeader.interlinks.length > i) {
+        if (interHeader.interlinks.length > i && i >= 0) {
           val header = headerById(interHeader.interlinks(i))
           loop(header +: acc)
         } else {
-          acc.reverse.tail.reverse
+          acc.dropRight(1)
         }
       }
 

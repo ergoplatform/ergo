@@ -26,6 +26,7 @@ case class PoPoWProof(m: Byte,
 
   override lazy val json: Json = ???
 
+  //todo: implement
   override def compare(that: PoPoWProof): Int = ???
 
 }
@@ -33,6 +34,7 @@ case class PoPoWProof(m: Byte,
 object PoPoWProof {
   val ModifierTypeId: Byte = 105: Byte
 
+  //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
     if (proof.suffix.length != proof.k) {
@@ -42,7 +44,7 @@ object PoPoWProof {
     } else if (proof.m < 1) {
       Failure(new Error(s"m should positive, ${proof.m} given"))
     } else if (!(proof.suffix.head.interlinks(proof.i) sameElements proof.innerchain.last.id)) {
-      Failure(new Error(s"Incorrect link form sufffix to innerchain in $proof"))
+      Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
     } else if (proof.innerchain.length < proof.m) {
       Failure(new Error(s"Innerchain length is not enough in $proof"))
     } else if (!proof.innerchain.forall(_.realDifficulty >= innerDifficulty)) {

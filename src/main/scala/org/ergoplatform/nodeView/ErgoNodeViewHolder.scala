@@ -19,7 +19,7 @@ import scorex.core.{NodeViewHolder, NodeViewModifier}
 abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
-  override val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
+  override lazy val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
 
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
@@ -27,7 +27,7 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   override type MP = ErgoMemPool
 
   //todo: complete this
-  override val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
+  override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
   Map(???,
     Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
@@ -91,7 +91,7 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
         val memPool = ErgoMemPool.empty
 
         (history, ds, wallet, memPool)
-      case _ => ???
+      case _ => ??? //shouldn't be here
     }
   }
 }

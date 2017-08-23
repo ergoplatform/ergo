@@ -119,6 +119,8 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
       .unauthenticatedLookup(id)
       .map(AnyoneCanSpendNoncedBoxSerializer.parseBytes)
       .flatMap(_.toOption)
+
+  override def rollbackVersions: Iterable[Digest] = persistentProver.storage.rollbackVersions
 }
 
 object UtxoState {

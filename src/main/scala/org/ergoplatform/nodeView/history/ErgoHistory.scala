@@ -30,7 +30,7 @@ import scala.util.{Failure, Try}
   * HeadersProcessor: processor of block headers. It's the same for all node settings
   * ADProofsProcessor: processor of ADProofs. ADProofs may
   *   1. Be downloaded from other nodes (ADState == true)
-  *   2. Be calculated by local state (ADState == false)
+  *   2. Be calculated by using local state (ADState == false)
   *   3. Be ignored by history in light mode (verifyTransactions == false)
   * PoPoWProofsProcessor: processor of PoPoWProof. PoPoWProof may
   *   1. Be downloaded once during bootstrap from other peers (poPoWBootstrap == true)
@@ -61,12 +61,11 @@ trait ErgoHistory
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
   /**
-    * Header of best Header chain.
-    * It is safe to call this function right after history initialization with genesis block or PoPoWProof.
+    * Header of best Header chain. Empty if no genesis block is applied yet (from a chain or a PoPoW proof).
     * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
     * it) call bestFullBlockOpt.
     */
-  def bestHeader: Header = bestHeaderOpt.get
+  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   /**
     * Complete block of the best chain with transactions.
@@ -159,7 +158,7 @@ trait ErgoHistory
         }
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
         HistoryComparisonResult.Older
-      case Some(id) =>
+      case Some(_) =>
         //Compare headers chain
         val ids = info.lastHeaderIds
         ids.view.reverse.find(m => contains(m)) match {
@@ -221,7 +220,11 @@ trait ErgoHistory
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int): HeaderChain = headerChainBack(count, bestHeader, b => b.isGenesis)
+  def lastHeaders(count: Int): HeaderChain =
+    bestHeaderOpt
+      .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
+      .getOrElse(HeaderChain.empty)
+
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
@@ -236,11 +239,9 @@ trait ErgoHistory
       case m: UTXOSnapshotChunk =>
         validate(m)
       case m =>
-        Failure(new Error(s"Modifier $m have incorrect type"))
+        Failure(new Error(s"Modifier $m has incorrect type"))
     }
   }
-
-  private def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
     val aDProofs = typedModifierById[ADProof](header.ADProofsId)
@@ -347,13 +348,6 @@ object ErgoHistory extends ScorexLogging {
           s"poPoWBootstrap==${m._1}")
     }
 
-    if (history.isEmpty) {
-      log.info("Initialize empty history with genesis block")
-      val genesis: ErgoFullBlock = ErgoFullBlock.genesis
-      history.append(genesis.header).get._1
-    } else {
-      log.info("Initialize non-empty history ")
-      history
-    }
+    history
   }
 }

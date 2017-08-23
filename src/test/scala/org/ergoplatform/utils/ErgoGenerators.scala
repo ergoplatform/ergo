@@ -28,7 +28,7 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(5000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
@@ -72,7 +72,7 @@ trait ErgoGenerators extends CoreGenerators {
     txs -> bs
   }
 
-  def validFullBlock(parent: Header, utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
     val (transactions, updHolder) = validTransactions(boxHolder)
 
@@ -84,7 +84,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
+    val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
       Array.fill(5)(0.toByte), time)
 
     val blockTransactions = BlockTransactions(header.id, transactions)

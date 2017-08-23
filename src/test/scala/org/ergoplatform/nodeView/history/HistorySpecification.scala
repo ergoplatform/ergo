@@ -24,23 +24,23 @@ trait HistorySpecification extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
-
   override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
+
   val BlocksInChain = 10
   val BlocksToKeep = BlocksInChain + 1
 
-  def bestFullOrGenesis(history: ErgoHistory): ErgoFullBlock = history.bestFullBlockOpt.getOrElse(ErgoFullBlock.genesis)
+  def bestFullOptToSeq(history: ErgoHistory): Seq[ErgoFullBlock] = history.bestFullBlockOpt.toSeq
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.height
     if (historyHeight < height) {
       history match {
-        case h: EmptyBlockTransactionsProcessor =>
-          applyHeaderChain(history, genHeaderChain(height - historyHeight, Seq(history.bestHeader)).tail)
-        case h =>
+        case _: EmptyBlockTransactionsProcessor =>
+          val chain = genHeaderChain(height - historyHeight, history)
+          if(history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
+        case _ =>
           ???
       }
-
     } else {
       history
     }
@@ -68,5 +68,4 @@ trait HistorySpecification extends PropSpec
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
-
 }

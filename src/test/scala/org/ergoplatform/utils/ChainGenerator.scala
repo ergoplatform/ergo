@@ -13,18 +13,22 @@ import scala.annotation.tailrec
 import scala.util.Random
 
 trait ChainGenerator {
+
+  def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
+    genHeaderChain(height, history.bestHeaderOpt.toSeq)
+
   @tailrec
   final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
     HeaderChain(acc.reverse)
   } else {
     val header = Miner.genHeader(Constants.InitialNBits,
-      acc.head,
+      acc.headOption,
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
-      Math.max(NetworkTime.time(), acc.head.timestamp + 1)
-    ): Header
+      Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time()))
+    )
     genHeaderChain(height - 1, header +: acc)
   }
 
@@ -41,12 +45,12 @@ trait ChainGenerator {
     val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(Constants.InitialNBits,
-      acc.head.header,
+      acc.headOption.map(_.header),
       stateRoot,
       proofsRoot,
       txsRoot,
       votes,
-      Math.max(NetworkTime.time(), acc.head.header.timestamp + 1)): Header
+      Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time()))): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
     val aDProofs: ADProof = ADProof(header.id, proofs)
 

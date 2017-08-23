@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.utils.ErgoGenerators
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}

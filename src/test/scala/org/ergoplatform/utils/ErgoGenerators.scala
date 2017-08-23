@@ -86,10 +86,8 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val fakeEquihashSolutions = Array.fill(32)(0.toByte)
-
-    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot, fakeEquihashSolutions,
-      Array.fill(5)(0.toByte), time)
+    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
+      Array.fill(5)(0.toByte), time, 96, 5)
 
     val blockTransactions = BlockTransactions(header.id, transactions)
     val adProof = ADProof(header.id, adProofBytes)

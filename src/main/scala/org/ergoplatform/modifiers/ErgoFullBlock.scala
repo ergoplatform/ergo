@@ -68,7 +68,7 @@ object ErgoFullBlock {
     //todo: fix
     assert(header.ADProofsRoot sameElements aDProofs.digest)
     assert(header.transactionsRoot sameElements blockTransactions.digest)
-    ErgoFullBlock(header, blockTransactions, Some(aDProofs), None)
+    ErgoFullBlock(header, blockTransactions, Some(aDProofs))
   }
 
   lazy val genesis: ErgoFullBlock = genesisWithStateDigest(Array.fill(32)(0:Byte))//ErgoState.afterGenesisStateDigest)

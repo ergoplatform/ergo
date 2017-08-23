@@ -3,16 +3,18 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.circe.Json
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{Algos, ErgoSettingsT}
+import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.settings.Settings
 import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
+
+import scala.concurrent.duration._
 
 trait HistorySpecification extends PropSpec
   with PropertyChecks
@@ -47,20 +49,22 @@ trait HistorySpecification extends PropSpec
   def generateHistory(verify: Boolean,
                       adState: Boolean,
                       popow: Boolean,
-                      toKeep: Int,
+                      blocksToKeep: Int,
                       nonce: Long = 0,
-                      epoch: Int = 100000000): ErgoHistory = {
-    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
-    val fullHistorySettings: ErgoSettingsT = new ErgoSettingsT {
-      override def settingsJSON: Map[String, Json] = Map()
+                      epochLength: Int = 100000000): ErgoHistory = {
 
-      override val epochLength: Int = epoch
-      override val verifyTransactions: Boolean = verify
-      override val ADState: Boolean = adState
-      override lazy val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
-      override val blocksToKeep: Int = toKeep
-      override val poPoWBootstrap: Boolean = popow
+    val blockInterval = 1.minute
+    val minimalSuffix = 2
+    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + blocksToKeep + popow))
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(adState, verify, blocksToKeep,
+      popow, minimalSuffix, blockInterval, epochLength)
+    val scorexSettings: Settings = new Settings {
+      override def settingsJSON: Map[String, Json] = Map()
     }
+
+    val fullHistorySettings: ErgoSettings = ErgoSettings(s"/tmp/ergo/test-history-$paramsHash-$nonce",
+      nodeSettings,
+      scorexSettings)
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }

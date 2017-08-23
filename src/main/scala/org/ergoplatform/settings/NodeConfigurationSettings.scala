@@ -1,5 +1,7 @@
 package org.ergoplatform.settings
 
+import scala.concurrent.duration.FiniteDuration
+
 case class NodeConfigurationSettings(/**
                                        * Keep state root hash only and validate transactions via ADProofs
                                        */
@@ -25,4 +27,14 @@ case class NodeConfigurationSettings(/**
                                      /**
                                        * Minimal suffix size for PoPoW proof (may be pre-defined constant or settings parameter)
                                        */
-                                     minimalSuffix: Int)
+                                     minimalSuffix: Int,
+
+                                     /**
+                                       * Desired time interval between blocks
+                                       */
+                                     blockInterval: FiniteDuration,
+
+                                     /**
+                                       * EpochLength
+                                       */
+                                     epochLength: Int)

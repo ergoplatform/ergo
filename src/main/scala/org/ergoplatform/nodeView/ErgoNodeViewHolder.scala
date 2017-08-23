@@ -9,17 +9,17 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettingsT
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewModifier.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-abstract class ErgoNodeViewHolder(settings: ErgoSettingsT)
+abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
-  override val networkChunkSize: Int = settings.networkChunkSize
+  override val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
 
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
@@ -28,8 +28,8 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettingsT)
 
   //todo: complete this
   override val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-    Map(???,
-      Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
+  Map(???,
+    Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -38,7 +38,7 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettingsT)
   }
 }
 
-class UtxoErgoNodeViewHolder(settings: ErgoSettingsT) extends ErgoNodeViewHolder(settings){
+class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
   override type MS = UtxoState
 
   /**
@@ -54,7 +54,7 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettingsT) extends ErgoNodeViewHolder
 }
 
 
-class DigestErgoNodeViewHolder(settings: ErgoSettingsT) extends ErgoNodeViewHolder(settings){
+class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
   override type MS = DigestState
 
   /**

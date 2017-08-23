@@ -8,6 +8,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProce
 import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Success, Try}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import ErgoHistory.GenesisHeight
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.

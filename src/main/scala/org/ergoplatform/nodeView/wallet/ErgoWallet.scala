@@ -1,11 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.settings.ErgoSettingsT
-import scorex.core.transaction.box.Box
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
 import scorex.core.utils.ScorexLogging
 
@@ -40,5 +38,5 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTr
 }
 
 object ErgoWallet {
-  def readOrGenerate(settings: ErgoSettingsT): ErgoWallet = new ErgoWallet
+  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
 }

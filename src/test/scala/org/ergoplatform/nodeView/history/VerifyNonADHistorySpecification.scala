@@ -3,18 +3,26 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.ErgoFullBlock
 import scorex.core.consensus.History.HistoryComparisonResult
 
+import scala.util.Random
+
 class VerifyNonADHistorySpecification extends HistorySpecification {
+
+  def genHistory() = generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
 
   var history = generateHistory(verify = true, adState = false, popow = false, BlocksToKeep)
 
   property("compare() for full chain") {
     def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))
 
-    val fork1 = genChain(BlocksInChain, Seq(bestFullOrGenesis(history)))
-    val fork2 = genChain(BlocksInChain + 1, Seq(bestFullOrGenesis(history)))
+    var history = genHistory()
+
+    history = applyChain(history, genChain(BlocksInChain, bestFullOptToSeq(history)))
+
+    val fork1 = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val fork2 = genChain(BlocksInChain + 1, bestFullOptToSeq(history))
 
     history = applyChain(history, fork1.tail)
-    history.bestHeader shouldBe fork1.last.header
+    history.bestHeaderOpt.get shouldBe fork1.last.header
 
     //Compare different headers chain
     history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Older
@@ -31,10 +39,13 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   }
 
   property("Appended headers and transactions blocks to best chain in tx history") {
-    assert(history.bestFullBlockOpt.get.header == history.bestHeader)
-    val chain = genChain(BlocksInChain, Seq(bestFullOrGenesis(history))).tail
-    chain.foreach { fullBlock =>
+    var history = genHistory()
+
+    history = applyChain(history, genChain(BlocksInChain, bestFullOptToSeq(history)))
+
+    genChain(BlocksInChain, bestFullOptToSeq(history)).tail.foreach { fullBlock =>
       val startFullBlock = history.bestFullBlockOpt.get
+
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
       history.contains(header) shouldBe false
@@ -48,9 +59,11 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.contains(txs) shouldBe false
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe true
-      history.bestHeader shouldBe header
+      history.bestHeaderOpt.get shouldBe header
+
       history.bestFullBlockOpt.get shouldBe startFullBlock
-      history.openSurfaceIds().head shouldEqual startFullBlock.header.id
+
+      history.openSurfaceIds().head shouldBe startFullBlock.header.id
 
       history = history.append(txs).get._1
 
@@ -58,7 +71,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.contains(txs) shouldBe true
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe false
-      history.bestHeader shouldBe header
+      history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get.header shouldBe fullBlock.header
     }
   }

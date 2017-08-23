@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.history
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -19,7 +18,7 @@ class PoPoWProofSpec extends PropSpec
   with ChainGenerator {
 
   def generatePoPoWProof(m: Int, k: Int): PoPoWProof = {
-    constructPoPoWProof(m, k, genHeaderChain(100, Seq(ErgoFullBlock.genesis.header)).headers).get
+    constructPoPoWProof(m, k, genHeaderChain(100, Seq()).headers).get
   }
 
   property("Valid PoPoWProof generation") {

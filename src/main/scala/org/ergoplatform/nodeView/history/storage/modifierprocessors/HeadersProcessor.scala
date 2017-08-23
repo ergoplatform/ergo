@@ -13,6 +13,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
+import scorex.crypto.encode.Base16
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -47,7 +48,7 @@ trait HeadersProcessor extends ScorexLogging {
   /**
     * @return height of best header
     */
-  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(0)
+  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(1)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -109,7 +110,7 @@ trait HeadersProcessor extends ScorexLogging {
         Success()
       }
     } else if (parentOpt.isEmpty) {
-      Failure(new Error(s"Parent header with id ${m.parentId} s not defined"))
+      Failure(new Error(s"Parent header with id ${Base16.encode(m.parentId)} not defined"))
     } else if (m.timestamp - NetworkTime.time() > MaxTimeDrift) {
       Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
     } else if (m.timestamp <= parentOpt.get.timestamp) {
@@ -212,8 +213,11 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficulty: Difficulty = bestHeaderIdOpt.flatMap(id => typedModifierById[Header](id))
-    .map(h => requiredDifficultyAfter(h)).getOrElse(Constants.InitialDifficulty)
+  def requiredDifficulty: Difficulty =
+    bestHeaderIdOpt
+      .flatMap(id => typedModifierById[Header](id))
+      .map(h => requiredDifficultyAfter(h))
+      .getOrElse(Constants.InitialDifficulty)
 
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentId: ModifierId = parent.id
@@ -228,8 +232,6 @@ trait HeadersProcessor extends ScorexLogging {
       val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
       assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
       difficultyCalculator.calculate(previousHeaders)
-
     }
   }
-
 }

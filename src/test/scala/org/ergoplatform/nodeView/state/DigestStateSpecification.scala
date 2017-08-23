@@ -22,8 +22,7 @@ class DigestStateSpecification extends PropSpec
         val us = UtxoState.fromBoxHolder(bh, dir1)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-        val block = validFullBlock(parent, us, bh)
+        val block = validFullBlock(parentOpt = None, us, bh)
 
         val ds = DigestState.create(us.rootHash, dir2).get
         ds.validate(block).get
@@ -47,8 +46,7 @@ class DigestStateSpecification extends PropSpec
         val us = UtxoState.fromBoxHolder(bh, dir1)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-        val block = validFullBlock(parent, us, bh)
+        val block = validFullBlock(parentOpt = None, us, bh)
 
         val ds = DigestState.create(us.rootHash, dir2).get
         ds.applyModifier(block).isSuccess shouldBe true
@@ -71,8 +69,7 @@ class DigestStateSpecification extends PropSpec
         val us = UtxoState.fromBoxHolder(bh, dir1)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
 
-        val parent = ErgoFullBlock.genesisWithStateDigest(us.rootHash).header
-        val block = validFullBlock(parent, us, bh)
+        val block = validFullBlock(parentOpt = None, us, bh)
 
         val ds = DigestState.create(us.rootHash, dir2).get
 

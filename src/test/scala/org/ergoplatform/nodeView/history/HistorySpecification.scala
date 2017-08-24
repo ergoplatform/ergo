@@ -34,7 +34,7 @@ trait HistorySpecification extends PropSpec
       history match {
         case _: EmptyBlockTransactionsProcessor =>
           val chain = genHeaderChain(height - historyHeight, history)
-          if(history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
+          if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
         case _ =>
           ???
       }
@@ -63,4 +63,5 @@ trait HistorySpecification extends PropSpec
     new File(fullHistorySettings.dataDir).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
+
 }

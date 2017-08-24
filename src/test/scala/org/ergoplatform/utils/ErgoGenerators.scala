@@ -13,6 +13,8 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.CoreGenerators
 
+import scala.util.Try
+
 
 trait ErgoGenerators extends CoreGenerators {
 
@@ -113,4 +115,14 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
+
+
+  def exitOnError(r: => Unit): Unit = Try {
+    r
+  }.recoverWith { case e =>
+    e.printStackTrace()
+    System.exit(1)
+    throw e
+  }
+
 }

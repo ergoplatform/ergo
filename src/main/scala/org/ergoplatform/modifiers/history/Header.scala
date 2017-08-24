@@ -5,6 +5,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
@@ -63,7 +64,7 @@ case class Header(version: Version,
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = height == 0
+  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 }
 
 object Header {

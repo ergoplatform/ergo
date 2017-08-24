@@ -7,9 +7,8 @@ import scala.util.Random
 
 class VerifyNonADHistorySpecification extends HistorySpecification {
 
-  def genHistory() = generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
-
-  var history = generateHistory(verify = true, adState = false, popow = false, BlocksToKeep)
+  private def genHistory() =
+    generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
 
   property("compare() for full chain") {
     def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))

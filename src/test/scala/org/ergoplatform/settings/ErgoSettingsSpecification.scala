@@ -12,7 +12,6 @@ class ErgoSettingsSpecification extends PropSpec
   with Matchers
   with ErgoGenerators with scorex.testkit.SerializationTests {
 
-
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read(None)
     settings.directory shouldBe System.getProperty("user.home") + "/ergo"

@@ -8,14 +8,14 @@ import io.circe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, PropSpecLike}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
@@ -33,18 +33,19 @@ class DigestErgoNodeViewHolderSpecification extends
   with Matchers
   with ErgoGenerators
   with TestkitHelpers
-  with BeforeAndAfterAll {
+  with BeforeAndAfterEach {
 
   lazy val settings: ErgoSettings = new ErgoSettings {
     override lazy val dataDir: String = s"/tmp/ergo/${Random.nextInt}"
     override def settingsJSON: Map[String, circe.Json] = Map()
   }
 
-  override def beforeAll {
+  override def beforeEach {
+    Path(new File(settings.dataDir)).deleteRecursively()
     new File(settings.dataDir).mkdirs()
   }
 
-  override def afterAll {
+  override def afterEach {
     Path(new File(settings.dataDir)).deleteRecursively()
     TestKit.shutdownActorSystem(system)
   }
@@ -67,7 +68,6 @@ class DigestErgoNodeViewHolderSpecification extends
     expectMsg(None)
   }
 
-  /*
   property("genesis - apply valid block") {
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
 
@@ -75,12 +75,36 @@ class DigestErgoNodeViewHolderSpecification extends
 
     val block = validFullBlock(None, us, bh)
 
-    digestHolder ! LocallyGeneratedModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoFullBlock](block)
+    /*
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory] { v =>
+      v.history
+    }
+
+    println(receiveN(1).head.asInstanceOf[ErgoHistory].append(block).get)*/
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
+    expectMsg(None)
 
-    expectMsg(Some(block.header))
-  }*/
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.history.height
+    }
+    expectMsg(-1)
+
+
+    //sending header
+    digestHolder ! LocallyGeneratedModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, Header](block.header)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.history.height
+    }
+    expectMsg(0)
+
+   /* digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(block.header))*/
+  }
 }

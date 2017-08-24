@@ -118,7 +118,6 @@ object HeaderSerializer extends Serializer[Header] {
 
     val interlinks = parseInterlinks(158, Seq())
 
-
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
       nBits, height, votes)
   }

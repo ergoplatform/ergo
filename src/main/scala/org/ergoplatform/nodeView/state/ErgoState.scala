@@ -68,21 +68,21 @@ object ErgoState extends ScorexLogging {
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
-  def generateGenesisUtxoState(stateDir: File): UtxoState = {
+  def generateGenesisUtxoState(stateDir: File): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
     lazy val genesisSeed = Long.MaxValue
     lazy val rndGen = new scala.util.Random(genesisSeed)
-    lazy val initialBoxesNumber = 1000000
+    lazy val initialBoxesNumber = 10000
 
     lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
-      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 100))
+      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
 
     val bh = BoxHolder(initialBoxes)
 
     UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
       log.info("Genesis UTXO state generated")
       us.rootHash.sameElements(afterGenesisStateDigest)
-    })
+    }) -> bh
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
@@ -90,7 +90,7 @@ object ErgoState extends ScorexLogging {
   }
 
   val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)
-  val afterGenesisStateDigestHex: String = "86df7da572efb3182a51dd96517bc8bea95a4c30cc9fef0f42ef8740f8baee2918"
+  val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
   val afterGenesisStateDigest: Digest = Base16.decode(afterGenesisStateDigestHex)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
@@ -103,4 +103,12 @@ object ErgoState extends ScorexLogging {
       if (settings.ADState) DigestState.create(None, stateDir).toOption else Some(new UtxoState(stateDir))
     }
   }
+}
+
+
+/**
+  * Tool to print new target digest in case of initial utxo state re-generation
+  */
+object DigestPrinter extends App {
+  println(Base16.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
 }

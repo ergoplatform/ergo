@@ -5,7 +5,10 @@ import java.io.File
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.circe
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
@@ -14,6 +17,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.testkit.TestkitHelpers
 
@@ -62,4 +66,21 @@ class DigestErgoNodeViewHolderSpecification extends
     }
     expectMsg(None)
   }
+
+  /*
+  property("genesis - apply valid block") {
+    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+
+    val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()))
+
+    val block = validFullBlock(None, us, bh)
+
+    digestHolder ! LocallyGeneratedModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoFullBlock](block)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+
+    expectMsg(Some(block.header))
+  }*/
 }

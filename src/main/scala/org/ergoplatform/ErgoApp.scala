@@ -22,6 +22,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val ergoSettings = ErgoSettings.read(args.headOption)
 
+  //TODO remove after Scorex update
   implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
   override val apiRoutes: Seq[ApiRoute] = Seq()

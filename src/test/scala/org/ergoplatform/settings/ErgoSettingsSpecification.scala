@@ -13,9 +13,27 @@ class ErgoSettingsSpecification extends PropSpec
   with ErgoGenerators with scorex.testkit.SerializationTests {
 
 
+  property("should keep data user home  by default") {
+    val settings = ErgoSettings.read(None)
+    settings.directory shouldBe System.getProperty("user.home") + "/ergo"
+  }
+
   property("should read default settings") {
     val settings = ErgoSettings.read(None)
-    settings.nodeSettings shouldBe NodeConfigurationSettings(ADState = false, verifyTransactions = true, 1000, PoPoWBootstrap = false, 10, 1.minute, 100)
+    settings.nodeSettings shouldBe NodeConfigurationSettings(ADState = false, verifyTransactions = true, 1000,
+      PoPoWBootstrap = false, 10, 1.minute, 100)
+  }
+
+  property("should read user settings from json file") {
+    val settings = ErgoSettings.read(Some("src/test/resources/settings.json"))
+    settings.nodeSettings shouldBe NodeConfigurationSettings(ADState = false, verifyTransactions = true, 12,
+      PoPoWBootstrap = false, 10, 1.minute, 100)
+  }
+
+  property("should read user settings from HOCON file") {
+    val settings = ErgoSettings.read(Some("src/test/resources/settings.conf"))
+    settings.nodeSettings shouldBe NodeConfigurationSettings(ADState = false, verifyTransactions = true, 13,
+      PoPoWBootstrap = false, 10, 1.minute, 100)
   }
 
 

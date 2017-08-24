@@ -65,7 +65,7 @@ trait HistorySpecification extends PropSpec
     val fullHistorySettings: ErgoSettings = ErgoSettings(s"/tmp/ergo/test-history-$paramsHash-$nonce",
       nodeSettings,
       scorexSettings)
-    new File(fullHistorySettings.dataDir).mkdirs()
+    new File(fullHistorySettings.directory).mkdirs()
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
 }

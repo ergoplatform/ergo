@@ -293,7 +293,7 @@ object ErgoHistory extends ScorexLogging {
   type NBits = Long
 
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
-    val dataDir = settings.dataDir
+    val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)

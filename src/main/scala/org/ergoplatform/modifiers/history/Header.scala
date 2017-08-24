@@ -99,12 +99,12 @@ object HeaderSerializer extends Serializer[Header] {
     val parentId = bytes.slice(1, 33)
     val ADProofsRoot = bytes.slice(33, 65)
     val transactionsRoot = bytes.slice(65, 97)
-    val stateRoot = bytes.slice(97, 129)
-    val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
-    val nonce = Longs.fromByteArray(bytes.slice(137, 145))
-    val votes = bytes.slice(145, 150)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(150, 154)).get
-    val height = Ints.fromByteArray(bytes.slice(154, 158))
+    val stateRoot = bytes.slice(97, 130)
+    val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
+    val nonce = Longs.fromByteArray(bytes.slice(138, 146))
+    val votes = bytes.slice(146, 151)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(151, 155)).get
+    val height = Ints.fromByteArray(bytes.slice(155, 159))
 
     @tailrec
     def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
@@ -116,7 +116,7 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinks = parseInterlinks(158, Seq())
+    val interlinks = parseInterlinks(159, Seq())
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
       nBits, height, votes)

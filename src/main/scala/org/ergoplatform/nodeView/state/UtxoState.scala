@@ -55,8 +55,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
     val proof = persistentProver.generateProof
 
-    //todo: do we need to do dropRight, or include digest into the blockchain?
-    val digest = persistentProver.digest.dropRight(1)
+    val digest = persistentProver.digest
 
     persistentProver.checkTree(true)
 

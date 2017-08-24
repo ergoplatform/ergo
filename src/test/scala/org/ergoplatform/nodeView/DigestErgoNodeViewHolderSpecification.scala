@@ -24,7 +24,6 @@ import scorex.testkit.TestkitHelpers
 
 import scala.reflect.io.Path
 import scala.util.Random
-import scala.concurrent.duration._
 
 
 class DigestErgoNodeViewHolderSpecification extends
@@ -121,9 +120,9 @@ class DigestErgoNodeViewHolderSpecification extends
     }
     expectMsg(Seq(ByteArrayWrapper(block.header.id)))
 
-    /*digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
-    expectMsg(Some(block.header))*/
+    expectMsg(Some(block.header))
   }
 }

@@ -32,9 +32,9 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     require(m > 0 && m < currentHeight, s"$m > 0 && $m < $currentHeight")
     require(k > 0 && k < currentHeight, s"$k > 0 && $k < $currentHeight")
 
-
     val suffix: HeaderChain = lastHeaders(k)
     val suffixFirstHeader = suffix.head
+
 
     def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
 

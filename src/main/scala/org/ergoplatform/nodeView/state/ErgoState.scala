@@ -72,7 +72,7 @@ object ErgoState extends ScorexLogging {
     log.info("Generating genesis UTXO state")
     lazy val genesisSeed = Long.MaxValue
     lazy val rndGen = new scala.util.Random(genesisSeed)
-    lazy val initialBoxesNumber = 50000
+    lazy val initialBoxesNumber = 1000000
 
     lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
       (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 100))

@@ -11,17 +11,17 @@ import scala.util.Random
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0, nonce = Random.nextLong())
+    generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0, nonce = Random.nextLong(), epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  property("Should apply UTXOSnapshotChunks") {
-    val history = genHistory()
+  private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 
+  property("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
-      history.applicable(snapshot) shouldBe true
-      val processInfo = history.append(snapshot).get._2
+      popowHistory.applicable(snapshot) shouldBe true
+      val processInfo = popowHistory.append(snapshot).get._2
       processInfo.toApply shouldEqual Seq(snapshot)
-      history.applicable(snapshot) shouldBe false
+      popowHistory.applicable(snapshot) shouldBe false
     }
   }
 
@@ -38,42 +38,35 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
 
   property("PoPoW history should be able to apply PoPoWProof proofs") {
-    var history = genHistory()
-
-    history = ensureMinimalHeight(history, 100)
-    val proof = history.constructPoPoWProof(5, 5).get
-    var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
-    newHistory.applicable(proof) shouldBe true
-    newHistory = newHistory.append(proof).get._1
-    newHistory.bestHeaderOpt.isDefined shouldBe true
+    //todo: why .get is not enough?
+    popowHistory.constructPoPoWProof(3, 5).map { proof =>
+      var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, System.nanoTime())
+      newHistory.applicable(proof) shouldBe true
+      newHistory = newHistory.append(proof).get._1
+      newHistory.bestHeaderOpt.isDefined shouldBe true
+    }
   }
 
   property("non-PoPoW history should ignore PoPoWProof proofs") {
-    var history = genHistory()
-    history = ensureMinimalHeight(history, 100)
-    val proof = history.constructPoPoWProof(5, 5).get
-    val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
-    newHistory.applicable(proof) shouldBe false
+    popowHistory.constructPoPoWProof(3, 5).map { proof =>
+      val newHistory = generateHistory(verify = false, adState = true, popow = false, 0)
+      newHistory.applicable(proof) shouldBe false
+    }
   }
 
   property("constructPoPoWProof() should generate valid proof") {
-    var history = genHistory()
-
-    history = ensureMinimalHeight(history, 100)
     forAll(smallInt, smallInt) { (m, k) =>
-      val proof = history.constructPoPoWProof(m + 1, k + 1).get
-      PoPoWProof.validate(proof) shouldBe 'success
+      popowHistory.constructPoPoWProof(m + 1, k + 1).map { proof =>
+        PoPoWProof.validate(proof) shouldBe 'success
+      }
     }
   }
 
   property("lastHeaders() should return correct number of blocks") {
-    var history = genHistory()
-
-    history = ensureMinimalHeight(history, BlocksInChain + 1)
     forAll(smallInt) { m =>
-      val lastHeaders = history.lastHeaders(m)
+      val lastHeaders = popowHistory.lastHeaders(m)
       if (m > 0) {
-        lastHeaders.last shouldBe history.bestHeaderOpt.get
+        lastHeaders.last shouldBe popowHistory.bestHeaderOpt.get
       }
       lastHeaders.length shouldBe m
     }

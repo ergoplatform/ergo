@@ -6,9 +6,8 @@ import scala.util.Random
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
-  var history = generateHistory(verify = true, adState = true, popow = false, BlocksToKeep)
-
-  def genHistory() = generateHistory(verify = true, adState = true, popow = false, BlocksToKeep, nonce = Random.nextLong())
+  private def genHistory() =
+    generateHistory(verify = true, adState = true, popow = false, BlocksToKeep, nonce = Random.nextLong())
 
   property("bootstrap from headers and last full blocks") {
     var history = generateHistory(verify = true, adState = true, popow = false, BlocksToKeep, System.nanoTime())

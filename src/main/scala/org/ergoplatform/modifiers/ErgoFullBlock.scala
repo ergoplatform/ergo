@@ -56,11 +56,11 @@ object ErgoFullBlock {
       stateRoot,
       BlockTransactions.rootHash(Seq(genesisTx.id)),
       genesisTimestamp,
-      0,
-      Array.fill(1)(0.toByte),
       Constants.InitialNBits,
       0,
-      Array.fill(5)(0.toByte)
+      Array.fill(5)(0.toByte),
+      0,
+      Array.fill(1)(0.toByte)
     )
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
     val aDProofs: ADProof = ADProof(header.id, proofs)

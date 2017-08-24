@@ -10,11 +10,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.ergoplatform.utils.LittleEndianBytes._
 
 object Equihash {
+
+  def nonceToLeBytes(nonce: BigInt): Array[Byte] = {
+    (for (i <- 0 to 7) yield leIntToByteArray((nonce >> 32 * i).intValue())).reduce(_ ++ _)
+  }
+
   def hashNonce[T <: Digest](digest: T, nonce: BigInt): T = {
-    for (i <- 0 to 7) {
-      val arr = leIntToByteArray((nonce >> 32 * i).intValue())
-      digest.update(arr, 0, arr.length)
-    }
+    val arr = nonceToLeBytes(nonce)
+    digest.update(arr, 0, arr.length)
     digest
   }
 
@@ -258,7 +261,7 @@ object Equihash {
     * @param n               Word length in bits
     * @param k               2-log of number of indices per solution
     * @param personal        Personal bytes for digest
-    * @param header          Block header with nonce, 140 bytes
+    * @param header          Block header with nonce
     * @param solutionIndices Solution indices
     * @return Return True if solution is valid, False if not.
     */
@@ -283,11 +286,6 @@ object Equihash {
       val digest = new Blake2bDigest(null, outlen, null, personal)
       digest.update(header, 0, header.length)
 
-      val words = ArrayBuffer.empty[BigInteger]
-      for (i <- 0 until solutionLen) {
-        words += generateWord(n, digest, solutionIndices(i))
-      }
-
       // Check pair-wise ordening of indices.
       for (s <- 0 until k) {
         val d = 1 << s
@@ -295,6 +293,11 @@ object Equihash {
           if (solutionIndices(i) >= solutionIndices(i + d))
             return false
         }
+      }
+
+      val words = ArrayBuffer.empty[BigInteger]
+      for (i <- 0 until solutionLen) {
+        words += generateWord(n, digest, solutionIndices(i))
       }
 
       // Check XOR conditions.

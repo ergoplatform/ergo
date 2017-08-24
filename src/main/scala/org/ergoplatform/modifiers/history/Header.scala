@@ -23,11 +23,12 @@ case class Header(version: Version,
                   stateRoot: Array[Byte],
                   transactionsRoot: Array[Byte],
                   timestamp: Timestamp,
-                  nonce: Long,
-                  equihashSolutions: Array[Byte],
                   nBits: Long, //actually it is unsigned int
                   height: Int,
-                  votes: Array[Byte]) extends ErgoPersistentModifier {
+                  votes: Array[Byte],
+                  nonce: Long,
+                  equihashSolutions: Array[Byte],
+                 ) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
@@ -75,22 +76,36 @@ object Header {
 
 object HeaderSerializer extends Serializer[Header] {
 
-  def bytesWithoutInterlinks(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
-    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), Longs.toByteArray(h.nonce), h.votes,
-    RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height), Shorts.toByteArray(h.equihashSolutions.length.toShort), h.equihashSolutions)
+  def bytesWithoutInterlinksAndNonceAndSolutions(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
+    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), h.votes,
+    RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height))
 
-  override def toBytes(h: Header): Array[Version] = {
-
-    def interlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
+  def bytesWithoutNonceAndSolutions(h: Header): Array[Byte] = {
+    def buildInterlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
         acc
       } else {
         val headLink: Array[Byte] = links.head
         val repeating: Byte = links.count(_ sameElements headLink).toByte
-        interlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
+        buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
       }
     }
-    Bytes.concat(bytesWithoutInterlinks(h), interlinkBytes(h.interlinks, Array[Byte]()))
+    val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
+    val interlinkBytesSize = Shorts.toByteArray(interlinkBytes.length.toShort)
+
+    Bytes.concat(bytesWithoutInterlinksAndNonceAndSolutions(h), interlinkBytesSize, interlinkBytes)
+  }
+
+  def bytesWithoutSolutions(h: Header): Array[Byte] = {
+    Bytes.concat(bytesWithoutNonceAndSolutions(h), Longs.toByteArray(h.nonce))
+  }
+
+  override def toBytes(h: Header): Array[Version] = {
+    val equihashSolutionsSize = Shorts.toByteArray(h.equihashSolutions.length.toShort)
+    val equihashSolutionsBytes = h.equihashSolutions
+    Bytes.concat(bytesWithoutSolutions(h),
+      equihashSolutionsSize, equihashSolutionsBytes
+    )
   }
 
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
@@ -100,27 +115,29 @@ object HeaderSerializer extends Serializer[Header] {
     val transactionsRoot = bytes.slice(65, 97)
     val stateRoot = bytes.slice(97, 129)
     val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
-    val nonce = Longs.fromByteArray(bytes.slice(137, 145))
-    val votes = bytes.slice(145, 150)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(150, 154)).get
-    val height = Ints.fromByteArray(bytes.slice(154, 158))
-    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(158, 160))
-    val equihashSolutions = bytes.slice(160, 160 + equihashSolutionsBytesSize)
+    val votes = bytes.slice(137, 142)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(142, 146)).get
+    val height = Ints.fromByteArray(bytes.slice(146, 150))
 
     @tailrec
-    def parseInterlinks(index: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (bytes.length > index) {
+    def parseInterlinks(index: Int, endIndex: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (endIndex > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
       val link: Array[Byte] = bytes.slice(index + 1, index + 33)
       val links: Seq[Array[Byte]] = Array.fill(repeatN)(link)
-      parseInterlinks(index + 33, acc ++ links)
+      parseInterlinks(index + 33, endIndex, acc ++ links)
     } else {
       acc
     }
 
-    val interlinks = parseInterlinks(160 + equihashSolutionsBytesSize, Seq())
+    val interlinksSize = Shorts.fromByteArray(bytes.slice(150, 152))
+    val interlinks = parseInterlinks(152, 152 + interlinksSize, Seq())
 
+    val nonce = Longs.fromByteArray(bytes.slice(152 + interlinksSize, 160 + interlinksSize))
 
-    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-      equihashSolutions, nBits, height, votes)
+    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(160 + interlinksSize, 162 + interlinksSize))
+    val equihashSolutions = bytes.slice(162 + interlinksSize, 162 + interlinksSize + equihashSolutionsBytesSize)
+
+    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, votes, nonce, equihashSolutions)
   }
 }

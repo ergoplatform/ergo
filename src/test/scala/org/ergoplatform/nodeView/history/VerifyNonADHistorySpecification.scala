@@ -10,6 +10,13 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
 
+  property("append header to genesis"){
+    val history = genHistory()
+    history.bestHeaderOpt shouldBe None
+    val header = genHeaderChain(1, history).head
+    history.append(header).get._1.bestHeaderOpt shouldBe Some(header)
+  }
+
   property("compare() for full chain") {
     def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))
 
@@ -34,7 +41,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.compare(getInfo(fork1).copy(fullBlockIdOpt = None)) shouldBe HistoryComparisonResult.Equal
     val worstFullBlock = getInfo(fork1).copy(fullBlockIdOpt = Some(fork1(fork1.length - 2).header.id))
     history.compare(worstFullBlock) shouldBe HistoryComparisonResult.Younger
-
   }
 
   property("Appended headers and transactions blocks to best chain in tx history") {

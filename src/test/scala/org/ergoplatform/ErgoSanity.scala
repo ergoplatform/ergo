@@ -50,7 +50,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 
     Miner.genHeader(Constants.InitialNBits,
       history.bestHeaderOpt,
-      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),

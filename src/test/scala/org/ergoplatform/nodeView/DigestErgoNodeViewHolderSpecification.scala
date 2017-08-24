@@ -5,6 +5,7 @@ import java.io.File
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.circe
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -18,6 +19,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, PropSpecL
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
+import scorex.core.NodeViewModifier.ModifierId
 import scorex.testkit.TestkitHelpers
 
 import scala.reflect.io.Path
@@ -114,8 +116,18 @@ class DigestErgoNodeViewHolderSpecification extends
     }
     expectMsg(Some(0))
 
-    /*
-    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.history.lastHeaders(10).size
+    }
+    expectMsg(1)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Seq[ByteArrayWrapper]] { v =>
+      v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
+    }
+    expectMsg(Seq(ByteArrayWrapper(block.header.id)))
+
+    /*digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
     expectMsg(Some(block.header))*/

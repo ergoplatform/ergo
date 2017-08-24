@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.circe
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -23,6 +22,8 @@ import scorex.testkit.TestkitHelpers
 
 import scala.reflect.io.Path
 import scala.util.Random
+import scala.concurrent.duration._
+
 
 class DigestErgoNodeViewHolderSpecification extends
   TestKit(ActorSystem("DigestErgoNodeViewHolderSpec"))
@@ -33,10 +34,12 @@ class DigestErgoNodeViewHolderSpecification extends
   with Matchers
   with ErgoGenerators
   with TestkitHelpers
-  with BeforeAndAfterEach {
+  with BeforeAndAfterEach
+  with BeforeAndAfterAll {
 
   lazy val settings: ErgoSettings = new ErgoSettings {
     override lazy val dataDir: String = s"/tmp/ergo/${Random.nextInt}"
+
     override def settingsJSON: Map[String, circe.Json] = Map()
   }
 
@@ -47,6 +50,9 @@ class DigestErgoNodeViewHolderSpecification extends
 
   override def afterEach {
     Path(new File(settings.dataDir)).deleteRecursively()
+  }
+
+  override def afterAll: Unit = {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -97,12 +103,19 @@ class DigestErgoNodeViewHolderSpecification extends
     //sending header
     digestHolder ! LocallyGeneratedModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, Header](block.header)
 
+
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
       v.history.height
     }
     expectMsg(0)
 
-   /* digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Int]] { v =>
+      v.history.heightOf(block.header.id)
+    }
+    expectMsg(Some(0))
+
+    /*
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
     expectMsg(Some(block.header))*/

@@ -54,14 +54,12 @@ class DigestErgoNodeViewHolderSpecification extends
     expectMsg(true)
   }
 
-  /*
-  //todo: fix
-  property("genesis - history") {
+  property("genesis - history (no genesis block there yet)") {
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
 
-    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Header] { v =>
-      v.history.bestHeader
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
     }
-    expectNoMsg()
-  } */
+    expectMsg(None)
+  }
 }

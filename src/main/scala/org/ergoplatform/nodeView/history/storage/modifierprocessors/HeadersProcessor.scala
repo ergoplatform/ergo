@@ -144,8 +144,10 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.db.get(headerScoreKey(id))
-    .map(b => BigInt(b.data))
+  protected def scoreOf(id: ModifierId): Option[BigInt] =
+    historyStorage.db
+      .get(headerScoreKey(id))
+      .map(b => BigInt(b.data))
 
   /**
     * @param height - block height

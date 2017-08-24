@@ -38,11 +38,11 @@ class DigestErgoNodeViewHolderSpecification extends
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   override def beforeAll {
-    new File(settings.dataDir).mkdirs()
+    new File(settings.directory).mkdirs()
   }
 
   override def afterAll {
-    Path(new File(settings.dataDir)).deleteRecursively()
+    Path(new File(settings.directory)).deleteRecursively()
     TestKit.shutdownActorSystem(system)
   }
 

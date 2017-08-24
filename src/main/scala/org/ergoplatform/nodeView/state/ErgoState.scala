@@ -94,7 +94,7 @@ object ErgoState extends ScorexLogging {
   val afterGenesisStateDigest: Digest = Base16.decode(afterGenesisStateDigestHex)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
-    val stateDir = new File(s"${settings.dataDir}/state")
+    val stateDir = new File(s"${settings.directory}/state")
     stateDir.mkdirs()
 
     if (stateDir.listFiles().isEmpty) {

@@ -10,7 +10,7 @@ import org.ergoplatform.ErgoApp
 import scorex.core.settings.Settings
 import scorex.core.utils.ScorexLogging
 
-case class ErgoSettings(dataDir: String,
+case class ErgoSettings(directory: String,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: Settings)
 

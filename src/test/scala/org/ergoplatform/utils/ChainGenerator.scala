@@ -17,8 +17,11 @@ trait ChainGenerator {
   def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
     genHeaderChain(height, history.bestHeaderOpt.toSeq)
 
+  final def genHeaderChain(height: Int, accIn: Seq[Header]): HeaderChain =
+    genHeaderChain(acc => acc.length == accIn.length + height, accIn)
+
   @tailrec
-  final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
+  final def genHeaderChain(until: Seq[Header] => Boolean, acc: Seq[Header]): HeaderChain = if (until(acc)) {
     HeaderChain(acc.reverse)
   } else {
     val header = Miner.genHeader(Constants.InitialNBits,
@@ -29,7 +32,7 @@ trait ChainGenerator {
       Array.fill(5)(0.toByte),
       Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time()))
     )
-    genHeaderChain(height - 1, header +: acc)
+    genHeaderChain(until, header +: acc)
   }
 
 

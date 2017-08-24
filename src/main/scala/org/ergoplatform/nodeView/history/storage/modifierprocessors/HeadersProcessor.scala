@@ -50,14 +50,16 @@ trait HeadersProcessor extends ScorexLogging {
   /**
     * @return height of best header
     */
-  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(1)
+  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
 
   /**
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] = historyStorage.db.get(headerHeightKey(id))
-    .map(b => Ints.fromByteArray(b.data))
+  def heightOf(id: ModifierId): Option[Int] =
+    historyStorage.db
+      .get(headerHeightKey(id))
+      .map(b => Ints.fromByteArray(b.data))
 
   /**
     * @param m - header to process

@@ -90,14 +90,6 @@ class LinearDifficultyControlSpecification extends PropSpec
     }
   }
 
-  def exitOnError(r: => Unit): Unit = Try {
-    r
-  }.recoverWith { case e =>
-    e.printStackTrace()
-    System.exit(1)
-    throw e
-  }
-
   def equalsWithPrecision(i: BigInt, j: BigInt): Unit = {
     require((BigDecimal(i - j) / BigDecimal(j)).toDouble < precision, s"$i and $j are too different")
   }

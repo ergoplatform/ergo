@@ -20,10 +20,11 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
     history.bestHeaderOpt.toSeq)
   private lazy val popowHistory = applyHeaderChain(history, chain)
 
-  //todo: why .map not .get?
   property("Valid PoPoWProof generation") {
-    popowHistory.constructPoPoWProof(5, 5).map { proof =>
-      PoPoWProof.validate(proof) shouldBe 'success
+    forAll(mkGen) { case (m, k) =>
+      val proof = popowHistory.constructPoPoWProof(m, k)
+      proof shouldBe 'success
+      PoPoWProof.validate(proof.get) shouldBe 'success
     }
   }
 

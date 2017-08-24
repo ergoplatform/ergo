@@ -83,12 +83,6 @@ class DigestErgoNodeViewHolderSpecification extends
 
     val block = validFullBlock(None, us, bh)
 
-    /*
-    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory] { v =>
-      v.history
-    }
-
-    println(receiveN(1).head.asInstanceOf[ErgoHistory].append(block).get)*/
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt

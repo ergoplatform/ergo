@@ -1,6 +1,9 @@
 package org.ergoplatform.nodeView.history
 
+import java.io.File
+
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.state.ErgoState
 import scorex.core.consensus.History.HistoryComparisonResult
 
 import scala.util.Random
@@ -10,12 +13,25 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
 
-  property("append header to genesis"){
+  property("append header to genesis") {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
     val header = genHeaderChain(1, history).head
     history.append(header).get._1.bestHeaderOpt shouldBe Some(header)
   }
+
+  /*
+  property("append header to genesis - 2") {
+    val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()))
+
+    val block = validFullBlock(None, us, bh)
+
+    val history = genHistory()
+    history.bestHeaderOpt shouldBe None
+    val header = block.header
+    history.append(header).get._1.bestHeaderOpt shouldBe Some(header)
+  }*/
+
 
   property("compare() for full chain") {
     def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))

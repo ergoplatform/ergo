@@ -5,7 +5,7 @@ import org.bouncycastle.crypto.digests.{Blake2bDigest, SHA256Digest}
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
@@ -14,9 +14,13 @@ import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.math.BigInt
-import scala.util.Random
+import scala.util.control.NonFatal
+import scala.util.{Random, Try}
+import org.ergoplatform.utils.LittleEndianBytes._
 
 object Miner extends ScorexLogging {
+
+  type Solution = Seq[Int]
 
   def blockHash(prevHash: Array[Byte], nonce: BigInt, soln: Seq[Int]): Array[Byte] = {
     // H(I||V||x_1||x_2||...|x_2^k)
@@ -49,6 +53,15 @@ object Miner extends ScorexLogging {
     new ErgoFullBlock(h, BlockTransactions(h.id, transactions), None)
   }
 
+  def isBlockValid(block: ErgoFullBlock, n: Int, k: Int): Boolean = Try {
+    val result = Equihash.validateSolution(n, k, ergoPerson(n, k), HeaderSerializer.bytesWithoutNonceAndSolutions(block.header) ++ Equihash.nonceToLeBytes(block.header.nonce), EquihashSolutionsSerializer.parseBytes(block.header.equihashSolutions).get)
+    result
+  }.recover {
+    case NonFatal(e) =>
+      log.debug(s"Block ${block.id} is invalid due pow", e)
+      false
+  }.getOrElse(false)
+
   def genHeader(nBits: Long,
                 parent: Header,
                 stateRoot: Array[Byte],
@@ -65,7 +78,9 @@ object Miner extends ScorexLogging {
     val wordsPerHash = 512 / n
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson(n, k))
-    digest.update(parent.id, 0, parent.id.length)
+    val h = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, 0l, null)
+    val I = HeaderSerializer.bytesWithoutNonceAndSolutions(h)
+    digest.update(I, 0, I.length)
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextLong()
@@ -78,9 +93,7 @@ object Miner extends ScorexLogging {
       })
       suitableSolution match {
         case Some(foundSolution) =>
-          Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nonce,
-            // todo
-            foundSolution.map(_.toByte).toArray, nBits, height, votes)
+          h.copy(nonce = nonce, equihashSolutions = EquihashSolutionsSerializer.toBytes(foundSolution))
         case None =>
           generateHeader()
       }

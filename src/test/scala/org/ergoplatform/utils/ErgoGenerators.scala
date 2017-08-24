@@ -54,8 +54,8 @@ trait ErgoGenerators extends CoreGenerators {
     interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
     timestamp <- positiveLongGen
     votes <- genBytesList(5)
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce,
-    equihashSolutions, requiredDifficulty, height, votes)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, requiredDifficulty, height, votes, nonce,
+    equihashSolutions)
 
 
   def validTransactions(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {

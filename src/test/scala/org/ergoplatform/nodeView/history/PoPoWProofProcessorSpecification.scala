@@ -2,11 +2,14 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{PoPoWProof, PoPoWProofSerializer}
 import org.ergoplatform.settings.Constants
-import org.scalacheck.Gen
+import org.scalacheck.{Gen, Shrink}
+import scorex.crypto.encode.Base58
 
 import scala.util.Random
 
 class PoPoWProofProcessorSpecification extends HistorySpecification {
+
+  private implicit def noShrink[A]: Shrink[A] = Shrink(_ => Stream.empty)
 
   val MaxM = 10
   val MaxK = 10

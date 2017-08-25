@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProof, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.block.Block._
 
 import scala.annotation.tailrec
@@ -50,14 +51,17 @@ object Miner {
     generateHeader()
   }
 
-  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
+  private[mining] def constructInterlinks(parentInterlinks: Seq[Array[Byte]],
+                                          parentRealDifficulty: BigInt,
+                                          parentId: ModifierId): Seq[Array[Byte]] = {
+
+    val genesisId = parentInterlinks.head
 
     def generateInterlinks(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-      if (parent.realDifficulty >= curDifficulty) {
-        generateInterlinks(curDifficulty * 2, acc :+ parent.id)
+      if (parentRealDifficulty >= curDifficulty) {
+        generateInterlinks(curDifficulty * 2, acc :+ parentId)
       } else {
-        parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
+        parentInterlinks.tail.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
           case Some(id) => generateInterlinks(curDifficulty * 2, acc :+ id)
           case _ => acc
         }
@@ -65,9 +69,18 @@ object Miner {
     }
 
     val interinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
-    assert(interinks.length >= parent.interlinks.length - 1)
+    assert(interinks.length >= parentInterlinks.length - 1)
 
     genesisId +: interinks
+
+  }
+
+  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = if (parent.isGenesis) {
+    Seq(parent.id)
+  } else {
+    constructInterlinks(parent.interlinks,
+      parent.realDifficulty,
+      parent.id)
   }
 
   def correctWorkDone(id: Array[Version], difficulty: BigInt): Boolean = {

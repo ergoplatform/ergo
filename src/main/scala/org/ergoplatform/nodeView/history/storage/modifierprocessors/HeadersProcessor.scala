@@ -67,6 +67,7 @@ trait HeadersProcessor extends ScorexLogging {
   protected def process(m: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(m)
     historyStorage.insert(m.id, dataToInsert)
+
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
       log.info(s"New best header ${m.encodedId}")
       //TODO Notify node view holder that it should download transactions ?

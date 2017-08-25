@@ -44,10 +44,10 @@ trait ErgoState[IState <: MinimalState[AnyoneCanSpendProposition.type,
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
   def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-    BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-    })
+  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
+      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
+  })
 
   override def version: VersionTag
 
@@ -94,13 +94,13 @@ object ErgoState extends ScorexLogging {
   val afterGenesisStateDigest: Digest = Base16.decode(afterGenesisStateDigestHex)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
-    val stateDir = new File(s"${settings.dataDir}/state")
+    val stateDir = new File(s"${settings.directory}/state")
     stateDir.mkdirs()
 
     if (stateDir.listFiles().isEmpty) {
       None
     } else {
-      if (settings.ADState) DigestState.create(None, stateDir).toOption else Some(new UtxoState(stateDir))
+      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption else Some(new UtxoState(stateDir))
     }
   }
 }

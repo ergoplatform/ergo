@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -48,7 +48,7 @@ trait ErgoHistory
     with BlockTransactionsProcessor
     with ScorexLogging {
 
-  protected val config: HistoryConfig
+  protected val config: NodeConfigurationSettings
   protected val storage: LSMStore
 
   protected lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
@@ -295,55 +295,54 @@ object ErgoHistory extends ScorexLogging {
   val GenesisHeight = 0
 
   def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
-    val dataDir = settings.dataDir
+    val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
-    val historyConfig = HistoryConfig(settings.blocksToKeep, settings.minimalSuffix, settings.blockInterval,
-      settings.epochLength)
+    val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (settings.ADState, settings.verifyTransactions, settings.poPoWBootstrap) match {
+    val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (true, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case (true, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case (false, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case (false, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case (true, false, true) =>
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case (true, false, false) =>
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val config: HistoryConfig = historyConfig
+          override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
       case m =>

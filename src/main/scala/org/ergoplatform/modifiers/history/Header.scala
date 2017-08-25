@@ -3,17 +3,20 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Ints, Longs, Shorts}
 import io.circe.Json
 import io.circe.syntax._
+import org.bouncycastle.crypto.digests.SHA256Digest
+import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
+import scala.math.BigInt
 import scala.util.Try
 
 case class Header(version: Version,
@@ -34,9 +37,23 @@ case class Header(version: Version,
 
   override lazy val id: ModifierId = Algos.hash(bytes)
 
-  lazy val powHash: Digest = Algos.miningHash(id)
+  lazy val powHash: Digest = {
+    // H(I||V||x_1||x_2||...|x_2^k)
+    val digest = new SHA256Digest()
+    val bytes = HeaderSerializer.bytesWithoutNonceAndSolutions(this)
+    digest.update(bytes, 0, bytes.length)
+    Equihash.hashNonce(digest, nonce)
+    EquihashSolutionsSerializer.parseBytes(equihashSolutions).get.foreach(s => Equihash.hashXi(digest, s))
+    val h = new Array[Byte](32)
+    digest.doFinal(h, 0)
+    val secondDigest = new SHA256Digest()
+    secondDigest.update(h, 0, h.length)
+    val result = new Array[Byte](32)
+    secondDigest.doFinal(result, 0)
+    result
+  }
 
-  lazy val realDifficulty: Difficulty = Algos.blockIdDifficulty(id)
+  lazy val realDifficulty: Difficulty = Constants.MaxTarget / BigInt(1, powHash)
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -96,14 +113,11 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndNonceAndSolutions(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def bytesWithoutSolutions(h: Header): Array[Byte] = {
-    Bytes.concat(bytesWithoutNonceAndSolutions(h), Longs.toByteArray(h.nonce))
-  }
-
   override def toBytes(h: Header): Array[Version] = {
     val equihashSolutionsSize = Shorts.toByteArray(h.equihashSolutions.length.toShort)
     val equihashSolutionsBytes = h.equihashSolutions
-    Bytes.concat(bytesWithoutSolutions(h),
+    Bytes.concat(bytesWithoutNonceAndSolutions(h),
+      Longs.toByteArray(h.nonce),
       equihashSolutionsSize, equihashSolutionsBytes
     )
   }

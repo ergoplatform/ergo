@@ -13,7 +13,7 @@ object EquihashSolutionsSerializer extends Serializer[Miner.Solution] {
   }
 
   override def parseBytes(bytes: Array[Byte]) = Try {
-    for {i <- 0 until bytes.length by Ints.BYTES} yield {
+    for {i <- bytes.indices by Ints.BYTES} yield {
       Ints.fromByteArray(bytes.slice(i, i + Ints.BYTES))
     }
   }

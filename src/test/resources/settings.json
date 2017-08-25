@@ -1,0 +1,7 @@
+{
+  "ergo": {
+    "node": {
+      "blocksToKeep": 12
+    }
+  }
+}

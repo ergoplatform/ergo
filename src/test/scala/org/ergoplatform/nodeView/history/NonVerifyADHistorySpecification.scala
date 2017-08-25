@@ -11,7 +11,7 @@ import scala.util.Random
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong(), epoch = 1000)
+    generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0, nonce = Random.nextLong(), epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
@@ -29,8 +29,8 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     val epochLength = 2
     val blocksBeforeRecalculate = epochLength * LinearDifficultyControl.UseLastEpochs + 1
 
-    var history = generateHistory(verify = false, adState = true, popow = false, toKeep = 0,
-      nonce = Random.nextLong(), epoch = epochLength)
+    var history = generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0,
+      nonce = Random.nextLong(), epochLength = epochLength)
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
     history.requiredDifficulty should not be Constants.InitialDifficulty

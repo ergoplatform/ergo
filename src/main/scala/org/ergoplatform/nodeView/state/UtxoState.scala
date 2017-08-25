@@ -54,6 +54,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     }.ensuring(_.isSuccess)
 
     val proof = persistentProver.generateProof
+
     val digest = persistentProver.digest
 
     persistentProver.checkTree(true)

@@ -12,7 +12,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
   val MaxK = 10
 
   private def genHistory() =
-    generateHistory(verify = false, adState = true, popow = false, toKeep = 0, nonce = Random.nextLong(), epoch = 1000)
+    generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0, nonce = Random.nextLong(), epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   val history = genHistory()
@@ -58,9 +58,11 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
 
   property("Valid PoPoWProof serialization") {
     forAll(mkGen) { case (m, k) =>
-      val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
-      val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
-      PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
+      exitOnError {
+        val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
+        val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
+        PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
+      }
     }
   }
 

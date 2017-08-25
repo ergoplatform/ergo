@@ -14,10 +14,17 @@ class HeadersSpec extends PropSpec
   with ChainGenerator {
 
   val chain = genHeaderChain(50, Seq())
+  val genesisId = chain.head.id
+
+  property("Header.interlinks.tail should not contain genesis id") {
+    chain.headers.tail.foreach { r =>
+      r.interlinks.tail.find(_ sameElements genesisId) shouldBe None
+    }
+  }
 
   property("Header Interlink(0) should always link to genesis block") {
     chain.headers.tail.foreach { r =>
-      r.interlinks(0) shouldEqual chain.head.id
+      r.interlinks(0) shouldEqual genesisId
     }
   }
 

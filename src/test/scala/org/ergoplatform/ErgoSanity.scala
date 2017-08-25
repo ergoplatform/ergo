@@ -10,8 +10,8 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
@@ -29,10 +29,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
   with ErgoGenerators {
 
-  val settings: ErgoSettings = new ErgoSettings {
-    override def settingsJSON: Map[String, circe.Json] = Map()
-  }
-
+  lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
   override val history: ErgoHistory = ErgoHistory.readOrGenerate(settings)
@@ -50,7 +47,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 
     Miner.genHeader(Constants.InitialNBits,
       history.bestHeaderOpt,
-      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),

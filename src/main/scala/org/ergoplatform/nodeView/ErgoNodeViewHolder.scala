@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -19,7 +19,7 @@ import scorex.core.{NodeViewHolder, NodeViewModifier}
 abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
-  override lazy val networkChunkSize: Int = settings.networkChunkSize
+  override lazy val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
 
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
@@ -28,8 +28,8 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
 
   //todo: complete this
   override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-    Map(???,
-      Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
+  Map(???,
+    Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -38,7 +38,7 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   }
 }
 
-class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
   override type MS = UtxoState
 
   /**
@@ -54,14 +54,14 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(
 }
 
 
-class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings){
+class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
   override type MS = DigestState
 
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
   override protected def genesisState: (ErgoHistory, DigestState, ErgoWallet, ErgoMemPool) = {
-    val dir = new File(settings.dataDir)
+    val dir = new File(settings.directory)
     dir.mkdirs()
 
     val digestState = ErgoState.generateGenesisDigestState(dir)

@@ -6,10 +6,9 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
@@ -26,7 +25,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
   */
 trait HeadersProcessor extends ScorexLogging {
 
-  protected val config: HistoryConfig
+  protected val config: NodeConfigurationSettings
 
   //TODO alternative DDoS protection
   protected lazy val MaxRollback = 600.days.toMillis / config.blockInterval.toMillis
@@ -50,14 +49,16 @@ trait HeadersProcessor extends ScorexLogging {
   /**
     * @return height of best header
     */
-  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(1)
+  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
 
   /**
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] = historyStorage.db.get(headerHeightKey(id))
-    .map(b => Ints.fromByteArray(b.data))
+  def heightOf(id: ModifierId): Option[Int] =
+    historyStorage.db
+      .get(headerHeightKey(id))
+      .map(b => Ints.fromByteArray(b.data))
 
   /**
     * @param m - header to process
@@ -142,8 +143,10 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.db.get(headerScoreKey(id))
-    .map(b => BigInt(b.data))
+  protected def scoreOf(id: ModifierId): Option[BigInt] =
+    historyStorage.db
+      .get(headerScoreKey(id))
+      .map(b => BigInt(b.data))
 
   /**
     * @param height - block height

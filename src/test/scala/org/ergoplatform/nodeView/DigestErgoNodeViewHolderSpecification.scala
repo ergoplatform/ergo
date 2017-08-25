@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
-import io.circe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -19,7 +18,6 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, PropSpecL
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
-import scorex.core.NodeViewModifier.ModifierId
 import scorex.testkit.TestkitHelpers
 
 import scala.reflect.io.Path
@@ -38,19 +36,15 @@ class DigestErgoNodeViewHolderSpecification extends
   with BeforeAndAfterEach
   with BeforeAndAfterAll {
 
-  lazy val settings: ErgoSettings = new ErgoSettings {
-    override lazy val dataDir: String = s"/tmp/ergo/${Random.nextInt}"
-
-    override def settingsJSON: Map[String, circe.Json] = Map()
-  }
+  lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   override def beforeEach {
-    Path(new File(settings.dataDir)).deleteRecursively()
-    new File(settings.dataDir).mkdirs()
+    Path(new File(settings.directory)).deleteRecursively()
+    new File(settings.directory).mkdirs()
   }
 
   override def afterEach {
-    Path(new File(settings.dataDir)).deleteRecursively()
+    Path(new File(settings.directory)).deleteRecursively()
   }
 
   override def afterAll: Unit = {

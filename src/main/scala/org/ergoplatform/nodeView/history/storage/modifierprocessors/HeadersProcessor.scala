@@ -6,10 +6,9 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.nodeView.history.HistoryConfig
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
@@ -26,7 +25,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
   */
 trait HeadersProcessor extends ScorexLogging {
 
-  protected val config: HistoryConfig
+  protected val config: NodeConfigurationSettings
 
   //TODO alternative DDoS protection
   protected lazy val MaxRollback = 600.days.toMillis / config.blockInterval.toMillis

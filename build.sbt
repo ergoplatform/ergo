@@ -17,6 +17,7 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.5",
   "com.storm-enroute" %% "scalameter" % "0.8.2",
+  "com.iheart" %% "ficus" % "1.4.1",
 
   "org.scalactic" %% "scalactic" % "3.0.1" % "test",
   "org.scalatest" %% "scalatest" % "3.0.1" % "test",

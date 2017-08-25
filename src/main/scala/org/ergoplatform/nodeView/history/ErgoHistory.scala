@@ -78,7 +78,11 @@ trait ErgoHistory
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = historyStorage.modifierById(id)
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
+    val modifier = historyStorage.modifierById(id)
+    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base58.encode(id)} expected")
+    modifier
+  }
 
   /**
     * Get ErgoPersistentModifier of type T by it's id if it is in history

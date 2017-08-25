@@ -12,7 +12,7 @@ import scala.util.Random
 class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verify = true, adState = false, popow = false, BlocksToKeep, nonce = Random.nextLong())
+    generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
 
   property("append header to genesis") {
     val history = genHistory()

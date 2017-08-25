@@ -21,12 +21,11 @@ class HeadersSpec extends PropSpec
     }
   }
 
-  property("Header Interlink(1) should always link to previous block") {
+  property("Header interlink length should not be less than parents") {
     chain.headers.sliding(2).foreach { r =>
       val block1 = r.head
       val block2 = r(1)
-      block2.parentId shouldEqual block1.id
-      block2.interlinks(1) shouldEqual block1.id
+      block2.interlinks.length should be >= block1.interlinks.length
     }
   }
 

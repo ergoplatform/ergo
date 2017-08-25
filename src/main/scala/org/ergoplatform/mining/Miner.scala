@@ -53,18 +53,21 @@ object Miner {
   private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
     val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
 
-    def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
+    def generateInterlinks(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
       if (parent.realDifficulty >= curDifficulty) {
-        generateInnerchain(curDifficulty * 2, acc :+ parent.id)
+        generateInterlinks(curDifficulty * 2, acc :+ parent.id)
       } else {
         parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-          case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
+          case Some(id) => generateInterlinks(curDifficulty * 2, acc :+ id)
           case _ => acc
         }
       }
     }
 
-    genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    val interinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    assert(interinks.length >= parent.interlinks.length - 1)
+
+    genesisId +: interinks
   }
 
   def correctWorkDone(id: Array[Version], difficulty: BigInt): Boolean = {

@@ -14,7 +14,7 @@ class ErgoStateSpecification  extends PropSpec
 
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     withDir("/tmp/ergostate1") {dir =>
-      ErgoState.generateGenesisUtxoState(dir).rootHash shouldBe ErgoState.generateGenesisDigestState(dir).rootHash
+      ErgoState.generateGenesisUtxoState(dir)._1.rootHash shouldBe ErgoState.generateGenesisDigestState(dir).rootHash
     }
   }
 }

@@ -7,7 +7,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
 import scorex.core.utils.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
@@ -26,13 +26,17 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTr
 
   override def secrets: Set[S] = Set()
 
-  override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = ???
+  //todo: implement
+  override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = this
 
-  override def scanOffchain(txs: Seq[AnyoneCanSpendTransaction]): ErgoWallet = ???
+  //todo: implement
+  override def scanOffchain(txs: Seq[AnyoneCanSpendTransaction]): ErgoWallet = this
 
-  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = ???
+  //todo: implement
+  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = this
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] = ???
+  //todo: implement
+  override def rollback(to: VersionTag): Try[ErgoWallet] = Success(this)
 
   override type NVCT = this.type
 }

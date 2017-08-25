@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}

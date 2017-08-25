@@ -43,7 +43,7 @@ trait ErgoGenerators extends CoreGenerators {
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- genBytesList(Constants.ModifierIdSize)
-    stateRoot <- genBytesList(Constants.ModifierIdSize)
+    stateRoot <- genBytesList(Constants.ModifierIdSize + 1)
     adRoot <- genBytesList(Constants.ModifierIdSize)
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]

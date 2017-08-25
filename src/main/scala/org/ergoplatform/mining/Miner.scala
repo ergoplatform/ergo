@@ -7,6 +7,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 import scorex.core.block.Block._
@@ -16,26 +17,10 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
 import scala.util.{Random, Try}
-import org.ergoplatform.utils.LittleEndianBytes._
 
 object Miner extends ScorexLogging {
 
   type Solution = Seq[Int]
-
-  def blockHash(prevHash: Array[Byte], nonce: BigInt, soln: Seq[Int]): Array[Byte] = {
-    // H(I||V||x_1||x_2||...|x_2^k)
-    val digest = new SHA256Digest()
-    digest.update(prevHash, 0, prevHash.length)
-    Equihash.hashNonce(digest, nonce)
-    soln.foreach(s => Equihash.hashXi(digest, s))
-    val h = new Array[Byte](32)
-    digest.doFinal(h, 0)
-    val secondDigest = new SHA256Digest()
-    secondDigest.update(h, 0, h.length)
-    val result = new Array[Byte](32)
-    secondDigest.doFinal(result, 0)
-    result
-  }
 
   // add chain byte?
   private def ergoPerson(n: Int, k: Int): Array[Byte] = "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
@@ -87,13 +72,14 @@ object Miner extends ScorexLogging {
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
-      val suitableSolution = solutions.find(solution => {
-        val h = blockHash(parent.id, nonce, solution)
-        correctWorkDone(h, difficulty)
+      val headerWithSuitableSolution = solutions.map(solution => {
+        h.copy(nonce = nonce, equihashSolutions = EquihashSolutionsSerializer.toBytes(solution))
+      }).find(newHeader => {
+        correctWorkDone(newHeader.realDifficulty, difficulty)
       })
-      suitableSolution match {
-        case Some(foundSolution) =>
-          h.copy(nonce = nonce, equihashSolutions = EquihashSolutionsSerializer.toBytes(foundSolution))
+      headerWithSuitableSolution match {
+        case Some(headerWithFoundSolution) =>
+          headerWithFoundSolution
         case None =>
           generateHeader()
       }
@@ -119,9 +105,8 @@ object Miner extends ScorexLogging {
     genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
   }
 
-  def correctWorkDone(id: Array[Byte], difficulty: BigInt): Boolean = {
-    val target = Constants.MaxTarget / difficulty
-    BigInt(1, id) < target
+  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
+    realDifficulty >= difficulty
   }
 
 }

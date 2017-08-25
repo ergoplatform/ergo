@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers
 
+import com.google.common.primitives.Ints
 import io.circe.Json
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.Miner
@@ -59,8 +60,8 @@ object ErgoFullBlock {
       Constants.InitialNBits,
       0,
       Array.fill(5)(0.toByte),
-      0,
-      Array.fill(1)(0.toByte)
+      1,
+      Array.fill(32)(1.toByte)
     )
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, Seq(genesisTx))
     val aDProofs: ADProof = ADProof(header.id, proofs)

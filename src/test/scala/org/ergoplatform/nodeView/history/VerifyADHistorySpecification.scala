@@ -7,10 +7,10 @@ import scala.util.Random
 class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verify = true, adState = true, popow = false, BlocksToKeep, nonce = Random.nextLong())
+    generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
 
   property("bootstrap from headers and last full blocks") {
-    var history = generateHistory(verify = true, adState = true, popow = false, BlocksToKeep, System.nanoTime())
+    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None
 

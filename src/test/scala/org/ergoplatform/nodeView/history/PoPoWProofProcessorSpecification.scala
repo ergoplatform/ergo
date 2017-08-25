@@ -12,7 +12,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
   val MaxK = 10
 
   private def genHistory() =
-    generateHistory(verify = false, adState = true, popow = false, blocksToKeep = 0, nonce = Random.nextLong(), epochLength = 1000)
+    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   val history = genHistory()
@@ -33,7 +33,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
       exitOnError {
         val proof = popowHistory.constructPoPoWProof(m, k).get
 
-        var newHistory = generateHistory(verify = false, adState = true, popow = true, 0, Random.nextLong())
+        var newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = true, 0)
         newHistory.applicable(proof) shouldBe true
         newHistory = newHistory.append(proof).get._1
         newHistory.bestHeaderOpt.isDefined shouldBe true
@@ -44,7 +44,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
   property("non-PoPoW history should ignore PoPoWProof proofs") {
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m, k).get
-      val newHistory = generateHistory(verify = false, adState = true, popow = false, 0, Random.nextLong())
+      val newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, 0)
       newHistory.applicable(proof) shouldBe false
     }
   }

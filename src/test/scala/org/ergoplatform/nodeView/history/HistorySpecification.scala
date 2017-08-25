@@ -5,7 +5,7 @@ import java.io.File
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -13,6 +13,7 @@ import org.scalatest.{Matchers, PropSpec}
 import scorex.core.settings.Settings
 import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
+import scorex.utils.Random
 
 import scala.concurrent.duration._
 
@@ -46,23 +47,23 @@ trait HistorySpecification extends PropSpec
     }
   }
 
-  def generateHistory(verify: Boolean,
-                      adState: Boolean,
-                      popow: Boolean,
+  def generateHistory(verifyTransactions: Boolean,
+                      ADState: Boolean,
+                      PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
-                      nonce: Long = 0,
                       epochLength: Int = 100000000): ErgoHistory = {
 
+    val nonce = Base58.encode(Random.randomBytes(32))
     val blockInterval = 1.minute
     val minimalSuffix = 2
-    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + blocksToKeep + popow))
-    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(adState, verify, blocksToKeep,
-      popow, minimalSuffix, blockInterval, epochLength)
+    val params = verifyTransactions.toString + "-" + ADState + "-" + blocksToKeep + "-" + PoPoWBootstrap
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
+      PoPoWBootstrap, minimalSuffix, blockInterval, epochLength)
     val scorexSettings: Settings = new Settings {
       override def settingsJSON: Map[String, Json] = Map()
     }
 
-    val fullHistorySettings: ErgoSettings = ErgoSettings(s"/tmp/ergo/test-history-$paramsHash-$nonce",
+    val fullHistorySettings: ErgoSettings = ErgoSettings(s"/tmp/ergo/test-history-$params-$nonce",
       nodeSettings,
       scorexSettings)
     new File(fullHistorySettings.directory).mkdirs()

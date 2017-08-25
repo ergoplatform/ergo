@@ -23,7 +23,7 @@ trait ChainGenerator {
   } else {
     val header = Miner.genHeader(Constants.InitialNBits,
       acc.headOption,
-      Array.fill(hashLength)(0.toByte),
+      Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
@@ -41,7 +41,7 @@ trait ChainGenerator {
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)
-    val stateRoot = Array.fill(32)(0.toByte)
+    val stateRoot = Array.fill(32 + 1)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(Constants.InitialNBits,

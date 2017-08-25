@@ -1,24 +1,16 @@
 package org.ergoplatform.modifiers
 
 import io.circe.Json
-import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.nodeView.state.ErgoState.Digest
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.settings.Constants._
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
-import scorex.core.block.Block.Timestamp
 import scorex.core.serialization.Serializer
 
 //TODO we need it to be ErgoPersistentModifier just to put it to ProcessInfo
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          aDProofs: Option[ADProof]) extends ErgoPersistentModifier {
-  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.ModifierTypeId
 
   override val parentId = header.parentId
 
@@ -33,5 +25,5 @@ case class ErgoFullBlock(header: Header,
 }
 
 object ErgoFullBlock {
-  val modifierTypeId: ModifierTypeId = (-127).toByte
+  val ModifierTypeId: ModifierTypeId = (-127).toByte
 }

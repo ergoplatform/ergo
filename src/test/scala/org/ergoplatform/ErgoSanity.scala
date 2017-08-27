@@ -1,17 +1,16 @@
 package org.ergoplatform
 
-import io.circe
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
@@ -27,12 +26,14 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //  with MempoolFilterPerformanceTest[P, TX, MPool]
   // with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
   //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
-  with ErgoGenerators {
+  with ErgoGenerators
+  with HistorySpecification {
 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
-  override val history: ErgoHistory = ErgoHistory.readOrGenerate(settings)
+  override val history: ErgoHistory = generateHistory(verifyTransactions = true, ADState = false,
+    PoPoWBootstrap = false, -1)
   override val mempool: ErgoMemPool = ErgoMemPool.empty
 
   //Generators

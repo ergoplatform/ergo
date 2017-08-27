@@ -2,14 +2,10 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{PoPoWProof, PoPoWProofSerializer}
 import org.ergoplatform.settings.Constants
-import org.scalacheck.{Gen, Shrink}
-import scorex.crypto.encode.Base58
+import org.ergoplatform.utils.NoShrink
+import org.scalacheck.Gen
 
-import scala.util.Random
-
-class PoPoWProofProcessorSpecification extends HistorySpecification {
-
-  private implicit def noShrink[A]: Shrink[A] = Shrink(_ => Stream.empty)
+class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrink {
 
   val MaxM = 10
   val MaxK = 10
@@ -23,6 +19,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
     history.bestHeaderOpt.toSeq)
   private lazy val popowHistory = applyHeaderChain(history, chain)
 
+
   property("Valid PoPoWProof generation") {
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m, k)
@@ -33,14 +30,12 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
 
   property("PoPoW history should be able to apply PoPoWProof proofs") {
     forAll(mkGen) { case (m, k) =>
-      exitOnError {
-        val proof = popowHistory.constructPoPoWProof(m, k).get
+      val proof = popowHistory.constructPoPoWProof(m, k).get
 
-        var newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = true, 0)
-        newHistory.applicable(proof) shouldBe true
-        newHistory = newHistory.append(proof).get._1
-        newHistory.bestHeaderOpt.isDefined shouldBe true
-      }
+      var newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = true, 0)
+      newHistory.applicable(proof) shouldBe true
+      newHistory = newHistory.append(proof).get._1
+      newHistory.bestHeaderOpt.isDefined shouldBe true
     }
   }
 
@@ -61,11 +56,9 @@ class PoPoWProofProcessorSpecification extends HistorySpecification {
 
   property("Valid PoPoWProof serialization") {
     forAll(mkGen) { case (m, k) =>
-      exitOnError {
-        val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
-        val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
-        PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
-      }
+      val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
+      val recovered = PoPoWProofSerializer.parseBytes(PoPoWProofSerializer.toBytes(proof)).get
+      PoPoWProofSerializer.toBytes(proof) shouldEqual PoPoWProofSerializer.toBytes(recovered)
     }
   }
 

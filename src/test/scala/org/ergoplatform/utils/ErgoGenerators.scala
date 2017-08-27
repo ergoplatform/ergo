@@ -13,8 +13,6 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.CoreGenerators
 
-import scala.util.Try
-
 
 trait ErgoGenerators extends CoreGenerators {
 
@@ -22,7 +20,7 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
     from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
-    to: IndexedSeq[Long]   <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
+    to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
   } yield AnyoneCanSpendTransaction(from, to)
 
   lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
@@ -65,7 +63,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val (boxes, bs) = boxHolder.take(spentBoxesCounts.sum)
 
-    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())){case ((bxs, ts), fromBoxes) =>
+    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
       val newBoxes = bxsFrom.map(_.value)
       val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
@@ -115,14 +113,5 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
-
-
-  def exitOnError(r: => Unit): Unit = Try {
-    r
-  }.recoverWith { case e =>
-    e.printStackTrace()
-    System.exit(1)
-    throw e
-  }
 
 }

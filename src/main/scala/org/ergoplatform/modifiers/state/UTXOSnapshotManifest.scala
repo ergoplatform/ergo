@@ -16,7 +16,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   override type M = UTXOSnapshotManifest
 
-  override lazy val serializer: Serializer[UTXOSnapshotManifest] = ???
+  override lazy val serializer: Serializer[UTXOSnapshotManifest] = UTXOSnapshotManifestSerializer
 
   override lazy val json: Json = ???
 
@@ -31,5 +31,11 @@ object UTXOSnapshotManifest {
     require(manifest.rootHash sameElements header.stateRoot)
     ???
   }
+}
+
+object UTXOSnapshotManifestSerializer extends Serializer[UTXOSnapshotManifest] {
+  override def toBytes(obj: UTXOSnapshotManifest): Array[ModifierTypeId] = ???
+
+  override def parseBytes(bytes: Array[ModifierTypeId]): Try[UTXOSnapshotManifest] = ???
 }
 

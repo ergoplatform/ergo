@@ -32,7 +32,10 @@ class DigestState private (override val rootHash: Digest, store: Store) extends 
         }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten
-    case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
+    case a: Any =>
+      log.warn(s"Modifier not validated: $a")
+      //TODO why success here?
+      Success()
   }
 
   private def update(newVersion: Digest): Try[DigestState] = Try {
@@ -45,7 +48,9 @@ class DigestState private (override val rootHash: Digest, store: Store) extends 
     case fb: ErgoFullBlock => validate(fb).flatMap(_ => update(fb.header.stateRoot))
 
       //todo: fail here? or not?
-    case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
+    case a: Any =>
+      log.warn(s"Unhandled modifier: $a")
+      Try(this)
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {

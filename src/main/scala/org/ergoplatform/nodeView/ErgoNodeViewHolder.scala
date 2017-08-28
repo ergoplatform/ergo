@@ -2,9 +2,11 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
+import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer, TransactionIdsForHeader, TransactionIdsForHeaderSerializer}
+import org.ergoplatform.modifiers.state.{UTXOSnapshotChunk, UTXOSnapshotManifest, UTXOSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
@@ -26,10 +28,15 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
-  //todo: complete this
   override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-  Map(???,
-    Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
+  Map(ADProof.ModifierTypeId -> ADProofSerializer,
+    Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer,
+    BlockTransactions.ModifierTypeId -> BlockTransactionsSerializer,
+    Header.ModifierTypeId -> HeaderSerializer,
+    PoPoWProof.ModifierTypeId -> PoPoWProofSerializer,
+    TransactionIdsForHeader.ModifierTypeId -> TransactionIdsForHeaderSerializer,
+    UTXOSnapshotChunk.ModifierTypeId -> TransactionIdsForHeaderSerializer,
+    UTXOSnapshotManifest.ModifierTypeId -> UTXOSnapshotManifestSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)

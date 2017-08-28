@@ -7,6 +7,8 @@ import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
+import scala.util.Try
+
 case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
 
@@ -14,7 +16,7 @@ case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier
 
   override type M = TransactionIdsForHeader
 
-  override lazy val serializer: Serializer[TransactionIdsForHeader] = ???
+  override lazy val serializer: Serializer[TransactionIdsForHeader] = TransactionIdsForHeaderSerializer
 
   override lazy val json: Json = ???
 
@@ -27,4 +29,10 @@ object TransactionIdsForHeader {
   def validate(txIds: TransactionIdsForHeader, header: Header): Boolean = {
     header.transactionsRoot sameElements txIds.rootHash
   }
+}
+
+object TransactionIdsForHeaderSerializer extends Serializer[TransactionIdsForHeader] {
+  override def toBytes(obj: TransactionIdsForHeader): Array[ModifierTypeId] = ???
+
+  override def parseBytes(bytes: Array[ModifierTypeId]): Try[TransactionIdsForHeader] = ???
 }

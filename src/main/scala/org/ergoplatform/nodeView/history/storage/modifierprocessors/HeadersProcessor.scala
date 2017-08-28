@@ -105,7 +105,7 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def validate(m: Header): Try[Unit] = {
     lazy val parentOpt = typedModifierById[Header](m.parentId)
-    if (m.isGenesis) {
+    if (m.parentId sameElements Header.GenesisParentId) {
       if (bestHeaderIdOpt.nonEmpty) {
         Failure(new Error("Trying to append genesis block to non-empty history"))
       } else if (m.height != GenesisHeight) {

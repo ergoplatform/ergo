@@ -4,8 +4,6 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
@@ -95,20 +93,21 @@ trait ErgoHistory
   /**
     * Append ErgoPersistentModifier to History if valid
     */
-  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = Try {
+  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = {
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
-    applicableTry(modifier).get
-    modifier match {
-      case m: Header =>
-        (this, process(m))
-      case m: BlockTransactions =>
-        (this, process(m))
-      case m: ADProof =>
-        (this, process(m))
-      case m: PoPoWProof =>
-        (this, process(m))
-      case m: UTXOSnapshotChunk =>
-        (this, process(m))
+    applicableTry(modifier).map { _ =>
+      modifier match {
+        case m: Header =>
+          (this, process(m))
+        case m: BlockTransactions =>
+          (this, process(m))
+        case m: ADProof =>
+          (this, process(m))
+        case m: PoPoWProof =>
+          (this, process(m))
+        case m: UTXOSnapshotChunk =>
+          (this, process(m))
+      }
     }
   }
 
@@ -287,8 +286,9 @@ trait ErgoHistory
         (Seq(ByteArrayWrapper(m.id)), Seq())
     }
 
+    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq()) //todo: dumb values, fix
     historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
-    ???
+    this -> progressInto
   }
 
   //todo: fix

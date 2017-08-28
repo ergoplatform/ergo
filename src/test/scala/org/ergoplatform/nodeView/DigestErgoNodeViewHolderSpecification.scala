@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -15,12 +14,14 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, PropSpecLike}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
-import scorex.core.NodeViewHolder.GetDataFromCurrentView
+import scorex.core.NodeViewHolder
+import scorex.core.NodeViewHolder.{EventType, GetDataFromCurrentView, SuccessfulModification}
 import scorex.testkit.TestkitHelpers
 
 import scala.reflect.io.Path
 import scala.util.Random
-
+import EventType._
+import io.iohk.iodb.ByteArrayWrapper
 
 class DigestErgoNodeViewHolderSpecification extends
   TestKit(ActorSystem("DigestErgoNodeViewHolderSpec"))
@@ -31,43 +32,51 @@ class DigestErgoNodeViewHolderSpecification extends
   with Matchers
   with ErgoGenerators
   with TestkitHelpers
-  with BeforeAndAfterEach
   with BeforeAndAfterAll {
-
-  lazy val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = "/tmp/ergo")
-
-  override def beforeEach {
-    Path(new File(settings.directory)).deleteRecursively()
-    new File(settings.directory).mkdirs()
-  }
-
-  override def afterEach {
-    Path(new File(settings.directory)).deleteRecursively()
-  }
 
   override def afterAll: Unit = {
     TestKit.shutdownActorSystem(system)
   }
 
   property("genesis - state digest") {
+    //todo: reduce this boilerplate
+    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
+    Path(new File(settings.directory)).deleteRecursively()
+    new File(settings.directory).mkdirs()
+
+
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>
       v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
     }
     expectMsg(true)
+
+    Path(new File(settings.directory)).deleteRecursively()
   }
 
   property("genesis - history (no genesis block there yet)") {
+    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
+    Path(new File(settings.directory)).deleteRecursively()
+    new File(settings.directory).mkdirs()
+
+
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
     expectMsg(None)
+
+    Path(new File(settings.directory)).deleteRecursively()
   }
 
   property("genesis - apply valid block") {
+    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
+    Path(new File(settings.directory)).deleteRecursively()
+    new File(settings.directory).mkdirs()
+
+
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
 
     val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()))
@@ -86,13 +95,15 @@ class DigestErgoNodeViewHolderSpecification extends
     }
     expectMsg(-1)
 
+    digestHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
 
     //sending header
     digestHolder ! LocallyGeneratedModifier[Header](block.header)
 
-/*
-  todo: uncomment & fix
+    expectMsg(SuccessfulModification(block.header, None))
 
+    /*
+    todo: uncomment / fix
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
       v.history.height
     }
@@ -118,6 +129,8 @@ class DigestErgoNodeViewHolderSpecification extends
       v.history.bestHeaderOpt
     }
     expectMsg(Some(block.header))
-    */
+  */
+
+    Path(new File(settings.directory)).deleteRecursively()
   }
 }

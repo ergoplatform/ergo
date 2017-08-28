@@ -1,0 +1,131 @@
+\documentclass[]{report}   % list options between brackets
+
+\usepackage{color}
+\usepackage{graphicx}
+%% The amssymb package provides various useful mathematical symbols
+\usepackage{amssymb}
+%% The amsthm package provides extended theorem environments
+\usepackage{amsthm}
+\usepackage{amsmath}
+
+\usepackage{listings}
+
+\usepackage{hyperref}
+
+
+\newtheorem{axiom}{Axiom}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+
+\def\shownotes{1}
+\def\notesinmargins{0}
+
+\ifnum\shownotes=1
+\ifnum\notesinmargins=1
+\newcommand{\authnote}[2]{\marginpar{\parbox{\marginparwidth}{\tiny %
+  \textsf{#1 {\textcolor{blue}{notes: #2}}}}}%
+  \textcolor{blue}{\textbf{\dag}}}
+\else
+\newcommand{\authnote}[2]{
+  \textsf{#1 \textcolor{blue}{: #2}}}
+\fi
+\else
+\newcommand{\authnote}[2]{}
+\fi
+
+\newcommand{\knote}[1]{{\authnote{\textcolor{green}{Alex notes}}{#1}}}
+\newcommand{\dnote}[1]{{\authnote{\textcolor{red}{Dmitry notes}}{#1}}}
+
+
+% type user-defined commands here
+\usepackage[T1]{fontenc}
+
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage[margin=1in]{geometry}
+\usepackage{titlesec}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\lstdefinestyle{myScalastyle}{
+  frame=tb,
+  language=scala,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,
+}
+\newtheorem{claim1}{Claim}
+\newtheorem{dfn}{Definition}
+\newtheorem{defn}{Definition}
+\newcommand{\ma}{\mathcal{A}}
+\newcommand{\mb}{\mathcal{B}}
+\newcommand{\he}{\hat{e}}
+\newcommand{\sr}{\stackrel}
+\newcommand{\ra}{\rightarrow}
+\newcommand{\la}{\leftarrow}
+
+\newcommand{\ignore}[1]{} % may contain useful stuff (that needs more work)
+\newcommand{\full}[1]{} % use only for full version
+\newcommand{\notfull}[1]{#1}
+\newcommand{\rand}{\stackrel{R}{\leftarrow}}
+\newcommand{\haya}{blue}
+\newcommand{\amitabh}{purple}
+\newcommand{\questions}{blue}
+\newcommand{\defined}{\stackrel{\mbox{\tiny{def}}}{=}}
+\newcommand{\mc}{\mathcal}
+\newcommand{\ms}{\mathsf}
+\newcommand{\txs}{\textsf}
+\newcommand{\lea}{\leftarrow}
+\newcommand{\rea}{\rightarrow}
+\newcommand{\adv}{{\cal A} }
+\def\kg{{\sf{Gen}}}
+\def\enc{{\sf{Enc}}}
+\def\dec{{\sf{Dec}}}
+\newcommand{\btc}{\includegraphics[height=8pt]{assets/btc.jpg}}
+\newcommand{\mypar}[1]{\smallskip\noindent\textbf{#1.}\ \ \ }
+
+\newcommand{\dlog}{dlog(h)}
+\newcommand{\pedersen}{pcom(h, c)}
+\newcommand{\height}{\mathcal{H}}
+\newcommand{\ergo}{$\Sigma$RGO}
+
+\newcommand{\ecash}{$\Sigma$-Cash}
+
+\newcommand{\edata}{$\Sigma$-Data}
+
+\newcommand{\state}{\textit{State}}
+\newcommand{\roller}{\textbf{Rollerchain}}
+\newcommand{\aspen}{\textbf{Aspen}}
+\newcommand{\bitcoinng}{\textbf{Bitcoin-ng}}
+\newcommand{\sse}{\textbf{Space-Scarce Economy}}
+\newcommand{\popow}{\textbf{PoPoW}}
+\newcommand{\ads}{\textbf{ADS}}
+\newcommand{\ssal}{\textbf{$\Sigma$SAL}}
+
+
+\begin{document}
+
+\title{The \ergo{} Yellowpaper}
+\author{Alexander Chepurnoy and Dmitry Meshkov}
+\maketitle
+
+\section{Introduction}
+
+\bibliographystyle{elsarticle-num}
+\bibliography{sources.bib}
+\addcontentsline{toc}{section}{References}
+
+\end{document}

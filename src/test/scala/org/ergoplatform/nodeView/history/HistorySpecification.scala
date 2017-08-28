@@ -1,19 +1,15 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
-
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{ErgoSettings, NodeConfigurationSettings}
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
-import org.scalacheck.{Gen, Shrink}
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.settings.Settings
-import scorex.crypto.encode.Base58
 import scorex.testkit.TestkitHelpers
-import scorex.utils.Random
 
 import scala.concurrent.duration._
 
@@ -22,6 +18,7 @@ trait HistorySpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
+  with ErgoTestHelpers
   with TestkitHelpers
   with ChainGenerator {
 
@@ -53,20 +50,16 @@ trait HistorySpecification extends PropSpec
                       blocksToKeep: Int,
                       epochLength: Int = 100000000): ErgoHistory = {
 
-    val nonce = Base58.encode(Random.randomBytes(32))
     val blockInterval = 1.minute
     val minimalSuffix = 2
-    val params = verifyTransactions.toString + "-" + ADState + "-" + blocksToKeep + "-" + PoPoWBootstrap
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, blockInterval, epochLength)
     val scorexSettings: Settings = new Settings {
       override def settingsJSON: Map[String, Json] = Map()
     }
 
-    val fullHistorySettings: ErgoSettings = ErgoSettings(s"/tmp/ergo/test-history-$params-$nonce",
-      nodeSettings,
-      scorexSettings)
-    new File(fullHistorySettings.directory).mkdirs()
+    val dir = createTempDir
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, nodeSettings, scorexSettings)
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
 

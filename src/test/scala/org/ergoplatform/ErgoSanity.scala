@@ -16,6 +16,7 @@ import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
 import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
+import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
@@ -41,7 +42,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //Generators
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
   
-  override def syntacticallyValidModifier(history: HT): PM = {
+  override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
 
     Miner.genHeader(Constants.InitialNBits,
@@ -54,7 +55,8 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
     )
   }
 
-  override def syntacticallyInvalidModifier(history: HT): PM = ???
+  override def syntacticallyInvalidModifier(history: HT): PM =
+    syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
 }
 
 object ErgoSanity {

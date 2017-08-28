@@ -63,5 +63,4 @@ object ErgoSettings extends ScorexLogging {
 
     config
   }
-
 }

@@ -9,6 +9,8 @@ import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 import scorex.utils.Random
 
+import scala.util.Try
+
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
 
@@ -17,7 +19,7 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 
   override type M = UTXOSnapshotChunk
 
-  override lazy val serializer: Serializer[UTXOSnapshotChunk] = ???
+  override lazy val serializer: Serializer[UTXOSnapshotChunk] = UTXOSnapshotChunkSerializer
 
   override lazy val json: Json = ???
 
@@ -28,4 +30,10 @@ object UTXOSnapshotChunk {
   type StateElement = AnyoneCanSpendNoncedBox
 
   val ModifierTypeId: Byte = 107: Byte
+}
+
+object UTXOSnapshotChunkSerializer extends Serializer[UTXOSnapshotChunk] {
+  override def toBytes(obj: UTXOSnapshotChunk): Array[ModifierTypeId] = ???
+
+  override def parseBytes(bytes: Array[ModifierTypeId]): Try[UTXOSnapshotChunk] = ???
 }

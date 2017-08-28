@@ -10,7 +10,9 @@ scalaVersion := "2.12.3"
 
 resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
   "SonaType" at "https://oss.sonatype.org/content/groups/public",
-  "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/")
+  "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+  "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
+
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.1",

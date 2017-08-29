@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView
 
-import java.io.File
-
 import akka.actor.Props
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -16,8 +14,6 @@ import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
 import scorex.testkit.utils.FileUtils
 
-import scala.util.Random
-
 class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
 
   type Fixture = DigestHolderFixture
@@ -25,23 +21,19 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
   class DigestHolderFixture extends AkkaFixture with FileUtils {
     val dir = createTempDir
     val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
-    val dh = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
   }
 
   def createAkkaFixture(): Fixture = new DigestHolderFixture
 
   property("genesis - state digest") { fixture => import fixture._
-    val digestHolder = fixture.dh
-
-    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>
+     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>
       v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
     }
     expectMsg(true)
   }
 
   property("genesis - history (no genesis block there yet)") { fixture => import fixture._
-    val digestHolder = fixture.dh
-
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
@@ -49,8 +41,8 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
   }
 
   property("genesis - apply valid block") { fixture => import fixture._
-    val digestHolder = fixture.dh
-    val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()))
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val block = validFullBlock(None, us, bh)
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>

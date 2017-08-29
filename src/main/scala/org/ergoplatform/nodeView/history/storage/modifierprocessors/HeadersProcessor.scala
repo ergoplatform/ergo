@@ -39,6 +39,12 @@ trait HeadersProcessor extends ScorexLogging {
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
+  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+
+  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+
+  protected def validityKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
+
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
   /**
@@ -184,10 +190,6 @@ trait HeadersProcessor extends ScorexLogging {
     if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
-
-  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
-
-  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 

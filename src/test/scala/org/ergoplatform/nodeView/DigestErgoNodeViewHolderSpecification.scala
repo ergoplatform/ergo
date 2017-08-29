@@ -2,93 +2,61 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import akka.actor.{ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestKit}
+import akka.actor.Props
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, PropSpecLike}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import org.ergoplatform.utils.{ErgoGenerators, SequentialAkkaFixture}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
-import scorex.core.NodeViewHolder.{EventType, GetDataFromCurrentView, SuccessfulModification}
-import scorex.testkit.TestkitHelpers
+import scorex.core.NodeViewHolder.EventType._
+import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
+import scorex.testkit.utils.FileUtils
 
-import scala.reflect.io.Path
 import scala.util.Random
-import EventType._
-import io.iohk.iodb.ByteArrayWrapper
 
-class DigestErgoNodeViewHolderSpecification extends
-  TestKit(ActorSystem("DigestErgoNodeViewHolderSpec"))
-  with ImplicitSender
-  with PropSpecLike
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with TestkitHelpers
-  with BeforeAndAfterAll {
+class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
 
-  override def afterAll: Unit = {
-    TestKit.shutdownActorSystem(system)
+  type Fixture = DigestHolderFixture
+
+  class DigestHolderFixture extends AkkaFixture with FileUtils {
+    val dir = createTempDir
+    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
+    val dh = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
   }
 
-  property("genesis - state digest") {
-    //todo: reduce this boilerplate
-    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
-    Path(new File(settings.directory)).deleteRecursively()
-    new File(settings.directory).mkdirs()
+  def createAkkaFixture(): Fixture = new DigestHolderFixture
 
-
-    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+  property("genesis - state digest") { fixture => import fixture._
+    val digestHolder = fixture.dh
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>
       v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
     }
     expectMsg(true)
-
-    Path(new File(settings.directory)).deleteRecursively()
   }
 
-  property("genesis - history (no genesis block there yet)") {
-    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
-    Path(new File(settings.directory)).deleteRecursively()
-    new File(settings.directory).mkdirs()
-
-
-    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+  property("genesis - history (no genesis block there yet)") { fixture => import fixture._
+    val digestHolder = fixture.dh
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
     expectMsg(None)
-
-    Path(new File(settings.directory)).deleteRecursively()
   }
 
-  property("genesis - apply valid block") {
-    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = s"/tmp/ergo/nvh-test-${Random.nextInt()}")
-    Path(new File(settings.directory)).deleteRecursively()
-    new File(settings.directory).mkdirs()
-
-
-    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
-
+  property("genesis - apply valid block") { fixture => import fixture._
+    val digestHolder = fixture.dh
     val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()))
-
     val block = validFullBlock(None, us, bh)
 
-
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
     expectMsg(None)
-
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
       v.history.height
@@ -130,7 +98,5 @@ class DigestErgoNodeViewHolderSpecification extends
     }
     expectMsg(Some(block.header))
   */
-
-    Path(new File(settings.directory)).deleteRecursively()
   }
 }

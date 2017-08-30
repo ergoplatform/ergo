@@ -12,7 +12,7 @@ import scala.collection.immutable.SortedMap
   *
   * @param boxes - immutable sorted collection of boxes (organized as box.key -> box map)
   */
-class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
+class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
 
   def get(id: ByteArrayWrapper): Option[AnyoneCanSpendNoncedBox] = boxes.get(id)
 
@@ -33,7 +33,7 @@ class BoxHolder(private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNon
 /**
   * For tests, box holder with in-memory diffs
   */
-class VersionedInMemoryBoxHolder( private val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox],
+class VersionedInMemoryBoxHolder( override val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox],
                                   val versions: IndexedSeq[ByteArrayWrapper],
                                   val diffs: Map[ByteArrayWrapper, (Seq[AnyoneCanSpendNoncedBox], Seq[AnyoneCanSpendNoncedBox])]
                                 ) extends BoxHolder(boxes) {

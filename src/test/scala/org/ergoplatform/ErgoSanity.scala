@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -62,13 +63,13 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override def syntacticallyInvalidModifier(history: HT): PM =
     syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
 
-  override val stateGen: Gen[ST] = boxesHolderGen.map{bh =>
+  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map{bh =>
     val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(100000)}")
     f.mkdirs()
-    UtxoState.fromBoxHolder(bh, f)
+    WrappedUtxoState(bh, f)
   }
 
-  override def semanticallyValidModifier(state: ST): PM = validFullBlock(None, state)
+  override def semanticallyValidModifier(state: ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
 
 }
 

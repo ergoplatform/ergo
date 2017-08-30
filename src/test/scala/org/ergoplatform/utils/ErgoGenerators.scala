@@ -6,13 +6,13 @@ import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.testkit.generators.CoreGenerators
-
 
 
 trait ErgoGenerators extends CoreGenerators {
@@ -74,13 +74,12 @@ trait ErgoGenerators extends CoreGenerators {
   }
 
 
-  def validTransactionsFromUtxoState(utxoState: UtxoState): Seq[AnyoneCanSpendTransaction] = {
+  def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[AnyoneCanSpendTransaction] = {
     val num = 10
 
     val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
-    ???
-/*
-    val boxes = utxoState.boxIterator.take(spentBoxesCounts.sum).toSeq
+
+    val boxes = wus.takeBoxes(spentBoxesCounts.sum).toSeq
 
     val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
@@ -88,7 +87,7 @@ trait ErgoGenerators extends CoreGenerators {
       val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
       (remainder, tx +: ts)
     }
-    txs*/
+    txs
   }
 
 
@@ -99,14 +98,14 @@ trait ErgoGenerators extends CoreGenerators {
   }
 
   def validFullBlock(parentOpt: Option[Header],
-                     utxoState: UtxoState): ErgoFullBlock = {
+                     utxoState: WrappedUtxoState): ErgoFullBlock = {
     val transactions = validTransactionsFromUtxoState(utxoState)
     validFullBlock(parentOpt, utxoState, transactions)
   }
 
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
-                     transactions:Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
+                     transactions: Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 

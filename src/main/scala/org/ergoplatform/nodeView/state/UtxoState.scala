@@ -47,7 +47,9 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
     val mods = boxChanges(txs).operations.map(ADProof.changeToMod)
     mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
-        persistentProver.performOneOperation(m)
+        val opRes = persistentProver.performOneOperation(m)
+        if(opRes.isFailure) println(opRes)
+        opRes
       })
     }.ensuring(_.isSuccess)
 

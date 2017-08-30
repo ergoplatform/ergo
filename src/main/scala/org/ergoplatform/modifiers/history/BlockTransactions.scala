@@ -2,17 +2,21 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
 import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction]) extends ErgoPersistentModifier
+case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction])
+  extends ErgoPersistentModifier
+    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
   with ModifierWithDigest {
 
   assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
@@ -29,6 +33,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   override def toString: String = s"BlockTransactions(${Base58.encode(id)},${Base58.encode(headerId)},$txs)"
 
+  override lazy val transactions: Seq[AnyoneCanSpendTransaction] = txs
 }
 
 object BlockTransactions {

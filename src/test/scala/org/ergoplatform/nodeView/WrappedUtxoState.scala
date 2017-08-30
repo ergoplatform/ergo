@@ -14,11 +14,13 @@ import scorex.core.transaction.state.MinimalState.VersionTag
 import scala.util.{Failure, Success, Try}
 
 
-class WrappedUtxoState(store: Store, versionedBoxHolder: VersionedInMemoryBoxHolder)
+class WrappedUtxoState(store: Store, val versionedBoxHolder: VersionedInMemoryBoxHolder)
   extends UtxoState(store) {
 
   private type TCPMOD =
     TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+
+  def size: Int = versionedBoxHolder.size
 
   def takeBoxes(count: Int): Seq[AnyoneCanSpendNoncedBox] = versionedBoxHolder.take(count)._1
 
@@ -56,6 +58,7 @@ object WrappedUtxoState {
       boxes,
       IndexedSeq(version),
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
+
     new WrappedUtxoState(us.store, vbh)
   }
 }

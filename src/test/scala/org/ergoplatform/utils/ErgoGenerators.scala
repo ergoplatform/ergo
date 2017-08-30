@@ -24,9 +24,11 @@ trait ErgoGenerators extends CoreGenerators {
     to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
   } yield AnyoneCanSpendTransaction(from, to)
 
+  lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
+
   lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
     nonce <- positiveLongGen
-    value <- positiveLongGen
+    value <- positiveIntGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
@@ -77,14 +79,20 @@ trait ErgoGenerators extends CoreGenerators {
   def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[AnyoneCanSpendTransaction] = {
     val num = 10
 
-    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
+    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(20) + 1)
 
-    val boxes = wus.takeBoxes(spentBoxesCounts.sum).toSeq
+    val boxes = wus.takeBoxes(spentBoxesCounts.sum)
 
-    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
+      boxes.foreach { b =>
+        assert(wus.boxById(b.id).isDefined)
+      }
+
+
+    val (_, txs) = spentBoxesCounts.foldLeft(boxes -> Seq[AnyoneCanSpendTransaction]()) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
-      val newBoxes = bxsFrom.map(_.value)
-      val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
+      val spentBoxNonces = bxsFrom.map(_.nonce).toIndexedSeq
+      val newBoxes = bxsFrom.map(_.value).toIndexedSeq
+      val tx = new AnyoneCanSpendTransaction(spentBoxNonces, newBoxes)
       (remainder, tx +: ts)
     }
     txs
@@ -100,6 +108,9 @@ trait ErgoGenerators extends CoreGenerators {
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
     val transactions = validTransactionsFromUtxoState(utxoState)
+    transactions.flatMap(_.boxIdsToOpen).foreach { bid =>
+      assert(utxoState.boxById(bid).isDefined)
+    }
     validFullBlock(parentOpt, utxoState, transactions)
   }
 

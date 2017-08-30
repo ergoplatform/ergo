@@ -16,8 +16,7 @@ import scala.util.Try
 /**
   * Transaction without any lockers and unlockers
   */
-case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce],
-                                     to: IndexedSeq[Value]) extends
+case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Value]) extends
   Transaction[AnyoneCanSpendProposition.type] with MempoolModifier {
 
   override type M = AnyoneCanSpendTransaction
@@ -27,7 +26,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce],
   }
 
   lazy val hashNoNonces: hash.Digest = Algos.hash(
-    Bytes.concat(scorex.core.utils.concatFixLengthBytes(from.map(n => Longs.toByteArray(n))),
+    Bytes.concat(scorex.core.utils.concatFixLengthBytes(boxIdsToOpen),
       scorex.core.utils.concatFixLengthBytes(to.map(v => Longs.toByteArray(v))))
   )
 
@@ -58,6 +57,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce],
 
   lazy val semanticValidity: Try[Unit] = Try {
     require(to.forall(_ >= 0))
+    //todo: check new boxes
   }
 
   //no signatures in the current transaction definition

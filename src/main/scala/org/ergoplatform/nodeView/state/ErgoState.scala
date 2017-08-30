@@ -91,7 +91,8 @@ object ErgoState extends ScorexLogging {
     if (stateDir.listFiles().isEmpty) {
       None
     } else {
-      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption else Some(new UtxoState(stateDir))
+      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption
+      else Some(UtxoState.create(stateDir))
     }
   }
 }

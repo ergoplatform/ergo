@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.LSMStore
+import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -18,15 +18,13 @@ import scala.util.{Failure, Success, Try}
 /**
   * Utxo set implementation.
   *
-  * @param dir - folder where persistent UTXO set authenticated with the help of an AVL+ tree is located
+  * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(dir: File) extends ErgoState[UtxoState] {
+class UtxoState(val store: Store) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
-
-  private[state] val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
-  private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
-  protected val storage = new VersionedIODBAVLStorage(store, np)
+  private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
+  protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Blake2b256Unsafe] =
     PersistentBatchAVLProver.create(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage).get
@@ -74,7 +72,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     p.rollback(version).map { _ =>
-      new UtxoState(dir) {
+      new UtxoState(store) {
         override protected lazy val persistentProver = p
       }
     }
@@ -99,11 +97,13 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
   //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
+
+      //todo: rollback if failure on the way
       checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
         val proofBytes: Array[Byte] = persistentProver.generateProof
         val proofHash = ADProof.proofDigest(proofBytes)
         assert(fb.header.ADProofsRoot.sameElements(proofHash))
-        new UtxoState(dir)
+        new UtxoState(store)
       }
 
     case a: Any =>
@@ -121,11 +121,19 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 }
 
 object UtxoState {
+
+  def create(dir:File): UtxoState = {
+    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+    new UtxoState(store)
+  }
+
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
     val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
 
-    new UtxoState(dir) {
+    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+
+    new UtxoState(store) {
       override protected lazy val persistentProver = PersistentBatchAVLProver.create(p, storage).get
 
       assert(persistentProver.digest.sameElements(storage.version.get))

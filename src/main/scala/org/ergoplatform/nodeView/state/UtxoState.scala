@@ -24,7 +24,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
 
-  private val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+  private[state] val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
   private val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected val storage = new VersionedIODBAVLStorage(store, np)
 
@@ -97,8 +97,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
 
   //todo: utxo snapshot could go here
   //todo: dont' use assert
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] =
-  mod match {
+  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
         val proofBytes: Array[Byte] = persistentProver.generateProof

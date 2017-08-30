@@ -16,7 +16,7 @@ Unlike most of blockchain systems, Ergo have the following types of **modifiers*
 
 Ergo will have the following parameters, that will determine concrete security regime:
 1. ADState: Boolean - keep state roothash only 
-2. VerifyTransactions: Boolean - download block transactions and verify them (requires BlocksToKeep == 0)
+2. VerifyTransactions: Boolean - download block transactions and verify them (requires BlocksToKeep == 0 if disabled)
 3. PoPoWBootstrap: Boolean - download PoPoW proof only
 4. BlocksToKeep: Int - number of last blocks to keep with transactions, for all other blocks it keep header only. Keep all blocks from genesis if negative
 5. MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant)

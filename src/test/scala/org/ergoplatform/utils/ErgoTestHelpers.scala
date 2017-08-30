@@ -1,29 +1,17 @@
 package org.ergoplatform.utils
 
-import java.io.File
-
+import org.ergoplatform.nodeView.state.ErgoState.Digest
+import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, UtxoState}
 import scorex.testkit.TestkitHelpers
+import scorex.testkit.utils.FileUtils
 
-import scala.reflect.io.Path
 
-trait ErgoTestHelpers extends TestkitHelpers {
-  def withDir(dirName: String)(action: File => Any): Unit = {
-    val dir = new File(dirName)
-    Path(dir).deleteRecursively()
-    dir.mkdirs()
-    action(dir)
-    Path(dir).deleteRecursively()
-  }
+trait ErgoTestHelpers extends TestkitHelpers with FileUtils {
 
-  def with2Dirs(dirName1: String, dirName2: String)(action: (File, File) => Any): Unit = {
-    val dir1 = new File(dirName1)
-    val dir2 = new File(dirName2)
-    Path(dir1).deleteRecursively()
-    Path(dir2).deleteRecursively()
-    dir1.mkdirs()
-    dir2.mkdirs()
-    action(dir1, dir2)
-    Path(dir1).deleteRecursively()
-    Path(dir2).deleteRecursively()
-  }
+  def createUtxoState: UtxoState = new UtxoState(createTempDir)
+
+  def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir)
+
+  def createDigestState(digest: Digest): DigestState = DigestState.create(digest, createTempDir).get
+
 }

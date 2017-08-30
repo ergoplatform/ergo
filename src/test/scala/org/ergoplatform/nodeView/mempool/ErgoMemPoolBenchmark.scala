@@ -12,13 +12,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import org.scalameter.picklers.Implicits._
 import scorex.core.NodeViewModifier
 
+import scala.util.{Random => Rng}
+
 object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
     with ErgoGenerators {
 
   private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
-  private val r = new Random
 
   private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[AnyoneCanSpendTransaction]] => Seq[AnyoneCanSpendTransaction]) = for {
     waitingSize <- waitingSizes
@@ -34,7 +35,7 @@ object ErgoMemPoolBenchmark
   }
 
   private val bestCaseGenerator = waitForTransactionsInSequence(_.flatten)
-  private val avgCaseGenerator = waitForTransactionsInSequence(txs => r.shuffle(txs.flatten))
+  private val avgCaseGenerator = waitForTransactionsInSequence(txs => Rng.shuffle(txs.flatten))
   private val worstCaseGenerator = waitForTransactionsInSequence(groups => {
     groups.flatMap(_.init) ++ groups.map(_.last)
   })
@@ -46,7 +47,8 @@ object ErgoMemPoolBenchmark
     exec.requireGC -> true
   )
 
-  private def bench(txsByWaitingGroups: Seq[Seq[NodeViewModifier.ModifierId]],txsInIncomeOrder: Seq[AnyoneCanSpendTransaction]) = {
+  private def bench(txsByWaitingGroups: Seq[Seq[NodeViewModifier.ModifierId]],
+                    txsInIncomeOrder: Seq[AnyoneCanSpendTransaction]) = {
     val pool = ErgoMemPool.empty
     val futures = txsByWaitingGroups.map(group => {
       pool.waitForAll(group)
@@ -58,19 +60,19 @@ object ErgoMemPoolBenchmark
 
   performance of "ErgoMemPool awaiting" in {
     performance of "best case" in {
-      using(bestCaseGenerator) config(config: _*) in {
+      using(bestCaseGenerator) config (config: _*) in {
         case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }
 
     performance of "avg case" in {
-      using(avgCaseGenerator) config(config: _*) in {
+      using(avgCaseGenerator) config (config: _*) in {
         case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }
 
     performance of "worst case" in {
-      using(worstCaseGenerator) config(config: _*) in {
+      using(worstCaseGenerator) config (config: _*) in {
         case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
       }
     }

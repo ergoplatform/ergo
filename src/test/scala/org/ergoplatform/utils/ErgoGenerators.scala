@@ -11,8 +11,7 @@ import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
-import scorex.testkit.CoreGenerators
-
+import scorex.testkit.generators.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
 
@@ -20,7 +19,7 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
     from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
-    to: IndexedSeq[Long]   <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
+    to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
   } yield AnyoneCanSpendTransaction(from, to)
 
   lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
@@ -28,7 +27,7 @@ trait ErgoGenerators extends CoreGenerators {
     value <- positiveLongGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(5000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
@@ -43,7 +42,7 @@ trait ErgoGenerators extends CoreGenerators {
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- genBytesList(Constants.ModifierIdSize)
-    stateRoot <- genBytesList(Constants.ModifierIdSize)
+    stateRoot <- genBytesList(Constants.ModifierIdSize + 1)
     adRoot <- genBytesList(Constants.ModifierIdSize)
     transactionsRoot <- genBytesList(Constants.ModifierIdSize)
     nonce <- Arbitrary.arbitrary[Int]
@@ -65,7 +64,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val (boxes, bs) = boxHolder.take(spentBoxesCounts.sum)
 
-    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())){case ((bxs, ts), fromBoxes) =>
+    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
       val newBoxes = bxsFrom.map(_.value)
       val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
@@ -74,7 +73,7 @@ trait ErgoGenerators extends CoreGenerators {
     txs -> bs
   }
 
-  def validFullBlock(parent: Header, utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
     val (transactions, updHolder) = validTransactions(boxHolder)
 
@@ -86,7 +85,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val time = System.currentTimeMillis()
 
-    val header = Miner.genHeader(Constants.InitialNBits, parent, updStateDigest, adProofhash, txsRoot,
+    val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
       Array.fill(5)(0.toByte), time, 96, 5)
 
     val blockTransactions = BlockTransactions(header.id, transactions)
@@ -115,4 +114,5 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
+
 }

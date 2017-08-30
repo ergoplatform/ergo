@@ -1,7 +1,7 @@
 package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, NoShrink}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -13,7 +13,8 @@ class LinearDifficultyControlSpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
   with Matchers
-  with ErgoGenerators {
+  with ErgoGenerators
+  with NoShrink {
 
   val precision = 0.0001
   val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
@@ -70,32 +71,20 @@ class LinearDifficultyControlSpecification extends PropSpec
 
   property("calculate() for constant hashrate") {
     forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
-      exitOnError {
-        val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff))
-        val newDiff = control.interpolate(previousDifficulties)
-        (BigDecimal(newDiff - diff) / BigDecimal(diff)).toDouble should be < precision
-      }
+      val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff))
+      val newDiff = control.interpolate(previousDifficulties)
+      (BigDecimal(newDiff - diff) / BigDecimal(diff)).toDouble should be < precision
     }
   }
 
 
   property("calculate() for linear hashrate growth") {
     forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
-      exitOnError {
-        val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff * i))
-        val newDiff = control.interpolate(previousDifficulties)
-        val expected = previousDifficulties.map(_._2).max + diff
-        equalsWithPrecision(expected, newDiff)
-      }
+      val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff * i))
+      val newDiff = control.interpolate(previousDifficulties)
+      val expected = previousDifficulties.map(_._2).max + diff
+      equalsWithPrecision(expected, newDiff)
     }
-  }
-
-  def exitOnError(r: => Unit): Unit = Try {
-    r
-  }.recoverWith { case e =>
-    e.printStackTrace()
-    System.exit(1)
-    throw e
   }
 
   def equalsWithPrecision(i: BigInt, j: BigInt): Unit = {

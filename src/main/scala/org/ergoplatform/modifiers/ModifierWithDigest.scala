@@ -6,7 +6,7 @@ import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier._
 import scorex.core.PersistentNodeViewModifier
 
-trait ModifierWithDigest extends PersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
+trait ModifierWithDigest extends PersistentNodeViewModifier {
 
   override lazy val id: ModifierId = ModifierWithDigest.computeId(modifierTypeId, headerId, digest)
 

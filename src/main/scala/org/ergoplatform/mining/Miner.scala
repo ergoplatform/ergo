@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.core.NodeViewModifier.ModifierId
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 import scorex.core.block.Block._
 import scorex.core.utils.ScorexLogging
@@ -88,21 +89,36 @@ object Miner extends ScorexLogging {
     generateHeader()
   }
 
-  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    val genesisId = if (parent.isGenesis) parent.id else parent.interlinks.head
+  private[mining] def constructInterlinks(parentInterlinks: Seq[Array[Byte]],
+                                          parentRealDifficulty: BigInt,
+                                          parentId: ModifierId): Seq[Array[Byte]] = {
 
-    def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-      if (parent.realDifficulty >= curDifficulty) {
-        generateInnerchain(curDifficulty * 2, acc :+ parent.id)
+    val genesisId = parentInterlinks.head
+
+    def generateInterlinks(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
+      if (parentRealDifficulty >= curDifficulty) {
+        generateInterlinks(curDifficulty * 2, acc :+ parentId)
       } else {
-        parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-          case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
+        parentInterlinks.tail.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
+          case Some(id) => generateInterlinks(curDifficulty * 2, acc :+ id)
           case _ => acc
         }
       }
     }
 
-    genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    val interinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    assert(interinks.length >= parentInterlinks.length - 1)
+
+    genesisId +: interinks
+
+  }
+
+  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = if (parent.isGenesis) {
+    Seq(parent.id)
+  } else {
+    constructInterlinks(parent.interlinks,
+      parent.realDifficulty,
+      parent.id)
   }
 
   def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {

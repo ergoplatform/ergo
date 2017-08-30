@@ -22,6 +22,14 @@ class SerializationTests extends PropSpec
     }
   }
 
+  property("Header serialization") {
+    val serializer = HeaderSerializer
+    forAll(invalidHeaderGen) { b: Header =>
+      val recovered = serializer.parseBytes(b.bytes)
+      recovered.get shouldBe b
+    }
+  }
+
   property("AnyoneCanSpendBoxGen serialization") {
     checkSerializationRoundtrip(anyoneCanSpendBoxGen, AnyoneCanSpendNoncedBoxSerializer)
   }
@@ -35,7 +43,6 @@ class SerializationTests extends PropSpec
       AnyoneCanSpendTransactionSerializer.parseBytes(tx.bytes).get == tx
     }
   }
-
 
   property("ErgoSyncInfo serialization") {
     checkSerializationRoundtrip(ergoSyncInfoGen, ErgoSyncInfoSerializer)
@@ -58,5 +65,4 @@ class SerializationTests extends PropSpec
   property("ADProofs serialization") {
     checkSerializationRoundtrip(randomADProofsGen, ADProofSerializer)
   }
-
 }

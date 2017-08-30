@@ -275,7 +275,7 @@ trait ErgoHistory
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-
+/*
     val headerId = modifier match {
       case h: Header => h.id
       case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
@@ -285,20 +285,21 @@ trait ErgoHistory
       case m =>
         log.warn(s"reportInvalid for invalid modifier type: $m")
         ???
-    }
+    }*/
 
-    /*
-    val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
-      case h: Header => toDrop(h)
-      case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
-      case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
-      case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
-      case m =>
-        log.warn(s"reportInvalid for invalid modifier type: $m")
-        Seq(ByteArrayWrapper(m.id)) -> Seq()
+
+    if(!valid) {
+      val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
+        case h: Header => toDrop(h)
+        case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
+        case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
+        case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
+        case m =>
+          log.warn(s"reportInvalid for invalid modifier type: $m")
+          Seq(ByteArrayWrapper(m.id)) -> Seq()
+      }
+      historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     }
-    historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
-    */
 
     lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq()) //todo: dumb values, fix
     this -> progressInto

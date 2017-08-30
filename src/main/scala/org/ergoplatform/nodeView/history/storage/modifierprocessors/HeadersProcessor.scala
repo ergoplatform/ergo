@@ -28,16 +28,22 @@ trait HeadersProcessor extends ScorexLogging {
   protected val config: NodeConfigurationSettings
 
   //TODO alternative DDoS protection
-  protected lazy val MaxRollback = 600.days.toMillis / config.blockInterval.toMillis
+  protected lazy val MaxRollback: Long = 600.days.toMillis / config.blockInterval.toMillis
 
   //Maximum time in future block header main contain
-  protected lazy val MaxTimeDrift = 10 * config.blockInterval.toMillis
+  protected lazy val MaxTimeDrift: Long = 10 * config.blockInterval.toMillis
 
   protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
+
+  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+
+  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+
+  protected def validityKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
 
@@ -68,6 +74,7 @@ trait HeadersProcessor extends ScorexLogging {
     val dataToInsert = toInsert(m)
     historyStorage.insert(m.id, dataToInsert)
 
+    //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
       log.info(s"New best header ${m.encodedId}")
       //TODO Notify node view holder that it should download transactions ?
@@ -88,13 +95,12 @@ trait HeadersProcessor extends ScorexLogging {
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))
 
-    val toRemove = Seq(headerScoreKey(modifierId),
-      ByteArrayWrapper(modifierId)) ++ payloadModifiers
+    val toRemove = Seq(headerScoreKey(modifierId), ByteArrayWrapper(modifierId)) ++ payloadModifiers
     val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
-      Seq((BestHeaderKey, ByteArrayWrapper(header.parentId)))
+      Seq(BestHeaderKey -> ByteArrayWrapper(header.parentId))
     } else Seq()
     val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
-      Seq((BestFullBlockKey, ByteArrayWrapper(header.parentId)))
+      Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
     } else Seq()
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
   }
@@ -185,32 +191,26 @@ trait HeadersProcessor extends ScorexLogging {
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
 
-  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
-
-  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
-
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
   private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
-      Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
-        (BestHeaderKey, ByteArrayWrapper(h.id)),
-        (heightIdsKey(GenesisHeight), ByteArrayWrapper(h.id)),
-        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(GenesisHeight))),
-        (headerScoreKey(h.id), ByteArrayWrapper(requiredDifficulty.toByteArray)))
+      Seq(
+        ByteArrayWrapper(h.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)),
+        BestHeaderKey -> ByteArrayWrapper(h.id),
+        heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
+        headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
+        headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray))
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
-      val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (blockScore > bestHeadersChainScore) {
-        Seq((BestHeaderKey, ByteArrayWrapper(h.id)))
-      } else {
-        Seq()
-      }
-      val scoreRow = (headerScoreKey(h.id), ByteArrayWrapper(blockScore.toByteArray))
-      val heightRow = (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(h.height)))
-      val headerIdsRow: (ByteArrayWrapper, ByteArrayWrapper) = (heightIdsKey(h.height),
-        ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
-      val modifierRow = (ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)))
+      val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
+        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq()
+
+      val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(blockScore.toByteArray)
+      val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
+      val headerIdsRow = heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray)
+      val modifierRow = ByteArrayWrapper(h.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))
       Seq(scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
     }
   }

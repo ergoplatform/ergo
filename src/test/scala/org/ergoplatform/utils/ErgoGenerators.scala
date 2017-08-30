@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
@@ -22,9 +23,11 @@ trait ErgoGenerators extends CoreGenerators {
     to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
   } yield AnyoneCanSpendTransaction(from, to)
 
+  lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
+
   lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
     nonce <- positiveLongGen
-    value <- positiveLongGen
+    value <- positiveIntGen
   } yield AnyoneCanSpendNoncedBox(nonce, value)
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
@@ -57,7 +60,7 @@ trait ErgoGenerators extends CoreGenerators {
     equihashSolutions)
 
 
-  def validTransactions(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
     val num = 10
 
     val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
@@ -73,9 +76,48 @@ trait ErgoGenerators extends CoreGenerators {
     txs -> bs
   }
 
+
+  def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[AnyoneCanSpendTransaction] = {
+    val num = 10
+
+    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(20) + 1)
+
+    val boxes = wus.takeBoxes(spentBoxesCounts.sum)
+
+      boxes.foreach { b =>
+        assert(wus.boxById(b.id).isDefined)
+      }
+
+
+    val (_, txs) = spentBoxesCounts.foldLeft(boxes -> Seq[AnyoneCanSpendTransaction]()) { case ((bxs, ts), fromBoxes) =>
+      val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
+      val spentBoxNonces = bxsFrom.map(_.nonce).toIndexedSeq
+      val newBoxes = bxsFrom.map(_.value).toIndexedSeq
+      val tx = new AnyoneCanSpendTransaction(spentBoxNonces, newBoxes)
+      (remainder, tx +: ts)
+    }
+    txs
+  }
+
+
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
-    val (transactions, updHolder) = validTransactions(boxHolder)
+    val (transactions, updHolder) = validTransactionsFromBoxHolder(boxHolder)
+    validFullBlock(parentOpt, utxoState, transactions)
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
+                     utxoState: WrappedUtxoState): ErgoFullBlock = {
+    val transactions = validTransactionsFromUtxoState(utxoState)
+    transactions.flatMap(_.boxIdsToOpen).foreach { bid =>
+      assert(utxoState.boxById(bid).isDefined)
+    }
+    validFullBlock(parentOpt, utxoState, transactions)
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
+                     utxoState: UtxoState,
+                     transactions: Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 

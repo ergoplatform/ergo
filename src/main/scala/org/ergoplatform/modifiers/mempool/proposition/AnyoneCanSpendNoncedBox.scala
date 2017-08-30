@@ -10,8 +10,7 @@ import scorex.crypto.encode.Base58
 
 import scala.util.Try
 
-case class AnyoneCanSpendNoncedBox(nonce: Long,
-                                   override val value: Long)
+case class AnyoneCanSpendNoncedBox(nonce: Long, override val value: Long)
   extends Box[AnyoneCanSpendProposition.type] with JsonSerializable {
 
   override val proposition = AnyoneCanSpendProposition

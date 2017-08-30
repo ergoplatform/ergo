@@ -1,11 +1,14 @@
 package org.ergoplatform
 
+import java.io.File
+
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -15,10 +18,13 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
 import scorex.testkit.properties._
+import scorex.testkit.properties.mempool.MempoolTransactionsTest
+import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
+  with StateApplicationTest[PM, ST]
   //with StateApplyChangesTest[P, TX, PM, B, ST]
   //with WalletSecretsTest[P, TX, PM]
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
@@ -58,6 +64,15 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 
   override def syntacticallyInvalidModifier(history: HT): PM =
     syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
+
+  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map { bh =>
+    val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(10000000)}")
+    f.mkdirs()
+    WrappedUtxoState(bh, f)
+  }
+
+  override def semanticallyValidModifier(state: ST): PM =
+    validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
 }
 
 object ErgoSanity {

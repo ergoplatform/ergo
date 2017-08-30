@@ -27,7 +27,7 @@ object Miner extends ScorexLogging {
   private def ergoPerson(n: Int, k: Int): Array[Byte] = "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
 
   def genBlock(nBits: Long,
-               parent: Header,
+               parent: Option[Header],
                stateRoot: Array[Byte],
                adProofs: ADProof,
                transactions: Seq[AnyoneCanSpendTransaction],
@@ -49,22 +49,22 @@ object Miner extends ScorexLogging {
   }.getOrElse(false)
 
   def genHeader(nBits: Long,
-                parent: Header,
+                parentOpt: Option[Header],
                 stateRoot: Array[Byte],
                 adProofsRoot: Array[Byte],
                 transactionsRoot: Array[Byte],
                 votes: Array[Byte],
                 timestamp: Timestamp,
                 n: Int, k: Int): Header = {
-    val interlinks: Seq[Array[Byte]] = if (parent.isGenesis) constructInterlinkVector(parent) else Seq(parent.id)
+    val interlinks: Seq[Array[Byte]] = if (parentOpt.isDefined) constructInterlinkVector(parentOpt.get) else Seq()
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
-    val height = parent.height + 1
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson(n, k))
-    val h = Header(0.toByte, parent.id, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, 0l, null)
+    val h = Header(0.toByte, parentOpt.map(_.id).getOrElse(Header.GenesisParentId), interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, 0l, null)
     val I = HeaderSerializer.bytesWithoutNonceAndSolutions(h)
     digest.update(I, 0, I.length)
     @tailrec

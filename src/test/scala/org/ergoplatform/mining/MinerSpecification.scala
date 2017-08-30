@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoGenerators
@@ -19,7 +20,8 @@ class MinerSpecification extends PropSpec
   private def createValidBlock: ErgoFullBlock = {
     Miner.genBlock(
       RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
-      ErgoFullBlock.genesis.header, Array.emptyByteArray, ErgoFullBlock.genesis.aDProofs.get, Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))), 1L, Array.emptyByteArray, n, k)
+      None, Array.emptyByteArray, ADProof(Array(1.toByte), Array(1.toByte)),
+      Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))), 1L, Array.emptyByteArray, n, k)
   }
 
   property("Miner should generate valid block") {
@@ -31,7 +33,7 @@ class MinerSpecification extends PropSpec
     val b = createValidBlock
     val invB = b.header.equihashSolutions.clone()
     invB(0) = 1
-    assert(!Miner.isBlockValid(b.copy(header = b.header.copy(equihashSolutions = invB)), n, k))
+    Miner.isBlockValid(b.copy(header = b.header.copy(equihashSolutions = invB)), n, k) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {
@@ -41,6 +43,6 @@ class MinerSpecification extends PropSpec
 
   property("Valid block should be invalid by pow after AD proofs root modification") {
     val b = createValidBlock
-    assert(!Miner.isBlockValid(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), n, k))
+    Miner.isBlockValid(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), n, k) shouldBe false
   }
 }

@@ -57,7 +57,7 @@ trait ErgoGenerators extends CoreGenerators {
     requiredDifficulty, height, votes)
 
 
-  def validTransactions(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
     val num = 10
 
     val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
@@ -73,9 +73,40 @@ trait ErgoGenerators extends CoreGenerators {
     txs -> bs
   }
 
+
+  def validTransactionsFromUtxoState(utxoState: UtxoState): Seq[AnyoneCanSpendTransaction] = {
+    val num = 10
+
+    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
+    ???
+/*
+    val boxes = utxoState.boxIterator.take(spentBoxesCounts.sum).toSeq
+
+    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
+      val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
+      val newBoxes = bxsFrom.map(_.value)
+      val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
+      (remainder, tx +: ts)
+    }
+    txs*/
+  }
+
+
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
     //todo: return updHolder
-    val (transactions, updHolder) = validTransactions(boxHolder)
+    val (transactions, updHolder) = validTransactionsFromBoxHolder(boxHolder)
+    validFullBlock(parentOpt, utxoState, transactions)
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
+                     utxoState: UtxoState): ErgoFullBlock = {
+    val transactions = validTransactionsFromUtxoState(utxoState)
+    validFullBlock(parentOpt, utxoState, transactions)
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
+                     utxoState: UtxoState,
+                     transactions:Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 

@@ -54,6 +54,7 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
     }.ensuring(_.isSuccess)
 
     val proof = persistentProver.generateProof
+
     val digest = persistentProver.digest
 
     persistentProver.checkTree(true)
@@ -78,9 +79,6 @@ class UtxoState(dir: File) extends ErgoState[UtxoState] {
       }
     }
   }
-
-  override def validate(mod: ErgoPersistentModifier): Try[Unit] =
-    Failure(new Exception("validate() is not implemented for UtxoState as it requires for costly provers' rollback"))
 
   //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: Digest) = Try {

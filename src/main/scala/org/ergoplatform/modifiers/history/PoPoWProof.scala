@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
@@ -26,6 +27,7 @@ case class PoPoWProof(m: Byte,
 
   override lazy val json: Json = ???
 
+  //todo: implement
   override def compare(that: PoPoWProof): Int = ???
 
 }
@@ -33,6 +35,7 @@ case class PoPoWProof(m: Byte,
 object PoPoWProof {
   val ModifierTypeId: Byte = 105: Byte
 
+  //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
     if (proof.suffix.length != proof.k) {
@@ -42,7 +45,7 @@ object PoPoWProof {
     } else if (proof.m < 1) {
       Failure(new Error(s"m should positive, ${proof.m} given"))
     } else if (!(proof.suffix.head.interlinks(proof.i) sameElements proof.innerchain.last.id)) {
-      Failure(new Error(s"Incorrect link form sufffix to innerchain in $proof"))
+      Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
     } else if (proof.innerchain.length < proof.m) {
       Failure(new Error(s"Innerchain length is not enough in $proof"))
     } else if (!proof.innerchain.forall(_.realDifficulty >= innerDifficulty)) {
@@ -58,20 +61,26 @@ object PoPoWProof {
   }
 
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    val genesisId = parent.interlinks.head
+    if (parent.height == ErgoHistory.GenesisHeight) {
+      //initialize interlink vector at first block after genesis
+      Seq(parent.id)
+    } else {
 
-    def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-      if (parent.realDifficulty >= curDifficulty) {
-        generateInnerchain(curDifficulty * 2, acc :+ parent.id)
-      } else {
-        parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-          case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
-          case _ => acc
+      val genesisId = parent.interlinks.head
+
+      def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
+        if (parent.realDifficulty >= curDifficulty) {
+          generateInnerchain(curDifficulty * 2, acc :+ parent.id)
+        } else {
+          parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
+            case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
+            case _ => acc
+          }
         }
       }
-    }
 
-    genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+      genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    }
   }
 
 }
@@ -100,6 +109,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
     val i = bytes(2)
     val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
     val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
+
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
       if (acc.length == k) (index, acc.reverse)
       else {
@@ -109,6 +119,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
     }
+
     var (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
     val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
     index = index + 2

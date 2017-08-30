@@ -1,13 +1,12 @@
 package org.ergoplatform
 
-import io.circe
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.hashLength
@@ -16,6 +15,7 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.utils.NetworkTime
 import scorex.testkit.properties._
+import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
@@ -27,37 +27,37 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   //  with MempoolFilterPerformanceTest[P, TX, MPool]
   // with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
   //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
-  with ErgoGenerators {
+  with ErgoGenerators
+  with HistorySpecification {
 
-  val settings: ErgoSettings = new ErgoSettings {
-    override def settingsJSON: Map[String, circe.Json] = Map()
-  }
-
+  lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
-  override val history: ErgoHistory = ErgoHistory.readOrGenerate(settings)
-  override val mempool: ErgoMemPool = ErgoMemPool.empty
+  override val history: ErgoHistory = generateHistory(verifyTransactions = true, ADState = false,
+    PoPoWBootstrap = false, -1)
+
+  override val memPool: MPool = ErgoMemPool.empty
 
   //Generators
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
 
-  //todo: fix, last 2 params are ignored for now
-  override def genValidModifier(history: ErgoHistory,
-                                mempoolTransactionFetchOption: Boolean,
-                                noOfTransactionsFromMempool: Int): Header = {
-    val bestHeader: Header = history.bestHeader
+  override def syntacticallyValidModifier(history: HT): Header = {
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
+
     Miner.genHeader(Constants.InitialNBits,
-      bestHeader,
-      Array.fill(hashLength)(0.toByte),
+      history.bestHeaderOpt,
+      Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
-      Math.max(NetworkTime.time(), bestHeader.timestamp + 1),
+      Math.max(NetworkTime.time(), bestTimestamp),
       96,
       5
     )
   }
 
+  override def syntacticallyInvalidModifier(history: HT): PM =
+    syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
 }
 
 object ErgoSanity {

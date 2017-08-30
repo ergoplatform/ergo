@@ -1,67 +1,65 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
-
 import io.circe.Json
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
+import org.ergoplatform.settings.{ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.encode.Base58
+import scorex.core.settings.Settings
 import scorex.testkit.TestkitHelpers
+
+import scala.concurrent.duration._
 
 trait HistorySpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
   with Matchers
   with ErgoGenerators
+  with ErgoTestHelpers
   with TestkitHelpers
   with ChainGenerator {
 
-
   override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
+
   val BlocksInChain = 10
   val BlocksToKeep = BlocksInChain + 1
 
-  def bestFullOrGenesis(history: ErgoHistory): ErgoFullBlock = history.bestFullBlockOpt.getOrElse(ErgoFullBlock.genesis)
+  def bestFullOptToSeq(history: ErgoHistory): Seq[ErgoFullBlock] = history.bestFullBlockOpt.toSeq
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.height
     if (historyHeight < height) {
       history match {
-        case h: EmptyBlockTransactionsProcessor =>
-          applyHeaderChain(history, genHeaderChain(height - historyHeight, Seq(history.bestHeader)).tail)
-        case h =>
+        case _: EmptyBlockTransactionsProcessor =>
+          val chain = genHeaderChain(height - historyHeight, history)
+          if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
+        case _ =>
           ???
       }
-
     } else {
       history
     }
   }
 
-  def generateHistory(verify: Boolean,
-                      adState: Boolean,
-                      popow: Boolean,
-                      toKeep: Int,
-                      nonce: Long = 0,
-                      epoch: Int = 100000000): ErgoHistory = {
-    val paramsHash = Base58.encode(Algos.hash(verify.toString + adState + toKeep + popow))
-    val fullHistorySettings: ErgoSettings = new ErgoSettings {
-      override def settingsJSON: Map[String, Json] = Map()
+  def generateHistory(verifyTransactions: Boolean,
+                      ADState: Boolean,
+                      PoPoWBootstrap: Boolean,
+                      blocksToKeep: Int,
+                      epochLength: Int = 100000000): ErgoHistory = {
 
-      override val epochLength: Int = epoch
-      override val verifyTransactions: Boolean = verify
-      override val ADState: Boolean = adState
-      override lazy val dataDir: String = s"/tmp/ergo/test-history-$paramsHash-$nonce"
-      override val blocksToKeep: Int = toKeep
-      override val poPoWBootstrap: Boolean = popow
+    val blockInterval = 1.minute
+    val minimalSuffix = 2
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
+      PoPoWBootstrap, minimalSuffix, blockInterval, epochLength)
+    val scorexSettings: Settings = new Settings {
+      override def settingsJSON: Map[String, Json] = Map()
     }
-    new File(fullHistorySettings.dataDir).mkdirs()
+
+    val dir = createTempDir
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, nodeSettings, scorexSettings)
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
 

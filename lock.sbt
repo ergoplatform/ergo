@@ -15,10 +15,11 @@ dependencyOverrides in ThisBuild ++= Set(
   "com.github.nscala-time" % "nscala-time_2.12.0-RC1" % "2.14.0",
   "com.github.swagger-akka-http" % "swagger-akka-http_2.12" % "0.10.0",
   "com.google.guava" % "guava" % "20.0",
+  "com.iheart" % "ficus_2.12" % "1.4.1",
   "com.storm-enroute" % "scalameter-core_2.12" % "0.8.2",
   "com.storm-enroute" % "scalameter_2.12" % "0.8.2",
   "com.thoughtworks.paranamer" % "paranamer" % "2.8",
-  "com.typesafe" % "config" % "1.3.0",
+  "com.typesafe" % "config" % "1.3.1",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.1",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.4.20",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.0.9",
@@ -74,4 +75,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 559fa38650ab44ca1b10df01fe34cf225ff069c6
+// LIBRARY_DEPENDENCIES_HASH a8cea9079dec36fdae1b3368a63f6e0ea80af58a

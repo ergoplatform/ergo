@@ -7,6 +7,7 @@ import scorex.core.transaction.state.MinimalState.VersionTag
 import ErgoState.Digest
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.ADProof
+import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -15,11 +16,14 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-class DigestState private (override val rootHash: Digest, store: Store) extends ErgoState[DigestState] with ScorexLogging {
+class DigestState private (override val rootHash: Digest, store: Store)
+  extends ErgoState[DigestState]
+    with ModifierValidation[ErgoPersistentModifier]
+    with ScorexLogging {
 
   override def version: VersionTag = rootHash
 
-  override def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
+  def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
         assert(ADProof.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
@@ -43,6 +47,8 @@ class DigestState private (override val rootHash: Digest, store: Store) extends 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock => validate(fb).flatMap(_ => update(fb.header.stateRoot))
+
+      //todo: fail here? or not?
     case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
   }
 

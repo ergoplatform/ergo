@@ -13,21 +13,28 @@ import scala.annotation.tailrec
 import scala.util.Random
 
 trait ChainGenerator {
+
+  def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
+    genHeaderChain(height, history.bestHeaderOpt.toSeq)
+
+  final def genHeaderChain(height: Int, accIn: Seq[Header]): HeaderChain =
+    genHeaderChain(acc => acc.length == accIn.length + height, accIn)
+
   @tailrec
-  final def genHeaderChain(height: Int, acc: Seq[Header]): HeaderChain = if (height == 0) {
+  final def genHeaderChain(until: Seq[Header] => Boolean, acc: Seq[Header]): HeaderChain = if (until(acc)) {
     HeaderChain(acc.reverse)
   } else {
     val header = Miner.genHeader(Constants.InitialNBits,
-      acc.head,
-      Array.fill(hashLength)(0.toByte),
+      acc.headOption,
+      Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(5)(0.toByte),
-      Math.max(NetworkTime.time(), acc.head.timestamp + 1),
+      Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time())),
       96,
       4
     ): Header
-    genHeaderChain(height - 1, header +: acc)
+    genHeaderChain(until, header +: acc)
   }
 
 
@@ -39,16 +46,16 @@ trait ChainGenerator {
     val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
     val proofsRoot = ADProof.proofDigest(proofs)
-    val stateRoot = Array.fill(32)(0.toByte)
+    val stateRoot = Array.fill(32 + 1)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
     val header = Miner.genHeader(Constants.InitialNBits,
-      acc.head.header,
+      acc.headOption.map(_.header),
       stateRoot,
       proofsRoot,
       txsRoot,
       votes,
-      Math.max(NetworkTime.time(), acc.head.header.timestamp + 1),
+      Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time())),
       96,
       5): Header
     val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)

@@ -7,6 +7,7 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
@@ -22,9 +23,9 @@ import scala.util.Try
 case class Header(version: Version,
                   override val parentId: BlockId,
                   interlinks: Seq[Array[Byte]],
-                  ADProofsRoot: Array[Byte],
-                  stateRoot: Array[Byte],
-                  transactionsRoot: Array[Byte],
+                  ADProofsRoot: Digest,
+                  stateRoot: Digest,
+                  transactionsRoot: Digest,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
@@ -83,11 +84,13 @@ case class Header(version: Version,
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = height == 0
+  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 }
 
 object Header {
   val ModifierTypeId: Byte = 101: Byte
+
+  lazy val GenesisParentId: Digest = Array.fill(Constants.hashLength)(0: Byte)
 }
 
 
@@ -127,11 +130,11 @@ object HeaderSerializer extends Serializer[Header] {
     val parentId = bytes.slice(1, 33)
     val ADProofsRoot = bytes.slice(33, 65)
     val transactionsRoot = bytes.slice(65, 97)
-    val stateRoot = bytes.slice(97, 129)
-    val timestamp = Longs.fromByteArray(bytes.slice(129, 137))
-    val votes = bytes.slice(137, 142)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(142, 146)).get
-    val height = Ints.fromByteArray(bytes.slice(146, 150))
+    val stateRoot = bytes.slice(97, 130)
+    val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
+    val votes = bytes.slice(138, 143)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(143, 147)).get
+    val height = Ints.fromByteArray(bytes.slice(147, 151))
 
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (endIndex > index) {
@@ -143,13 +146,13 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinksSize = Shorts.fromByteArray(bytes.slice(150, 152))
-    val interlinks = parseInterlinks(152, 152 + interlinksSize, Seq())
+    val interlinksSize = Shorts.fromByteArray(bytes.slice(151, 153))
+    val interlinks = parseInterlinks(153, 153 + interlinksSize, Seq())
 
-    val nonce = Longs.fromByteArray(bytes.slice(152 + interlinksSize, 160 + interlinksSize))
+    val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
 
-    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(160 + interlinksSize, 162 + interlinksSize))
-    val equihashSolutions = bytes.slice(162 + interlinksSize, 162 + interlinksSize + equihashSolutionsBytesSize)
+    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
+    val equihashSolutions = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, votes, nonce, equihashSolutions)

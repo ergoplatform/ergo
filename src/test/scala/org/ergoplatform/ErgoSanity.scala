@@ -46,7 +46,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 
   //Generators
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
-  
+
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
 
@@ -63,14 +63,14 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override def syntacticallyInvalidModifier(history: HT): PM =
     syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
 
-  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map{bh =>
-    val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(100000)}")
+  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map { bh =>
+    val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(10000000)}")
     f.mkdirs()
     WrappedUtxoState(bh, f)
   }
 
-  override def semanticallyValidModifier(state: ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
-
+  override def semanticallyValidModifier(state: ST): PM =
+    validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
 }
 
 object ErgoSanity {

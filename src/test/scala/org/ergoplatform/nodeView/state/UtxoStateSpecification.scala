@@ -35,7 +35,7 @@ class UtxoStateSpecification extends PropSpec
   property("proofsForTransactions() to be deterministic") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
-      val txs = validTransactions(bh)._1
+      val txs = validTransactionsFromBoxHolder(bh)._1
 
       val (proof1, digest1) = us.proofsForTransactions(txs).get
       val (proof2, digest2) = us.proofsForTransactions(txs).get
@@ -47,7 +47,7 @@ class UtxoStateSpecification extends PropSpec
 
   property("checkTransactions()") {
     forAll(boxesHolderGen) { bh =>
-      val txs = validTransactions(bh)._1
+      val txs = validTransactionsFromBoxHolder(bh)._1
 
       val boxIds = txs.flatMap(_.boxIdsToOpen)
       boxIds.foreach(id => assert(bh.get(ByteArrayWrapper(id)).isDefined))

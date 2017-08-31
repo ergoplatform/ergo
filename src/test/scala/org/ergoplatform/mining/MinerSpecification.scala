@@ -5,7 +5,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, NoShrink}
+import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.crypto.encode.Base58
@@ -14,7 +15,8 @@ class MinerSpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
   with Matchers
-  with ErgoGenerators {
+  with ErgoGenerators
+  with NoShrink {
 
   private val n = 48: Char
   private val k = 5: Char
@@ -36,9 +38,12 @@ class MinerSpecification extends PropSpec
     calculated.map(Base58.encode) shouldEqual Seq(genesisId, parentId, oldId).map(Base58.encode)
   }
 
+  //todo: for Tolsi: make real prop test, what are accepted n & k values?
   property("Miner should generate valid block") {
-    val b = createValidBlock
-    Miner.isValidBlock(b, n, k) shouldBe true
+   // forAll(Gen.choose(2, 100), Gen.choose(3, 5)) {case (nV, kV) =>
+        val b = createValidBlock
+        Miner.isValidBlock(b, n.toChar, k.toChar) shouldBe true
+   // }
   }
 
   property("Valid block should be invalid by pow after equihash solutions modification") {

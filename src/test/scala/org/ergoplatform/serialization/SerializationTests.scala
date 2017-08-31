@@ -17,7 +17,7 @@ class SerializationTests extends PropSpec
   property("HeaderWithoutInterlinks serialization") {
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>
-      val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinksAndNonceAndSolutions(b)).get.copy(interlinks = b.interlinks)
+      val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
       recovered shouldBe b
     }
   }

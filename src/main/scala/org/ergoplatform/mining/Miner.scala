@@ -25,7 +25,7 @@ object Miner extends ScorexLogging {
 
   //todo: add chain byte?
   private def ergoPerson(n: Char, k: Char): Array[Byte] =
-    "ERGOPoWT".getBytes ++ Chars.toByteArray(n) ++ Chars.toByteArray(k)
+    "ERGOPoWT1234".getBytes ++ Chars.toByteArray(n) ++ Chars.toByteArray(k)
 
   def genBlock(nBits: Long,
                parent: Option[Header],

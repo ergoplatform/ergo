@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
-
-import org.bouncycastle.crypto.digests.{Blake2bDigest, SHA256Digest}
+import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -18,6 +17,7 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
 import scala.util.{Random, Try}
+
 
 object Miner extends ScorexLogging {
 
@@ -106,10 +106,10 @@ object Miner extends ScorexLogging {
       }
     }
 
-    val interinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
-    assert(interinks.length >= parentInterlinks.length - 1)
+    val interlinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+    assert(interlinks.length >= parentInterlinks.length - 1)
 
-    genesisId +: interinks
+    genesisId +: interlinks
 
   }
 

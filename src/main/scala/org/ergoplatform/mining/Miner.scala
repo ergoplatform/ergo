@@ -23,8 +23,9 @@ object Miner extends ScorexLogging {
 
   type Solution = Seq[Int]
 
-  // add chain byte?
-  private def ergoPerson(n: Int, k: Int): Array[Byte] = "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
+  //todo: add chain byte?
+  private def ergoPerson(n: Int, k: Int): Array[Byte] =
+    "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
 
   def genBlock(nBits: Long,
                parent: Option[Header],
@@ -34,20 +35,22 @@ object Miner extends ScorexLogging {
                timestamp: Timestamp,
                votes: Array[Byte],
                n: Int, k: Int): ErgoFullBlock = {
-    val h = genHeader(nBits,
-      parent, stateRoot, adProofs.proofBytes, BlockTransactions.rootHash(transactions.map(_.id)), votes, timestamp, n, k)
+    val h = genHeader(nBits, parent, stateRoot, adProofs.proofBytes,
+      BlockTransactions.rootHash(transactions.map(_.id)), votes, timestamp, n, k)
     new ErgoFullBlock(h, BlockTransactions(h.id, transactions), None)
   }
 
-  def isBlockValid(block: ErgoFullBlock, n: Int, k: Int): Boolean = Try {
-    val result = Equihash.validateSolution(n, k, ergoPerson(n, k), HeaderSerializer.bytesWithoutNonceAndSolutions(block.header) ++ Equihash.nonceToLeBytes(block.header.nonce), EquihashSolutionsSerializer.parseBytes(block.header.equihashSolutions).get)
-    result
+  def isValidBlock(block: ErgoFullBlock, n: Int, k: Int): Boolean = Try {
+    Equihash.validateSolution(n, k, ergoPerson(n, k),
+      HeaderSerializer.bytesWithoutNonceAndSolutions(block.header) ++ Equihash.nonceToLeBytes(block.header.nonce),
+      EquihashSolutionsSerializer.parseBytes(block.header.equihashSolutions).get)
   }.recover {
     case NonFatal(e) =>
       log.debug(s"Block ${block.id} is invalid due pow", e)
       false
   }.getOrElse(false)
 
+  //todo: description
   def genHeader(nBits: Long,
                 parentOpt: Option[Header],
                 stateRoot: Array[Byte],
@@ -67,6 +70,7 @@ object Miner extends ScorexLogging {
     val h = Header(0.toByte, parentOpt.map(_.id).getOrElse(Header.GenesisParentId), interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, 0l, null)
     val I = HeaderSerializer.bytesWithoutNonceAndSolutions(h)
     digest.update(I, 0, I.length)
+
     @tailrec
     def generateHeader(): Header = {
       val nonce = Random.nextLong()
@@ -87,6 +91,19 @@ object Miner extends ScorexLogging {
     }
 
     generateHeader()
+  }
+
+  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
+    realDifficulty >= difficulty
+  }
+
+  //todo: there's constructInterlinkVector() method already in PoPoWPoof class
+  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = if (parent.isGenesis) {
+    Seq(parent.id)
+  } else {
+    constructInterlinks(parent.interlinks,
+      parent.realDifficulty,
+      parent.id)
   }
 
   private[mining] def constructInterlinks(parentInterlinks: Seq[Array[Byte]],
@@ -110,19 +127,5 @@ object Miner extends ScorexLogging {
     assert(interlinks.length >= parentInterlinks.length - 1)
 
     genesisId +: interlinks
-
   }
-
-  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = if (parent.isGenesis) {
-    Seq(parent.id)
-  } else {
-    constructInterlinks(parent.interlinks,
-      parent.realDifficulty,
-      parent.id)
-  }
-
-  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
-    realDifficulty >= difficulty
-  }
-
 }

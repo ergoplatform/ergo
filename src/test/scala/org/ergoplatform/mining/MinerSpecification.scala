@@ -26,23 +26,23 @@ class MinerSpecification extends PropSpec
 
   property("Miner should generate valid block") {
     val b = createValidBlock
-    Miner.isBlockValid(b, n, k) shouldBe true
+    Miner.isValidBlock(b, n, k) shouldBe true
   }
 
   property("Valid block should be invalid by pow after equihash solutions modification") {
     val b = createValidBlock
     val invB = b.header.equihashSolutions.clone()
     invB(0) = 1
-    Miner.isBlockValid(b.copy(header = b.header.copy(equihashSolutions = invB)), n, k) shouldBe false
+    Miner.isValidBlock(b.copy(header = b.header.copy(equihashSolutions = invB)), n, k) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {
     val b = createValidBlock
-    assert(!Miner.isBlockValid(b.copy(header = b.header.copy(height = 3)), n, k))
+    assert(!Miner.isValidBlock(b.copy(header = b.header.copy(height = 3)), n, k))
   }
 
   property("Valid block should be invalid by pow after AD proofs root modification") {
     val b = createValidBlock
-    Miner.isBlockValid(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), n, k) shouldBe false
+    Miner.isValidBlock(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), n, k) shouldBe false
   }
 }

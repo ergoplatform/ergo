@@ -30,6 +30,7 @@ libraryDependencies ++= Seq(
 
 javaOptions in run ++= Seq("-Xmx2G")
 
+javaOptions in testOnly ++= Seq("-Xmx12G")
 
 homepage := Some(url("http://ergoplatform.org/"))
 

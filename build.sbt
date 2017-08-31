@@ -28,9 +28,11 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test"
 )
 
-javaOptions in run ++= Seq("-Xmx2G")
+// javaOptions in run ++= Seq("-Xmx2G")
 
-javaOptions in testOnly ++= Seq("-Xmx12G")
+fork in Test := true
+
+javaOptions in Test ++= Seq("-Xmx12G", "-XX:-UseConcMarkSweepGC")
 
 homepage := Some(url("http://ergoplatform.org/"))
 

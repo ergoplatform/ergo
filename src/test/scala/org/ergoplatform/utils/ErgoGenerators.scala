@@ -118,7 +118,7 @@ trait ErgoGenerators extends CoreGenerators {
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
                      transactions: Seq[AnyoneCanSpendTransaction],
-                     n: Char = 96,
+                     n: Char = 48,
                      k: Char = 5
                     ): ErgoFullBlock = {
 

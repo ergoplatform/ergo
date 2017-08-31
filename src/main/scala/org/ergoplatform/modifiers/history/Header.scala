@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Ints, Longs, Shorts}
+import com.google.common.primitives._
 import io.circe.Json
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
@@ -24,14 +24,14 @@ case class Header(version: Version,
                   override val parentId: BlockId,
                   interlinks: Seq[Array[Byte]],
                   ADProofsRoot: Digest,
-                  stateRoot: Digest,
+                  stateRoot: Array[Byte], //33 bytes! extra byte with tree height here!
                   transactionsRoot: Digest,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
                   votes: Array[Byte],
                   nonce: Long,
-                  equihashSolutions: Array[Byte],
+                  equihashSolutions: Array[Byte]
                  ) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
@@ -96,9 +96,17 @@ object Header {
 
 object HeaderSerializer extends Serializer[Header] {
 
-  def bytesWithoutInterlinksAndNonceAndSolutions(h: Header): Array[Byte] = Bytes.concat(Array(h.version), h.parentId, h.ADProofsRoot,
-    h.transactionsRoot, h.stateRoot, Longs.toByteArray(h.timestamp), h.votes,
-    RequiredDifficulty.toBytes(h.nBits), Ints.toByteArray(h.height))
+  def bytesWithoutInterlinksAndNonceAndSolutions(h: Header): Array[Byte] =
+    Bytes.concat(
+      Array(h.version),
+      h.parentId,
+      h.ADProofsRoot,
+      h.transactionsRoot,
+      h.stateRoot,
+      Longs.toByteArray(h.timestamp),
+      h.votes,
+      RequiredDifficulty.toBytes(h.nBits),
+      Ints.toByteArray(h.height))
 
   def bytesWithoutNonceAndSolutions(h: Header): Array[Byte] = {
     def buildInterlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
@@ -146,12 +154,12 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinksSize = Shorts.fromByteArray(bytes.slice(151, 153))
+    val interlinksSize = Chars.fromByteArray(bytes.slice(151, 153))
     val interlinks = parseInterlinks(153, 153 + interlinksSize, Seq())
 
     val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
 
-    val equihashSolutionsBytesSize = Shorts.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
+    val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
     val equihashSolutions = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,

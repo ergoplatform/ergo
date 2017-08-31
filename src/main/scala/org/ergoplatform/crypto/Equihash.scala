@@ -5,9 +5,8 @@ import java.math.BigInteger
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.slf4j.LoggerFactory
-
+import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 import scala.collection.mutable.ArrayBuffer
-import org.ergoplatform.utils.LittleEndianBytes._
 
 object Equihash {
 

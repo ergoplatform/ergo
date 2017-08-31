@@ -6,7 +6,7 @@ import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.bouncycastle.util.encoders.Hex
 import org.scalatest.prop.{PropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import org.ergoplatform.utils.LittleEndianBytes._
+import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 
 class EquihashSpecification extends PropSpec
   with PropertyChecks

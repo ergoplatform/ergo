@@ -1,7 +1,5 @@
 package org.ergoplatform.crypto
 
-import java.math.BigInteger
-
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.bouncycastle.util.encoders.Hex
 import org.scalatest.prop.{PropertyChecks, TableDrivenPropertyChecks}

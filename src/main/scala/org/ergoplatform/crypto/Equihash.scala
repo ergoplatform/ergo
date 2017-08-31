@@ -27,6 +27,7 @@ object Equihash {
   }
 
   private val byteSize = 8
+
   def countLeadingZeroes(bytes: Array[Int]): Int = {
     (0 until byteSize * bytes.length).foldLeft(0) {
       case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => res + 1
@@ -122,7 +123,7 @@ object Equihash {
   }
 
   // Implementation of Basic Wagner's algorithm for the GBP
-  def gbpBasic(digest: Blake2bDigest, n: Int, k: Int): Seq[Seq[Int]] = {
+  def gbpBasic(digest: Blake2bDigest, n: Char, k: Char): Seq[Seq[Int]] = {
     val collisionLength = n / (k + 1)
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
@@ -235,7 +236,7 @@ object Equihash {
     * @return word
     */
   // https://github.com/str4d/zcash-pow/blob/master/test-pow.py
-  def generateWord(n: Int, digestWithoutIdx: Blake2bDigest, idx: Int): BigInteger = {
+  def generateWord(n: Char, digestWithoutIdx: Blake2bDigest, idx: Int): BigInteger = {
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
 
@@ -264,7 +265,7 @@ object Equihash {
     * @param solutionIndices Solution indices
     * @return Return True if solution is valid, False if not.
     */
-  def validateSolution(n: Int, k: Int, personal: Array[Byte], header: Array[Byte], solutionIndices: Seq[Int]): Boolean = {
+  def validateSolution(n: Char, k: Char, personal: Array[Byte], header: Array[Byte], solutionIndices: Seq[Int]): Boolean = {
     assert(n > 1)
     assert(k >= 3)
     assert(n % 8 == 0)

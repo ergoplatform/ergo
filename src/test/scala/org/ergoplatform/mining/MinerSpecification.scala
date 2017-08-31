@@ -5,8 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProof
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{ErgoGenerators, NoShrink}
-import org.scalacheck.Gen
+import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.crypto.encode.Base58
@@ -15,13 +14,12 @@ class MinerSpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
   with Matchers
-  with ErgoGenerators
-  with NoShrink {
+  with ErgoGenerators {
 
-  private val n = 48: Char
-  private val k = 5: Char
+  private val nDefault = 48: Char
+  private val kDefault = 5: Char
 
-  private def createValidBlock: ErgoFullBlock = {
+  private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = {
     Miner.genBlock(
       RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
       None, Array.emptyByteArray, ADProof(Array(1.toByte), Array(1.toByte)),
@@ -38,28 +36,25 @@ class MinerSpecification extends PropSpec
     calculated.map(Base58.encode) shouldEqual Seq(genesisId, parentId, oldId).map(Base58.encode)
   }
 
-  //todo: for Tolsi: make real prop test, what are accepted n & k values?
   property("Miner should generate valid block") {
-   // forAll(Gen.choose(2, 100), Gen.choose(3, 5)) {case (nV, kV) =>
-        val b = createValidBlock
-        Miner.isValidBlock(b, n.toChar, k.toChar) shouldBe true
-   // }
+    val b = createValidBlock()
+    Miner.isValidBlock(b, nDefault, kDefault) shouldBe true
   }
 
   property("Valid block should be invalid by pow after equihash solutions modification") {
-    val b = createValidBlock
+    val b = createValidBlock()
     val invB = b.header.equihashSolutions.clone()
     invB(0) = 1
-    Miner.isValidBlock(b.copy(header = b.header.copy(equihashSolutions = invB)), n, k) shouldBe false
+    Miner.isValidBlock(b.copy(header = b.header.copy(equihashSolutions = invB)), nDefault, kDefault) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {
-    val b = createValidBlock
-    assert(!Miner.isValidBlock(b.copy(header = b.header.copy(height = 3)), n, k))
+    val b = createValidBlock()
+    assert(!Miner.isValidBlock(b.copy(header = b.header.copy(height = 3)), nDefault, kDefault))
   }
 
   property("Valid block should be invalid by pow after AD proofs root modification") {
-    val b = createValidBlock
-    Miner.isValidBlock(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), n, k) shouldBe false
+    val b = createValidBlock()
+    Miner.isValidBlock(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)), nDefault, kDefault) shouldBe false
   }
 }

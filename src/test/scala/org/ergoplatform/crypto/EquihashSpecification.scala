@@ -40,6 +40,8 @@ class EquihashSpecification extends PropSpec
         Seq(3976, 108868, 80426, 109742, 33354, 55962, 68338, 80112, 26648, 28006, 64679, 130709, 41182, 126811, 56563, 129040, 4013, 80357, 38063, 91241, 30768, 72264, 97338, 124455, 5607, 36901, 67672, 87377, 17841, 66985, 77087, 85291),
         Seq(5970, 21862, 34861, 102517, 11849, 104563, 91620, 110653, 7619, 52100, 21162, 112513, 74964, 79553, 105558, 127256, 21905, 112672, 81803, 92086, 43695, 97911, 66587, 104119, 29017, 61613, 97690, 106345, 47428, 98460, 53655, 109002),
       )),
+
+      //todo: uncomment vectors below?
       //      (96, 5, "block header".getBytes, BigInt(1), Seq(
       //        Seq(1911, 96020, 94086, 96830, 7895, 51522, 56142, 62444, 15441, 100732, 48983, 64776, 27781, 85932, 101138, 114362, 4497, 14199, 36249, 41817, 23995, 93888, 35798, 96337, 5530, 82377, 66438, 85247, 39332, 78978, 83015, 123505),
       //      )),
@@ -216,7 +218,7 @@ class EquihashSpecification extends PropSpec
           xx - yy
         }
       }
-      val solutions = Equihash.gbpBasic(digest, n, k).sorted
+      val solutions = Equihash.gbpBasic(digest, n.toChar, k.toChar).sorted
       solutions shouldBe correctSolutions
     }
   }
@@ -224,7 +226,7 @@ class EquihashSpecification extends PropSpec
   property("Equihash should validate prepared solutions") {
     forAll(tasksAndSolutionValidationResult) { (n: Int, k: Int, I: Array[Byte], nonce: BigInt, solution: Seq[Int], valid: Boolean) =>
       val header = I ++ leIntToByteArray(nonce.toInt) ++ Array.fill(28)(0.toByte)
-      Equihash.validateSolution(n, k, zcashPerson(n, k), header, solution) shouldBe valid
+      Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution) shouldBe valid
     }
   }
 
@@ -232,7 +234,7 @@ class EquihashSpecification extends PropSpec
     forAll(tasksAndSolutions) { (n: Int, k: Int, I: Array[Byte], nonce: BigInt, solutions: Seq[Seq[Int]]) =>
       val header = I ++ leIntToByteArray(nonce.toInt) ++ Array.fill(28)(0.toByte)
       solutions.foreach(solution => {
-        Equihash.validateSolution(n, k, zcashPerson(n, k), header, solution) shouldBe true
+        Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution) shouldBe true
       })
     }
   }

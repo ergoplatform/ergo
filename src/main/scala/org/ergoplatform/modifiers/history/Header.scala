@@ -124,14 +124,23 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndNonceAndSolutions(h), interlinkBytesSize, interlinkBytes)
   }
 
-  override def toBytes(h: Header): Array[Version] = {
+  def nonceAndSolutionBytes(h:Header): Array[Byte] = {
     val equihashSolutionsSize = Chars.toByteArray(h.equihashSolutions.length.toChar)
     val equihashSolutionsBytes = h.equihashSolutions
-    Bytes.concat(bytesWithoutNonceAndSolutions(h),
-      Longs.toByteArray(h.nonce),
-      equihashSolutionsSize, equihashSolutionsBytes
-    )
+
+    Bytes.concat(Longs.toByteArray(h.nonce), equihashSolutionsSize, equihashSolutionsBytes)
   }
+
+  def bytesWithoutInterlinks(h: Header): Array[Byte] =
+    Bytes.concat(
+      bytesWithoutInterlinksAndNonceAndSolutions(h),
+      Chars.toByteArray(0),
+      nonceAndSolutionBytes(h)
+    )
+
+
+  override def toBytes(h: Header): Array[Version] =
+    Bytes.concat(bytesWithoutNonceAndSolutions(h), nonceAndSolutionBytes(h))
 
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head

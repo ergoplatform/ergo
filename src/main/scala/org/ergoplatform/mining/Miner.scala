@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import com.google.common.primitives.Chars
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -9,7 +10,6 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewModifier.ModifierId
-import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 import scorex.core.block.Block._
 import scorex.core.utils.ScorexLogging
 
@@ -24,8 +24,8 @@ object Miner extends ScorexLogging {
   type Solution = Seq[Int]
 
   //todo: add chain byte?
-  private def ergoPerson(n: Int, k: Int): Array[Byte] =
-    "ERGOPoWT".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
+  private def ergoPerson(n: Char, k: Char): Array[Byte] =
+    "ERGOPoWT".getBytes ++ Chars.toByteArray(n) ++ Chars.toByteArray(k)
 
   def genBlock(nBits: Long,
                parent: Option[Header],
@@ -34,13 +34,13 @@ object Miner extends ScorexLogging {
                transactions: Seq[AnyoneCanSpendTransaction],
                timestamp: Timestamp,
                votes: Array[Byte],
-               n: Int, k: Int): ErgoFullBlock = {
+               n: Char, k: Char): ErgoFullBlock = {
     val h = genHeader(nBits, parent, stateRoot, adProofs.proofBytes,
       BlockTransactions.rootHash(transactions.map(_.id)), votes, timestamp, n, k)
     new ErgoFullBlock(h, BlockTransactions(h.id, transactions), None)
   }
 
-  def isValidBlock(block: ErgoFullBlock, n: Int, k: Int): Boolean = Try {
+  def isValidBlock(block: ErgoFullBlock, n: Char, k: Char): Boolean = Try {
     Equihash.validateSolution(n, k, ergoPerson(n, k),
       HeaderSerializer.bytesWithoutNonceAndSolutions(block.header) ++ Equihash.nonceToLeBytes(block.header.nonce),
       EquihashSolutionsSerializer.parseBytes(block.header.equihashSolutions).get)
@@ -58,7 +58,8 @@ object Miner extends ScorexLogging {
                 transactionsRoot: Array[Byte],
                 votes: Array[Byte],
                 timestamp: Timestamp,
-                n: Int, k: Int): Header = {
+                n: Char,
+                k: Char): Header = {
     val interlinks: Seq[Array[Byte]] = if (parentOpt.isDefined) constructInterlinkVector(parentOpt.get) else Seq()
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)

@@ -117,7 +117,10 @@ trait ErgoGenerators extends CoreGenerators {
 
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
-                     transactions: Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
+                     transactions: Seq[AnyoneCanSpendTransaction],
+                     n: Char = 96,
+                     k: Char = 5
+                    ): ErgoFullBlock = {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
@@ -128,7 +131,7 @@ trait ErgoGenerators extends CoreGenerators {
     val time = System.currentTimeMillis()
 
     val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
-      Array.fill(5)(0.toByte), time, 96, 5)
+      Array.fill(5)(0.toByte), time, n, k)
 
     val blockTransactions = BlockTransactions(header.id, transactions)
     val adProof = ADProof(header.id, adProofBytes)

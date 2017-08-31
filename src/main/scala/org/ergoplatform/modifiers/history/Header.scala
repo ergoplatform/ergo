@@ -119,13 +119,13 @@ object HeaderSerializer extends Serializer[Header] {
       }
     }
     val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
-    val interlinkBytesSize = Shorts.toByteArray(interlinkBytes.length.toShort)
+    val interlinkBytesSize = Chars.toByteArray(interlinkBytes.length.toChar)
 
     Bytes.concat(bytesWithoutInterlinksAndNonceAndSolutions(h), interlinkBytesSize, interlinkBytes)
   }
 
   override def toBytes(h: Header): Array[Version] = {
-    val equihashSolutionsSize = Shorts.toByteArray(h.equihashSolutions.length.toShort)
+    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolutions.length.toChar)
     val equihashSolutionsBytes = h.equihashSolutions
     Bytes.concat(bytesWithoutNonceAndSolutions(h),
       Longs.toByteArray(h.nonce),

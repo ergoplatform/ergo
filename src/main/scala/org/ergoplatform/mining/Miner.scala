@@ -8,8 +8,6 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.NodeViewModifier.ModifierId
 import scorex.core.block.Block._
 import scorex.core.utils.ScorexLogging
 
@@ -60,8 +58,12 @@ object Miner extends ScorexLogging {
                 timestamp: Timestamp,
                 n: Char,
                 k: Char): Header = {
-    val interlinks: Seq[Array[Byte]] = if (parentOpt.isDefined) constructInterlinkVector(parentOpt.get) else Seq()
+
+    val interlinks: Seq[Array[Byte]] =
+      if (parentOpt.isDefined) PoPoWProof.constructInterlinkVector(parentOpt.get) else Seq()
+
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
     val bytesPerWord = n / 8
@@ -96,37 +98,5 @@ object Miner extends ScorexLogging {
 
   def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
     realDifficulty >= difficulty
-  }
-
-  //todo: there's constructInterlinkVector() method already in PoPoWPoof class
-  private def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = if (parent.isGenesis) {
-    Seq(parent.id)
-  } else {
-    constructInterlinks(parent.interlinks,
-      parent.realDifficulty,
-      parent.id)
-  }
-
-  private[mining] def constructInterlinks(parentInterlinks: Seq[Array[Byte]],
-                                          parentRealDifficulty: BigInt,
-                                          parentId: ModifierId): Seq[Array[Byte]] = {
-
-    val genesisId = parentInterlinks.head
-
-    def generateInterlinks(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-      if (parentRealDifficulty >= curDifficulty) {
-        generateInterlinks(curDifficulty * 2, acc :+ parentId)
-      } else {
-        parentInterlinks.tail.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-          case Some(id) => generateInterlinks(curDifficulty * 2, acc :+ id)
-          case _ => acc
-        }
-      }
-    }
-
-    val interlinks = generateInterlinks(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
-    assert(interlinks.length >= parentInterlinks.length - 1)
-
-    genesisId +: interlinks
   }
 }

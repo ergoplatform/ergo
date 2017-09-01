@@ -8,7 +8,6 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import scorex.crypto.encode.Base58
 
 class MinerSpecification extends PropSpec
   with PropertyChecks
@@ -24,16 +23,6 @@ class MinerSpecification extends PropSpec
       RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
       None, Array.emptyByteArray, ADProof(Array(1.toByte), Array(1.toByte)),
       Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))), 1L, Array.emptyByteArray, n, k)
-  }
-
-  property("constructInterlinks() vector") {
-    val parentId = Base58.decode("6pwRCCgbGBson6JkCwCAW4C6AE3X3ZWLqeD3cX712dzr").get
-    val oldId = Base58.decode("4ahpTQ3cTbLDdCXbWuHuaazSbsPZS5LZ7RF6L8UFXaLb").get
-    val genesisId = Base58.decode("3yHgzU5Q48EueocnGUgQu3sS24XcbTHi7VYMvveQUeze").get
-    val parentInterlinks = List(genesisId, oldId, oldId)
-
-    val calculated = Miner.constructInterlinks(parentInterlinks: Seq[Array[Byte]], BigInt(2), parentId)
-    calculated.map(Base58.encode) shouldEqual Seq(genesisId, parentId, oldId).map(Base58.encode)
   }
 
   property("Miner should generate valid block") {

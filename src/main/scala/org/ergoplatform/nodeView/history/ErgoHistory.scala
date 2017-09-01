@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
@@ -46,6 +46,7 @@ trait ErgoHistory
     with BlockTransactionsProcessor
     with ScorexLogging {
 
+  protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
   protected val storage: LSMStore
 
@@ -331,6 +332,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
@@ -338,6 +340,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
@@ -345,6 +348,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
@@ -352,6 +356,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
@@ -359,6 +364,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }
@@ -366,6 +372,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
         }

@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
+import org.ergoplatform.settings._
 import scorex.core.NodeViewModifier._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
@@ -17,7 +17,6 @@ import scorex.crypto.encode.Base16
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
 import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 
 /**
@@ -26,14 +25,16 @@ import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 trait HeadersProcessor extends ScorexLogging {
 
   protected val config: NodeConfigurationSettings
+  protected val chainSettings: ChainSettings
 
   //TODO alternative DDoS protection
-  protected lazy val MaxRollback: Long = 600.days.toMillis / config.blockInterval.toMillis
+  protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
 
   //Maximum time in future block header main contain
-  protected lazy val MaxTimeDrift: Long = 10 * config.blockInterval.toMillis
+  protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
+  protected lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
+    chainSettings.epochLength)
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 

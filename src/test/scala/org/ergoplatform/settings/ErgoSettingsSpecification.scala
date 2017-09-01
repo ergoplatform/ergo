@@ -14,7 +14,7 @@ class ErgoSettingsSpecification extends PropSpec
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read(None)
-    settings.directory shouldBe System.getProperty("user.home") + "/ergo"
+    settings.directory shouldBe System.getProperty("user.dir") + "/ergo/data"
   }
 
   property("should read default settings") {

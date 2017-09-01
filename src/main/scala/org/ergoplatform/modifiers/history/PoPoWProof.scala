@@ -61,7 +61,7 @@ object PoPoWProof {
   }
 
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
-    if (parent.height == ErgoHistory.GenesisHeight) {
+    if (parent.isGenesis) {
       //initialize interlink vector at first block after genesis
       Seq(parent.id)
     } else {

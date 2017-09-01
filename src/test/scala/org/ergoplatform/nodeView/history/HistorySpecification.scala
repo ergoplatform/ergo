@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -53,13 +53,16 @@ trait HistorySpecification extends PropSpec
     val blockInterval = 1.minute
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, blockInterval, epochLength)
+      PoPoWBootstrap, minimalSuffix)
     val scorexSettings: Settings = new Settings {
       override def settingsJSON: Map[String, Json] = Map()
     }
+    val chainSettings = ChainSettings(blockInterval, epochLength)
 
     val dir = createTempDir
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, nodeSettings, scorexSettings)
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings,
+      nodeSettings, scorexSettings)
+
     ErgoHistory.readOrGenerate(fullHistorySettings)
   }
 

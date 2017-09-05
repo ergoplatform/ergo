@@ -7,7 +7,6 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.Constants
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
 
@@ -44,11 +43,7 @@ trait PoWScheme {
 
   def verify(header: Header): Boolean
 
-  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
-    realDifficulty >= difficulty
-  }
-
-  def derivedHeaderFields(parentOpt: Option[Header]) = {
+  protected def derivedHeaderFields(parentOpt: Option[Header]) = {
     val interlinks: Seq[Array[Byte]] =
       parentOpt.map(parent => PoPoWProof.constructInterlinkVector(parent)).getOrElse(Seq())
 
@@ -59,6 +54,10 @@ trait PoWScheme {
     val parentId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, version, interlinks, height)
+  }
+
+  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
+    realDifficulty >= difficulty
   }
 }
 
@@ -128,23 +127,23 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 }
 
 
-class FakePowScheme extends PoWScheme {
+class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
+
   override def prove(parentOpt: Option[Header], nBits: Long, stateRoot: Array[Byte], adProofsRoot: Array[Byte],
                      transactionsRoot: Array[Byte], timestamp: Timestamp, votes: Array[Byte]): Header = {
-    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
+
+    val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
 
     new Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, nonce = 0L, Array.emptyByteArray){
 
-      override lazy val realDifficulty: Difficulty = (Random.nextInt(100) + 1) * requiredDifficulty + 1
-
-      override lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+      override lazy val realDifficulty: Difficulty =  level * requiredDifficulty
     }
   }
 
   override def verify(header: Header): Boolean = true
 }
 
-object DefaultFakePowScheme extends FakePowScheme
+object DefaultFakePowScheme extends FakePowScheme(None)

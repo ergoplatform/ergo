@@ -1,8 +1,7 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
@@ -14,6 +13,8 @@ import scala.util.Random
 
 trait ChainGenerator {
 
+  val powScheme = DefaultFakePowScheme
+
   def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
     genHeaderChain(height, history.bestHeaderOpt.toSeq)
 
@@ -24,15 +25,14 @@ trait ChainGenerator {
   final def genHeaderChain(until: Seq[Header] => Boolean, acc: Seq[Header]): HeaderChain = if (until(acc)) {
     HeaderChain(acc.reverse)
   } else {
-    val header = Miner.genHeader(Constants.InitialNBits,
+    val header = powScheme.prove(
       acc.headOption,
+      Constants.InitialNBits,
       Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
-      Array.fill(5)(0.toByte),
       Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time())),
-      96,
-      4
+      Array.fill(5)(0.toByte)
     ): Header
     genHeaderChain(until, header +: acc)
   }
@@ -43,25 +43,17 @@ trait ChainGenerator {
     acc.reverse
   } else {
     val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq(height.toLong), IndexedSeq(1L)))
-    val txsRoot = BlockTransactions.rootHash(txs.map(_.id))
     val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
-    val proofsRoot = ADProof.proofDigest(proofs)
     val stateRoot = Array.fill(32 + 1)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
-    val header = Miner.genHeader(Constants.InitialNBits,
-      acc.headOption.map(_.header),
+    val block = powScheme.proveBlock(acc.headOption.map(_.header),
+      Constants.InitialNBits,
       stateRoot,
-      proofsRoot,
-      txsRoot,
-      votes,
+      proofs,
+      txs,
       Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time())),
-      96,
-      5): Header
-    val blockTransactions: BlockTransactions = BlockTransactions(header.id, txs)
-    val aDProofs: ADProof = ADProof(header.id, proofs)
-
-    val block = ErgoFullBlock(header, blockTransactions, Some(aDProofs))
+      votes)
     genChain(height - 1, block +: acc)
   }
 
@@ -80,5 +72,4 @@ trait ChainGenerator {
       block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
     }
   }
-
 }

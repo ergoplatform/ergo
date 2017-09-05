@@ -3,9 +3,8 @@ package org.ergoplatform
 import java.io.File
 
 import org.ergoplatform.ErgoSanity._
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.WrappedUtxoState
@@ -50,15 +49,14 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
 
-    Miner.genHeader(Constants.InitialNBits,
+    DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
+      Constants.InitialNBits,
       Array.fill(hashLength + 1)(0.toByte),
       Array.fill(hashLength)(0.toByte),
       Array.fill(hashLength)(0.toByte),
-      Array.fill(5)(0.toByte),
       Math.max(NetworkTime.time(), bestTimestamp),
-      96,
-      5
+      Array.fill(5)(0.toByte)
     )
   }
 

@@ -1,14 +1,12 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Ints, Shorts}
-import org.ergoplatform.mining.Miner
-import org.ergoplatform.mining.Miner.Solution
+import com.google.common.primitives.Ints
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-object EquihashSolutionsSerializer extends Serializer[Miner.Solution] {
-  override def toBytes(obj: Solution) = {
+object EquihashSolutionsSerializer extends Serializer[PoWScheme.Solution] {
+  override def toBytes(obj: PoWScheme.Solution) = {
     obj.map(Ints.toByteArray).reduceLeft(_ ++ _)
   }
 

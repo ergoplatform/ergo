@@ -13,7 +13,7 @@ case class PoPoWProof(m: Byte,
                       k: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header]) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      suffix: Seq[Header])(implicit poWScheme: PoWScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.ModifierTypeId
@@ -22,7 +22,7 @@ case class PoPoWProof(m: Byte,
 
   override type M = PoPoWProof
 
-  override lazy val serializer: Serializer[PoPoWProof] = PoPoWProofSerializer
+  override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(poWScheme)
 
   override lazy val json: Json = ???
 
@@ -33,9 +33,13 @@ case class PoPoWProof(m: Byte,
 
 object PoPoWProof {
   val ModifierTypeId: Byte = 105: Byte
+}
+
+class PoPoWProofUtils(poWScheme: PoWScheme) {
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
+    //todo: why initial difficulty here?
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
     if (proof.suffix.length != proof.k) {
       Failure(new Error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}"))
@@ -47,7 +51,7 @@ object PoPoWProof {
       Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
     } else if (proof.innerchain.length < proof.m) {
       Failure(new Error(s"Innerchain length is not enough in $proof"))
-    } else if (!proof.innerchain.forall(_.realDifficulty >= innerDifficulty)) {
+    } else if (!proof.innerchain.forall(h => poWScheme.realDifficulty(h) >= innerDifficulty)) {
       Failure(new Error(s"Innerchain difficulty is not enough in $proof"))
     } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId sameElements s.head.id)) {
       Failure(new Error(s"Suffix links are incorrect in $proof"))
@@ -60,7 +64,7 @@ object PoPoWProof {
   }
 
   def isLevel(header: Header, level: Int) = {
-    val headerDiff = header.realDifficulty
+    val headerDiff = poWScheme.realDifficulty(header)
     val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
     headerDiff >= levelDiff
   }
@@ -90,10 +94,9 @@ object PoPoWProof {
       (genesisId +: pLevels) ++ priorLevels
     }
   }
-
 }
 
-object PoPoWProofSerializer extends Serializer[PoPoWProof] {
+class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
       val bytes = HeaderSerializer.bytesWithoutInterlinksAndNonceAndSolutions(h)
@@ -123,7 +126,7 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
       else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
-        val interlinks = PoPoWProof.constructInterlinkVector(acc.head)
+        val interlinks = new PoPoWProofUtils(poWScheme).constructInterlinkVector(acc.head)
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
     }
@@ -137,8 +140,6 @@ object PoPoWProofSerializer extends Serializer[PoPoWProof] {
       index = index + 2 + l
       header
     }
-    PoPoWProof(m, k, i, innerchain, suffix)
+    PoPoWProof(m, k, i, innerchain, suffix)(poWScheme)
   }
 }
-
-

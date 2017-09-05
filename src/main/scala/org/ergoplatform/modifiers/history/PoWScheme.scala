@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.Chars
+import com.google.common.primitives.{Chars, Ints}
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.settings.Constants
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
 
@@ -43,9 +44,11 @@ trait PoWScheme {
 
   def verify(header: Header): Boolean
 
+  def realDifficulty(header: Header): BigInt
+
   protected def derivedHeaderFields(parentOpt: Option[Header]) = {
     val interlinks: Seq[Array[Byte]] =
-      parentOpt.map(parent => PoPoWProof.constructInterlinkVector(parent)).getOrElse(Seq())
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
@@ -101,7 +104,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
       val headerWithSuitableSolution = solutions.map(solution => {
         h.copy(nonce = nonce, equihashSolutions = EquihashSolutionsSerializer.toBytes(solution))
       }).find(newHeader => {
-        correctWorkDone(newHeader.realDifficulty, difficulty)
+        correctWorkDone(realDifficulty(newHeader), difficulty)
       })
       headerWithSuitableSolution match {
         case Some(headerWithFoundSolution) =>
@@ -124,6 +127,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         log.debug(s"Block ${header.id} is invalid due pow", e)
         false
     }.getOrElse(false)
+
+  override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
 }
 
 
@@ -137,13 +142,14 @@ class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
 
     new Header(version, parentId, interlinks,
-      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, nonce = 0L, Array.emptyByteArray){
-
-      override lazy val realDifficulty: Difficulty =  level * requiredDifficulty
-    }
+      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
+      nonce = 0L, Ints.toByteArray(level))
   }
 
   override def verify(header: Header): Boolean = true
+
+  override def realDifficulty(header: Header): Difficulty =
+    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
 }
 
 object DefaultFakePowScheme extends FakePowScheme(None)

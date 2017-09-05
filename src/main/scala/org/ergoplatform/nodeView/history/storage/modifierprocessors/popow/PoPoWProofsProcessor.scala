@@ -61,6 +61,6 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
     val (depth, innerchain) = constructProof(suffixFirstHeader.interlinks.length)
 
-    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
+    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)(powScheme)
   }
 }

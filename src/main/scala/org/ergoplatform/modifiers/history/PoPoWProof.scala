@@ -59,6 +59,18 @@ object PoPoWProof {
     }
   }
 
+  def isLevel(header: Header, level: Int) = {
+    val headerDiff = header.realDifficulty
+    val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
+    headerDiff >= levelDiff
+  }
+
+  def maxLevel(header: Header): Int = {
+    var level = 0
+    while (isLevel(header, level + 1)) level = level + 1
+    level
+  }
+
   def constructInterlinkVector(parent: Header): Seq[Array[Byte]] = {
     if (parent.isGenesis) {
       //initialize interlink vector at first block after genesis
@@ -67,18 +79,15 @@ object PoPoWProof {
 
       val genesisId = parent.interlinks.head
 
-      def generateInnerchain(curDifficulty: BigInt, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = {
-        if (parent.realDifficulty >= curDifficulty) {
-          generateInnerchain(curDifficulty * 2, acc :+ parent.id)
-        } else {
-          parent.interlinks.find(pId => Algos.blockIdDifficulty(pId) >= curDifficulty) match {
-            case Some(id) if !(id sameElements genesisId) => generateInnerchain(curDifficulty * 2, acc :+ id)
-            case _ => acc
-          }
-        }
-      }
+      val tail = parent.interlinks.tail
 
-      genesisId +: generateInnerchain(Constants.InitialDifficulty * 2, Seq[Array[Byte]]())
+      val pLevel = maxLevel(parent)
+
+      val pLevels = if (pLevel > 0) Seq.fill(pLevel)(parent.id) else Seq()
+
+      val priorLevels = if(tail.length > pLevel) tail.drop(pLevel) else Seq()
+
+      (genesisId +: pLevels) ++ priorLevels
     }
   }
 

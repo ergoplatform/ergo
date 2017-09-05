@@ -1,8 +1,7 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -124,19 +123,10 @@ trait ErgoGenerators extends CoreGenerators {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val txsRoot = BlockTransactions.rootHash(transactions.map(_.id))
-
-    val adProofhash = ADProof.proofDigest(adProofBytes)
-
     val time = System.currentTimeMillis()
 
-    val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
-      Array.fill(5)(0.toByte), time, n, k)
-
-    val blockTransactions = BlockTransactions(header.id, transactions)
-    val adProof = ADProof(header.id, adProofBytes)
-
-    ErgoFullBlock(header, blockTransactions, Some(adProof))
+    DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
+      transactions, time, Array.fill(5)(0.toByte))
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
@@ -159,5 +149,4 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
-
 }

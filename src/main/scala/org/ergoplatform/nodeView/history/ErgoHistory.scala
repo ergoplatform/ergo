@@ -318,13 +318,15 @@ object ErgoHistory extends ScorexLogging {
 
   val GenesisHeight = 0
 
-  def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
+  //todo: move pow to settings
+  def readOrGenerate(settings: ErgoSettings, pow: PoWScheme): ErgoHistory = {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
     val nodeSettings = settings.nodeSettings
+
 
     val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (true, true, true) =>
@@ -333,6 +335,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
@@ -340,6 +343,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (false, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
@@ -347,6 +351,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (false, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
@@ -354,6 +359,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, false, true) =>
         new ErgoHistory with EmptyADProofsProcessor
@@ -361,6 +367,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, false, false) =>
         new ErgoHistory with EmptyADProofsProcessor
@@ -368,6 +375,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case m =>
         throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +

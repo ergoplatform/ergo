@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer, PoWScheme}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -17,13 +17,16 @@ import scorex.crypto.encode.Base16
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
 import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 
 /**
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ScorexLogging {
+
+  val powScheme: PoWScheme
+
+  def realDifficulty(h: Header) = powScheme.realDifficulty(h)
 
   protected val config: NodeConfigurationSettings
 
@@ -129,8 +132,8 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Header height ${m.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
     } else if (historyStorage.contains(m.id)) {
       Failure(new Error("Header is already in history"))
-    } else if (m.realDifficulty < m.requiredDifficulty) {
-      Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
+    } else if (realDifficulty(m) < m.requiredDifficulty) {
+      Failure(new Error(s"Block difficulty ${realDifficulty(m)} is less than required ${m.requiredDifficulty}"))
     } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
     } else if (!heightOf(m.parentId).exists(h => height - h < MaxRollback)) {

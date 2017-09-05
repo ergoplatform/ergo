@@ -36,6 +36,7 @@ case class Header(version: Version,
 
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
+  //todo: why not powHash?
   override lazy val id: ModifierId = Algos.hash(bytes)
 
   lazy val powHash: Digest = {
@@ -53,8 +54,6 @@ case class Header(version: Version,
     secondDigest.doFinal(result, 0)
     result
   }
-
-  lazy val realDifficulty: Difficulty = Constants.MaxTarget / BigInt(1, powHash)
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 

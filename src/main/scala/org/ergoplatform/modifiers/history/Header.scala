@@ -10,14 +10,13 @@ import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.state.ErgoState.Digest
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.encode.Base58
 
 import scala.annotation.tailrec
-import scala.math.BigInt
 import scala.util.Try
 
 case class Header(version: Version,
@@ -37,8 +36,10 @@ case class Header(version: Version,
   override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
 
   //todo: why not powHash?
-  override lazy val id: ModifierId = Algos.hash(bytes)
+  override lazy val id: ModifierId = powHash
 
+  //todo: why SHA256?
+  //todo: tolsi: check this
   lazy val powHash: Digest = {
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
@@ -48,6 +49,7 @@ case class Header(version: Version,
     EquihashSolutionsSerializer.parseBytes(equihashSolutions).get.foreach(s => Equihash.hashXi(digest, s))
     val h = new Array[Byte](32)
     digest.doFinal(h, 0)
+
     val secondDigest = new SHA256Digest()
     secondDigest.update(h, 0, h.length)
     val result = new Array[Byte](32)
@@ -136,7 +138,6 @@ object HeaderSerializer extends Serializer[Header] {
       Chars.toByteArray(0),
       nonceAndSolutionBytes(h)
     )
-
 
   override def toBytes(h: Header): Array[Version] =
     Bytes.concat(bytesWithoutPow(h), nonceAndSolutionBytes(h))

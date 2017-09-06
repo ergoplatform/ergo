@@ -138,6 +138,8 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
     } else if (!heightOf(m.parentId).exists(h => height - h < MaxRollback)) {
       Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(m.parentId)}"))
+    } else if (!powScheme.verify(m)) {
+      Failure(new Error(s"Wrong proof-of-work solution for $m"))
     } else {
       Success()
     }

@@ -7,8 +7,8 @@ import org.scalacheck.Gen
 
 class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrink {
 
-  val MaxM = 10
-  val MaxK = 10
+  val MaxM = 11
+  val MaxK = 11
 
   private def genHistory() =
     generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
@@ -165,8 +165,8 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   }
 
   def mkGen: Gen[(Int, Int)] = for {
-    m <- Gen.choose(1, MaxM)
-    k <- Gen.choose(1, MaxK)
+    m <- Gen.choose(1, MaxM - 1)
+    k <- Gen.choose(1, MaxK - 1)
   } yield (m, k)
 
   //todo: interlink check test

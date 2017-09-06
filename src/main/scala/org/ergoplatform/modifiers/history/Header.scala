@@ -42,7 +42,7 @@ case class Header(version: Version,
   lazy val powHash: Digest = {
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
-    val bytes = HeaderSerializer.bytesWithoutNonceAndSolutions(this)
+    val bytes = HeaderSerializer.bytesWithoutPow(this)
     digest.update(bytes, 0, bytes.length)
     Equihash.hashNonce(digest, nonce)
     EquihashSolutionsSerializer.parseBytes(equihashSolutions).get.foreach(s => Equihash.hashXi(digest, s))
@@ -95,7 +95,7 @@ object Header {
 
 object HeaderSerializer extends Serializer[Header] {
 
-  def bytesWithoutInterlinksAndNonceAndSolutions(h: Header): Array[Byte] =
+  def bytesWithoutInterlinksAndPow(h: Header): Array[Byte] =
     Bytes.concat(
       Array(h.version),
       h.parentId,
@@ -107,7 +107,7 @@ object HeaderSerializer extends Serializer[Header] {
       RequiredDifficulty.toBytes(h.nBits),
       Ints.toByteArray(h.height))
 
-  def bytesWithoutNonceAndSolutions(h: Header): Array[Byte] = {
+  def bytesWithoutPow(h: Header): Array[Byte] = {
     def buildInterlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
         acc
@@ -120,7 +120,7 @@ object HeaderSerializer extends Serializer[Header] {
     val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
     val interlinkBytesSize = Chars.toByteArray(interlinkBytes.length.toChar)
 
-    Bytes.concat(bytesWithoutInterlinksAndNonceAndSolutions(h), interlinkBytesSize, interlinkBytes)
+    Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
   def nonceAndSolutionBytes(h:Header): Array[Byte] = {
@@ -132,14 +132,14 @@ object HeaderSerializer extends Serializer[Header] {
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
     Bytes.concat(
-      bytesWithoutInterlinksAndNonceAndSolutions(h),
+      bytesWithoutInterlinksAndPow(h),
       Chars.toByteArray(0),
       nonceAndSolutionBytes(h)
     )
 
 
   override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutNonceAndSolutions(h), nonceAndSolutionBytes(h))
+    Bytes.concat(bytesWithoutPow(h), nonceAndSolutionBytes(h))
 
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head

@@ -99,7 +99,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
 class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
-      val bytes = HeaderSerializer.bytesWithoutInterlinksAndNonceAndSolutions(h)
+      val bytes = HeaderSerializer.bytesWithoutInterlinks(h)
       Bytes.concat(Shorts.toByteArray(bytes.length.toShort), bytes)
     })
     val innerchainBytes = scorex.core.utils.concatBytes(obj.innerchain.map { h =>

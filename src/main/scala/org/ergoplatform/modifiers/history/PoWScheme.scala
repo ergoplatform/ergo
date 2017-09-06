@@ -92,7 +92,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     val h = Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, nonce = 0L, null)
 
-    val I = HeaderSerializer.bytesWithoutNonceAndSolutions(h)
+    val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
 
     @tailrec
@@ -120,7 +120,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   override def verify(header: Header): Boolean =
     Try {
       Equihash.validateSolution(n, k, ergoPerson,
-        HeaderSerializer.bytesWithoutNonceAndSolutions(header) ++ Equihash.nonceToLeBytes(header.nonce),
+        HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
         EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).get)
     }.recover {
       case NonFatal(e) =>

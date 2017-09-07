@@ -9,7 +9,6 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -17,12 +16,10 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-class DigestState private (override val rootHash: Digest32, store: Store)
+class DigestState private (override val version: VersionTag, override val rootHash: ADDigest, store: Store)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
-
-  override def version: VersionTag = rootHash
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
@@ -40,28 +37,33 @@ class DigestState private (override val rootHash: Digest32, store: Store)
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 
-  private def update(newVersion: Digest32): Try[DigestState] = Try {
-    store.update(ByteArrayWrapper(newVersion), Seq(), Seq())
-    new DigestState(newVersion, store)
+  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
+    val wrappedVersion = ByteArrayWrapper(newVersion)
+    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(rootHash)))
+    new DigestState(newVersion, rootHash, store)
   }
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
-    case fb: ErgoFullBlock => validate(fb).flatMap(_ => update(fb.header.stateRoot))
+    case fb: ErgoFullBlock => this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
 
       //todo: fail here? or not?
     case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
-    Try(store.rollback(ByteArrayWrapper(version))).map(_ => new DigestState(rootHash = version, store))
+    val wrappedVersion = ByteArrayWrapper(version)
+    Try(store.rollback(wrappedVersion)).map{_ =>
+      val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
+      new DigestState(version, rootHash, store)
+    }
   }
 
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
 }
 
 object DigestState {
-  def create(rootHashOpt: Option[Digest], dir: File): Try[DigestState] = Try {
+  def create(version: VersionTag, rootHashOpt: Option[ADDigest], dir: File): Try[DigestState] = Try {
     val store = new LSMStore(dir, keepVersions = 10)
 
     rootHashOpt match {
@@ -79,5 +81,5 @@ object DigestState {
     }
   }
 
-  def create(rootHash: Digest, dir: File): Try[DigestState] = create(Some(rootHash), dir)
+  def create(rootHash: ADDigest, dir: File): Try[DigestState] = create(Some(rootHash), dir)
 }

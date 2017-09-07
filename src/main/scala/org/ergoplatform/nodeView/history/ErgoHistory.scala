@@ -274,7 +274,8 @@ trait ErgoHistory
 
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
-                                      valid: Boolean): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+                                      valid: Boolean,
+                                      lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
 /*
     val headerId = modifier match {
       case h: Header => h.id

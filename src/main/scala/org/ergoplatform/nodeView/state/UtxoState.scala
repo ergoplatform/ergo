@@ -2,12 +2,12 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.{LSMStore, Store}
-import org.bouncycastle.jcajce.provider.digest.Blake2b.Blake2b256
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
+import org.ergoplatform.settings.Algos
 import scorex.core.VersionTag
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
@@ -25,6 +25,8 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
   implicit val hf = new Blake2b256Unsafe
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
+
+  private lazy val bestVersionKey = Algos.hash("best state version")
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] =
     PersistentBatchAVLProver.create(
@@ -50,12 +52,12 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         val opRes = persistentProver.performOneOperation(m)
-        if(opRes.isFailure) println(opRes)
+        if (opRes.isFailure) println(opRes)
         opRes
       })
     }.ensuring(_.isSuccess)
 
-    val proof = persistentProver.generateProof
+    val proof = persistentProver.generateProofAndUpdateStorage()
 
     val digest = persistentProver.digest
 
@@ -72,7 +74,8 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
-    p.rollback(version).map { _ =>
+    val hash = ADDigest @@ store.get(ByteArrayWrapper(version)).get.data
+    p.rollback(hash).map { _ =>
       new UtxoState(version, store) {
         override protected lazy val persistentProver = p
       }
@@ -100,11 +103,21 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
     case fb: ErgoFullBlock =>
 
       //todo: rollback if failure on the way
-      checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
-        val proofBytes = persistentProver.generateProof
-        val proofHash = ADProofs.proofDigest(proofBytes)
-        assert(fb.header.ADProofsRoot.sameElements(proofHash))
-        new UtxoState(store)
+      checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot) match {
+        case Success(_) =>
+          Try {
+            val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = fb.id -> fb.header.stateRoot
+            val stateDigestIdIdxElem = Algos.hash(fb.header.stateRoot) -> fb.id
+            val bestVersion = bestVersionKey -> fb.id
+
+            val metaData = Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
+
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(metaData)
+            val proofHash = ADProofs.proofDigest(proofBytes)
+            assert(fb.header.ADProofsRoot.sameElements(proofHash))
+            new UtxoState(VersionTag @@ fb.id, store)
+          }
+        case Failure(e) => ???
       }
 
     case a: Any =>
@@ -118,23 +131,25 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
       .map(AnyoneCanSpendNoncedBoxSerializer.parseBytes)
       .flatMap(_.toOption)
 
-  override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions
+  override def rollbackVersions: Iterable[VersionTag] =
+    persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
 }
 
 object UtxoState {
 
-  def create(dir:File): UtxoState = {
+  //todo: check database state, read version from it
+  def create(versionTag: Option[VersionTag], dir: File): UtxoState = {
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
-    new UtxoState(store)
+    new UtxoState(versionTag.getOrElse(ErgoState.genesisStateVersion), store)
   }
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
-    val p = new BatchAVLProver[Digest32, Blake2b256](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
 
-    new UtxoState(store) {
+    new UtxoState(ErgoState.genesisStateVersion, store) {
       override protected lazy val persistentProver = PersistentBatchAVLProver.create(p, storage).get
 
       assert(persistentProver.digest.sameElements(storage.version.get))

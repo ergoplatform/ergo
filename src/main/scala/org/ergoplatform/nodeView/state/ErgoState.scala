@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.{ModifierId, VersionTag}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
@@ -80,9 +80,12 @@ object ErgoState extends ScorexLogging {
     DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
   }
 
-  val preGenesisStateDigest: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
+  val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
+  //33 bytes
   val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
-  val afterGenesisStateDigest: Digest32 = Digest32 @@ Base16.decode(afterGenesisStateDigestHex)
+  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
+
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.directory}/state")
@@ -91,8 +94,11 @@ object ErgoState extends ScorexLogging {
     if (stateDir.listFiles().isEmpty) {
       None
     } else {
-      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption
-      else Some(UtxoState.create(stateDir))
+      //todo: considering db state
+
+
+      if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, stateDir).toOption
+      else Some(UtxoState.create(None, stateDir))
     }
   }
 }

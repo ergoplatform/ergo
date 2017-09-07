@@ -41,8 +41,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 object BlockTransactions {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
-  //todo: asInstanceOf
-  def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(ids.asInstanceOf[Seq[LeafData]])
+  def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(LeafData @@ ids)
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {

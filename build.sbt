@@ -15,9 +15,9 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
 
 
 libraryDependencies ++= Seq(
-  "org.scorexfoundation" %% "iodb" % "0.3.1",
+  "org.scorexfoundation" %% "iodb" % "0.3.2-SNAPSHOT",
   "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.8",
+  "org.scorexfoundation" %% "avl-iodb" % "0.2.9",
   "com.storm-enroute" %% "scalameter" % "0.8.2",
   "com.iheart" %% "ficus" % "1.4.1",
 

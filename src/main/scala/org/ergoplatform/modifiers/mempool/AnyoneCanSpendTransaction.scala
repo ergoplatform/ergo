@@ -10,6 +10,7 @@ import org.ergoplatform.settings.Algos.hash
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
@@ -25,7 +26,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Val
     AnyoneCanSpendNoncedBox.idFromBox(nonce)
   }
 
-  lazy val hashNoNonces: hash.Digest = Algos.hash(
+  lazy val hashNoNonces: Digest32 = Algos.hash(
     Bytes.concat(scorex.core.utils.concatFixLengthBytes(boxIdsToOpen),
       scorex.core.utils.concatFixLengthBytes(to.map(v => Longs.toByteArray(v))))
   )

@@ -49,7 +49,7 @@ class AdProofSpec extends PropSpec
     forAll(Gen.choose(0, 1000)) { s =>
       whenever(s >= 0) {
         val (operations, prevDigest, newDigest, pf) = createEnv(s)
-        val proof = ADProof(Array.fill(32)(0.toByte), pf)
+        val proof = ADProofs(Array.fill(32)(0.toByte), pf)
         proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'success
       }
     }
@@ -57,19 +57,19 @@ class AdProofSpec extends PropSpec
 
   property("verify should be failed if first operation is missed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     proof.verify(BoxStateChanges(operations.tail), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if last operation is missed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     proof.verify(BoxStateChanges(operations.init), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     val moreInsertions = operations :+
       Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(11L, 1L))
     proof.verify(BoxStateChanges(moreInsertions), prevDigest, newDigest) shouldBe 'failure
@@ -77,7 +77,7 @@ class AdProofSpec extends PropSpec
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     val differentInsertions = operations.init :+
       Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](AnyoneCanSpendNoncedBox(11L, 1L))
     proof.verify(BoxStateChanges(differentInsertions), prevDigest, newDigest) shouldBe 'failure
@@ -85,7 +85,7 @@ class AdProofSpec extends PropSpec
 
   property("verify should be failed if there are operations in different order") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     val operationsInDifferentOrder = operations.last +: operations.init
     proof.verify(BoxStateChanges(operationsInDifferentOrder), prevDigest, newDigest) shouldBe 'failure
   }
@@ -93,20 +93,20 @@ class AdProofSpec extends PropSpec
   //todo: what to do with that?
   ignore("verify should be failed if there are more proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf :+ 't'.toByte)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf :+ 't'.toByte)
     proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are less proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
-    val proof = ADProof(Array.fill(32)(0.toByte), pf.init)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf.init)
     proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are different proof bytes") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     pf.update(4, 6.toByte)
-    val proof = ADProof(Array.fill(32)(0.toByte), pf)
+    val proof = ADProofs(Array.fill(32)(0.toByte), pf)
     proof.verify(BoxStateChanges(operations), prevDigest, newDigest) shouldBe 'failure
   }
 
@@ -114,6 +114,6 @@ class AdProofSpec extends PropSpec
     val (operations1, prevDigest1, newDigest1, pf1) = createEnv()
     val (operations2, prevDigest2, newDigest2, pf2) = createEnv()
 
-    ADProof.proofDigest(pf1) shouldBe ADProof.proofDigest(pf2)
+    ADProofs.proofDigest(pf1) shouldBe ADProofs.proofDigest(pf2)
   }
 }

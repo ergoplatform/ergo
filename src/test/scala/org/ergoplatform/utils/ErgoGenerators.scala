@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, DefaultFakePowScheme, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -134,10 +134,10 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- Gen.nonEmptyListOf(invalidAnyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val randomADProofsGen: Gen[ADProof] = for {
+  lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- genBytesList(Constants.ModifierIdSize)
     proof <- genBoundedBytes(32, 32 * 1024)
-  } yield ADProof(headerId, proof)
+  } yield ADProofs(headerId, proof)
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]

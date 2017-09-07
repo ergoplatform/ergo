@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.ADProof
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -40,7 +40,7 @@ class UtxoStateSpecification extends PropSpec
       val (proof1, digest1) = us.proofsForTransactions(txs).get
       val (proof2, digest2) = us.proofsForTransactions(txs).get
 
-      ADProof.proofDigest(proof1) shouldBe ADProof.proofDigest(proof2)
+      ADProofs.proofDigest(proof1) shouldBe ADProofs.proofDigest(proof2)
       digest1 shouldBe digest2
     }
   }

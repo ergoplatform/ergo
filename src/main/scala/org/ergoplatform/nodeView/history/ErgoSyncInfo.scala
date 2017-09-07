@@ -49,9 +49,7 @@ object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
     val fullBlockIdOpt = if (fullBlockIsDefined) Some(ModifierId @@ bytes.slice(1, 33)) else None
     val startPosition = if (fullBlockIsDefined) 33 else 1
 
-    //todo: asInstanceOf
-    val ids = bytes.slice(startPosition, bytes.length).grouped(NodeViewModifier.ModifierIdSize)
-      .toSeq.asInstanceOf[Seq[ModifierId]]
+    val ids = ModifierId @@ bytes.slice(startPosition, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
 
     ErgoSyncInfo(answer, ids, fullBlockIdOpt)
   }

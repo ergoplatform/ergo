@@ -22,8 +22,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   override lazy val json: Json = ???
 
-  //todo: asInstanceOf
-  lazy val rootHash: Digest32 = Algos.merkleTreeRoot(chunkRootHashes.asInstanceOf[Seq[LeafData]])
+  lazy val rootHash: Digest32 = Algos.merkleTreeRoot(LeafData @@ chunkRootHashes)
 }
 
 object UTXOSnapshotManifest {

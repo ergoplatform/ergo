@@ -63,6 +63,8 @@ class DigestState private (override val version: VersionTag, override val rootHa
 }
 
 object DigestState {
+
+  //todo: rework, this method is very wrong
   def create(version: VersionTag, rootHashOpt: Option[ADDigest], dir: File): Try[DigestState] = Try {
     val store = new LSMStore(dir, keepVersions = 10)
 
@@ -70,16 +72,17 @@ object DigestState {
 
       case Some(rootHash) =>
         if (store.lastVersionID.isDefined) {
-          new DigestState(rootHash, store)
+          new DigestState(version, rootHash, store)
         } else {
-          new DigestState(rootHash, store).update(rootHash).get //sync store
+          new DigestState(version, rootHash, store).update(version, rootHash).get //sync store
         }.ensuring(store.lastVersionID.get.data.sameElements(rootHash))
 
       case None =>
-        val rootHash = store.lastVersionID.get.data
-        new DigestState(rootHash, store)
+        val rootHash = ADDigest @@ store.get(store.lastVersionID.get).get.data
+
+        new DigestState(version, rootHash, store)
     }
   }
 
-  def create(rootHash: ADDigest, dir: File): Try[DigestState] = create(Some(rootHash), dir)
+  def create(rootHash: ADDigest, dir: File): Try[DigestState] = create(ErgoState.genesisStateVersion, Some(rootHash), dir)
 }

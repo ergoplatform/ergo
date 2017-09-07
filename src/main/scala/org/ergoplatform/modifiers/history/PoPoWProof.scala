@@ -4,7 +4,7 @@ import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 
 import scala.util.{Failure, Success, Try}
@@ -16,9 +16,9 @@ case class PoPoWProof(m: Byte,
                       suffix: Seq[Header])(implicit poWScheme: PoWScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
-  override val modifierTypeId: ModifierTypeId = PoPoWProof.ModifierTypeId
+  override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
 
-  override lazy val id: ModifierId = Algos.hash(bytes)
+  override lazy val id: ModifierId = ModifierId @@ Algos.hash(bytes)
 
   override type M = PoPoWProof
 
@@ -32,7 +32,7 @@ case class PoPoWProof(m: Byte,
 }
 
 object PoPoWProof {
-  val ModifierTypeId: Byte = 105: Byte
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (105: Byte)
 }
 
 class PoPoWProofUtils(poWScheme: PoWScheme) {

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
-import scorex.core.NodeViewModifier._
+import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 import scorex.crypto.encode.Base16
@@ -48,7 +48,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected def validityKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(ModifierId @@ _.data)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -81,10 +81,10 @@ trait HeadersProcessor extends ScorexLogging {
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
       log.info(s"New best header ${m.encodedId}")
       //TODO Notify node view holder that it should download transactions ?
-      ProgressInfo(None, Seq(), Seq(m))
+      ProgressInfo(None, Seq(), Seq(m), Seq())
     } else {
       log.info(s"New orphaned header ${m.encodedId}, best: ${}")
-      ProgressInfo(None, Seq(), Seq())
+      ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }
 
@@ -147,7 +147,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val historyStorage: HistoryStorage
 
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
 
@@ -167,8 +167,8 @@ trait HeadersProcessor extends ScorexLogging {
     *         single id if no forks on this height
     *         multiple ids if there are forks at chosen height
     */
-  protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
-    .map(_.data).getOrElse(Array()).grouped(32).toSeq
+  protected def headerIdsAtHeight(height: Int): Seq[ModifierId] =
+    historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

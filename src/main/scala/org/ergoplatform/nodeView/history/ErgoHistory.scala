@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{AD
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
-import scorex.core.NodeViewModifier._
+import scorex.core._
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.utils.ScorexLogging
@@ -101,7 +101,7 @@ trait ErgoHistory
           (this, process(m))
         case m: BlockTransactions =>
           (this, process(m))
-        case m: ADProof =>
+        case m: ADProofs =>
           (this, process(m))
         case m: PoPoWProof =>
           (this, process(m))
@@ -175,15 +175,15 @@ trait ErgoHistory
     val startId = headerIdsAtHeight(heightFrom).head
     val startHeader = typedModifierById[Header](startId).get
     val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
-      .headers.map(h => Header.ModifierTypeId -> h.id)
+      .headers.map(h => Header.modifierTypeId -> h.id)
     val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
       case Some(bestFullBlockHeight) =>
         val heightFrom = Math.min(height, bestFullBlockHeight + size)
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
-        headers.headers.flatMap(h => Seq((ADProof.ModifierTypeId, h.ADProofsId),
-          (BlockTransactions.ModifierTypeId, h.transactionsId)))
+        headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
+          (BlockTransactions.modifierTypeId, h.transactionsId)))
       case _ => Seq()
     }
     headerIds ++ fullBlockContinuation
@@ -217,7 +217,7 @@ trait ErgoHistory
         validate(m)
       case m: BlockTransactions =>
         validate(m)
-      case m: ADProof =>
+      case m: ADProofs =>
         validate(m)
       case m: PoPoWProof =>
         validate(m)
@@ -229,7 +229,7 @@ trait ErgoHistory
   }
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
-    val aDProofs = typedModifierById[ADProof](header.ADProofsId)
+    val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs)
   }
@@ -291,17 +291,17 @@ trait ErgoHistory
     if(!valid) {
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
         case h: Header => toDrop(h)
-        case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
+        case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
         case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
         case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
         case m =>
           log.warn(s"reportInvalid for invalid modifier type: $m")
           Seq(ByteArrayWrapper(m.id)) -> Seq()
       }
-      historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
+      historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     }
 
-    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq()) //todo: dumb values, fix
+    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq()) //todo: dumb values, fix
     this -> progressInto
   }
 

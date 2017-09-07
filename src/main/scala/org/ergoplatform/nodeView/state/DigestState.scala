@@ -3,12 +3,13 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import scorex.core.transaction.state.MinimalState.VersionTag
-import ErgoState.Digest
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.modifiers.history.ADProof
+import org.ergoplatform.modifiers.history.ADProofs
+import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -16,7 +17,7 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-class DigestState private (override val rootHash: Digest, store: Store)
+class DigestState private (override val rootHash: Digest32, store: Store)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
@@ -26,7 +27,7 @@ class DigestState private (override val rootHash: Digest, store: Store)
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        assert(ADProof.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
+        assert(ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
 
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot
@@ -39,7 +40,7 @@ class DigestState private (override val rootHash: Digest, store: Store)
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 
-  private def update(newVersion: Digest): Try[DigestState] = Try {
+  private def update(newVersion: Digest32): Try[DigestState] = Try {
     store.update(ByteArrayWrapper(newVersion), Seq(), Seq())
     new DigestState(newVersion, store)
   }
@@ -56,7 +57,7 @@ class DigestState private (override val rootHash: Digest, store: Store)
     Try(store.rollback(ByteArrayWrapper(version))).map(_ => new DigestState(rootHash = version, store))
   }
 
-  override def rollbackVersions: Iterable[Digest] = store.rollbackVersions().map(_.data)
+  override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
 }
 
 object DigestState {

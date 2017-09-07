@@ -4,8 +4,9 @@ import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
@@ -20,7 +21,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   override lazy val json: Json = ???
 
-  lazy val rootHash: Array[Byte] = Algos.merkleTreeRoot(chunkRootHashes)
+  lazy val rootHash: Digest32 = Algos.merkleTreeRoot(chunkRootHashes)
 }
 
 object UTXOSnapshotManifest {

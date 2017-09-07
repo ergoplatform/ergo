@@ -9,12 +9,13 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.Constants
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -22,9 +23,9 @@ import scala.util.Try
 case class Header(version: Version,
                   override val parentId: BlockId,
                   interlinks: Seq[Array[Byte]],
-                  ADProofsRoot: Digest,
-                  stateRoot: Array[Byte], //33 bytes! extra byte with tree height here!
-                  transactionsRoot: Digest,
+                  ADProofsRoot: Digest32,
+                  stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
+                  transactionsRoot: Digest32,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
@@ -33,14 +34,14 @@ case class Header(version: Version,
                   equihashSolutions: Array[Byte]
                  ) extends ErgoPersistentModifier {
 
-  override val modifierTypeId: ModifierTypeId = Header.ModifierTypeId
+  override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
   //todo: why not powHash?
-  override lazy val id: ModifierId = powHash
+  override lazy val id: ModifierId = ModifierId @@ powHash
 
   //todo: why SHA256?
   //todo: tolsi: check this
-  lazy val powHash: Digest = {
+  lazy val powHash: Digest32 = {
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
     val bytes = HeaderSerializer.bytesWithoutPow(this)
@@ -54,15 +55,16 @@ case class Header(version: Version,
     secondDigest.update(h, 0, h.length)
     val result = new Array[Byte](32)
     secondDigest.doFinal(result, 0)
-    result
+
+    Digest32 @@ result
   }
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProof.ModifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
   lazy val transactionsId: ModifierId =
-    ModifierWithDigest.computeId(BlockTransactions.ModifierTypeId, id, transactionsRoot)
+    ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
@@ -89,9 +91,9 @@ case class Header(version: Version,
 }
 
 object Header {
-  val ModifierTypeId: Byte = 101: Byte
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
-  lazy val GenesisParentId: Digest = Array.fill(Constants.hashLength)(0: Byte)
+  lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
 }
 
 
@@ -144,10 +146,10 @@ object HeaderSerializer extends Serializer[Header] {
 
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
-    val parentId = bytes.slice(1, 33)
-    val ADProofsRoot = bytes.slice(33, 65)
-    val transactionsRoot = bytes.slice(65, 97)
-    val stateRoot = bytes.slice(97, 130)
+    val parentId = ModifierId @@ bytes.slice(1, 33)
+    val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
+    val transactionsRoot = Digest32 @@ bytes.slice(65, 97)
+    val stateRoot = ADDigest @@ bytes.slice(97, 130)
     val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
     val votes = bytes.slice(138, 143)
     val nBits = RequiredDifficulty.parseBytes(bytes.slice(143, 147)).get

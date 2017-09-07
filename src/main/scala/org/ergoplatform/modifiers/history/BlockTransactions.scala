@@ -6,11 +6,13 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
+import scorex.crypto.authds.LeafData
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
@@ -21,9 +23,9 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
 
-  override val modifierTypeId: ModifierTypeId = BlockTransactions.ModifierTypeId
+  override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
-  override def digest: Array[ModifierTypeId] = BlockTransactions.rootHash(txs.map(_.id))
+  override def digest: Digest32 = BlockTransactions.rootHash(txs.map(_.id))
 
   override type M = BlockTransactions
 
@@ -37,21 +39,21 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 }
 
 object BlockTransactions {
-  val ModifierTypeId: Byte = 102: Byte
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
-  def rootHash(ids: Seq[Array[Byte]]): Array[Byte] = Algos.merkleTreeRoot(ids)
+  def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(ids)
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
-  override def toBytes(obj: BlockTransactions): Array[ModifierTypeId] = {
+  override def toBytes(obj: BlockTransactions): Array[Byte] = {
     val txsBytes = concatBytes(obj.txs.map{tx =>
       assert(tx.bytes.length.toShort % 8 == 0)
       Bytes.concat(Shorts.toByteArray(tx.bytes.length.toShort), tx.bytes)})
     Bytes.concat(obj.headerId, txsBytes)
   }
 
-  override def parseBytes(bytes: Array[ModifierTypeId]): Try[BlockTransactions] = Try {
-    val headerId = bytes.slice(0, Constants.ModifierIdSize)
+  override def parseBytes(bytes: Array[Byte]): Try[BlockTransactions] = Try {
+    val headerId: ModifierId = ModifierId @@ bytes.slice(0, Constants.ModifierIdSize)
 
     def parseTransactions(index: Int, acc: Seq[AnyoneCanSpendTransaction]): BlockTransactions = {
       if (index == bytes.length) {

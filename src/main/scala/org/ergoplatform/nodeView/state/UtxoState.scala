@@ -3,15 +3,15 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.{LSMStore, Store}
+import org.bouncycastle.jcajce.provider.digest.Blake2b.Blake2b256
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.ADProof
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
-import org.ergoplatform.nodeView.state.ErgoState.Digest
-import scorex.core.transaction.state.MinimalState.VersionTag
-import scorex.crypto.authds.avltree.AVLValue
+import scorex.core.VersionTag
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.hash.Blake2b256Unsafe
+import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 
 import scala.util.{Failure, Success, Try}
 
@@ -26,8 +26,10 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
-  protected lazy val persistentProver: PersistentBatchAVLProver[Blake2b256Unsafe] =
-    PersistentBatchAVLProver.create(new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage).get
+  protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] =
+    PersistentBatchAVLProver.create(
+      new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage
+    ).get
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
@@ -37,15 +39,15 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
   }
 
   //TODO not efficient at all
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(ADProof.ProofRepresentation, Digest)] = Try {
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = Try {
     require(persistentProver.digest.sameElements(rootHash))
     require(storage.version.get.sameElements(rootHash))
     require(store.lastVersionID.get.data.sameElements(rootHash))
 
     persistentProver.checkTree(true)
 
-    val mods = boxChanges(txs).operations.map(ADProof.changeToMod)
-    mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
+    val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         val opRes = persistentProver.performOneOperation(m)
         if(opRes.isFailure) println(opRes)
@@ -66,7 +68,7 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
     proof -> digest
   }
 
-  override val rootHash: Digest = persistentProver.digest
+  override val rootHash: ADDigest = persistentProver.digest
 
   //todo: the same question as with DigestState.version
   override def version: VersionTag = rootHash
@@ -81,12 +83,12 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
   }
 
   //todo: don't use assert
-  private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: Digest) = Try {
+  private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
 
-    val mods = boxChanges(transactions).operations.map(ADProof.changeToMod)
-    mods.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, m) =>
+    val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
+    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
       })
@@ -102,8 +104,8 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
 
       //todo: rollback if failure on the way
       checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot).map { _ =>
-        val proofBytes: Array[Byte] = persistentProver.generateProof
-        val proofHash = ADProof.proofDigest(proofBytes)
+        val proofBytes = persistentProver.generateProof
+        val proofHash = ADProofs.proofDigest(proofBytes)
         assert(fb.header.ADProofsRoot.sameElements(proofHash))
         new UtxoState(store)
       }
@@ -113,13 +115,13 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
       Failure(new Exception("unknown modifier"))
   }
 
-  def boxById(id: Digest): Option[AnyoneCanSpendNoncedBox] =
+  def boxById(id: ADKey): Option[AnyoneCanSpendNoncedBox] =
     persistentProver
       .unauthenticatedLookup(id)
       .map(AnyoneCanSpendNoncedBoxSerializer.parseBytes)
       .flatMap(_.toOption)
 
-  override def rollbackVersions: Iterable[Digest] = persistentProver.storage.rollbackVersions
+  override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions
 }
 
 object UtxoState {
@@ -130,8 +132,8 @@ object UtxoState {
   }
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
-    val p = new BatchAVLProver(keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
-    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, b.bytes)).ensuring(_.isSuccess))
+    val p = new BatchAVLProver[Digest32, Blake2b256](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
 

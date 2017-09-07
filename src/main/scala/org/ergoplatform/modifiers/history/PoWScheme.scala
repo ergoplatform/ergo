@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Constants
+import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
 
@@ -15,29 +16,31 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 trait PoWScheme {
   def prove(parentOpt: Option[Header],
             nBits: Long,
-            stateRoot: Array[Byte],
-            adProofsRoot: Array[Byte],
-            transactionsRoot: Array[Byte],
+            stateRoot: ADDigest,
+            adProofsRoot: Digest32,
+            transactionsRoot: Digest32,
             timestamp: Timestamp,
             votes: Array[Byte]): Header
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
-                 stateRoot: Array[Byte],
-                 adProofBytes: ADProof.ProofRepresentation,
+                 stateRoot: ADDigest,
+                 adProofBytes: SerializedAdProof,
                  transactions: Seq[AnyoneCanSpendTransaction],
                  timestamp: Timestamp,
                  votes: Array[Byte]): ErgoFullBlock = {
 
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
-    val adProofsRoot = ADProof.proofDigest(adProofBytes)
+    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     val h = prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes)
-    val adProofs = ADProof(h.id, adProofBytes)
+    val adProofs = ADProofs(h.id, adProofBytes)
 
     new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
   }
@@ -54,7 +57,7 @@ trait PoWScheme {
 
     val version = 0: Byte
 
-    val parentId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+    val parentId: ModifierId = ModifierId @@ parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, version, interlinks, height)
   }
@@ -74,9 +77,9 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
   override def prove(parentOpt: Option[Header],
                      nBits: Long,
-                     stateRoot: Array[Byte],
-                     adProofsRoot: Array[Byte],
-                     transactionsRoot: Array[Byte],
+                     stateRoot: ADDigest,
+                     adProofsRoot: Digest32,
+                     transactionsRoot: Digest32,
                      timestamp: Timestamp,
                      votes: Array[Byte]): Header = {
 
@@ -89,8 +92,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     val wordsPerHash = 512 / n
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson)
-    val h = Header(version, parentId, interlinks,
-      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes, nonce = 0L, null)
+    val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, votes, nonce = 0L, null)
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
@@ -134,8 +137,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
 class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
 
-  override def prove(parentOpt: Option[Header], nBits: Long, stateRoot: Array[Byte], adProofsRoot: Array[Byte],
-                     transactionsRoot: Array[Byte], timestamp: Timestamp, votes: Array[Byte]): Header = {
+  override def prove(parentOpt: Option[Header], nBits: Long, stateRoot: ADDigest, adProofsRoot: Digest32,
+                     transactionsRoot: Digest32, timestamp: Timestamp, votes: Array[Byte]): Header = {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 

@@ -6,6 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{JsonSerializable, Serializer}
 import scorex.core.transaction.box.Box
+import scorex.crypto.authds.ADKey
 import scorex.crypto.encode.Base58
 
 import scala.util.Try
@@ -21,7 +22,7 @@ case class AnyoneCanSpendNoncedBox(nonce: Long, override val value: Long)
     "value" -> value.asJson
   ).asJson
 
-  override val id: Array[Byte] = Algos.hash(Longs.toByteArray(nonce))
+  override val id: ADKey = ADKey @@ Algos.hash(Longs.toByteArray(nonce))
 
   override type M = AnyoneCanSpendNoncedBox
 

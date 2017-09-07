@@ -20,7 +20,7 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(val store: Store) extends ErgoState[UtxoState] {
+class UtxoState(override val version: VersionTag, val store: Store) extends ErgoState[UtxoState] {
 
   implicit val hf = new Blake2b256Unsafe
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
@@ -70,13 +70,10 @@ class UtxoState(val store: Store) extends ErgoState[UtxoState] {
 
   override val rootHash: ADDigest = persistentProver.digest
 
-  //todo: the same question as with DigestState.version
-  override def version: VersionTag = rootHash
-
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     p.rollback(version).map { _ =>
-      new UtxoState(store) {
+      new UtxoState(version, store) {
         override protected lazy val persistentProver = p
       }
     }

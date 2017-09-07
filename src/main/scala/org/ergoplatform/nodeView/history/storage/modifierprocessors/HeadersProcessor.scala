@@ -168,7 +168,8 @@ trait HeadersProcessor extends ScorexLogging {
     *         multiple ids if there are forks at chosen height
     */
   protected def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
+    historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32)
+      .toSeq.asInstanceOf[Seq[ModifierId]]   //todo: asInstanceOf
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

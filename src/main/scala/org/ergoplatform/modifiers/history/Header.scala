@@ -22,7 +22,7 @@ import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: BlockId,
-                  interlinks: Seq[Array[Byte]],
+                  interlinks: Seq[ModifierId],
                   ADProofsRoot: Digest32,
                   stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
                   transactionsRoot: Digest32,
@@ -156,10 +156,10 @@ object HeaderSerializer extends Serializer[Header] {
     val height = Ints.fromByteArray(bytes.slice(147, 151))
 
     @tailrec
-    def parseInterlinks(index: Int, endIndex: Int, acc: Seq[Array[Byte]]): Seq[Array[Byte]] = if (endIndex > index) {
+    def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
-      val link: Array[Byte] = bytes.slice(index + 1, index + 33)
-      val links: Seq[Array[Byte]] = Array.fill(repeatN)(link)
+      val link: ModifierId = ModifierId @@ bytes.slice(index + 1, index + 33)
+      val links: Seq[ModifierId] = Array.fill(repeatN)(link)
       parseInterlinks(index + 33, endIndex, acc ++ links)
     } else {
       acc

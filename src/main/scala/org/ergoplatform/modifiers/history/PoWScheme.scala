@@ -50,7 +50,7 @@ trait PoWScheme {
   def realDifficulty(header: Header): BigInt
 
   protected def derivedHeaderFields(parentOpt: Option[Header]) = {
-    val interlinks: Seq[Array[Byte]] =
+    val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)

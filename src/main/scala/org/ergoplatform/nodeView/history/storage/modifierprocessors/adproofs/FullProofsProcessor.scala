@@ -25,7 +25,7 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
             historyStorage.insert(m.id, modifierRow)
-            ProgressInfo(None, Seq(), Seq())
+            ProgressInfo(None, Seq(), Seq(), Seq())
         }
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")

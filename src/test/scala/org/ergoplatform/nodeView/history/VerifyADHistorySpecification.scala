@@ -54,7 +54,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.contains(parentHeader.transactionsId) shouldBe true
       history.contains(parentHeader.ADProofsId) shouldBe true
 
-      val (repHistory, _) = history.reportSemanticValidity(fullBlock.blockTransactions, false)
+      //todo: why parentHeader.id?
+      val (repHistory, _) = history.reportSemanticValidity(fullBlock.blockTransactions, false, parentHeader.id)
       repHistory.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       repHistory.bestHeaderOpt.get shouldBe parentHeader
     }

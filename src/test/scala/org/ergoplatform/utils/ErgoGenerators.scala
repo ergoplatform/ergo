@@ -10,7 +10,10 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
+import scorex.core.NodeViewModifier
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
@@ -36,23 +39,37 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
-    idGenerator <- genBytesList(Constants.ModifierIdSize)
-    ids <- Gen.nonEmptyListOf(idGenerator).map(_.take(ErgoSyncInfo.MaxBlockIds))
-    fullBlockOpt <- Gen.option(idGenerator)
+    ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
+    fullBlockOpt <- Gen.option(modifierIdGen)
   } yield ErgoSyncInfo(answer, ids, fullBlockOpt)
+
+  lazy val digest32Gen: Gen[Digest32] = {
+    val x = Digest32 @@ genBytesList(32)
+    x
+  }
+
+  lazy val stateRootGen: Gen[ADDigest] = {
+    val x = ADDigest @@ genBytesList(Constants.ModifierIdSize + 1)
+    x
+  }
+
+  lazy val serializedAdProofGen: Gen[SerializedAdProof] = {
+    val x = SerializedAdProof @@ genBoundedBytes(32, 32 * 1024)
+    x
+  }
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
-    parentId <- genBytesList(Constants.ModifierIdSize)
-    stateRoot <- genBytesList(Constants.ModifierIdSize + 1)
-    adRoot <- genBytesList(Constants.ModifierIdSize)
-    transactionsRoot <- genBytesList(Constants.ModifierIdSize)
+    parentId <- modifierIdGen
+    stateRoot <- stateRootGen
+    adRoot <- digest32Gen
+    transactionsRoot <- digest32Gen
     nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[Int]
     height <- Gen.choose(1, Int.MaxValue)
     equihashSolutions <- genBytesList(Constants.ModifierIdSize)
     height <- Gen.choose(1, Int.MaxValue)
-    interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
+    interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, requiredDifficulty, height, votes, nonce,
@@ -130,13 +147,13 @@ trait ErgoGenerators extends CoreGenerators {
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
-    headerId <- genBytesList(Constants.ModifierIdSize)
+    headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidAnyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {
-    headerId <- genBytesList(Constants.ModifierIdSize)
-    proof <- genBoundedBytes(32, 32 * 1024)
+    headerId <- modifierIdGen
+    proof <- serializedAdProofGen
   } yield ADProofs(headerId, proof)
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {

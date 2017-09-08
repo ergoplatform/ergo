@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers, _}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 

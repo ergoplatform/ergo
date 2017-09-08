@@ -7,6 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTime
+import scorex.crypto.authds._
+import scorex.crypto.hash._
 
 import scala.annotation.tailrec
 import scala.util.Random
@@ -14,6 +16,9 @@ import scala.util.Random
 trait ChainGenerator {
 
   val powScheme = DefaultFakePowScheme
+  private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
+  private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
+  private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
   def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
     genHeaderChain(height, history.bestHeaderOpt.toSeq)
@@ -28,29 +33,26 @@ trait ChainGenerator {
     val header = powScheme.prove(
       acc.headOption,
       Constants.InitialNBits,
-      Array.fill(hashLength + 1)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
+      EmptyStateRoot,
+      EmptyDigest32,
+      EmptyDigest32,
       Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time())),
       Array.fill(5)(0.toByte)
     ): Header
     genHeaderChain(until, header +: acc)
   }
 
-
   @tailrec
   final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
     acc.reverse
   } else {
     val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq(height.toLong), IndexedSeq(1L)))
-    val proofs = scorex.utils.Random.randomBytes(Random.nextInt(5000))
-    val stateRoot = Array.fill(32 + 1)(0.toByte)
     val votes = Array.fill(5)(0.toByte)
 
     val block = powScheme.proveBlock(acc.headOption.map(_.header),
       Constants.InitialNBits,
-      stateRoot,
-      proofs,
+      EmptyStateRoot,
+      emptyProofs,
       txs,
       Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time())),
       votes)

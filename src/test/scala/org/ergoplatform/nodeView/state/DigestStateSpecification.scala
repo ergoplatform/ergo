@@ -69,7 +69,7 @@ class DigestStateSpecification extends PropSpec
 
       ds2.rootHash.sameElements(ds.rootHash) shouldBe false
 
-      val ds3 = ds2.rollbackTo(ErgoState.genesisStateVersion).get
+      val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash
 
       ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash

@@ -87,7 +87,7 @@ class UtxoStateSpecification extends PropSpec
 
       us.rootHash.sameElements(us2.rootHash) shouldBe false
 
-      val us3 = us2.rollbackTo(us.rootHash).get
+      val us3 = us2.rollbackTo(us.version).get
       us3.rootHash shouldBe us.rootHash
       us3.version shouldBe us.version
 

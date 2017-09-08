@@ -6,7 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{JsonSerializable, Serializer}
 import scorex.core.transaction.box.Box
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds._
 import scorex.crypto.encode.Base58
 
 import scala.util.Try
@@ -27,6 +27,8 @@ case class AnyoneCanSpendNoncedBox(nonce: Long, override val value: Long)
   override type M = AnyoneCanSpendNoncedBox
 
   override lazy val serializer: Serializer[AnyoneCanSpendNoncedBox] = AnyoneCanSpendNoncedBoxSerializer
+
+  override lazy val bytes: ADValue = ADValue @@ serializer.toBytes(this)
 }
 
 object AnyoneCanSpendNoncedBox {

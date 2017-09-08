@@ -13,7 +13,7 @@ trait EmptyADProofsProcessor extends ADProofsProcessor {
   protected val adState: Boolean = false
 
   override protected def process(m: ADProofs): ProgressInfo[ErgoPersistentModifier] =
-    ProgressInfo(None, Seq(), Seq(), Seq())
+    ProgressInfo(None, Seq(), Seq())
 
   override protected def validate(m: ADProofs): Try[Unit] = Failure(new Error("Regime that do not process ADProofs"))
 }

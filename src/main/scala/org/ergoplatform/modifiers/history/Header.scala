@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 case class Header(version: Version,
-                  override val parentId: BlockId,
+                  override val parentId: ModifierId,
                   interlinks: Seq[ModifierId],
                   ADProofsRoot: Digest32,
                   stateRoot: ADDigest, //33 bytes! extra byte with tree height here!

@@ -8,14 +8,13 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState, VersionedInMemoryBoxHolder}
-import scorex.core.TransactionsCarryingPersistentNodeViewModifier
-import scorex.core.transaction.state.MinimalState.VersionTag
+import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag}
 
 import scala.util.{Failure, Success, Try}
 
 
 class WrappedUtxoState(store: Store, val versionedBoxHolder: VersionedInMemoryBoxHolder)
-  extends UtxoState(store) {
+  extends UtxoState(??? ,store) {
 
   private type TCPMOD =
     TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]

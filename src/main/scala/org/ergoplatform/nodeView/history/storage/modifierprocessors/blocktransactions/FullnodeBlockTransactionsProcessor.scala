@@ -29,7 +29,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
             historyStorage.insert(txs.id, modifierRow)
-            ProgressInfo(None, Seq(), Seq(), Seq())
+            ProgressInfo(None, Seq(), Seq())
         }
       case _ =>
         throw new Error(s"Header for modifier $txs is no defined")

@@ -15,7 +15,10 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
+import scorex.core.ModifierId
 import scorex.core.utils.NetworkTime
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
@@ -52,16 +55,16 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
     DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
       Constants.InitialNBits,
-      Array.fill(hashLength + 1)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
+      ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
+      Digest32 @@ Array.fill(hashLength)(0.toByte),
+      Digest32 @@ Array.fill(hashLength)(0.toByte),
       Math.max(NetworkTime.time(), bestTimestamp),
       Array.fill(5)(0.toByte)
     )
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =
-    syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
+    syntacticallyValidModifier(history).copy(parentId = ModifierId @@ Random.randomBytes(32))
 
   override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map { bh =>
     val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(10000000)}")

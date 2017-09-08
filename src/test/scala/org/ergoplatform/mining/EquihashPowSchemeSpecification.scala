@@ -8,6 +8,8 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash._
 
 class EquihashPowSchemeSpecification extends PropSpec
   with PropertyChecks
@@ -24,8 +26,8 @@ class EquihashPowSchemeSpecification extends PropSpec
     powScheme.proveBlock(
       None,
       RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
-      Array.fill(33)(0: Byte),
-      Array.emptyByteArray,
+      ADDigest @@ Array.fill(33)(0: Byte),
+      SerializedAdProof @@ Array.emptyByteArray,
       Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))), 1L, Array.emptyByteArray)
   }
 
@@ -48,6 +50,6 @@ class EquihashPowSchemeSpecification extends PropSpec
 
   property("Valid block should be invalid by pow after AD proofs root modification") {
     val b = createValidBlock()
-    powScheme.verify(b.copy(header = b.header.copy(ADProofsRoot = Array.emptyByteArray)).header) shouldBe false
+    powScheme.verify(b.copy(header = b.header.copy(ADProofsRoot = Digest32 @@ Array.emptyByteArray)).header) shouldBe false
   }
 }

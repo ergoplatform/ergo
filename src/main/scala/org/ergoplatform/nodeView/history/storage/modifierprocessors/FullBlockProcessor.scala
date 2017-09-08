@@ -64,14 +64,14 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
           if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
         }
-        ProgressInfo(Some(prevChain.head.id), toRemove, toApply, Seq())
+        ProgressInfo(Some(prevChain.head.id), toRemove, toApply)
       case (None, _, _) =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
         historyStorage.insert(storageVersion, Seq(newModRow))
-        ProgressInfo(None, Seq(), Seq(), Seq())
+        ProgressInfo(None, Seq(), Seq())
     }
   }
 
@@ -92,6 +92,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                                 storageVersion: ModifierId,
                                 fullBlock: ErgoFullBlock): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
-    ProgressInfo(None, Seq(), Seq(fullBlock), Seq())
+    ProgressInfo(None, Seq(), Seq(fullBlock))
   }
 }

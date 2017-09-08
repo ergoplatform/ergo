@@ -117,7 +117,9 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
-        case Failure(e) => ???
+        case Failure(e) =>
+          log.warn(s"Error while applying a modifier ${mod.id}: ", e)
+          Failure(e)
       }
 
     case a: Any =>

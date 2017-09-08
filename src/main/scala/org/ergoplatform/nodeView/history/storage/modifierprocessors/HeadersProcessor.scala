@@ -81,10 +81,10 @@ trait HeadersProcessor extends ScorexLogging {
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
       log.info(s"New best header ${m.encodedId}")
       //TODO Notify node view holder that it should download transactions ?
-      ProgressInfo(None, Seq(), Seq(m))
+      ProgressInfo(None, Seq(), Seq(m), Seq())
     } else {
       log.info(s"New orphaned header ${m.encodedId}, best: ${}")
-      ProgressInfo(None, Seq(), Seq())
+      ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }
 

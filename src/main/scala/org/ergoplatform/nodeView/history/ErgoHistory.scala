@@ -274,7 +274,8 @@ trait ErgoHistory
 
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
-                                      valid: Boolean): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+                                      valid: Boolean,
+                                      lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
 /*
     val headerId = modifier match {
       case h: Header => h.id
@@ -301,7 +302,7 @@ trait ErgoHistory
       historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     }
 
-    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq()) //todo: dumb values, fix
+    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq()) //todo: dumb values, fix
     this -> progressInto
   }
 

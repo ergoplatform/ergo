@@ -79,7 +79,7 @@ trait HeadersProcessor extends ScorexLogging {
 
     //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
-      log.info(s"New best header ${header.encodedId}")
+      log.info(s"New best header ${Base16.encode(header.id)}")
       //TODO Notify node view holder that it should download transactions ?
       ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {

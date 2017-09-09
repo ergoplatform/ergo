@@ -160,11 +160,11 @@ object UtxoState {
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest), paranoidChecks = false
+          metadata(ErgoState.genesisStateVersion, p.digest),
+          paranoidChecks = true
         ).get
 
       assert(persistentProver.digest.sameElements(storage.version.get))
-      persistentProver.checkTree(true)
     }
   }
 }

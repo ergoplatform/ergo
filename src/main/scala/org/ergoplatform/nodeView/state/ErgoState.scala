@@ -6,12 +6,11 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.{ModifierId, VersionTag}
+import scorex.core.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base16
-import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
@@ -72,7 +71,7 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
       log.info("Genesis UTXO state generated")
-      us.rootHash.sameElements(afterGenesisStateDigest)
+      us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
@@ -85,7 +84,7 @@ object ErgoState extends ScorexLogging {
   val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
 
-  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest)
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.directory}/state")

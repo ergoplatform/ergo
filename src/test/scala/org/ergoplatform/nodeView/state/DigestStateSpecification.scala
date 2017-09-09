@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-
+import scorex.crypto.authds.ADDigest
+import org.ergoplatform.utils._
 
 class DigestStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
@@ -11,6 +12,7 @@ class DigestStateSpecification extends PropSpec
   with ErgoGenerators
   with ErgoTestHelpers {
 
+  private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   property("validate() - valid block") {
     forAll(boxesHolderGen) { bh =>
@@ -26,7 +28,7 @@ class DigestStateSpecification extends PropSpec
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(Array.fill(32)(0: Byte))
+      val state = createDigestState(emptyAdDigest)
       state.validate(b).isFailure shouldBe true
     }
   }
@@ -45,7 +47,7 @@ class DigestStateSpecification extends PropSpec
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(Array.fill(32)(0: Byte))
+      val state = createDigestState(emptyAdDigest)
       state.applyModifier(b).isFailure shouldBe true
     }
   }
@@ -67,7 +69,7 @@ class DigestStateSpecification extends PropSpec
 
       ds2.rootHash.sameElements(ds.rootHash) shouldBe false
 
-      val ds3 = ds2.rollbackTo(ds.rootHash).get
+      val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash
 
       ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash

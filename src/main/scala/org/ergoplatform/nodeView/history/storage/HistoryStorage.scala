@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
-import scorex.core.NodeViewModifier.ModifierId
+import scorex.core.ModifierId
 import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success}

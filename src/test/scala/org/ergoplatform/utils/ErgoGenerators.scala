@@ -1,8 +1,7 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -11,9 +10,11 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
+import scorex.core.NodeViewModifier
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-
 
 trait ErgoGenerators extends CoreGenerators {
 
@@ -38,25 +39,41 @@ trait ErgoGenerators extends CoreGenerators {
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     answer <- Arbitrary.arbitrary[Boolean]
-    idGenerator <- genBytesList(Constants.ModifierIdSize)
-    ids <- Gen.nonEmptyListOf(idGenerator).map(_.take(ErgoSyncInfo.MaxBlockIds))
-    fullBlockOpt <- Gen.option(idGenerator)
+    ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
+    fullBlockOpt <- Gen.option(modifierIdGen)
   } yield ErgoSyncInfo(answer, ids, fullBlockOpt)
+
+  lazy val digest32Gen: Gen[Digest32] = {
+    val x = Digest32 @@ genBytesList(32)
+    x
+  }
+
+  lazy val stateRootGen: Gen[ADDigest] = {
+    val x = ADDigest @@ genBytesList(Constants.ModifierIdSize + 1)
+    x
+  }
+
+  lazy val serializedAdProofGen: Gen[SerializedAdProof] = {
+    val x = SerializedAdProof @@ genBoundedBytes(32, 32 * 1024)
+    x
+  }
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
-    parentId <- genBytesList(Constants.ModifierIdSize)
-    stateRoot <- genBytesList(Constants.ModifierIdSize + 1)
-    adRoot <- genBytesList(Constants.ModifierIdSize)
-    transactionsRoot <- genBytesList(Constants.ModifierIdSize)
+    parentId <- modifierIdGen
+    stateRoot <- stateRootGen
+    adRoot <- digest32Gen
+    transactionsRoot <- digest32Gen
     nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[Int]
     height <- Gen.choose(1, Int.MaxValue)
-    interlinks <- Gen.nonEmptyListOf(genBytesList(Constants.ModifierIdSize)).map(_.take(128))
+    equihashSolutions <- genBytesList(Constants.ModifierIdSize)
+    height <- Gen.choose(1, Int.MaxValue)
+    interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     votes <- genBytesList(5)
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, nonce,
-    requiredDifficulty, height, votes)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, requiredDifficulty, height, votes, nonce,
+    equihashSolutions)
 
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
@@ -116,34 +133,28 @@ trait ErgoGenerators extends CoreGenerators {
 
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
-                     transactions: Seq[AnyoneCanSpendTransaction]): ErgoFullBlock = {
+                     transactions: Seq[AnyoneCanSpendTransaction],
+                     n: Char = 48,
+                     k: Char = 5
+                    ): ErgoFullBlock = {
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val txsRoot = BlockTransactions.rootHash(transactions.map(_.id))
-
-    val adProofhash = ADProof.proofDigest(adProofBytes)
-
     val time = System.currentTimeMillis()
 
-    val header = Miner.genHeader(Constants.InitialNBits, parentOpt, updStateDigest, adProofhash, txsRoot,
-      Array.fill(5)(0.toByte), time)
-
-    val blockTransactions = BlockTransactions(header.id, transactions)
-    val adProof = ADProof(header.id, adProofBytes)
-
-    ErgoFullBlock(header, blockTransactions, Some(adProof))
+    DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
+      transactions, time, Array.fill(5)(0.toByte))
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
-    headerId <- genBytesList(Constants.ModifierIdSize)
+    headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidAnyoneCanSpendTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val randomADProofsGen: Gen[ADProof] = for {
-    headerId <- genBytesList(Constants.ModifierIdSize)
-    proof <- genBoundedBytes(32, 32 * 1024)
-  } yield ADProof(headerId, proof)
+  lazy val randomADProofsGen: Gen[ADProofs] = for {
+    headerId <- modifierIdGen
+    proof <- serializedAdProofGen
+  } yield ADProofs(headerId, proof)
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
@@ -155,5 +166,4 @@ trait ErgoGenerators extends CoreGenerators {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
-
 }

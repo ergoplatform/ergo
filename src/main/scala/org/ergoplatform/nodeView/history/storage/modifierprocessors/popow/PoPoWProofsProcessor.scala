@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{Header, HeaderChain, PoPoWProof}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
+import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
@@ -36,7 +37,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     val suffixFirstHeader = suffix.head
 
 
-    def headerById(id: Array[Byte]): Header = typedModifierById[Header](id).get
+    def headerById(id: ModifierId): Header = typedModifierById[Header](id).get
 
     @tailrec
     def constructProof(depth: Int): (Int, Seq[Header]) = {
@@ -61,6 +62,6 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
     val (depth, innerchain) = constructProof(suffixFirstHeader.interlinks.length)
 
-    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)
+    PoPoWProof(m.toByte, k.toByte, depth.toByte, innerchain, suffix.headers)(powScheme)
   }
 }

@@ -10,7 +10,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Random
 import scala.concurrent.ExecutionContext.Implicits.global
 import org.scalameter.picklers.Implicits._
-import scorex.core.NodeViewModifier
+import scorex.core.{ModifierId, NodeViewModifier}
 
 import scala.util.{Random => Rng}
 
@@ -31,7 +31,7 @@ object ErgoMemPoolBenchmark
           invalidAnyoneCanSpendTransactionGen.sample
         }).flatten
       }
-    (txsByWaitingGroups.map(_.map(_.id.clone())), txIncomeOrder(txsByWaitingGroups))
+    (txsByWaitingGroups.map(_.map(_.id)), txIncomeOrder(txsByWaitingGroups))
   }
 
   private val bestCaseGenerator = waitForTransactionsInSequence(_.flatten)
@@ -47,7 +47,7 @@ object ErgoMemPoolBenchmark
     exec.requireGC -> true
   )
 
-  private def bench(txsByWaitingGroups: Seq[Seq[NodeViewModifier.ModifierId]],
+  private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
                     txsInIncomeOrder: Seq[AnyoneCanSpendTransaction]) = {
     val pool = ErgoMemPool.empty
     val futures = txsByWaitingGroups.map(group => {

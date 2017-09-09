@@ -46,7 +46,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.apache.commons" % "commons-lang3" % "3.4",
   "org.apache.commons" % "commons-math3" % "3.2",
   "org.bitlet" % "weupnp" % "0.1.4",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.57",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.58",
   "org.javassist" % "javassist" % "3.21.0-GA",
   "org.joda" % "joda-convert" % "1.2",
   "org.mongodb" % "casbah-commons_2.12.0-RC1" % "3.1.1",
@@ -57,14 +57,15 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.0",
   "org.reflections" % "reflections" % "0.9.11",
+  "org.rudogma" % "supertagged_2.12" % "1.3",
   "org.scala-lang.modules" % "scala-java8-compat_2.12" % "0.8.0",
   "org.scala-lang.modules" % "scala-parser-combinators_2.12" % "1.0.4",
   "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.5",
   "org.scala-tools.testing" % "test-interface" % "0.5",
-  "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.5",
-  "org.scorexfoundation" % "iodb_2.12" % "0.3.1",
+  "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.10",
+  "org.scorexfoundation" % "iodb_2.12" % "0.3.2-SNAPSHOT",
   "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-SNAPSHOT",
-  "org.scorexfoundation" % "scrypto_2.12" % "1.3.3",
+  "org.scorexfoundation" % "scrypto_2.12" % "2.0.2",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
   "org.typelevel" % "cats-core_2.12" % "0.9.0",
@@ -75,4 +76,4 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH a8cea9079dec36fdae1b3368a63f6e0ea80af58a
+// LIBRARY_DEPENDENCIES_HASH 9b7be38ab918ff70adb169097c7b481cb8d9e6c9

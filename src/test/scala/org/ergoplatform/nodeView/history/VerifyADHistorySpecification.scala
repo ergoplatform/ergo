@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 
 import scala.util.Random
 
@@ -54,7 +54,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.contains(parentHeader.transactionsId) shouldBe true
       history.contains(parentHeader.ADProofsId) shouldBe true
 
-      val (repHistory, _) = history.reportSemanticValidity(fullBlock.blockTransactions, false)
+      //todo: why parentHeader.id?
+      val (repHistory, _) = history.reportSemanticValidity(fullBlock.blockTransactions, false, parentHeader.id)
       repHistory.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       repHistory.bestHeaderOpt.get shouldBe parentHeader
     }
@@ -72,8 +73,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
         val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
         val continuation = history.continuationIds(si, forkLength).get
 
-        continuation.count(_._1 == ADProof.ModifierTypeId) shouldBe forkLength - 1
-        continuation.count(_._1 == BlockTransactions.ModifierTypeId) shouldBe forkLength - 1
+        continuation.count(_._1 == ADProofs.modifierTypeId) shouldBe forkLength - 1
+        continuation.count(_._1 == BlockTransactions.modifierTypeId) shouldBe forkLength - 1
 
       }
     }

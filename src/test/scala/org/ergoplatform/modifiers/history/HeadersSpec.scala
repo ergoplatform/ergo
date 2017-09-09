@@ -24,7 +24,7 @@ class HeadersSpec extends PropSpec
 
   property("Header Interlink(0) should always link to genesis block") {
     chain.headers.tail.foreach { r =>
-      r.interlinks(0) shouldEqual genesisId
+      r.interlinks.head shouldEqual genesisId
     }
   }
 
@@ -35,5 +35,4 @@ class HeadersSpec extends PropSpec
       block2.interlinks.length should be >= block1.interlinks.length
     }
   }
-
 }

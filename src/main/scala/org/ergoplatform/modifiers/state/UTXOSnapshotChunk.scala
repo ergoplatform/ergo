@@ -5,15 +5,17 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import scorex.crypto.authds.LeafData
+import scorex.crypto.hash.Digest32
 import scorex.utils.Random
 
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoPersistentModifier {
-  override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.ModifierTypeId
+  override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
 
   //TODO implement correctly
-  override lazy val id: ModifierId = Random.randomBytes(32)
+  override lazy val id: ModifierId = ModifierId @@ Random.randomBytes(32)
 
   override type M = UTXOSnapshotChunk
 
@@ -21,11 +23,11 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 
   override lazy val json: Json = ???
 
-  lazy val rootHash: Array[Byte] = Algos.merkleTreeRoot(stateElements.map(_.bytes))
+  lazy val rootHash: Digest32 = Algos.merkleTreeRoot(stateElements.map(LeafData @@ _.bytes))
 }
 
 object UTXOSnapshotChunk {
   type StateElement = AnyoneCanSpendNoncedBox
 
-  val ModifierTypeId: Byte = 107: Byte
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (107: Byte)
 }

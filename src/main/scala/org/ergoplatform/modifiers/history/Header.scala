@@ -14,7 +14,7 @@ import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
@@ -66,21 +66,21 @@ case class Header(version: Version,
     ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   override lazy val json: Json = Map(
-    "id" -> Base58.encode(id).asJson,
-    "transactionsRoot" -> Base58.encode(transactionsRoot).asJson,
-    "interlinks" -> interlinks.map(i => Base58.encode(i).asJson).asJson,
-    "ADProofsRoot" -> Base58.encode(ADProofsRoot).asJson,
-    "stateRoot" -> Base58.encode(stateRoot).asJson,
-    "parentId" -> Base58.encode(parentId).asJson,
+    "id" -> Base16.encode(id).asJson,
+    "transactionsRoot" -> Base16.encode(transactionsRoot).asJson,
+    "interlinks" -> interlinks.map(i => Base16.encode(i).asJson).asJson,
+    "ADProofsRoot" -> Base16.encode(ADProofsRoot).asJson,
+    "stateRoot" -> Base16.encode(stateRoot).asJson,
+    "parentId" -> Base16.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
     "nonce" -> nonce.asJson,
     "equihashSolutions" -> equihashSolutions.asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
-    "votes" -> Base58.encode(votes).asJson
+    "votes" -> Base16.encode(votes).asJson
   ).asJson
 
-  override lazy val toString: String = s"Header(${json.noSpaces})"
+  override lazy val toString: String = s"Header(${json.noSpaces}) Binary: ${Base16.encode(this.bytes)}"
 
   override type M = Header
 

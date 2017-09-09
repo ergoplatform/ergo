@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.HeaderSerializer
+import org.ergoplatform.modifiers.history.{HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.ErgoState
 import scorex.core.consensus.History.HistoryComparisonResult
 
@@ -19,6 +19,16 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt shouldBe None
     val header = genHeaderChain(1, history).head
     val updHistory = history.append(header).get._1
+    updHistory.bestHeaderOpt shouldBe Some(header)
+    updHistory.modifierById(header.id) shouldBe Some(header)
+  }
+
+  property("append header as genesis - via applyHeaderChain") {
+    val history = genHistory()
+    history.bestHeaderOpt shouldBe None
+    val header = genHeaderChain(1, history).head
+
+    val updHistory = applyHeaderChain(history, HeaderChain(Seq(header)))
     updHistory.bestHeaderOpt shouldBe Some(header)
     updHistory.modifierById(header.id) shouldBe Some(header)
   }

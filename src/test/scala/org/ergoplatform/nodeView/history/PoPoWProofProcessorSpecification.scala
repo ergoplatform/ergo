@@ -26,13 +26,13 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   private lazy val popowHistory = applyHeaderChain(history, chain)
 
   val emptyADDigest: ADDigest = ADDigest @@ Array.fill(33)(0: Byte)
-  val emptyDigest32: Digest32 = Digest32 @@ Array.fill(33)(0: Byte)
+  val emptyDigest32: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
 
   property("PoPoWProof.constructInterlinkVector") {
 
     //genesis
     val h1 = powScheme.prove(None, Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      0L, Array.fill(5)(0: Byte))
+      1L, Array.fill(5)(0: Byte))
 
     h1.interlinks.length shouldBe 0
 
@@ -40,55 +40,55 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
 
     //first after genesis
     val h2 = zeroLevelPowScheme.prove(Some(h1), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      1L, Array.fill(5)(0: Byte))
+      2L, Array.fill(5)(0: Byte))
 
     h2.interlinks.length shouldBe 1
 
     val h3 = zeroLevelPowScheme.prove(Some(h2), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      2L, Array.fill(5)(0: Byte))
+      3L, Array.fill(5)(0: Byte))
 
     h3.interlinks.length shouldBe 1
 
     val oneLevelPowScheme = new FakePowScheme(Some(1))
 
     val h4 = oneLevelPowScheme.prove(Some(h3), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      3L, Array.fill(5)(0: Byte))
+      4L, Array.fill(5)(0: Byte))
 
     h4.interlinks.length shouldBe 1
 
     val h5 = zeroLevelPowScheme.prove(Some(h4), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      4L, Array.fill(5)(0: Byte))
+      5L, Array.fill(5)(0: Byte))
 
     h5.interlinks.length shouldBe 2
 
     val h6 = zeroLevelPowScheme.prove(Some(h5), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      5L, Array.fill(5)(0: Byte))
+      6L, Array.fill(5)(0: Byte))
 
     h6.interlinks.length shouldBe 2
 
     val twoLevelPowScheme = new FakePowScheme(Some(2))
 
     val h7 = twoLevelPowScheme.prove(Some(h6), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      6L, Array.fill(5)(0: Byte))
+      7L, Array.fill(5)(0: Byte))
 
     DefaultFakePowScheme.realDifficulty(h7) shouldBe h7.requiredDifficulty * 4
 
     h7.interlinks.length shouldBe 2
 
     val h8 = zeroLevelPowScheme.prove(Some(h7), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      7L, Array.fill(5)(0: Byte))
+      8L, Array.fill(5)(0: Byte))
 
     h8.interlinks.length shouldBe 3
 
     val h9 = twoLevelPowScheme.prove(Some(h8), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      8L, Array.fill(5)(0: Byte))
+      9L, Array.fill(5)(0: Byte))
 
     DefaultFakePowScheme.realDifficulty(h9) shouldBe h9.requiredDifficulty * 4
 
     h9.interlinks.length shouldBe 3
 
     val h10 = oneLevelPowScheme.prove(Some(h9), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      9L, Array.fill(5)(0: Byte))
+      10L, Array.fill(5)(0: Byte))
 
     h10.interlinks.length shouldBe 3
 
@@ -97,7 +97,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     h10.interlinks(2).sameElements(h9.id) shouldBe true
 
     val h11 = zeroLevelPowScheme.prove(Some(h10), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      10L, Array.fill(5)(0: Byte))
+      11L, Array.fill(5)(0: Byte))
 
     h11.interlinks.length shouldBe 3
 

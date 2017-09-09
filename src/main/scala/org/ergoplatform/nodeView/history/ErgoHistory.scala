@@ -16,7 +16,7 @@ import scorex.core._
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.{Base16, Base58}
 
 import scala.util.{Failure, Try}
 
@@ -78,7 +78,7 @@ trait ErgoHistory
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     val modifier = historyStorage.modifierById(id)
-    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base58.encode(id)} expected")
+    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base16.encode(id)} expected")
     modifier
   }
 
@@ -213,17 +213,17 @@ trait ErgoHistory
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
-      case m: Header =>
-        validate(m)
+      case header: Header =>
+        validate(header)
       case m: BlockTransactions =>
         validate(m)
       case m: ADProofs =>
         validate(m)
       case m: PoPoWProof =>
         validate(m)
-      case m: UTXOSnapshotChunk =>
-        validate(m)
-      case m =>
+      case chunk: UTXOSnapshotChunk =>
+        validate(chunk)
+      case m: Any =>
         Failure(new Error(s"Modifier $m has incorrect type"))
     }
   }

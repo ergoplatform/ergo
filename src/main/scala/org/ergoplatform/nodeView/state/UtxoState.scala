@@ -21,12 +21,11 @@ import scala.util.{Failure, Success, Try}
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
 class UtxoState(override val version: VersionTag, val store: Store) extends ErgoState[UtxoState] {
+  import UtxoState.metadata
 
   implicit val hf = new Blake2b256Unsafe
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
-
-  private lazy val bestVersionKey = Algos.hash("best state version")
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] =
     PersistentBatchAVLProver.create(
@@ -106,13 +105,8 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
       checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot) match {
         case Success(_) =>
           Try {
-            val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = fb.id -> fb.header.stateRoot
-            val stateDigestIdIdxElem = Algos.hash(fb.header.stateRoot) -> fb.id
-            val bestVersion = bestVersionKey -> fb.id
-
-            val metaData = Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
-
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(metaData)
+            val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
@@ -138,6 +132,16 @@ class UtxoState(override val version: VersionTag, val store: Store) extends Ergo
 }
 
 object UtxoState {
+  private lazy val bestVersionKey = Algos.hash("best state version")
+
+  private def metadata(modId: VersionTag, stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {
+    val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
+    val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
+    val bestVersion = bestVersionKey -> modId
+
+    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
+  }
+
 
   //todo: check database state, read version from it
   def create(versionTag: Option[VersionTag], dir: File): UtxoState = {
@@ -152,7 +156,12 @@ object UtxoState {
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
 
     new UtxoState(ErgoState.genesisStateVersion, store) {
-      override protected lazy val persistentProver = PersistentBatchAVLProver.create(p, storage).get
+      override protected lazy val persistentProver =
+        PersistentBatchAVLProver.create(
+          p,
+          storage,
+          metadata(ErgoState.genesisStateVersion, p.digest), paranoidChecks = false
+        ).get
 
       assert(persistentProver.digest.sameElements(storage.version.get))
       persistentProver.checkTree(true)

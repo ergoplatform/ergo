@@ -97,16 +97,16 @@ trait ErgoHistory
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).map { _ =>
       modifier match {
-        case m: Header =>
-          (this, process(m))
-        case m: BlockTransactions =>
-          (this, process(m))
-        case m: ADProofs =>
-          (this, process(m))
-        case m: PoPoWProof =>
-          (this, process(m))
-        case m: UTXOSnapshotChunk =>
-          (this, process(m))
+        case header: Header =>
+          (this, process(header))
+        case blockTransactions: BlockTransactions =>
+          (this, process(blockTransactions))
+        case aDProofs: ADProofs =>
+          (this, process(aDProofs))
+        case poPoWProof: PoPoWProof =>
+          (this, process(poPoWProof))
+        case chunk: UTXOSnapshotChunk =>
+          (this, process(chunk))
       }
     }
   }

@@ -1,14 +1,15 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
-import org.ergoplatform.nodeView.state.ErgoState.Digest
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.transaction.state.MinimalState.VersionTag
+import org.ergoplatform.settings.{Algos, ErgoSettings}
+import scorex.core.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base16
 
 import scala.util.Try
@@ -28,7 +29,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
   self: IState =>
 
   //TODO: kushti: AVL+ tree root, not Merkle
-  def rootHash(): Digest
+  def rootHash(): ADDigest
 
   //TODO implement correctly
   def stateHeight: Int = 0
@@ -48,14 +49,12 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   override def rollbackTo(version: VersionTag): Try[IState]
 
-  def rollbackVersions: Iterable[Digest]
+  def rollbackVersions: Iterable[VersionTag]
 
   override type NVCT = this.type
 }
 
 object ErgoState extends ScorexLogging {
-
-  type Digest = Array[Byte]
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
@@ -72,7 +71,7 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
       log.info("Genesis UTXO state generated")
-      us.rootHash.sameElements(afterGenesisStateDigest)
+      us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
@@ -80,9 +79,12 @@ object ErgoState extends ScorexLogging {
     DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
   }
 
-  val preGenesisStateDigest: Digest = Array.fill(32)(0: Byte)
+  val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
+  //33 bytes
   val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
-  val afterGenesisStateDigest: Digest = Base16.decode(afterGenesisStateDigestHex)
+  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
+
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.directory}/state")
@@ -91,8 +93,11 @@ object ErgoState extends ScorexLogging {
     if (stateDir.listFiles().isEmpty) {
       None
     } else {
-      if (settings.nodeSettings.ADState) DigestState.create(None, stateDir).toOption
-      else Some(UtxoState.create(stateDir))
+      //todo: considering db state
+
+
+      if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, stateDir).toOption
+      else Some(UtxoState.create(None, stateDir))
     }
   }
 }

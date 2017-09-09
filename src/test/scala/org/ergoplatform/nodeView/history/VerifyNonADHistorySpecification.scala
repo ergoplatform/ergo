@@ -14,11 +14,13 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
 
-  property("append header to genesis") {
+  property("append header as genesis") {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
     val header = genHeaderChain(1, history).head
-    history.append(header).get._1.bestHeaderOpt shouldBe Some(header)
+    val updHistory = history.append(header).get._1
+    updHistory.bestHeaderOpt shouldBe Some(header)
+    updHistory.modifierById(header.id) shouldBe Some(header)
   }
 
   property("append header to genesis - 2") {

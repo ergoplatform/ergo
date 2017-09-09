@@ -26,7 +26,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   val powScheme: PoWScheme
 
-  def realDifficulty(h: Header) = powScheme.realDifficulty(h)
+  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   protected val config: NodeConfigurationSettings
 
@@ -70,20 +70,20 @@ trait HeadersProcessor extends ScorexLogging {
       .map(b => Ints.fromByteArray(b.data))
 
   /**
-    * @param m - header to process
+    * @param header - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(m: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val dataToInsert = toInsert(m)
-    historyStorage.insert(m.id, dataToInsert)
+  protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
+    val dataToInsert = toInsert(header)
+    historyStorage.insert(header.id, dataToInsert)
 
     //todo: why the first check?
-    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
-      log.info(s"New best header ${m.encodedId}")
+    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
+      log.info(s"New best header ${header.encodedId}")
       //TODO Notify node view holder that it should download transactions ?
-      ProgressInfo(None, Seq(), Seq(m), Seq())
+      ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {
-      log.info(s"New orphaned header ${m.encodedId}, best: ${}")
+      log.info(s"New orphaned header ${header.encodedId}, best: ${}")
       ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }
@@ -109,37 +109,37 @@ trait HeadersProcessor extends ScorexLogging {
   }
 
   /**
-    * @param m - header to validate
+    * @param header - header to validate
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(m: Header): Try[Unit] = {
-    lazy val parentOpt = typedModifierById[Header](m.parentId)
-    if (m.parentId sameElements Header.GenesisParentId) {
+  protected def validate(header: Header): Try[Unit] = {
+    lazy val parentOpt = typedModifierById[Header](header.parentId)
+    if (header.parentId sameElements Header.GenesisParentId) {
       if (bestHeaderIdOpt.nonEmpty) {
         Failure(new Error("Trying to append genesis block to non-empty history"))
-      } else if (m.height != GenesisHeight) {
-        Failure(new Error(s"Height of genesis block $m is incorrect"))
+      } else if (header.height != GenesisHeight) {
+        Failure(new Error(s"Height of genesis block $header is incorrect"))
       } else {
         Success()
       }
     } else if (parentOpt.isEmpty) {
-      Failure(new Error(s"Parent header with id ${Base16.encode(m.parentId)} not defined"))
-    } else if (m.timestamp - NetworkTime.time() > MaxTimeDrift) {
-      Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
-    } else if (m.timestamp <= parentOpt.get.timestamp) {
-      Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
-    } else if (m.height != parentOpt.get.height + 1) {
-      Failure(new Error(s"Header height ${m.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
-    } else if (historyStorage.contains(m.id)) {
+      Failure(new Error(s"Parent header with id ${Base16.encode(header.parentId)} not defined"))
+    } else if (header.timestamp - NetworkTime.time() > MaxTimeDrift) {
+      Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${NetworkTime.time()}"))
+    } else if (header.timestamp <= parentOpt.get.timestamp) {
+      Failure(new Error(s"Header timestamp ${header.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
+    } else if (header.height != parentOpt.get.height + 1) {
+      Failure(new Error(s"Header height ${header.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
+    } else if (historyStorage.contains(header.id)) {
       Failure(new Error("Header is already in history"))
-    } else if (realDifficulty(m) < m.requiredDifficulty) {
-      Failure(new Error(s"Block difficulty ${realDifficulty(m)} is less than required ${m.requiredDifficulty}"))
-    } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
-      Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
-    } else if (!heightOf(m.parentId).exists(h => height - h < MaxRollback)) {
-      Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(m.parentId)}"))
-    } else if (!powScheme.verify(m)) {
-      Failure(new Error(s"Wrong proof-of-work solution for $m"))
+    } else if (realDifficulty(header) < header.requiredDifficulty) {
+      Failure(new Error(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}"))
+    } else if (header.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
+      Failure(new Error(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
+    } else if (!heightOf(header.parentId).exists(h => height - h < MaxRollback)) {
+      Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
+    } else if (!powScheme.verify(header)) {
+      Failure(new Error(s"Wrong proof-of-work solution for $header"))
     } else {
       Success()
     }

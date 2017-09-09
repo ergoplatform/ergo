@@ -36,7 +36,6 @@ case class Header(version: Version,
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
-  //todo: why not powHash?
   override lazy val id: ModifierId = ModifierId @@ powHash
 
   //todo: why SHA256?

@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers
 
-import scorex.core.NodeViewModifier._
-import scorex.core.PersistentNodeViewModifier
+import scorex.core.{ModifierId, PersistentNodeViewModifier}
 
 trait ErgoPersistentModifier extends PersistentNodeViewModifier {
 

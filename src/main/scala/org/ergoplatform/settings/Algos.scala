@@ -1,7 +1,8 @@
 package org.ergoplatform.settings
 
+import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
-import scorex.crypto.hash.Blake2b256
+import scorex.crypto.hash.{Blake2b256, Digest32}
 
 object Algos {
 
@@ -12,13 +13,11 @@ object Algos {
   }
 
   val hash = Blake2b256
-  //TODO replace to concrete mining algorithm
-  val miningHash = Blake2b256
 
   val initialDifficulty = 1
 
-  def merkleTreeRoot(elements: Seq[Array[Byte]]): Array[Byte] =
+  def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 
-  lazy val emptyMerkleTreeRoot: Array[Byte] = Algos.hash(Array[Byte]())
+  lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 }

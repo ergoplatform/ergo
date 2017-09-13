@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{HistoryModifierSerializer, PoPoWProof}
+import org.ergoplatform.modifiers.history.{HistoryModifierSerializer, PoPoWProof, PoPoWProofUtils}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import scorex.core.consensus.History.ProgressInfo
 
@@ -16,7 +16,7 @@ import ErgoHistory.GenesisHeight
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
-  def validate(m: PoPoWProof): Try[Unit] = PoPoWProof.validate(m).map { _ =>
+  def validate(m: PoPoWProof): Try[Unit] = new PoPoWProofUtils(powScheme).validate(m).map { _ =>
     bestHeaderIdOpt match {
       case Some(genesisId) =>
         heightOf(genesisId) match {
@@ -31,8 +31,6 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
       case None =>
         Failure(new Error("Trying to apply PoPoW proof to history with unknown genesis"))
     }
-
-
   }
 
   def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = {
@@ -49,7 +47,7 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
     val bestHeaderRow = (BestHeaderKey, ByteArrayWrapper(bestHeader.id))
     historyStorage.insert(bestHeader.id, bestHeaderRow +: headersRows)
 
-    ProgressInfo(None, Seq(), Seq(m.suffix.last))
+    ProgressInfo(None, toRemove = Seq(), toApply = Seq(m.suffix.last), toDownload = Seq())
   }
 }
 

@@ -39,9 +39,7 @@ class SerializationTests extends PropSpec
   }
 
   property("AnyoneCanSpendTransactionGen serialization - .bytes") {
-    forAll(invalidAnyoneCanSpendTransactionGen){tx =>
-      AnyoneCanSpendTransactionSerializer.parseBytes(tx.bytes).get == tx
-    }
+    checkSerializationRoundtrip(invalidAnyoneCanSpendTransactionGen, AnyoneCanSpendTransactionSerializer)
   }
 
   property("ErgoSyncInfo serialization") {
@@ -57,9 +55,7 @@ class SerializationTests extends PropSpec
   }
 
   property("BlockTransactions serialization - .bytes") {
-    forAll(invalidBlockTransactionsGen){bt =>
-      BlockTransactionsSerializer.parseBytes(bt.bytes).get == bt
-    }
+    checkSerializationRoundtrip(invalidBlockTransactionsGen, BlockTransactionsSerializer)
   }
 
   property("ADProofs serialization") {
@@ -67,8 +63,6 @@ class SerializationTests extends PropSpec
   }
 
   property("TransactionIdsForHeader serialization - .bytes") {
-    forAll(transactionIdsForHeaderGen){ tx =>
-      TransactionIdsForHeaderSerializer.parseBytes(tx.bytes).get == tx
-    }
+    checkSerializationRoundtrip(transactionIdsForHeaderGen, TransactionIdsForHeaderSerializer)
   }
 }

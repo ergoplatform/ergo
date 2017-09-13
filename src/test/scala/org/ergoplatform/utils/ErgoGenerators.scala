@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.NodeViewModifier
+import scorex.core.{ModifierId, NodeViewModifier}
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -48,7 +48,7 @@ trait ErgoGenerators extends CoreGenerators {
     maxLength = 100
     toTake <- Gen.chooseNum(1, 100)
     ids <- Gen.listOfN(maxLength, idGenerator).map(_.take(toTake))
-  } yield TransactionIdsForHeader(ids)
+  } yield TransactionIdsForHeader(ModifierId @@ ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytesList(32)

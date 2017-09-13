@@ -5,19 +5,14 @@ import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.{JsonSerializable, Serializer}
+import scorex.core.{ModifierId, ModifierTypeId, NodeViewModifier}
 import scorex.crypto.encode.Base58
-import scorex.core.{ModifierId, ModifierTypeId}
-import scorex.core.serialization.Serializer
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
 case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier with JsonSerializable {
-  override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
-case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.modifierTypeId
 
   override lazy val id: ModifierId = ModifierId @@ Algos.hash(scorex.core.utils.concatFixLengthBytes(ids))
@@ -51,6 +46,6 @@ object TransactionIdsForHeaderSerializer extends Serializer[TransactionIdsForHea
   override def parseBytes(bytes: Array[Byte]): Try[TransactionIdsForHeader] = Try {
     require(bytes.length % fixedSize == 0)
     val ids = Range(0, bytes.length, fixedSize).map { i => bytes.slice(i, i + fixedSize) }
-    TransactionIdsForHeader(ids)
+    TransactionIdsForHeader(ModifierId @@ ids)
   }
 }

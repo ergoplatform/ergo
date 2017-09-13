@@ -8,6 +8,7 @@ import scorex.crypto.encode.Base58
 import io.circe.parser._
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.scalacheck.Gen
+import scorex.core.ModifierId
 
 class JsonSerializationSpec extends PropSpec with ErgoGenerators with Matchers {
 
@@ -15,7 +16,7 @@ class JsonSerializationSpec extends PropSpec with ErgoGenerators with Matchers {
     val modifierId = genBytesList(Constants.ModifierIdSize).sample.get
     val stringId = Base58.encode(modifierId)
     val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
-    val data = TransactionIdsForHeader(Seq(modifierId))
+    val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))
     data.json shouldEqual expected
   }
 

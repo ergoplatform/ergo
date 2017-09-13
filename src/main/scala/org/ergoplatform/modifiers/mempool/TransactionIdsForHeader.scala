@@ -4,19 +4,23 @@ import com.google.common.primitives.Bytes
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
-import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewModifier
 import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.{JsonSerializable, Serializer}
 import scorex.crypto.encode.Base58
+import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core.serialization.Serializer
+import scorex.crypto.hash.Digest32
 
 import scala.util.Try
 
 case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier with JsonSerializable {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.ModifierTypeId
+case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier {
+  override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.modifierTypeId
 
-  override lazy val id: ModifierId = Algos.hash(scorex.core.utils.concatFixLengthBytes(ids))
+  override lazy val id: ModifierId = ModifierId @@ Algos.hash(scorex.core.utils.concatFixLengthBytes(ids))
 
   override type M = TransactionIdsForHeader
 
@@ -26,11 +30,11 @@ case class TransactionIdsForHeader(ids: Seq[ModifierId]) extends MempoolModifier
     "ids" -> ids.map(Base58.encode)
   ).asJson
 
-  lazy val rootHash: Digest = BlockTransactions.rootHash(ids)
+  lazy val rootHash: Digest32 = BlockTransactions.rootHash(ids)
 }
 
 object TransactionIdsForHeader {
-  val ModifierTypeId: Byte = 103: Byte
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (103: Byte)
 
   def validate(txIds: TransactionIdsForHeader, header: Header): Boolean = {
     header.transactionsRoot sameElements txIds.rootHash

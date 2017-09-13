@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
@@ -60,7 +61,9 @@ trait HistorySpecification extends PropSpec
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, nodeSettings, scorexSettings)
-    ErgoHistory.readOrGenerate(fullHistorySettings)
+
+    val pow = DefaultFakePowScheme
+    ErgoHistory.readOrGenerate(fullHistorySettings, pow)
   }
 
 }

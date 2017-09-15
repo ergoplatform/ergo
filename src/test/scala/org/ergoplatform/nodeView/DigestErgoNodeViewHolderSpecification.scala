@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.Props
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -62,8 +63,6 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
 
     expectMsg(SuccessfulModification(block.header, None))
 
-    /*
-    todo: uncomment / fix
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
       v.history.height
     }
@@ -89,6 +88,6 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       v.history.bestHeaderOpt
     }
     expectMsg(Some(block.header))
-  */
+
   }
 }

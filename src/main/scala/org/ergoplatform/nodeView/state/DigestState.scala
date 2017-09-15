@@ -9,6 +9,7 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
@@ -33,7 +34,14 @@ class DigestState private(override val version: VersionTag, override val rootHas
           status.flatMap(_ => tx.semanticValidity)
         }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
           .getOrElse(Failure(new Error("Proofs are empty"))))
-      }.flatten
+      }.flatten match {
+        case s: Success[_] =>
+          log.info(s"Valid modifier applied to DigestState: ${Base16.encode(mod.id)}")
+          s
+        case Failure(e) =>
+          log.warn(s"Modifier $mod is not valid: ", e)
+          Failure(e)
+      }
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 

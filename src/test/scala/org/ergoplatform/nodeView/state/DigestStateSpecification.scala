@@ -4,7 +4,6 @@ import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.crypto.authds.ADDigest
-import org.ergoplatform.utils._
 
 class DigestStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks

@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
+import org.ergoplatform.modifiers.history.EquihashPowScheme
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
@@ -10,7 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.NodeViewModifier.ModifierTypeId
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
@@ -66,8 +67,9 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
 
     val digestState = ErgoState.generateGenesisDigestState(dir)
 
+    val pow = new EquihashPowScheme(n = 96, k = 5)
     //todo: ensure that history is in certain mode
-    val history = ErgoHistory.readOrGenerate(settings)
+    val history = ErgoHistory.readOrGenerate(settings, pow)
 
     val wallet = ErgoWallet.readOrGenerate(settings)
 
@@ -81,10 +83,12 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState(): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = {
+    val pow = new EquihashPowScheme(n = 96, k = 5)
+
     ErgoState.readOrGenerate(settings).map {
       case ds: DigestState =>
         //todo: ensure that history is in certain mode
-        val history = ErgoHistory.readOrGenerate(settings)
+        val history = ErgoHistory.readOrGenerate(settings, pow)
 
         val wallet = ErgoWallet.readOrGenerate(settings)
 

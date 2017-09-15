@@ -12,11 +12,11 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{AD
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.core.NodeViewModifier._
-import scorex.core.consensus.{History, ModifierSemanticValidity}
+import scorex.core._
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
+import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.{Base16, Base58}
 
 import scala.util.{Failure, Try}
 
@@ -79,7 +79,7 @@ trait ErgoHistory
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     val modifier = historyStorage.modifierById(id)
-    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base58.encode(id)} expected")
+    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base16.encode(id)} expected")
     modifier
   }
 
@@ -98,16 +98,16 @@ trait ErgoHistory
     log.debug(s"Trying to append modifier ${Base58.encode(modifier.id)} to history")
     applicableTry(modifier).map { _ =>
       modifier match {
-        case m: Header =>
-          (this, process(m))
-        case m: BlockTransactions =>
-          (this, process(m))
-        case m: ADProof =>
-          (this, process(m))
-        case m: PoPoWProof =>
-          (this, process(m))
-        case m: UTXOSnapshotChunk =>
-          (this, process(m))
+        case header: Header =>
+          (this, process(header))
+        case blockTransactions: BlockTransactions =>
+          (this, process(blockTransactions))
+        case aDProofs: ADProofs =>
+          (this, process(aDProofs))
+        case poPoWProof: PoPoWProof =>
+          (this, process(poPoWProof))
+        case chunk: UTXOSnapshotChunk =>
+          (this, process(chunk))
       }
     }
   }
@@ -176,15 +176,15 @@ trait ErgoHistory
     val startId = headerIdsAtHeight(heightFrom).head
     val startHeader = typedModifierById[Header](startId).get
     val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
-      .headers.map(h => Header.ModifierTypeId -> h.id)
+      .headers.map(h => Header.modifierTypeId -> h.id)
     val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
       case Some(bestFullBlockHeight) =>
         val heightFrom = Math.min(height, bestFullBlockHeight + size)
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
-        headers.headers.flatMap(h => Seq((ADProof.ModifierTypeId, h.ADProofsId),
-          (BlockTransactions.ModifierTypeId, h.transactionsId)))
+        headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
+          (BlockTransactions.modifierTypeId, h.transactionsId)))
       case _ => Seq()
     }
     headerIds ++ fullBlockContinuation
@@ -207,30 +207,30 @@ trait ErgoHistory
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
   def lastHeaders(count: Int): HeaderChain =
-    bestHeaderOpt
-      .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
-      .getOrElse(HeaderChain.empty)
+  bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
+    .getOrElse(HeaderChain.empty)
 
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
-      case m: Header =>
-        validate(m)
+      case header: Header =>
+        validate(header)
       case m: BlockTransactions =>
         validate(m)
-      case m: ADProof =>
+      case m: ADProofs =>
         validate(m)
       case m: PoPoWProof =>
         validate(m)
-      case m: UTXOSnapshotChunk =>
-        validate(m)
-      case m =>
+      case chunk: UTXOSnapshotChunk =>
+        validate(chunk)
+      case m: Any =>
         Failure(new Error(s"Modifier $m has incorrect type"))
     }
   }
 
   protected def getFullBlock(header: Header): ErgoFullBlock = {
-    val aDProofs = typedModifierById[ADProof](header.ADProofsId)
+    val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     val txs = typedModifierById[BlockTransactions](header.transactionsId).get
     ErgoFullBlock(header, txs, aDProofs)
   }
@@ -275,34 +275,35 @@ trait ErgoHistory
 
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
-                                      valid: Boolean): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-/*
-    val headerId = modifier match {
-      case h: Header => h.id
-      case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
-      case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
+                                      valid: Boolean,
+                                      lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    /*
+        val headerId = modifier match {
+          case h: Header => h.id
+          case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
+          case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
 
-      case snapshot: UTXOSnapshotChunk => ???
-      case m =>
-        log.warn(s"reportInvalid for invalid modifier type: $m")
-        ???
-    }*/
+          case snapshot: UTXOSnapshotChunk => ???
+          case m =>
+            log.warn(s"reportInvalid for invalid modifier type: $m")
+            ???
+        }*/
 
 
-    if(!valid) {
+    if (!valid) {
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
         case h: Header => toDrop(h)
-        case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
+        case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
         case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
         case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
         case m =>
           log.warn(s"reportInvalid for invalid modifier type: $m")
           Seq(ByteArrayWrapper(m.id)) -> Seq()
       }
-      historyStorage.update(Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
+      historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
     }
 
-    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq()) //todo: dumb values, fix
+    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq()) //todo: dumb values, fix
     this -> progressInto
   }
 
@@ -319,13 +320,15 @@ object ErgoHistory extends ScorexLogging {
 
   val GenesisHeight = 0
 
-  def readOrGenerate(settings: ErgoSettings): ErgoHistory = {
+  //todo: move pow to settings
+  def readOrGenerate(settings: ErgoSettings, pow: PoWScheme): ErgoHistory = {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
 
     val nodeSettings = settings.nodeSettings
+
 
     val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (true, true, true) =>
@@ -335,6 +338,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
@@ -343,6 +347,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (false, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
@@ -351,6 +356,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (false, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
@@ -359,6 +365,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, false, true) =>
         new ErgoHistory with EmptyADProofsProcessor
@@ -367,6 +374,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case (true, false, false) =>
         new ErgoHistory with EmptyADProofsProcessor
@@ -375,6 +383,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
+          override val powScheme = pow
         }
       case m =>
         throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +

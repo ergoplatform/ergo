@@ -4,7 +4,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewModifier._
+import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
@@ -19,7 +19,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(_.data)
+  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(ModifierId @@ _.data)
 
   protected def getFullBlock(h: Header): ErgoFullBlock
 
@@ -36,7 +36,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val header: Header = fullBlock.header
     val txs: BlockTransactions = fullBlock.blockTransactions
-    val adProofsOpt: Option[ADProof] = fullBlock.aDProofs
+    val adProofsOpt: Option[ADProofs] = fullBlock.aDProofs
 
     assert(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
@@ -64,14 +64,14 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
           if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
         }
-        ProgressInfo(Some(prevChain.head.id), toRemove, toApply)
+        ProgressInfo(Some(prevChain.head.id), toRemove, toApply, toDownload = Seq())
       case (None, _, _) =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
         historyStorage.insert(storageVersion, Seq(newModRow))
-        ProgressInfo(None, Seq(), Seq())
+        ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }
 
@@ -79,7 +79,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     .foreach(h => pruneBlockDataAt(Seq(h - config.blocksToKeep)))
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
-    val id: ModifierId = Algos.hash(heights.flatMap(_.toString.getBytes).toArray)
+    val id: ModifierId = ModifierId @@ Algos.hash(heights.flatMap(_.toString.getBytes).toArray)
     val toRemove: Seq[ByteArrayWrapper] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap { id => typedModifierById[Header](id) }
       .flatMap { h =>
@@ -92,6 +92,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                                 storageVersion: ModifierId,
                                 fullBlock: ErgoFullBlock): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
-    ProgressInfo(None, Seq(), Seq(fullBlock))
+    ProgressInfo(None, Seq(), Seq(fullBlock), Seq())
   }
 }

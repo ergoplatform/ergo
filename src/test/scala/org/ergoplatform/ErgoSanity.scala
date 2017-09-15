@@ -3,9 +3,8 @@ package org.ergoplatform
 import java.io.File
 
 import org.ergoplatform.ErgoSanity._
-import org.ergoplatform.mining.Miner
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.WrappedUtxoState
@@ -16,7 +15,10 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
+import scorex.core.ModifierId
 import scorex.core.utils.NetworkTime
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
@@ -50,18 +52,19 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
 
-    Miner.genHeader(Constants.InitialNBits,
+    DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
-      Array.fill(hashLength + 1)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
-      Array.fill(hashLength)(0.toByte),
-      Array.fill(5)(0.toByte),
-      Math.max(NetworkTime.time(), bestTimestamp)
+      Constants.InitialNBits,
+      ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
+      Digest32 @@ Array.fill(hashLength)(0.toByte),
+      Digest32 @@ Array.fill(hashLength)(0.toByte),
+      Math.max(NetworkTime.time(), bestTimestamp),
+      Array.fill(5)(0.toByte)
     )
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =
-    syntacticallyValidModifier(history).copy(parentId = Random.randomBytes(32))
+    syntacticallyValidModifier(history).copy(parentId = ModifierId @@ Random.randomBytes(32))
 
   override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map { bh =>
     val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(10000000)}")

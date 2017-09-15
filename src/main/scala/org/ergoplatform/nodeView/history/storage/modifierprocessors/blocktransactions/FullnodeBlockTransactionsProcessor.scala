@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{ADProof, BlockTransactions, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
@@ -22,14 +22,14 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
-          case Some(adProof: ADProof) =>
+          case Some(adProof: ADProofs) =>
             processFullBlock(ErgoFullBlock(header, txs, Some(adProof)), txsAreNew = true)
           case None if !adState =>
             processFullBlock(ErgoFullBlock(header, txs, None), txsAreNew = true)
           case _ =>
             val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
             historyStorage.insert(txs.id, modifierRow)
-            ProgressInfo(None, Seq(), Seq())
+            ProgressInfo(None, Seq(), Seq(), Seq())
         }
       case _ =>
         throw new Error(s"Header for modifier $txs is no defined")

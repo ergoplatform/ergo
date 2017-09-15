@@ -5,10 +5,10 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer, PoWScheme}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
@@ -17,7 +17,6 @@ import scorex.crypto.encode.Base16
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 
 /**
   * Contains all functions required by History to process Headers.
@@ -29,14 +28,16 @@ trait HeadersProcessor extends ScorexLogging {
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   protected val config: NodeConfigurationSettings
+  protected val chainSettings: ChainSettings
 
   //TODO alternative DDoS protection
-  protected lazy val MaxRollback: Long = 600.days.toMillis / config.blockInterval.toMillis
+  protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
 
   //Maximum time in future block header main contain
-  protected lazy val MaxTimeDrift: Long = 10 * config.blockInterval.toMillis
+  protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  protected lazy val difficultyCalculator = new LinearDifficultyControl(config.blockInterval, config.epochLength)
+  protected lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
+    chainSettings.epochLength)
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -65,9 +66,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @return height of modifier with such id if is in History
     */
   def heightOf(id: ModifierId): Option[Int] =
-    historyStorage.db
-      .get(headerHeightKey(id))
-      .map(b => Ints.fromByteArray(b.data))
+  historyStorage.db
+    .get(headerHeightKey(id))
+    .map(b => Ints.fromByteArray(b.data))
 
   /**
     * @param header - header to process
@@ -156,9 +157,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @return score of header with such id if is in History
     */
   protected def scoreOf(id: ModifierId): Option[BigInt] =
-    historyStorage.db
-      .get(headerScoreKey(id))
-      .map(b => BigInt(b.data))
+  historyStorage.db
+    .get(headerScoreKey(id))
+    .map(b => BigInt(b.data))
 
   /**
     * @param height - block height
@@ -168,7 +169,7 @@ trait HeadersProcessor extends ScorexLogging {
     *         multiple ids if there are forks at chosen height
     */
   protected def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
+  ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

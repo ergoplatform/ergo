@@ -3,13 +3,13 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer, PoWScheme}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings._
-import scorex.core.NodeViewModifier._
+import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
+import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 import scorex.crypto.encode.Base16
@@ -17,12 +17,15 @@ import scorex.crypto.encode.Base16
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 
 /**
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ScorexLogging {
+
+  val powScheme: PoWScheme
+
+  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   protected val config: NodeConfigurationSettings
   protected val chainSettings: ChainSettings
@@ -46,7 +49,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected def validityKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(_.data)
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(ModifierId @@ _.data)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -63,26 +66,26 @@ trait HeadersProcessor extends ScorexLogging {
     * @return height of modifier with such id if is in History
     */
   def heightOf(id: ModifierId): Option[Int] =
-    historyStorage.db
-      .get(headerHeightKey(id))
-      .map(b => Ints.fromByteArray(b.data))
+  historyStorage.db
+    .get(headerHeightKey(id))
+    .map(b => Ints.fromByteArray(b.data))
 
   /**
-    * @param m - header to process
+    * @param header - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(m: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val dataToInsert = toInsert(m)
-    historyStorage.insert(m.id, dataToInsert)
+  protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
+    val dataToInsert = toInsert(header)
+    historyStorage.insert(header.id, dataToInsert)
 
     //todo: why the first check?
-    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements m.id)) {
-      log.info(s"New best header ${m.encodedId}")
+    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
+      log.info(s"New best header ${Base16.encode(header.id)}")
       //TODO Notify node view holder that it should download transactions ?
-      ProgressInfo(None, Seq(), Seq(m))
+      ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {
-      log.info(s"New orphaned header ${m.encodedId}, best: ${}")
-      ProgressInfo(None, Seq(), Seq())
+      log.info(s"New orphaned header ${header.encodedId}, best: ${}")
+      ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }
 
@@ -107,35 +110,37 @@ trait HeadersProcessor extends ScorexLogging {
   }
 
   /**
-    * @param m - header to validate
+    * @param header - header to validate
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(m: Header): Try[Unit] = {
-    lazy val parentOpt = typedModifierById[Header](m.parentId)
-    if (m.parentId sameElements Header.GenesisParentId) {
+  protected def validate(header: Header): Try[Unit] = {
+    lazy val parentOpt = typedModifierById[Header](header.parentId)
+    if (header.parentId sameElements Header.GenesisParentId) {
       if (bestHeaderIdOpt.nonEmpty) {
         Failure(new Error("Trying to append genesis block to non-empty history"))
-      } else if (m.height != GenesisHeight) {
-        Failure(new Error(s"Height of genesis block $m is incorrect"))
+      } else if (header.height != GenesisHeight) {
+        Failure(new Error(s"Height of genesis block $header is incorrect"))
       } else {
         Success()
       }
     } else if (parentOpt.isEmpty) {
-      Failure(new Error(s"Parent header with id ${Base16.encode(m.parentId)} not defined"))
-    } else if (m.timestamp - NetworkTime.time() > MaxTimeDrift) {
-      Failure(new Error(s"Header timestamp ${m.timestamp} is too far in future from now ${NetworkTime.time()}"))
-    } else if (m.timestamp <= parentOpt.get.timestamp) {
-      Failure(new Error(s"Header timestamp ${m.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
-    } else if (m.height != parentOpt.get.height + 1) {
-      Failure(new Error(s"Header height ${m.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
-    } else if (historyStorage.contains(m.id)) {
+      Failure(new Error(s"Parent header with id ${Base16.encode(header.parentId)} not defined"))
+    } else if (header.timestamp - NetworkTime.time() > MaxTimeDrift) {
+      Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${NetworkTime.time()}"))
+    } else if (header.timestamp <= parentOpt.get.timestamp) {
+      Failure(new Error(s"Header timestamp ${header.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
+    } else if (header.height != parentOpt.get.height + 1) {
+      Failure(new Error(s"Header height ${header.height} is not greater by 1 than parents ${parentOpt.get.height + 1}"))
+    } else if (historyStorage.contains(header.id)) {
       Failure(new Error("Header is already in history"))
-    } else if (m.realDifficulty < m.requiredDifficulty) {
-      Failure(new Error(s"Block difficulty ${m.realDifficulty} is less than required ${m.requiredDifficulty}"))
-    } else if (m.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
-      Failure(new Error(s"Incorrect difficulty: ${m.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
-    } else if (!heightOf(m.parentId).exists(h => height - h < MaxRollback)) {
-      Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(m.parentId)}"))
+    } else if (realDifficulty(header) < header.requiredDifficulty) {
+      Failure(new Error(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}"))
+    } else if (header.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
+      Failure(new Error(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
+    } else if (!heightOf(header.parentId).exists(h => height - h < MaxRollback)) {
+      Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
+    } else if (!powScheme.verify(header)) {
+      Failure(new Error(s"Wrong proof-of-work solution for $header"))
     } else {
       Success()
     }
@@ -143,7 +148,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val historyStorage: HistoryStorage
 
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.ModifierTypeId))
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
 
@@ -152,9 +157,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @return score of header with such id if is in History
     */
   protected def scoreOf(id: ModifierId): Option[BigInt] =
-    historyStorage.db
-      .get(headerScoreKey(id))
-      .map(b => BigInt(b.data))
+  historyStorage.db
+    .get(headerScoreKey(id))
+    .map(b => BigInt(b.data))
 
   /**
     * @param height - block height
@@ -163,8 +168,8 @@ trait HeadersProcessor extends ScorexLogging {
     *         single id if no forks on this height
     *         multiple ids if there are forks at chosen height
     */
-  protected def headerIdsAtHeight(height: Int): Seq[ModifierId] = historyStorage.db.get(heightIdsKey(height: Int))
-    .map(_.data).getOrElse(Array()).grouped(32).toSeq
+  protected def headerIdsAtHeight(height: Int): Seq[ModifierId] =
+  ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

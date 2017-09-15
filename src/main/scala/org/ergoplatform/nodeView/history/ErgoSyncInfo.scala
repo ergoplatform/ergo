@@ -1,8 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.Header
-import scorex.core.NodeViewModifier
-import scorex.core.NodeViewModifier.ModifierId
+import scorex.core.{ModifierId, ModifierTypeId, NodeViewModifier}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.Serializer
@@ -14,8 +13,8 @@ case class ErgoSyncInfo(answer: Boolean,
                         lastHeaderIds: Seq[ModifierId],
                         fullBlockIdOpt: Option[ModifierId]) extends SyncInfo {
 
-  override def startingPoints: Seq[(NodeViewModifier.ModifierTypeId, NodeViewModifier.ModifierId)] = {
-    lastHeaderIds.map(b => Header.ModifierTypeId -> b)
+  override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
+    lastHeaderIds.map(b => Header.modifierTypeId -> b)
   }
 
   override type M = ErgoSyncInfo
@@ -47,9 +46,11 @@ object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
       case 3 => (true, true)
       case m => throw new Error(s"Incorrect flag $m")
     }
-    val fullBlockIdOpt = if (fullBlockIsDefined) Some(bytes.slice(1, 33)) else None
+    val fullBlockIdOpt = if (fullBlockIsDefined) Some(ModifierId @@ bytes.slice(1, 33)) else None
     val startPosition = if (fullBlockIsDefined) 33 else 1
-    val ids = bytes.slice(startPosition, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
+
+    val ids = ModifierId @@ bytes.slice(startPosition, bytes.length).grouped(NodeViewModifier.ModifierIdSize).toSeq
+
     ErgoSyncInfo(answer, ids, fullBlockIdOpt)
   }
 

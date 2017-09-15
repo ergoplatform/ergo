@@ -3,37 +3,35 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Bytes
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.ADProof.ProofRepresentation
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.nodeView.state.ErgoState.Digest
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.NodeViewModifier.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.state.{BoxStateChangeOperation, BoxStateChanges, Insertion, Removal}
-import scorex.crypto.authds.avltree.AVLValue
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.encode.Base58
-import scorex.crypto.hash.Blake2b256Unsafe
+import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 
 import scala.util.{Failure, Success, Try}
 
-case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extends ErgoPersistentModifier
+case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends ErgoPersistentModifier
   with ModifierWithDigest {
 
-  override def digest: Array[ModifierTypeId] = ADProof.proofDigest(proofBytes)
+  override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
-  override val modifierTypeId: ModifierTypeId = ADProof.ModifierTypeId
+  override val modifierTypeId: ModifierTypeId = ADProofs.modifierTypeId
 
-  override type M = ADProof
+  override type M = ADProofs
 
-  override lazy val serializer: Serializer[ADProof] = ADProofSerializer
+  override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
 
   override lazy val json: Json = Map(
     "headerId" -> Base58.encode(headerId).asJson,
     "proofBytes" -> Base58.encode(proofBytes).asJson,
-    "digest" -> Base58.encode(digest).asJson,
+    "digest" -> Base58.encode(digest).asJson
   ).asJson
 
   override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
@@ -47,18 +45,18 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
     * @return Success, if verification passed
     */
   def verify(changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox],
-             previousHash: Digest,
-             expectedHash: Digest): Try[Unit] = {
+             previousHash: ADDigest,
+             expectedHash: ADDigest): Try[Unit] = {
 
-    def applyChanges(verifier: BatchAVLVerifier[Blake2b256Unsafe],
+    def applyChanges(verifier: BatchAVLVerifier[Digest32, Blake2b256Unsafe],
                      changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]) =
-      changes.operations.foldLeft[Try[Option[AVLValue]]](Success(None)) { case (t, o) =>
+      changes.operations.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
-          verifier.performOneOperation(ADProof.changeToMod(o))
+          verifier.performOneOperation(ADProofs.changeToMod(o))
         })
       }
 
-    val verifier = new BatchAVLVerifier[Blake2b256Unsafe](previousHash, proofBytes, ADProof.KL,
+    val verifier = new BatchAVLVerifier[Digest32, Blake2b256Unsafe](previousHash, proofBytes, ADProofs.KL,
       Some(ErgoState.BoxSize), maxNumOperations = Some(changes.operations.size))
 
     applyChanges(verifier, changes).flatMap { _ =>
@@ -76,14 +74,12 @@ case class ADProof(headerId: ModifierId, proofBytes: ProofRepresentation) extend
   }
 }
 
-object ADProof {
-  type ProofRepresentation = Array[Byte]
-
-  val ModifierTypeId: Byte = 104: Byte
+object ADProofs {
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
 
   val KL = 32
 
-  def proofDigest(proofBytes: ProofRepresentation): Array[Byte] = Algos.hash(proofBytes)
+  def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
 
   /**
     * Convert operation over a box into an AVL+ tree modification
@@ -93,16 +89,18 @@ object ADProof {
   def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]): Modification =
     change match {
       case i: Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
-        Insert(i.box.id, i.box.bytes)
+        Insert(i.box.id, ADValue @@ i.box.bytes)
       case r: Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
         Remove(r.boxId)
     }
 }
 
-object ADProofSerializer extends Serializer[ADProof] {
-  override def toBytes(obj: ADProof): Array[Byte] = Bytes.concat(obj.headerId, obj.proofBytes)
+object ADProofSerializer extends Serializer[ADProofs] {
+  override def toBytes(obj: ADProofs): Array[Byte] = Bytes.concat(obj.headerId, obj.proofBytes)
 
-  override def parseBytes(bytes: Array[Byte]): Try[ADProof] = Try {
-    ADProof(bytes.take(Constants.ModifierIdSize), bytes.slice(Constants.ModifierIdSize, bytes.length))
+  override def parseBytes(bytes: Array[Byte]): Try[ADProofs] = Try {
+    ADProofs(
+      ModifierId @@ bytes.take(Constants.ModifierIdSize),
+      SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length))
   }
 }

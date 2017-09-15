@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import akka.actor.Props
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
@@ -23,7 +23,10 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
   class DigestHolderFixture extends AkkaFixture with FileUtils {
     val dir = createTempDir
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
-    val settings = defaultSettings.copy(nodeSettings = defaultSettings.nodeSettings.copy(ADState = true))
+    val settings = defaultSettings.copy(
+      nodeSettings = defaultSettings.nodeSettings.copy(ADState = true),
+      chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
+    )
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
   }
 
@@ -98,14 +101,13 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
-
     digestHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
 
     digestHolder ! LocallyGeneratedModifier(genesis.header)
     expectMsg(SuccessfulModification(genesis.header, None))
 
     digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
-    //expectMsg(SuccessfulModification(genesis.blockTransactions, None))
+   //   expectMsg(SuccessfulModification(genesis.blockTransactions, None))  todo: why no message?
 
     digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
     expectMsg(SuccessfulModification(genesis.aDProofs.get, None))
@@ -114,5 +116,34 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       v.history.bestFullBlockOpt
     }
     expectMsg(Some(genesis))
+  }
+
+  property("apply valid full block after genesis") { fixture =>
+    import fixture._
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfter = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    //digestHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+
+    digestHolder ! LocallyGeneratedModifier(genesis.header)
+    digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
+
+    //receiveN(3)
+
+    val block = validFullBlock(Some(genesis.header), wusAfter)
+
+    digestHolder ! LocallyGeneratedModifier(block.header)
+    digestHolder ! LocallyGeneratedModifier(block.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(block.aDProofs.get)
+
+    //receiveN(3)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(block))
   }
 }

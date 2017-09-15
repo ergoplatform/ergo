@@ -58,13 +58,11 @@ trait HistorySpecification extends PropSpec
     val scorexSettings: Settings = new Settings {
       override def settingsJSON: Map[String, Json] = Map()
     }
-    val chainSettings = ChainSettings(blockInterval, epochLength)
+    val chainSettings = ChainSettings(blockInterval, epochLength, DefaultFakePowScheme)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, nodeSettings, scorexSettings)
 
-    val pow = DefaultFakePowScheme
-    ErgoHistory.readOrGenerate(fullHistorySettings, pow)
+    ErgoHistory.readOrGenerate(fullHistorySettings)
   }
-
 }

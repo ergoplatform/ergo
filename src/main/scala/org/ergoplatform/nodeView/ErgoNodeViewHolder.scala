@@ -67,9 +67,9 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
 
     val digestState = ErgoState.generateGenesisDigestState(dir)
 
-    val pow = new EquihashPowScheme(n = 96, k = 5)
+//    val pow = new EquihashPowScheme(n = 96, k = 5)
     //todo: ensure that history is in certain mode
-    val history = ErgoHistory.readOrGenerate(settings, pow)
+    val history = ErgoHistory.readOrGenerate(settings)
 
     val wallet = ErgoWallet.readOrGenerate(settings)
 
@@ -83,12 +83,12 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState(): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = {
-    val pow = new EquihashPowScheme(n = 96, k = 5)
+    //val pow = new EquihashPowScheme(n = 96, k = 5)
 
     ErgoState.readOrGenerate(settings).map {
       case ds: DigestState =>
         //todo: ensure that history is in certain mode
-        val history = ErgoHistory.readOrGenerate(settings, pow)
+        val history = ErgoHistory.readOrGenerate(settings)
 
         val wallet = ErgoWallet.readOrGenerate(settings)
 

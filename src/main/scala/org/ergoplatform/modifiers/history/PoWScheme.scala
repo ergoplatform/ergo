@@ -69,6 +69,12 @@ trait PoWScheme {
 
 object PoWScheme {
   type Solution = Seq[Int]
+
+  //todo: do n & k as Option[Char]
+  def apply(powType: String, n: Int, k: Int): PoWScheme = {
+    if (powType == "fake") DefaultFakePowScheme else
+      new EquihashPowScheme(n.toChar, k.toChar)
+  }
 }
 
 

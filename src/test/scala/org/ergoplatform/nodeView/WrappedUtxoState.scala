@@ -50,8 +50,13 @@ class WrappedUtxoState(override val version: VersionTag, store: Store, val versi
 
 object WrappedUtxoState {
   def apply(boxHolder: BoxHolder, dir: File): WrappedUtxoState = {
-    val boxes = boxHolder.boxes
     val us = UtxoState.fromBoxHolder(boxHolder, dir)
+    WrappedUtxoState(us, boxHolder)
+  }
+
+  def apply(us: UtxoState, boxHolder: BoxHolder): WrappedUtxoState = {
+    val boxes = boxHolder.boxes
+
     val version = ByteArrayWrapper(us.version)
     val vbh = new VersionedInMemoryBoxHolder(
       boxes,

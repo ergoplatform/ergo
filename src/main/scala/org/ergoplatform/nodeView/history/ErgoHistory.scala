@@ -11,10 +11,10 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
-import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
+import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.{Base16, Base58}
 
@@ -46,6 +46,7 @@ trait ErgoHistory
     with BlockTransactionsProcessor
     with ScorexLogging {
 
+  protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
   protected val storage: LSMStore
 
@@ -206,9 +207,9 @@ trait ErgoHistory
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
   def lastHeaders(count: Int): HeaderChain =
-    bestHeaderOpt
-      .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
-      .getOrElse(HeaderChain.empty)
+  bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
+    .getOrElse(HeaderChain.empty)
 
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
@@ -276,20 +277,20 @@ trait ErgoHistory
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
                                       lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-/*
-    val headerId = modifier match {
-      case h: Header => h.id
-      case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
-      case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
+    /*
+        val headerId = modifier match {
+          case h: Header => h.id
+          case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
+          case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
 
-      case snapshot: UTXOSnapshotChunk => ???
-      case m =>
-        log.warn(s"reportInvalid for invalid modifier type: $m")
-        ???
-    }*/
+          case snapshot: UTXOSnapshotChunk => ???
+          case m =>
+            log.warn(s"reportInvalid for invalid modifier type: $m")
+            ???
+        }*/
 
 
-    if(!valid) {
+    if (!valid) {
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
         case h: Header => toDrop(h)
         case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
@@ -334,6 +335,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow
@@ -342,6 +344,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow
@@ -350,6 +353,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow
@@ -358,6 +362,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow
@@ -366,6 +371,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow
@@ -374,6 +380,7 @@ object ErgoHistory extends ScorexLogging {
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
+          override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: LSMStore = db
           override val powScheme = pow

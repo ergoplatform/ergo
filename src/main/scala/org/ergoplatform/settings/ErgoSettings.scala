@@ -11,6 +11,7 @@ import scorex.core.settings.Settings
 import scorex.core.utils.ScorexLogging
 
 case class ErgoSettings(directory: String,
+                        chainSettings: ChainSettings,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: Settings)
 
@@ -27,11 +28,12 @@ object ErgoSettings extends ScorexLogging {
     val settingsFilename = config.as[String](s"$configPath.legacySettingsFilename")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
+    val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val legacySettings = new Settings {
       override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename).ensuring(_.nonEmpty)
     }
 
-    ErgoSettings(directory, nodeSettings, legacySettings)
+    ErgoSettings(directory, chainSettings, nodeSettings, legacySettings)
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView
 
 import akka.actor.Props
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -21,7 +22,8 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
 
   class DigestHolderFixture extends AkkaFixture with FileUtils {
     val dir = createTempDir
-    val settings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
+    val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
+    val settings = defaultSettings.copy(nodeSettings = defaultSettings.nodeSettings.copy(ADState = true))
     val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
   }
 
@@ -41,7 +43,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     expectMsg(None)
   }
 
-  property("genesis - apply valid block") { fixture => import fixture._
+  property("genesis - apply valid block header") { fixture => import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val block = validFullBlock(None, us, bh)
@@ -88,6 +90,29 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       v.history.bestHeaderOpt
     }
     expectMsg(Some(block.header))
+  }
 
+
+  property("apply valid full block as genesis") { fixture =>
+    import fixture._
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+
+    digestHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+
+    digestHolder ! LocallyGeneratedModifier(genesis.header)
+    expectMsg(SuccessfulModification(genesis.header, None))
+
+    digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
+    //expectMsg(SuccessfulModification(genesis.blockTransactions, None))
+
+    digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    expectMsg(SuccessfulModification(genesis.aDProofs.get, None))
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(genesis))
   }
 }

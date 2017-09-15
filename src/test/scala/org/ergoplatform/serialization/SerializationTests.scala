@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransactionSerializer
+import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransactionSerializer, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBoxSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.utils.ErgoGenerators
@@ -39,9 +39,7 @@ class SerializationTests extends PropSpec
   }
 
   property("AnyoneCanSpendTransactionGen serialization - .bytes") {
-    forAll(invalidAnyoneCanSpendTransactionGen){tx =>
-      AnyoneCanSpendTransactionSerializer.parseBytes(tx.bytes).get == tx
-    }
+    checkSerializationRoundtrip(invalidAnyoneCanSpendTransactionGen, AnyoneCanSpendTransactionSerializer)
   }
 
   property("ErgoSyncInfo serialization") {
@@ -57,12 +55,14 @@ class SerializationTests extends PropSpec
   }
 
   property("BlockTransactions serialization - .bytes") {
-    forAll(invalidBlockTransactionsGen){bt =>
-      BlockTransactionsSerializer.parseBytes(bt.bytes).get == bt
-    }
+    checkSerializationRoundtrip(invalidBlockTransactionsGen, BlockTransactionsSerializer)
   }
 
   property("ADProofs serialization") {
     checkSerializationRoundtrip(randomADProofsGen, ADProofSerializer)
+  }
+
+  property("TransactionIdsForHeader serialization - .bytes") {
+    checkSerializationRoundtrip(transactionIdsForHeaderGen, TransactionIdsForHeaderSerializer)
   }
 }

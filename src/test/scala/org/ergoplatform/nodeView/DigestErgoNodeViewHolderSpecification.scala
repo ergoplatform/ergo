@@ -14,7 +14,6 @@ import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
-import scorex.crypto.authds.ADDigest
 import scorex.testkit.utils.FileUtils
 
 class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
@@ -119,7 +118,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     expectMsg(Some(genesis))
   }
 
-  property("apply valid full block after genesis") { fixture =>
+  property("apply full blocks after genesis") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
@@ -165,5 +164,26 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       ByteArrayWrapper(v.state.rootHash)
     }
     expectMsg(ByteArrayWrapper(wusAfterBlock.rootHash))
+
+    val brokenBlock = validFullBlock(Some(block.header), wusAfterBlock)
+
+    digestHolder ! LocallyGeneratedModifier(brokenBlock.header)
+
+    val brokenTransactions = brokenBlock.blockTransactions.copy(txs = brokenBlock.blockTransactions.txs.tail)
+    digestHolder ! LocallyGeneratedModifier(brokenTransactions)
+    digestHolder ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(block))
+
+
+    //todo: probably wrong behavior
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(brokenBlock.header))
+
   }
 }

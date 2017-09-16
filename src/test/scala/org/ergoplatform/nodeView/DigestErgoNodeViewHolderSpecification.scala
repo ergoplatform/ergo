@@ -14,6 +14,7 @@ import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
+import scorex.crypto.authds.ADDigest
 import scorex.testkit.utils.FileUtils
 
 class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
@@ -123,7 +124,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfter = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
 
     //digestHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
 
@@ -131,7 +132,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
     digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
-    val block = validFullBlock(Some(genesis.header), wusAfter)
+    val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
     digestHolder ! LocallyGeneratedModifier(block.header)
     digestHolder ! LocallyGeneratedModifier(block.blockTransactions)
@@ -143,6 +144,11 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     }
     expectMsg(Some(block))
 
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(block.header))
+
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
       v.history.height
     }
@@ -152,5 +158,12 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       v.history.lastHeaders(10).size
     }
     expectMsg(2)
+
+    val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ByteArrayWrapper] { v =>
+      ByteArrayWrapper(v.state.rootHash)
+    }
+    expectMsg(ByteArrayWrapper(wusAfterBlock.rootHash))
   }
 }

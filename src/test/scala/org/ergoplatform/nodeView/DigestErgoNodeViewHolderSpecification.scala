@@ -131,19 +131,26 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
     digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
-    //receiveN(3)
-
     val block = validFullBlock(Some(genesis.header), wusAfter)
 
     digestHolder ! LocallyGeneratedModifier(block.header)
     digestHolder ! LocallyGeneratedModifier(block.blockTransactions)
     digestHolder ! LocallyGeneratedModifier(block.aDProofs.get)
 
-    //receiveN(3)
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
     expectMsg(Some(block))
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.history.height
+    }
+    expectMsg(1)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.history.lastHeaders(10).size
+    }
+    expectMsg(2)
   }
 }

@@ -277,20 +277,10 @@ trait ErgoHistory
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
                                       lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    /*
-        val headerId = modifier match {
-          case h: Header => h.id
-          case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
-          case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
-
-          case snapshot: UTXOSnapshotChunk => ???
-          case m =>
-            log.warn(s"reportInvalid for invalid modifier type: $m")
-            ???
-        }*/
-
-
-    if (!valid) {
+    if (valid) {
+      //TODO mark as valid
+      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+    } else {
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
         case h: Header => toDrop(h)
         case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
@@ -301,10 +291,10 @@ trait ErgoHistory
           Seq(ByteArrayWrapper(m.id)) -> Seq()
       }
       historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
+      //TODO fix
+      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
     }
 
-    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq()) //todo: dumb values, fix
-    this -> progressInto
   }
 
   //todo: fix

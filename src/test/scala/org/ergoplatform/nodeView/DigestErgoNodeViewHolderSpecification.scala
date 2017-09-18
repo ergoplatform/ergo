@@ -161,7 +161,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     expectMsg(2)
   }
 
-  ignore("apply invalid full block"){ fixture =>
+  property("apply invalid full block"){ fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
@@ -187,6 +187,11 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     }
     expectMsg(ByteArrayWrapper(wusAfterBlock.rootHash))
 
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(block.header))
+
     val brokenBlock = validFullBlock(Some(block.header), wusAfterBlock)
 
     digestHolder ! LocallyGeneratedModifier(brokenBlock.header)
@@ -203,6 +208,7 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt
     }
-    expectMsg(Some(block.header))
+    //TODO Note and verify!
+    expectMsg(Some(brokenBlock.header))
   }
 }

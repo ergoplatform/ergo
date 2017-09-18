@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView
 
-import akka.actor.Props
+import java.io.File
+
+import akka.actor.{ActorRef, Props}
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
@@ -18,19 +20,19 @@ import scorex.testkit.utils.FileUtils
 
 class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
 
-  type Fixture = DigestHolderFixture
-
-  class DigestHolderFixture extends AkkaFixture with FileUtils {
-    val dir = createTempDir
+  private class DigestHolderFixture extends AkkaFixture with FileUtils {
+    val dir: File = createTempDir
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
-    val settings = defaultSettings.copy(
+    val settings: ErgoSettings = defaultSettings.copy(
       nodeSettings = defaultSettings.nodeSettings.copy(ADState = true),
       chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
     )
-    val digestHolder = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+    val digestHolder: ActorRef = system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
   }
 
-  def createAkkaFixture(): Fixture = new DigestHolderFixture
+  override type Fixture = DigestHolderFixture
+
+  override def createAkkaFixture(): Fixture = new DigestHolderFixture
 
   property("genesis - state digest") { fixture => import fixture._
      digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>

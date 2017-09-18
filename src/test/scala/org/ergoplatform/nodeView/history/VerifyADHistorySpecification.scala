@@ -40,24 +40,47 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
   }
 
-  property("reportSemanticValidity should change nothing for valid blocks") {
+  property("reportSemanticValidity(valid = true) should change nothing") {
     var history = genHistory()
 
-    genChain(BlocksInChain, bestFullOptToSeq(history)).tail.foreach { fullBlock =>
-      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
-      history.bestHeaderOpt.get.id shouldEqual fullBlock.parentId
+    genChain(BlocksInChain, bestFullOptToSeq(history)).foreach { fullBlock =>
+      history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
+      history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
 
-      history = history.append(fullBlock.header).get._1.append(fullBlock.aDProofs.get).get._1
-        .append(fullBlock.blockTransactions).get._1
+      history = history.append(fullBlock.header).get._1
+      history = history.append(fullBlock.aDProofs.get).get._1
+      history = history.append(fullBlock.blockTransactions).get._1
+
+      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+      history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
 
       history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
 
-      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
-      history.bestHeaderOpt.get.id shouldEqual fullBlock.id
       //TODO check that modifier validity is persisted with isSemanticallyValid?
     }
+  }
+
+  property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
+    var history = genHistory()
+    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    history = applyChain(history, chain)
+
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get shouldEqual chain.last
+
+    val invalidChain = chain.takeRight(2)
+
+    val report = history.reportSemanticValidity(invalidChain.head.header, valid = false, invalidChain.head.header.id)
+    history = report._1
+    val processInfo = report._2
+    processInfo.toApply.isEmpty shouldBe true
+    processInfo.branchPoint shouldEqual Some(invalidChain.head.header.parentId)
+    processInfo.toRemove shouldEqual invalidChain
+
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get.id shouldEqual invalidChain.head.parentId
   }
 
 

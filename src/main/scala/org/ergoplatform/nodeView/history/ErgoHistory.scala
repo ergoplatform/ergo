@@ -276,16 +276,20 @@ trait ErgoHistory
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
     if (valid) {
-      //TODO mark as valid
+      //TODO mark as valid if isSemanticallyValid() is needed
       this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
     } else {
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
-        case h: Header => toDrop(h)
-        case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
-        case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
-        case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
+        case h: Header =>
+          reportInvalid(h)
+        case proof: ADProofs =>
+          typedModifierById[Header](proof.headerId).map(h => reportInvalid(h)).getOrElse(Seq())
+        case txs: BlockTransactions =>
+          typedModifierById[Header](txs.headerId).map(h => reportInvalid(h)).getOrElse(Seq())
+        case snapshot: UTXOSnapshotChunk =>
+          reportInvalid(snapshot)
         case m =>
           log.warn(s"reportInvalid for invalid modifier type: $m")
           Seq(ByteArrayWrapper(m.id)) -> Seq()

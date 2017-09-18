@@ -40,6 +40,27 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
   }
 
+  property("reportSemanticValidity should change nothing for valid blocks") {
+    var history = genHistory()
+
+    genChain(BlocksInChain, bestFullOptToSeq(history)).tail.foreach { fullBlock =>
+      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+      history.bestHeaderOpt.get.id shouldEqual fullBlock.parentId
+
+      history = history.append(fullBlock.header).get._1.append(fullBlock.aDProofs.get).get._1
+        .append(fullBlock.blockTransactions).get._1
+
+      history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
+      history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
+      history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
+
+      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+      history.bestHeaderOpt.get.id shouldEqual fullBlock.id
+      //TODO check that modifier validity is persisted with isSemanticallyValid?
+    }
+  }
+
+
   property("Report invalid for best full block") {
     var history = genHistory()
 

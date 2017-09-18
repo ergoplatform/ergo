@@ -94,7 +94,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @param header - header we're going to remove from history
     * @return ids to remove, new data to apply
     */
-  protected def toDrop(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
+  protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
+
+
     val modifierId = header.id
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))
@@ -107,6 +109,7 @@ trait HeadersProcessor extends ScorexLogging {
       Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
     } else Seq()
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
+
   }
 
   /**

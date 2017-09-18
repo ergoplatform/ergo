@@ -20,7 +20,7 @@ import scorex.testkit.utils.FileUtils
 
 class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
 
-  private class DigestHolderFixture extends AkkaFixture with FileUtils {
+  class DigestHolderFixture extends AkkaFixture with FileUtils {
     val dir: File = createTempDir
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
     val settings: ErgoSettings = defaultSettings.copy(

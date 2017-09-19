@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.consensus.{History, ModifierSemanticValidity}
@@ -283,24 +283,24 @@ trait ErgoHistory
         ByteArrayWrapper(Array(1.toByte))))
       this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
     } else {
-      /*
-      val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
-        case h: Header =>
-          reportInvalid(h)
-        case proof: ADProofs =>
-          typedModifierById[Header](proof.headerId).map(h => reportInvalid(h)).getOrElse(Seq())
-        case txs: BlockTransactions =>
-          typedModifierById[Header](txs.headerId).map(h => reportInvalid(h)).getOrElse(Seq())
-        case snapshot: UTXOSnapshotChunk =>
-          reportInvalid(snapshot)
-        case m =>
-          log.warn(s"reportInvalid for invalid modifier type: $m")
-          Seq(ByteArrayWrapper(m.id)) -> Seq()
+      val headerOpt: Option[Header] = modifier match {
+        case h: Header => Some(h)
+        case proof: ADProofs => typedModifierById[Header](proof.headerId)
+        case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
+        case _ => None
       }
-      historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
-      */
-      val toInsert = Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte)))
-      historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
+      headerOpt match {
+        case Some(h) =>
+          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = Seq(h.id, h.transactionsId, h.ADProofsId)
+            .map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
+
+          val toInsert = validityRow
+          historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
+        case None =>
+          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+            ByteArrayWrapper(Array(0.toByte))))
+      }
+
 
       //TODO fix
       this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
@@ -308,11 +308,11 @@ trait ErgoHistory
 
   }
 
-  override def isSemanticallyValid(modifierID: ModifierId): ModifierSemanticValidity.Value = {
-    historyStorage.db.get(validityKey(modifierID)) match {
+  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = {
+    historyStorage.db.get(validityKey(modifierId)) match {
       case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
       case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
-      case None if contains(modifierID) => ModifierSemanticValidity.Unknown
+      case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>
         log.error(s"Incorrect validity status: $m")

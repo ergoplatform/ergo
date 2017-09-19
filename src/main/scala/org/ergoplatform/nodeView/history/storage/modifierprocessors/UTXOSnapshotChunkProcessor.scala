@@ -28,8 +28,4 @@ trait UTXOSnapshotChunkProcessor {
     Success()
   }
 
-  protected def reportInvalid(m: UTXOSnapshotChunk): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
-    (Seq(), Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(Array(0.toByte)))))
-  }
-
 }

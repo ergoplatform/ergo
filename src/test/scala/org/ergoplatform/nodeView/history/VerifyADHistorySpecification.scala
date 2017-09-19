@@ -75,7 +75,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   }
 
-  property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result") {
+  property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {
     var history = genHistory()
 
     val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
@@ -84,15 +84,13 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     chain.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
-      history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
-      history.reportSemanticValidity(fullBlock.aDProofs.get, valid = false, fullBlock.header.parentId)
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
-      history.reportSemanticValidity(fullBlock.blockTransactions, valid = false, fullBlock.header.parentId)
+
+      history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
     }
   }

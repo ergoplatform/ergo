@@ -102,7 +102,20 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
-  property("process fork") {
+  property("process fork from genesis") {
+    val genesis = genChain(1, Seq())
+    var history = applyChain(genHistory(), genesis)
+    val fork1 = genChain(1, Seq(history.bestFullBlockOpt.get)).tail
+    val fork2 = genChain(2, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, fork1)
+    history.bestHeaderOpt.get shouldBe fork1.last.header
+
+    history = applyChain(history, fork2)
+    history.bestHeaderOpt.get shouldBe fork2.last.header
+  }
+
+  property("process fork from existing chain") {
     var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
 
     assert(history.bestFullBlockOpt.isDefined)

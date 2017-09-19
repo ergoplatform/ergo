@@ -277,10 +277,13 @@ trait ErgoHistory
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
                                       unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
-      //TODO mark as valid if isSemanticallyValid() is needed
+      historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+        ByteArrayWrapper(Array(1.toByte))))
       this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
     } else {
+      /*
       val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
         case h: Header =>
           reportInvalid(h)
@@ -295,14 +298,27 @@ trait ErgoHistory
           Seq(ByteArrayWrapper(m.id)) -> Seq()
       }
       historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
+      */
+      val toInsert = Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte)))
+      historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
+
       //TODO fix
       this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
     }
 
   }
 
-  //todo: fix
-  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = ???
+  override def isSemanticallyValid(modifierID: ModifierId): ModifierSemanticValidity.Value = {
+    historyStorage.db.get(validityKey(modifierID)) match {
+      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
+      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case None if contains(modifierID) => ModifierSemanticValidity.Unknown
+      case None => ModifierSemanticValidity.Absent
+      case m =>
+        log.error(s"Incorrect validity status: $m")
+        ModifierSemanticValidity.Absent
+    }
+  }
 }
 
 object ErgoHistory extends ScorexLogging {

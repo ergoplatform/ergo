@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import scorex.core.consensus.ModifierSemanticValidity
 
 import scala.util.Random
 
@@ -40,12 +41,17 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
   }
 
-  property("reportSemanticValidity(valid = true) should change nothing") {
+  property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
     var history = genHistory()
 
-    genChain(BlocksInChain, bestFullOptToSeq(history)).foreach { fullBlock =>
+    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    chain.foreach { fullBlock =>
       history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
       history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Absent
 
       history = history.append(fullBlock.header).get._1
       history = history.append(fullBlock.aDProofs.get).get._1
@@ -54,11 +60,40 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
 
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+
       history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
 
-      //TODO check that modifier validity is persisted with isSemanticallyValid?
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
+    }
+
+  }
+
+  property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result") {
+    var history = genHistory()
+
+    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+
+    history = applyChain(history, chain)
+
+    chain.foreach { fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
+      history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
+      history.reportSemanticValidity(fullBlock.aDProofs.get, valid = false, fullBlock.header.parentId)
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+      history.reportSemanticValidity(fullBlock.blockTransactions, valid = false, fullBlock.header.parentId)
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
     }
   }
 

@@ -193,7 +193,7 @@ trait ErgoHistory
   /**
     * @return all possible forks, that contains specified header
     */
-  def continuationHeaderChains(header: Header): Seq[HeaderChain] = {
+  private[history] def continuationHeaderChains(headerId: ModifierId): Seq[HeaderChain] = {
     ???
   }
 
@@ -303,7 +303,7 @@ trait ErgoHistory
       }
       headerOpt match {
         case Some(h) =>
-          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = continuationHeaderChains(h).flatMap(_.headers)
+          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = continuationHeaderChains(h.id).flatMap(_.headers)
             .flatMap(h => validityRowsForHeader(h))
 
           val toInsert = validityRow

@@ -191,6 +191,14 @@ trait ErgoHistory
   }.toOption
 
   /**
+    * @return all possible forks, that contains specified header
+    */
+  def continuationHeaderChains(header: Header): Seq[HeaderChain] = {
+    ???
+  }
+
+
+  /**
     *
     * @param answer - whether it is answer to other node request or not
     * @return Node ErgoSyncInfo
@@ -277,6 +285,10 @@ trait ErgoHistory
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
                                       unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    def validityRowsForHeader(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+      Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
+    }
+
     assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
       historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
@@ -291,8 +303,8 @@ trait ErgoHistory
       }
       headerOpt match {
         case Some(h) =>
-          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = Seq(h.id, h.transactionsId, h.ADProofsId)
-            .map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
+          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = continuationHeaderChains(h).flatMap(_.headers)
+            .flatMap(h => validityRowsForHeader(h))
 
           val toInsert = validityRow
           historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)

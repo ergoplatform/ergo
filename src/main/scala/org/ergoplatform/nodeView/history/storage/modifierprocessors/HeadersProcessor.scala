@@ -11,6 +11,7 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 import scorex.crypto.encode.Base16
 
@@ -22,6 +23,8 @@ import scala.util.{Failure, Success, Try}
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ScorexLogging {
+
+  protected val historyStorage: HistoryStorage
 
   val powScheme: PoWScheme
 
@@ -38,6 +41,8 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.epochLength)
+
+  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -144,12 +149,12 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
+    } else if (isSemanticallyValid(header.parentId) == ModifierSemanticValidity.Invalid) {
+      Failure(new Error(s"Parent header is marked as semantically invalid"))
     } else {
       Success()
     }
   }
-
-  protected val historyStorage: HistoryStorage
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 

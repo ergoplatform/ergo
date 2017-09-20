@@ -129,9 +129,8 @@ object Equihash {
     val indicesPerHashOutput = 512 / n
     log.debug("Generating first list")
     //  1) Generate first list
-    var X = ArrayBuffer.empty[(Array[Byte], Seq[Int])]
     val tmpHash = new Array[Byte](digest.getDigestSize)
-    for {i <- 0 until Math.pow(2, collisionLength + 1).toInt} {
+    var X = for {i <- (0 until Math.pow(2, collisionLength + 1).toInt).toVector} yield {
       val r = i % indicesPerHashOutput
       if (r == 0) {
         //  X_i = H(I||V||x_i)
@@ -141,8 +140,7 @@ object Equihash {
       }
       val d = tmpHash.slice(r * n / 8, (r + 1) * n / 8)
       val expanded = expandArray(d, hashLength, collisionLength)
-      val p = (expanded, Seq(i))
-      X += p
+      expanded -> Seq(i)
     }
 
     //  3) Repeat step 2 until 2n/(k+1) bits remain
@@ -154,17 +152,17 @@ object Equihash {
       X = X.sortBy(_._1.toIterable)
 
       log.debug("- Finding collisions")
-      var Xc = ArrayBuffer.empty[(Array[Byte], Seq[Int])]
+      var Xc = Vector.empty[(Array[Byte], Seq[Int])]
       while (X.nonEmpty) {
         //  2b) Find next set of unordered pairs with collisions on first n/(k+1) bits
         val XSize = X.size
         val j = (1 until XSize).find(j => !hasCollision(X.last._1, X(XSize - 1 - j)._1, i, collisionLength)).getOrElse(XSize)
 
         //  2c) Store tuples (X_i ^ X_j, (i, j)) on the table
-        for {
+        Xc ++= (for {
           l <- 0 until j - 1
           m <- l + 1 until j
-        } {
+        } yield {
           val X1l = X(XSize - 1 - l)
           val X1m = X(XSize - 1 - m)
           //  Check that there are no duplicate indices in tuples i and j
@@ -174,10 +172,9 @@ object Equihash {
             } else {
               X1m._2 ++ X1l._2
             }
-            val p = (xor(X1l._1, X1m._1), concat)
-            Xc += p
-          }
-        }
+            Some(xor(X1l._1, X1m._1) -> concat)
+          } else None
+        }).flatten
 
         //  2d) Drop this set
         X = X.take(XSize - j)
@@ -194,7 +191,7 @@ object Equihash {
 
     log.debug("- Finding collisions")
 
-    val solns = ArrayBuffer.empty[Seq[Int]]
+    var solns = Vector.empty[Seq[Int]]
 
     while (X.nonEmpty) {
       val XSize = X.length
@@ -203,22 +200,23 @@ object Equihash {
       val j = (1 until XSize).find(j => !(hasCollision(X.last._1, X(XSize - 1 - j)._1, k, collisionLength) &&
         hasCollision(X.last._1, X(XSize - 1 - j)._1, k + 1, collisionLength))).getOrElse(XSize)
 
-      for (l <- 0 until j - 1) {
-        for (m <- l + 1 until j) {
-          val res = xor(X(XSize - 1 - l)._1, X(XSize - 1 - m)._1)
-          if (countLeadingZeroes(res) == 8 * hashLength && distinctIndices(X(XSize - 1 - l)._2, X(XSize - 1 - m)._2)) {
-            //        if DEBUG and VERBOSE:
-            //          print 'Found solution:'
-            //        print '- %s %s' % (print_hash(X[-1-l][0]), X[-1-l][1])
-            //        print '- %s %s' % (print_hash(X[-1-m][0]), X[-1-m][1])
-            if (X(XSize - 1 - l)._2(0) < X(XSize - 1 - m)._2(0)) {
-              solns.append(X(XSize - 1 - l)._2 ++ X(XSize - 1 - m)._2)
-            } else {
-              solns.append(X(XSize - 1 - m)._2 ++ X(XSize - 1 - l)._2)
-            }
-          }
-        }
-      }
+      solns ++= (for {
+        l <- 0 until j - 1
+        m <- l + 1 until j
+      } yield {
+        val res = xor(X(XSize - 1 - l)._1, X(XSize - 1 - m)._1)
+        if (countLeadingZeroes(res) == 8 * hashLength && distinctIndices(X(XSize - 1 - l)._2, X(XSize - 1 - m)._2)) {
+          //        if DEBUG and VERBOSE:
+          //          print 'Found solution:'
+          //        print '- %s %s' % (print_hash(X[-1-l][0]), X[-1-l][1])
+          //        print '- %s %s' % (print_hash(X[-1-m][0]), X[-1-m][1])
+          Some(if (X(XSize - 1 - l)._2(0) < X(XSize - 1 - m)._2(0)) {
+            X(XSize - 1 - l)._2 ++ X(XSize - 1 - m)._2
+          } else {
+            X(XSize - 1 - m)._2 ++ X(XSize - 1 - l)._2
+          })
+        } else None
+      }).flatten
 
       // 2d) Drop this set
       X = X.take(XSize - j)

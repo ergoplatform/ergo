@@ -242,14 +242,14 @@ class EquihashSpecification extends PropSpec
   property("Equihash should expand byte arrays") {
     forAll(expendCompressVectors) { (scope: Array[Byte], bitLen: Int, bytePad: Int, compact: Array[Byte], expanded: Array[Byte]) =>
       val outExpanded = Equihash.expandArray(compact, expanded.length, bitLen, bytePad)
-      expanded.map(_ & 0xFF) shouldBe outExpanded
+      expanded shouldBe outExpanded
     }
   }
 
   property("Equihash should compress byte arrays") {
     forAll(expendCompressVectors) { (scope: Array[Byte], bitLen: Int, bytePad: Int, compact: Array[Byte], expanded: Array[Byte]) =>
       val outCompressed = Equihash.compressArray(expanded, compact.length, bitLen, bytePad)
-      compact.map(_ & 0xFF) shouldBe outCompressed
+      compact shouldBe outCompressed
     }
   }
 }

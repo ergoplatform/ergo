@@ -28,33 +28,33 @@ object Equihash {
 
   private val byteSize = 8
 
-  def countLeadingZeroes(bytes: Array[Int]): Int = {
-    (0 until byteSize * bytes.length).foldLeft(0) {
-      case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => res + 1
+  def countLeadingZeroes(bytes: Array[Byte]): Byte = {
+    (0 until byteSize * bytes.length).foldLeft(0.toByte) {
+      case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => (res + 1).toByte
       case (res, _) => return res
     }
   }
 
-  def hasCollision(ha: Array[Int], hb: Array[Int], i: Int, lenght: Int): Boolean = {
+  def hasCollision(ha: Array[Byte], hb: Array[Byte], i: Int, lenght: Int): Boolean = {
     ((i - 1) * lenght / 8 until i * lenght / 8).forall(j => ha(j) == hb(j))
   }
 
   def distinctIndices(a: Seq[Int], b: Seq[Int]): Boolean = !a.exists(b.contains)
 
-  def xor(ha: Array[Int], hb: Array[Int]): Array[Int] = {
-    for {(a, b) <- ha.zip(hb)} yield a ^ b
+  def xor(ha: Array[Byte], hb: Array[Byte]): Array[Byte] = {
+    for {(a, b) <- ha.zip(hb)} yield (a ^ b).toByte
   }
 
   private val log = LoggerFactory.getLogger(getClass)
   private val wordSize = 32
   private val wordMask = BigInteger.ONE.shiftLeft(wordSize).subtract(BigInteger.ONE)
 
-  def expandArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Int] = {
+  def expandArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Byte] = {
     assert(bitLen >= 8 && wordSize >= 7 + bitLen)
 
     val outWidth = (bitLen + 7) / 8 + bytePad
     assert(outLen == 8 * outWidth * inp.length / bitLen)
-    val out = new Array[Int](outLen)
+    val out = new Array[Byte](outLen)
 
     val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
     val byteMask = BigInteger.valueOf(0xFF)
@@ -79,7 +79,7 @@ object Equihash {
             // Apply bitLenMask across byte boundaries
               bitLenMask.shiftRight(8 * (outWidth - x - 1)).and(byteMask)
             val v = a.and(b)
-            v.intValueExact()
+            v.byteValue()
           })
         j += outWidth
       }
@@ -88,12 +88,12 @@ object Equihash {
     out
   }
 
-  def compressArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Int] = {
+  def compressArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Byte] = {
     assert(bitLen >= 8 && wordSize >= 7 + bitLen)
 
     val inWidth = (bitLen + 7) / 8 + bytePad
     assert(outLen == bitLen * inp.length / (8 * inWidth))
-    val out = new Array[Int](outLen)
+    val out = new Array[Byte](outLen)
 
     val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
 
@@ -116,7 +116,7 @@ object Equihash {
       }
 
       accBits -= 8
-      out(i) = accValue.shiftRight(accBits).and(BigInteger.valueOf(0xFF)).intValueExact()
+      out(i) = accValue.shiftRight(accBits).and(BigInteger.valueOf(0xFF)).byteValue()
     }
 
     out
@@ -129,7 +129,7 @@ object Equihash {
     val indicesPerHashOutput = 512 / n
     log.debug("Generating first list")
     //  1) Generate first list
-    var X = ArrayBuffer.empty[(Array[Int], Seq[Int])]
+    var X = ArrayBuffer.empty[(Array[Byte], Seq[Int])]
     val tmpHash = new Array[Byte](digest.getDigestSize)
     for {i <- 0 until Math.pow(2, collisionLength + 1).toInt} {
       val r = i % indicesPerHashOutput
@@ -154,7 +154,7 @@ object Equihash {
       X = X.sortBy(_._1.toIterable)
 
       log.debug("- Finding collisions")
-      var Xc = ArrayBuffer.empty[(Array[Int], Seq[Int])]
+      var Xc = ArrayBuffer.empty[(Array[Byte], Seq[Int])]
       while (X.nonEmpty) {
         //  2b) Find next set of unordered pairs with collisions on first n/(k+1) bits
         val XSize = X.size

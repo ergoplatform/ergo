@@ -82,7 +82,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history = applyChain(history, chain)
 
-    chain.foreach { fullBlock =>
+    chain.reverse.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
@@ -94,6 +94,34 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
     }
   }
+
+  property("reportSemanticValidity(valid = false) should mark invalid all forks containing this header") {
+    var history = genHistory()
+
+    val inChain = genChain(2, bestFullOptToSeq(history))
+    history = applyChain(history, inChain)
+    history.contains(inChain.last.header) shouldBe true
+
+    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
+    history = applyChain(history, fork1)
+    val fork2 = genChain(3, bestFullOptToSeq(history)).tail
+    history = applyChain(history, fork2)
+
+    history.reportSemanticValidity(inChain.last.header, valid = false, inChain.last.parentId)
+
+    fork1.foreach{ fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    }
+
+    fork2.foreach{ fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    }
+  }
+
 
   property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
     var history = genHistory()

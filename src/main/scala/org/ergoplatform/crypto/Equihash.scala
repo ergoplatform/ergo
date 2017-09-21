@@ -48,6 +48,7 @@ object Equihash {
   private val log = LoggerFactory.getLogger(getClass)
   private val wordSize = 32
   private val wordMask = BigInteger.ONE.shiftLeft(wordSize).subtract(BigInteger.ONE)
+  private val byteMask = BigInteger.valueOf(0xFF)
 
   def expandArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Byte] = {
     assert(bitLen >= 8 && wordSize >= 7 + bitLen)
@@ -57,7 +58,6 @@ object Equihash {
     val out = new Array[Byte](outLen)
 
     val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
-    val byteMask = BigInteger.valueOf(0xFF)
 
     // The acc_bits least - significant bits of acc_value represent a bit sequence in big-endian order.
     var accBits = 0
@@ -105,10 +105,10 @@ object Equihash {
     for (i <- 0 until outLen) {
       // When we have fewer than 8 bits left in the accumulator, read the next input element.
       if (accBits < 8) {
-        accValue = accValue.shiftLeft(bitLen).and(wordMask).or(BigInteger.valueOf((inp(j) & 0xFF).toLong))
+        accValue = accValue.shiftLeft(bitLen).and(wordMask).or(BigInteger.valueOf(inp(j).toLong))
         for (x <- bytePad until inWidth) {
           // Apply bit_len_mask across byte boundaries
-          val b = BigInteger.valueOf(inp(j + x) & 0xFF).and(bitLenMask.shiftRight(8 * (inWidth - x - 1)).and(BigInteger.valueOf(0xFF))).shiftLeft(8 * (inWidth - x - 1))
+          val b = BigInteger.valueOf(inp(j + x)).and(bitLenMask.shiftRight(8 * (inWidth - x - 1)).and(BigInteger.valueOf(0xFF))).shiftLeft(8 * (inWidth - x - 1))
           accValue = accValue.or(b) //Big - endian
         }
         j += inWidth

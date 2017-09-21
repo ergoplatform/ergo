@@ -159,10 +159,10 @@ object Equihash {
         val j = (1 until XSize).find(j => !hasCollision(X.last._1, X(XSize - 1 - j)._1, i, collisionLength)).getOrElse(XSize)
 
         //  2c) Store tuples (X_i ^ X_j, (i, j)) on the table
-        Xc ++= (for {
+        for {
           l <- 0 until j - 1
           m <- l + 1 until j
-        } yield {
+        } {
           val X1l = X(XSize - 1 - l)
           val X1m = X(XSize - 1 - m)
           //  Check that there are no duplicate indices in tuples i and j
@@ -172,12 +172,12 @@ object Equihash {
             } else {
               X1m._2 ++ X1l._2
             }
-            Some(xor(X1l._1, X1m._1) -> concat)
-          } else None
-        }).flatten
+            Xc = Xc :+ (xor(X1l._1, X1m._1) -> concat)
+          }
+        }
 
         //  2d) Drop this set
-        X = X.take(XSize - j)
+        X = X.dropRight(j)
       }
       //  2e) Replace previous list with new list
       X = Xc
@@ -200,26 +200,27 @@ object Equihash {
       val j = (1 until XSize).find(j => !(hasCollision(X.last._1, X(XSize - 1 - j)._1, k, collisionLength) &&
         hasCollision(X.last._1, X(XSize - 1 - j)._1, k + 1, collisionLength))).getOrElse(XSize)
 
-      solns ++= (for {
+      for {
         l <- 0 until j - 1
         m <- l + 1 until j
-      } yield {
+      } {
         val res = xor(X(XSize - 1 - l)._1, X(XSize - 1 - m)._1)
         if (countLeadingZeroes(res) == 8 * hashLength && distinctIndices(X(XSize - 1 - l)._2, X(XSize - 1 - m)._2)) {
           //        if DEBUG and VERBOSE:
           //          print 'Found solution:'
           //        print '- %s %s' % (print_hash(X[-1-l][0]), X[-1-l][1])
           //        print '- %s %s' % (print_hash(X[-1-m][0]), X[-1-m][1])
-          Some(if (X(XSize - 1 - l)._2(0) < X(XSize - 1 - m)._2(0)) {
+          val p = if (X(XSize - 1 - l)._2(0) < X(XSize - 1 - m)._2(0)) {
             X(XSize - 1 - l)._2 ++ X(XSize - 1 - m)._2
           } else {
             X(XSize - 1 - m)._2 ++ X(XSize - 1 - l)._2
-          })
-        } else None
-      }).flatten
+          }
+          solns = solns :+ p
+        }
+      }
 
       // 2d) Drop this set
-      X = X.take(XSize - j)
+      X = X.dropRight(j)
     }
 
     solns

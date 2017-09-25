@@ -9,12 +9,11 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
@@ -66,21 +65,21 @@ case class Header(version: Version,
     ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   override lazy val json: Json = Map(
-    "id" -> Base16.encode(id).asJson,
-    "transactionsRoot" -> Base16.encode(transactionsRoot).asJson,
-    "interlinks" -> interlinks.map(i => Base16.encode(i).asJson).asJson,
-    "ADProofsRoot" -> Base16.encode(ADProofsRoot).asJson,
-    "stateRoot" -> Base16.encode(stateRoot).asJson,
-    "parentId" -> Base16.encode(parentId).asJson,
+    "id" -> Algos.encode(id).asJson,
+    "transactionsRoot" -> Algos.encode(transactionsRoot).asJson,
+    "interlinks" -> interlinks.map(i => Algos.encode(i).asJson).asJson,
+    "ADProofsRoot" -> Algos.encode(ADProofsRoot).asJson,
+    "stateRoot" -> Algos.encode(stateRoot).asJson,
+    "parentId" -> Algos.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
     "nonce" -> nonce.asJson,
     "equihashSolutions" -> equihashSolutions.asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
-    "votes" -> Base16.encode(votes).asJson
+    "votes" -> Algos.encode(votes).asJson
   ).asJson
 
-  override lazy val toString: String = s"Header(${json.noSpaces}) Binary: ${Base16.encode(this.bytes)}"
+  override lazy val toString: String = s"Header(${json.noSpaces}) Binary: ${Algos.encode(this.bytes)}"
 
   override type M = Header
 

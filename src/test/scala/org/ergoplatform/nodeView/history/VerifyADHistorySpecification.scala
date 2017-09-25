@@ -128,23 +128,21 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("reportSemanticValidity(valid = false) should return blocks to rollback and to process") {
-    var history = genHistory()
+    var history = genHistory(3)
+    val common = history.bestFullBlockOpt.get
 
-    val inChain = genChain(2, bestFullOptToSeq(history))
-    history = applyChain(history, inChain)
-
-    val fork1 = genChain(3, Seq(inChain.last)).tail
-    val fork2 = genChain(2, Seq(inChain.last)).tail
+    val fork1 = genChain(3, Seq(common)).tail
+    val fork2 = genChain(2, Seq(common)).tail
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
     history.bestHeaderOpt.get shouldBe fork1.last.header
 
-    val res = history.reportSemanticValidity(fork1.head.header, valid = false, inChain.last.parentId)
+    val res = history.reportSemanticValidity(fork1.head.header, valid = false, common.parentId)
 
-    history.bestHeaderOpt.get shouldBe fork2.last
+    history.bestHeaderOpt.get shouldBe fork2.last.header
+    history.bestFullBlockOpt.get shouldBe fork2.last
   }
-
 
   property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
     var history = genHistory()
@@ -152,7 +150,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, chain)
 
     history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
-    history.bestHeaderOpt.get shouldEqual chain.last
+    history.bestHeaderOpt.get shouldEqual chain.last.header
 
     val invalidChain = chain.takeRight(2)
 
@@ -166,7 +164,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
     history.bestHeaderOpt.get.id shouldEqual invalidChain.head.parentId
   }
-
 
   property("Report invalid for best full block") {
     var history = genHistory()

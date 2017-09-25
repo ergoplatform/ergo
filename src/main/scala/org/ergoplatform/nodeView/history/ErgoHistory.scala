@@ -253,9 +253,7 @@ trait ErgoHistory
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
-    val otherHeightOpt = heightOf(header2.id)
-    assert(otherHeightOpt.isDefined)
-    val otherHeight = otherHeightOpt.get
+    assert(contains(header2))
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
@@ -263,7 +261,7 @@ trait ErgoHistory
         r
       } else {
         val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
-        if (biggerOther.length < otherHeight) {
+        if (!otherChain.head.isGenesis) {
           loop(biggerOther.size, biggerOther)
         } else {
           throw new Error(s"Common point not found for headers $header1 and $header2")

@@ -34,7 +34,8 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
 
   override def createAkkaFixture(): Fixture = new DigestHolderFixture
 
-  property("genesis - state digest") { fixture => import fixture._
+  property("genesis - state digest") { fixture =>
+    import fixture._
      digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Boolean] { v =>
       v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
     }
@@ -48,7 +49,8 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     expectMsg(None)
   }
 
-  property("genesis - apply valid block header") { fixture => import fixture._
+  property("genesis - apply valid block header") { fixture =>
+    import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val block = validFullBlock(None, us, bh)
@@ -210,5 +212,52 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
     }
     //TODO Note and verify!
     expectMsg(Some(brokenBlock.header))
+  }
+
+  property("switching to a better chain") { fixture =>
+    import fixture._
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    digestHolder ! LocallyGeneratedModifier(genesis.header)
+    digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
+
+    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    digestHolder ! LocallyGeneratedModifier(chain1block1.header)
+    digestHolder ! LocallyGeneratedModifier(chain1block1.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(chain1block1.aDProofs.get)
+
+    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    digestHolder ! LocallyGeneratedModifier(chain2block1.header)
+    digestHolder ! LocallyGeneratedModifier(chain2block1.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
+
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+
+    val chain2block2 = validFullBlock(Some(genesis.header), wusChain2Block1)
+
+    digestHolder ! LocallyGeneratedModifier(chain2block2.header)
+    digestHolder ! LocallyGeneratedModifier(chain2block2.blockTransactions)
+    digestHolder ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
+
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(chain2block2))
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(chain2block2.header))
+  }
+
+  ignore("switching to a better chain, but a new chain is invalid") {fixture =>
+
   }
 }

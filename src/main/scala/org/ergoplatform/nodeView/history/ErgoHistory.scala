@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{AD
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.core._
+import scorex.core.{PersistentNodeViewModifier, _}
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
@@ -305,16 +305,31 @@ trait ErgoHistory
     } else {
       val headerOpt: Option[Header] = modifier match {
         case h: Header => Some(h)
+        case full: ErgoFullBlock => Some(full.header)
         case proof: ADProofs => typedModifierById[Header](proof.headerId)
         case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
         case _ => None
       }
       headerOpt match {
         case Some(h) =>
-          val validityRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = continuationHeaderChains(h).flatMap(_.headers)
-              .distinct.flatMap(h => validityRowsForHeader(h))
+          val invalidatedHeaders = continuationHeaderChains(h).flatMap(_.headers).distinct
+          log.info(s"Invalidated header ${h.encodedId} and linked ${invalidatedHeaders.map(_.encodedId).mkString(",")}")
+          val validityRow = invalidatedHeaders.flatMap(h => validityRowsForHeader(h))
+          def isStillValid(h: Header): Boolean = !invalidatedHeaders.contains(h)
 
-          val toInsert = validityRow
+          lazy val bestValidHeader: Header = headerChainBack(height + 1, bestHeaderOpt.get, isStillValid).head
+          lazy val bestValidFullOpt: Option[Header] = bestFullBlockOpt
+            .map(f => headerChainBack(height + 1, f.header, isStillValid).head)
+
+          //TODO invalidation of last valid genesis header will fail here
+          assert(isStillValid(bestValidHeader), s"Invalid header  $bestValidHeader")
+          bestValidFullOpt.foreach(h => assert(isStillValid(h)))
+
+          val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey ->  ByteArrayWrapper(h.id)) :+
+            (BestHeaderKey, ByteArrayWrapper(bestValidHeader.id))
+
+
+          val toInsert = validityRow ++ changedLinks
           historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
         case None =>
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->

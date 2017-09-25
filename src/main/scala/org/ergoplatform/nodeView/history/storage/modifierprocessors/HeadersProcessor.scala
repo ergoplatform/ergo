@@ -13,7 +13,6 @@ import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.{NetworkTime, ScorexLogging}
-import scorex.crypto.encode.Base16
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -85,7 +84,7 @@ trait HeadersProcessor extends ScorexLogging {
 
     //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
-      log.info(s"New best header ${Base16.encode(header.id)}")
+      log.info(s"New best header ${Algos.encode(header.id)}")
       //TODO Notify node view holder that it should download transactions ?
       ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {
@@ -132,7 +131,7 @@ trait HeadersProcessor extends ScorexLogging {
         Success()
       }
     } else if (parentOpt.isEmpty) {
-      Failure(new Error(s"Parent header with id ${Base16.encode(header.parentId)} not defined"))
+      Failure(new Error(s"Parent header with id ${Algos.encode(header.parentId)} not defined"))
     } else if (header.timestamp - NetworkTime.time() > MaxTimeDrift) {
       Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${NetworkTime.time()}"))
     } else if (header.timestamp <= parentOpt.get.timestamp) {

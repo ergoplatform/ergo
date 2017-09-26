@@ -1,9 +1,7 @@
 package org.ergoplatform.nodeView
 
 import java.io.File
-
-import org.ergoplatform.modifiers.history.EquihashPowScheme
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -45,13 +43,28 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
-  override protected def genesisState: (ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool) = ???
+  override protected def genesisState: (ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool) = {
+    val dir = new File(settings.directory)
+    dir.mkdirs()
+
+    val utxoState = ErgoState.generateGenesisUtxoState(dir)._1
+
+    val history = ErgoHistory.readOrGenerate(settings)
+
+    val wallet = ErgoWallet.readOrGenerate(settings)
+
+    val memPool = ErgoMemPool.empty
+
+    (history, utxoState, wallet, memPool)
+  }
 
   /**
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
-  override def restoreState(): Option[(ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool)] = ???
+  override def restoreState(): Option[(ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool)] = {
+    None
+  }
 }
 
 
@@ -67,7 +80,6 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
 
     val digestState = ErgoState.generateGenesisDigestState(dir)
 
-//    val pow = new EquihashPowScheme(n = 96, k = 5)
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings)
 

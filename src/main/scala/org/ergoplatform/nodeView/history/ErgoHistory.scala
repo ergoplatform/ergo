@@ -340,12 +340,16 @@ trait ErgoHistory
                 val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
                 (headersChain._1.headers, headersChain._2.headers)
             }
-            val branchPoint = validChain.head
+            assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
+            val branchPoint: Some[ModifierId] = invalidatedChain.head match {
+              case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
+              case header => Some(header.id)
+            }
 
             val toInsert = validityRow ++ changedLinks
             historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
 
-            this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain, validChain, Seq())
+            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail, validChain.tail, Seq())
           }
         case None =>
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->

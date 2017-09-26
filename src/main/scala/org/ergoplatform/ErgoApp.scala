@@ -2,6 +2,7 @@ package org.ergoplatform
 
 
 import akka.actor.ActorRef
+import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -16,12 +17,14 @@ class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
   override type TX = AnyoneCanSpendTransaction
   override type PMOD = ErgoPersistentModifier
-  override type NVHT = ErgoNodeViewHolder
+  override type NVHT = ErgoNodeViewHolder[_]
 
   val ergoSettings = ErgoSettings.read(args.headOption)
 
   //TODO remove after Scorex update
-  override implicit lazy val settings: Settings = ergoSettings.scorexSettings
+  override implicit lazy val settings: Settings = new Settings {
+    override def settingsJSON: Map[String, Json] = Map()
+  } // ergoSettings.scorexSettings
 
   override val apiRoutes: Seq[ApiRoute] = Seq()
   override val apiTypes: Set[Class[_]] = Set()

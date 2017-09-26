@@ -15,11 +15,12 @@ import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
 
 
-abstract class ErgoNodeViewHolder(settings: ErgoSettings)
+abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
 
+  override type MS = StateType
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
   override type VL = ErgoWallet
@@ -37,8 +38,7 @@ abstract class ErgoNodeViewHolder(settings: ErgoSettings)
   }
 }
 
-class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
-  override type MS = UtxoState
+class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder[UtxoState](settings) {
 
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
@@ -80,8 +80,7 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(
 }
 
 
-class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(settings) {
-  override type MS = DigestState
+class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder[DigestState](settings) {
 
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
@@ -119,5 +118,13 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
         (history, ds, wallet, memPool)
       case _ => ??? //shouldn't be here
     }
+  }
+}
+
+
+object ErgoNodeViewHolder {
+  def create(settings: ErgoSettings): ErgoNodeViewHolder[_] = {
+    if (settings.nodeSettings.ADState) new DigestErgoNodeViewHolder(settings)
+    else new UtxoErgoNodeViewHolder(settings)
   }
 }

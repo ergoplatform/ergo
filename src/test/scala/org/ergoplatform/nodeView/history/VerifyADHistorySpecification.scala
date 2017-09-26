@@ -158,7 +158,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
-    processInfo.branchPoint shouldEqual Some(invalidChain.head.header.parentId)
+    processInfo.branchPoint.get shouldEqual invalidChain.head.header.parentId
     processInfo.toRemove shouldEqual invalidChain
 
     history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get

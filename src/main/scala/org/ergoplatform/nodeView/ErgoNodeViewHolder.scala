@@ -63,7 +63,19 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder(
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState(): Option[(ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool)] = {
-    None
+    ErgoState.readOrGenerate(settings).map {
+      case us: UtxoState =>
+        //todo: ensure that history is in certain mode
+        val history = ErgoHistory.readOrGenerate(settings)
+
+        val wallet = ErgoWallet.readOrGenerate(settings)
+
+        val memPool = ErgoMemPool.empty
+
+        (history, us, wallet, memPool)
+
+      case _ => ??? //shouldn't be here
+    }
   }
 }
 
@@ -95,8 +107,6 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState(): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = {
-    //val pow = new EquihashPowScheme(n = 96, k = 5)
-
     ErgoState.readOrGenerate(settings).map {
       case ds: DigestState =>
         //todo: ensure that history is in certain mode

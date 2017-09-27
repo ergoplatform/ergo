@@ -30,7 +30,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val apiTypes: Set[Class[_]] = Set()
 
   override protected val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
-  override val nodeViewHolderRef: ActorRef = ???
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
   override val nodeViewSynchronizer: ActorRef = ???
   override val localInterface: ActorRef = ???
 }

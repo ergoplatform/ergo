@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView
 
 import java.io.File
+
+import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
@@ -123,8 +125,8 @@ class DigestErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolde
 
 
 object ErgoNodeViewHolder {
-  def create(settings: ErgoSettings): ErgoNodeViewHolder[_] = {
-    if (settings.nodeSettings.ADState) new DigestErgoNodeViewHolder(settings)
-    else new UtxoErgoNodeViewHolder(settings)
+  def createActor(system: ActorSystem, settings: ErgoSettings): ActorRef = {
+    if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings))
+    else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings))
   }
 }

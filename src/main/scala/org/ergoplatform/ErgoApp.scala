@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiRoute
+import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
@@ -24,8 +24,11 @@ class ErgoApp(args: Seq[String]) extends Application {
   //TODO remove after Scorex update
   override implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
-  override lazy val apiRoutes: Seq[ApiRoute] = Seq()
-  override lazy val apiTypes: Set[Class[_]] = Set()
+  override lazy val apiRoutes: Seq[ApiRoute] = Seq(
+    UtilsApiRoute(settings),
+    PeersApiRoute(peerManagerRef, networkController, settings))
+
+  override lazy val apiTypes: Set[Class[_]] = Set(classOf[UtilsApiRoute], classOf[PeersApiRoute])
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)

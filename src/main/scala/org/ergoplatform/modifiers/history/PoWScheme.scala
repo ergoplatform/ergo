@@ -20,13 +20,31 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 trait PoWScheme {
+
   def prove(parentOpt: Option[Header],
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            votes: Array[Byte]): Header
+            votes: Array[Byte],
+            startingNonce: Long,
+            finishingNonce: Long
+           ): Option[Header]
+
+
+  def prove(parentOpt: Option[Header],
+            nBits: Long,
+            stateRoot: ADDigest,
+            adProofsRoot: Digest32,
+            transactionsRoot: Digest32,
+            timestamp: Timestamp,
+            votes: Array[Byte]): Header = {
+    val start = Long.MinValue
+    val finish = Long.MaxValue
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, start, finish).get
+  }
+
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
@@ -49,7 +67,7 @@ trait PoWScheme {
 
   def realDifficulty(header: Header): BigInt
 
-  protected def derivedHeaderFields(parentOpt: Option[Header]) = {
+  protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
 
@@ -87,7 +105,10 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
-                     votes: Array[Byte]): Header = {
+                     votes: Array[Byte],
+                     startingNonce: Long,
+                     finishingNonce: Long
+                    ): Option[Header] = {
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -104,8 +125,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     digest.update(I, 0, I.length)
 
     @tailrec
-    def generateHeader(): Header = {
-      val nonce = Random.nextLong()
+    def generateHeader(nonce: Long): Option[Header] = {
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
@@ -115,14 +135,14 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         correctWorkDone(realDifficulty(newHeader), difficulty)
       })
       headerWithSuitableSolution match {
-        case Some(headerWithFoundSolution) =>
+        case headerWithFoundSolution: Some[Header] =>
           headerWithFoundSolution
         case None =>
-          generateHeader()
+          if (nonce == finishingNonce) None else generateHeader(nonce + 1)
       }
     }
 
-    generateHeader()
+    generateHeader(startingNonce)
   }
 
   override def verify(header: Header): Boolean =
@@ -144,16 +164,23 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
 class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
 
-  override def prove(parentOpt: Option[Header], nBits: Long, stateRoot: ADDigest, adProofsRoot: Digest32,
-                     transactionsRoot: Digest32, timestamp: Timestamp, votes: Array[Byte]): Header = {
+  override def prove(parentOpt: Option[Header],
+                     nBits: Long,
+                     stateRoot: ADDigest,
+                     adProofsRoot: Digest32,
+                     transactionsRoot: Digest32,
+                     timestamp: Timestamp,
+                     votes: Array[Byte],
+                     startingNonce: Long,
+                     finishingNonce: Long): Option[Header] = {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
 
-    new Header(version, parentId, interlinks,
+    Some(new Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
-      nonce = 0L, Ints.toByteArray(level))
+      nonce = 0L, Ints.toByteArray(level)))
   }
 
   override def verify(header: Header): Boolean = true

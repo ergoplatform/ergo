@@ -27,9 +27,13 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   override def receive: Receive = {
     case StartMining =>
+      log.info("Starting Mining")
       viewHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]]{v =>
         v.history.bestHeaderOpt
       }
+
+    case headerOpt: Option[Header] =>
+      self ! MineBlock(headerOpt)
 
     case StopMining =>
 
@@ -37,6 +41,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
       val emptyADDigest: ADDigest = ADDigest @@ Array.fill(33)(0: Byte)
       val emptyDigest32: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
+      log.info("New block found: ")
       println(ergoSettings.chainSettings.poWScheme.prove(None, Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
         1L, Array.fill(5)(0: Byte)))
   }

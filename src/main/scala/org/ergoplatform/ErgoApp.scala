@@ -1,7 +1,8 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.local.ErgoLocalInterface
+import org.ergoplatform.local.ErgoMiner.StartMining
+import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -43,6 +44,9 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
     networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+
+  val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
+  miner ! StartMining
 }
 
 object ErgoApp extends App {

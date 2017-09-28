@@ -17,7 +17,7 @@ case class ErgoFullBlock(header: Header,
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override val parentId = header.parentId
+  override val parentId: ModifierId = header.parentId
 
   override lazy val id: ModifierId =
     ModifierId @@ Algos.hash(header.id ++ blockTransactions.id ++ aDProofs.map(_.id).getOrElse(Array()))

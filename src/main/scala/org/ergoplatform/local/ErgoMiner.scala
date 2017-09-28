@@ -2,17 +2,15 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, Cancellable}
 import org.ergoplatform.local.ErgoMiner.{GetLastHeader, MineBlock, StartMining, StopMining}
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
@@ -22,8 +20,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
   private var startingNonce = Long.MinValue
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
-
-
+  
   override def preStart(): Unit = {
   }
 
@@ -33,45 +30,39 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       self ! GetLastHeader
 
     case GetLastHeader =>
-      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
-        v.pool.take(1000)
-        v.history.bestHeaderOpt
+      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, CandidateBlock] { v =>
+        val txs = v.state.filterValid(v.pool.take(1000).toSeq)
+        val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
+
+        val timestamp = System.currentTimeMillis()
+        val votes = Array.fill(5)(0:Byte)
+        CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest, adProof, txs, timestamp, votes)
       }
 
-    case headerOpt: Option[Header] =>
+    case candidate: CandidateBlock =>
       startingNonce = Long.MinValue
-      self ! MineBlock(headerOpt)
+      self ! MineBlock(candidate)
 
     case StopMining =>
 
-    case MineBlock(lastHeaderOpt) =>
-
-      val emptyADDigest: ADDigest = ADDigest @@ Array.fill(33)(0: Byte)
-      val emptyDigest32: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
-
+    case MineBlock(candidate) =>
       val start = startingNonce
       val finish = start + 10
       startingNonce = finish
 
       log.info(s"Trying nonces from $start till $finish")
 
-      ergoSettings.chainSettings.poWScheme.prove(
-        lastHeaderOpt,
-        Constants.InitialNBits,
-        emptyADDigest,
-        emptyDigest32,
-        emptyDigest32,
-        1L,
-        Array.fill(5)(0: Byte),
+      ergoSettings.chainSettings.poWScheme.proveBlock(
+        candidate,
         start,
         finish
       ) match {
-        case Some(newHeader) =>
-          log.info("New block found: " + newHeader)
-          viewHolder ! LocallyGeneratedModifier[Header](newHeader)
-          self ! MineBlock(Some(newHeader))
+        case Some(newBlock) =>
+          log.info("New block found: " + newBlock)
+          viewHolder ! LocallyGeneratedModifier[Header](newBlock.header)
+          self ! GetLastHeader
         case None =>
-          self ! MineBlock(lastHeaderOpt)
+          self ! MineBlock(candidate)
       }
   }
 }
@@ -85,6 +76,5 @@ object ErgoMiner {
 
   case object StopMining
 
-  case class MineBlock(lastHeaderOpt: Option[Header])
-
+  case class MineBlock(candidate: CandidateBlock)
 }

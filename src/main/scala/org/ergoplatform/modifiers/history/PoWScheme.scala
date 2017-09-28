@@ -19,6 +19,15 @@ import scala.util.control.NonFatal
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
+
+case class CandidateBlock(parentOpt: Option[Header],
+                          nBits: Long,
+                          stateRoot: ADDigest,
+                          adProofBytes: SerializedAdProof,
+                          transactions: Seq[AnyoneCanSpendTransaction],
+                          timestamp: Timestamp,
+                          votes: Array[Byte])
+
 trait PoWScheme {
 
   def prove(parentOpt: Option[Header],
@@ -52,15 +61,56 @@ trait PoWScheme {
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[AnyoneCanSpendTransaction],
                  timestamp: Timestamp,
-                 votes: Array[Byte]): ErgoFullBlock = {
+                 votes: Array[Byte],
+                 startingNonce: Long,
+                 finishingNonce: Long): Option[ErgoFullBlock] = {
 
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    val h = prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes)
-    val adProofs = ADProofs(h.id, adProofBytes)
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, votes, startingNonce, finishingNonce).map { h =>
+      val adProofs = ADProofs(h.id, adProofBytes)
 
-    new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+    }
+  }
+
+  def proveBlock(candidateBlock: CandidateBlock,
+                 startingNonce: Long,
+                 finishingNonce: Long): Option[ErgoFullBlock] = {
+
+    val parentOpt: Option[Header] = candidateBlock.parentOpt
+    val nBits: Long = candidateBlock.nBits
+    val stateRoot: ADDigest = candidateBlock.stateRoot
+    val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
+    val transactions: Seq[AnyoneCanSpendTransaction] = candidateBlock.transactions
+    val timestamp: Timestamp = candidateBlock.timestamp
+    val votes: Array[Byte] = candidateBlock.votes
+
+    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
+
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, votes, startingNonce, finishingNonce).map { h =>
+      val adProofs = ADProofs(h.id, adProofBytes)
+
+      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+    }
+  }
+
+  def proveBlock(parentOpt: Option[Header],
+                 nBits: Long,
+                 stateRoot: ADDigest,
+                 adProofBytes: SerializedAdProof,
+                 transactions: Seq[AnyoneCanSpendTransaction],
+                 timestamp: Timestamp,
+                 votes: Array[Byte]): ErgoFullBlock = {
+
+    val start = Long.MinValue
+    val finish = Long.MaxValue
+
+    proveBlock(parentOpt, nBits, stateRoot, adProofBytes, transactions, timestamp, votes, start, finish).get
   }
 
   def verify(header: Header): Boolean
@@ -164,7 +214,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 }
 
 
-class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
+class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
   override def prove(parentOpt: Option[Header],
                      nBits: Long,

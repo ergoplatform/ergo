@@ -20,7 +20,8 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store) extends ErgoState[UtxoState] {
+class UtxoState(override val version: VersionTag, val store: Store)
+  extends ErgoState[UtxoState] {
   import UtxoState.metadata
 
   implicit val hf = new Blake2b256Unsafe

@@ -1,7 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, Cancellable}
-import org.ergoplatform.local.ErgoMiner.{GetLastHeader, MineBlock, StartMining, StopMining}
+import org.ergoplatform.local.ErgoMiner.{ProduceCandidate, MineBlock, StartMining, StopMining}
 import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -20,16 +20,16 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
   private var startingNonce = Long.MinValue
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
-  
+
   override def preStart(): Unit = {
   }
 
   override def receive: Receive = {
     case StartMining =>
       log.info("Starting Mining")
-      self ! GetLastHeader
+      self ! ProduceCandidate
 
-    case GetLastHeader =>
+    case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, CandidateBlock] { v =>
         val txs = v.state.filterValid(v.pool.take(1000).toSeq)
         val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
@@ -60,7 +60,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         case Some(newBlock) =>
           log.info("New block found: " + newBlock)
           viewHolder ! LocallyGeneratedModifier[Header](newBlock.header)
-          self ! GetLastHeader
+          self ! ProduceCandidate
         case None =>
           self ! MineBlock(candidate)
       }
@@ -72,7 +72,7 @@ object ErgoMiner {
 
   case object StartMining
 
-  case object GetLastHeader
+  case object ProduceCandidate
 
   case object StopMining
 

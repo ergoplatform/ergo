@@ -109,6 +109,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
                      startingNonce: Long,
                      finishingNonce: Long
                     ): Option[Header] = {
+    require(finishingNonce >= startingNonce)
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -126,6 +127,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
     @tailrec
     def generateHeader(nonce: Long): Option[Header] = {
+      log.info("Trying nonce: " + nonce)
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)

@@ -6,9 +6,10 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
 import scorex.core.VersionTag
+import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
@@ -21,7 +22,8 @@ import scala.util.{Failure, Success, Try}
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
 class UtxoState(override val version: VersionTag, val store: Store)
-  extends ErgoState[UtxoState] {
+  extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
+
   import UtxoState.metadata
 
   implicit val hf = new Blake2b256Unsafe
@@ -130,6 +132,10 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
   override def rollbackVersions: Iterable[VersionTag] =
     persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+
+  override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if(tx.boxIdsToOpen.forall { k =>
+    persistentProver.unauthenticatedLookup(k).isDefined
+  }) Success() else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
 }
 
 object UtxoState {

@@ -1,13 +1,14 @@
-package org.ergoplatform
+package org.ergoplatform.local
 
 import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.LocalInterface
 
 
-class ErgoLocalInterface (override val viewHolderRef: ActorRef)
+class ErgoLocalInterface (override val viewHolderRef: ActorRef, ergoSettings: ErgoSettings)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = ???

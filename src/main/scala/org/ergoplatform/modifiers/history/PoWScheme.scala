@@ -89,7 +89,6 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
                      timestamp: Timestamp,
                      votes: Array[Byte]): Header = {
 
-
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
@@ -138,6 +137,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     }.getOrElse(false)
 
   override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
+
+  override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
 }
 
 

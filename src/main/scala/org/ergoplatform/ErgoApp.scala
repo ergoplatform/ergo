@@ -2,7 +2,8 @@ package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -44,6 +45,9 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
     networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+
+  val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+  txGen ! StartGeneration
 
   val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
   miner ! StartMining

@@ -15,8 +15,6 @@ import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.Settings
-import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
@@ -48,6 +46,9 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
   txGen ! StartGeneration
+
+  //todo: remove
+  Thread.sleep(1000)
 
   val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
   miner ! StartMining

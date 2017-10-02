@@ -3,11 +3,12 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef, Cancellable}
 import org.ergoplatform.local.TransactionGenerator.{GetState, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.utils.ScorexLogging
 
@@ -31,7 +32,8 @@ class TransactionGenerator(viewHolder: ActorRef) extends Actor with ScorexLoggin
       }
 
     case txBoxes: IndexedSeq[AnyoneCanSpendNoncedBox] =>
-      AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+      val tx = AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+      viewHolder ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
 
     case StopGeneration =>
       txGenerator.cancel()

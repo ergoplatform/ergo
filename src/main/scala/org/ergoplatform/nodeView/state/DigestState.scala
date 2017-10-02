@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
@@ -44,6 +44,9 @@ class DigestState private(override val version: VersionTag, override val rootHas
           log.warn(s"Modifier $mod is not valid: ", e)
           Failure(e)
       }
+      
+    case h: Header => Success(new UtxoState(VersionTag @@ h.id, this.store))
+
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }
 

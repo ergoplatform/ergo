@@ -27,8 +27,6 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
   import UtxoState.metadata
 
-  override def maxRollbackDepth: Int = store.rollbackVersions().size
-
   implicit val hf = new Blake2b256Unsafe
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)

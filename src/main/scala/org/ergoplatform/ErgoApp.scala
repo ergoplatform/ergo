@@ -3,6 +3,7 @@ package org.ergoplatform
 import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes.HistoryApiRoute
 import org.ergoplatform.api.services.HistoryActorService
+import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier

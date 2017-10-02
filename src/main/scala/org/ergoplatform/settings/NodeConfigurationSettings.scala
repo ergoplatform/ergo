@@ -9,4 +9,5 @@ case class NodeConfigurationSettings(ADState: Boolean,
                                      verifyTransactions: Boolean,
                                      blocksToKeep: Int,
                                      PoPoWBootstrap: Boolean,
-                                     minimalSuffix: Int)
+                                     minimalSuffix: Int,
+                                     offlineGeneration: Boolean = false)

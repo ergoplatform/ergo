@@ -49,7 +49,7 @@ trait PoWScheme {
 
   def realDifficulty(header: Header): BigInt
 
-  protected def derivedHeaderFields(parentOpt: Option[Header]) = {
+  protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
 
@@ -88,7 +88,6 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
                      votes: Array[Byte]): Header = {
-
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 

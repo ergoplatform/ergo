@@ -1,8 +1,9 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.HistoryApiRoute
-import org.ergoplatform.api.services.HistoryActorService
+import org.ergoplatform.api.routes.{HistoryApiRoute, StateApiRoute}
+import org.ergoplatform.api.services.{HistoryService, StateService}
+import org.ergoplatform.api.services.impl.{HistoryActorServiceImpl, StateActorServiceImpl}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
@@ -18,6 +19,8 @@ import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.Settings
+
+import scala.concurrent.ExecutionContext
 
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
@@ -35,18 +38,18 @@ class ErgoApp(args: Seq[String]) extends Application {
   override lazy val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings),
     PeersApiRoute(peerManagerRef, networkController, settings),
-    HistoryApiRoute(historyService, settings))
+    HistoryApiRoute(ErgoApp.initHistoryService(nodeViewHolderRef, ergoSettings), settings),
+    StateApiRoute(ErgoApp.initStateService(nodeViewHolderRef, ergoSettings), settings))
 
-  override lazy val apiTypes: Set[Class[_]] = Set(classOf[UtilsApiRoute], classOf[PeersApiRoute], classOf[HistoryApiRoute])
+  override lazy val apiTypes: Set[Class[_]] = Set(
+    classOf[UtilsApiRoute],
+    classOf[PeersApiRoute],
+    classOf[HistoryApiRoute],
+    classOf[StateApiRoute]
+  )
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
-
-  val historyService = if (ergoSettings.nodeSettings.ADState) {
-    new HistoryActorService[DigestState](nodeViewHolderRef)
-  } else {
-    new HistoryActorService[UtxoState](nodeViewHolderRef)
-  }
 
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef, ergoSettings)
@@ -69,4 +72,18 @@ class ErgoApp(args: Seq[String]) extends Application {
 object ErgoApp extends App {
   new ErgoApp(args).run()
   def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
+
+  def initHistoryService(ref: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): HistoryService =
+    if (settings.nodeSettings.ADState) {
+      new HistoryActorServiceImpl[DigestState](ref)
+    } else {
+      new HistoryActorServiceImpl[UtxoState](ref)
+    }
+
+  def initStateService(ref: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): StateService =
+    if (settings.nodeSettings.ADState) {
+      new StateActorServiceImpl[DigestState](ref)
+    } else {
+      new StateActorServiceImpl[UtxoState](ref)
+    }
 }

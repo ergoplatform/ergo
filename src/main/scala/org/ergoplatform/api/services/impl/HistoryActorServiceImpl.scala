@@ -1,8 +1,9 @@
-package org.ergoplatform.api.services
+package org.ergoplatform.api.services.impl
 
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.api.services.HistoryService
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -14,7 +15,7 @@ import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-class HistoryActorService[ST <: ErgoState[ST]](historyActorRef: ActorRef)(implicit val ec: ExecutionContext)
+class HistoryActorServiceImpl[ST <: ErgoState[ST]](historyActorRef: ActorRef)(implicit val ec: ExecutionContext)
   extends HistoryService {
 
   implicit val timeout = Timeout(5.seconds)

@@ -4,7 +4,7 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
@@ -117,6 +117,10 @@ class UtxoState(override val version: VersionTag, val store: Store)
           log.warn(s"Error while applying a modifier ${mod.id}: ", e)
           Failure(e)
       }
+
+    case h: Header =>
+      Success(new UtxoState(VersionTag @@ h.id, this.store))
+
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")

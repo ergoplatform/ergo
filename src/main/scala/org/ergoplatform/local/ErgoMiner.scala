@@ -2,7 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, Cancellable}
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, CandidateBlock, Header}
+import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -16,6 +16,7 @@ import scorex.core.utils.ScorexLogging
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
   private var cancellableOpt: Option[Cancellable] = None
+
   private var mining = false
   private var startingNonce = Long.MinValue
 
@@ -33,6 +34,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
     case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, CandidateBlock] { v =>
         val txs = v.state.filterValid(v.pool.take(1000).toSeq)
+        println("txs to put in a block: " + txs)
         val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
 
         val timestamp = System.currentTimeMillis()
@@ -58,10 +60,10 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         case Some(newBlock) =>
           log.info("New block found: " + newBlock)
 
-          viewHolder ! LocallyGeneratedModifier[Header](newBlock.header)
-          viewHolder ! LocallyGeneratedModifier[BlockTransactions](newBlock.blockTransactions)
+          viewHolder ! LocallyGeneratedModifier(newBlock.header)
+          viewHolder ! LocallyGeneratedModifier(newBlock.blockTransactions)
           newBlock.aDProofs.foreach { adp =>
-            viewHolder ! LocallyGeneratedModifier[ADProofs](adp)
+            viewHolder ! LocallyGeneratedModifier(adp)
           }
 
           self ! ProduceCandidate

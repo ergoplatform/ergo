@@ -42,13 +42,13 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
-    networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+      networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
 
   val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
   txGen ! StartGeneration
 
   //todo: remove
-  Thread.sleep(1000)
+  Thread.sleep(4000)
 
   val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
   miner ! StartMining

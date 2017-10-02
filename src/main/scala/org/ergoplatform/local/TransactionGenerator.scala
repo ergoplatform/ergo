@@ -38,7 +38,6 @@ class TransactionGenerator(viewHolder: ActorRef) extends Actor with ScorexLoggin
     case StopGeneration =>
       txGenerator.cancel()
   }
-
 }
 
 object TransactionGenerator {

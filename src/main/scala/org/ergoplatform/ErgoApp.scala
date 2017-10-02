@@ -3,7 +3,8 @@ package org.ergoplatform
 import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes.HistoryApiRoute
 import org.ergoplatform.api.services.HistoryActorService
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -30,8 +31,6 @@ class ErgoApp(args: Seq[String]) extends Application {
   //TODO remove after Scorex update
   override implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
-
-
   override lazy val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings),
     PeersApiRoute(peerManagerRef, networkController, settings),
@@ -55,6 +54,12 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
     networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+
+  val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+  txGen ! StartGeneration
+
+  //todo: remove
+  Thread.sleep(1000)
 
   val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
   miner ! StartMining

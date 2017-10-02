@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
+import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
@@ -31,7 +32,10 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   override lazy val serializer: Serializer[BlockTransactions] = BlockTransactionsSerializer
 
-  override lazy val json: Json = ???
+  override lazy val json: Json = Map(
+    "headerId" -> Base58.encode(headerId).asJson,
+    "transactions" -> txs.map(_.json).asJson
+  ).asJson
 
   override def toString: String = s"BlockTransactions(${Base58.encode(id)},${Base58.encode(headerId)},$txs)"
 

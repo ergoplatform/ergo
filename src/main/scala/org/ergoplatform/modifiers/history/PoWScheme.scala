@@ -19,14 +19,85 @@ import scala.util.control.NonFatal
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
+
+case class CandidateBlock(parentOpt: Option[Header],
+                          nBits: Long,
+                          stateRoot: ADDigest,
+                          adProofBytes: SerializedAdProof,
+                          transactions: Seq[AnyoneCanSpendTransaction],
+                          timestamp: Timestamp,
+                          votes: Array[Byte])
+
 trait PoWScheme {
+
   def prove(parentOpt: Option[Header],
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            votes: Array[Byte]): Header
+            votes: Array[Byte],
+            startingNonce: Long,
+            finishingNonce: Long
+           ): Option[Header]
+
+
+  def prove(parentOpt: Option[Header],
+            nBits: Long,
+            stateRoot: ADDigest,
+            adProofsRoot: Digest32,
+            transactionsRoot: Digest32,
+            timestamp: Timestamp,
+            votes: Array[Byte]): Header = {
+    val start = Long.MinValue
+    val finish = Long.MaxValue
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, start, finish).get
+  }
+
+
+  def proveBlock(parentOpt: Option[Header],
+                 nBits: Long,
+                 stateRoot: ADDigest,
+                 adProofBytes: SerializedAdProof,
+                 transactions: Seq[AnyoneCanSpendTransaction],
+                 timestamp: Timestamp,
+                 votes: Array[Byte],
+                 startingNonce: Long,
+                 finishingNonce: Long): Option[ErgoFullBlock] = {
+
+    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
+
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, votes, startingNonce, finishingNonce).map { h =>
+      val adProofs = ADProofs(h.id, adProofBytes)
+
+      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+    }
+  }
+
+  def proveBlock(candidateBlock: CandidateBlock,
+                 startingNonce: Long,
+                 finishingNonce: Long): Option[ErgoFullBlock] = {
+
+    val parentOpt: Option[Header] = candidateBlock.parentOpt
+    val nBits: Long = candidateBlock.nBits
+    val stateRoot: ADDigest = candidateBlock.stateRoot
+    val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
+    val transactions: Seq[AnyoneCanSpendTransaction] = candidateBlock.transactions
+    val timestamp: Timestamp = candidateBlock.timestamp
+    val votes: Array[Byte] = candidateBlock.votes
+
+    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
+
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, votes, startingNonce, finishingNonce).map { h =>
+      val adProofs = ADProofs(h.id, adProofBytes)
+
+      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+    }
+  }
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
@@ -36,13 +107,10 @@ trait PoWScheme {
                  timestamp: Timestamp,
                  votes: Array[Byte]): ErgoFullBlock = {
 
-    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
-    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
+    val start = Long.MinValue
+    val finish = Long.MaxValue
 
-    val h = prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes)
-    val adProofs = ADProofs(h.id, adProofBytes)
-
-    new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+    proveBlock(parentOpt, nBits, stateRoot, adProofBytes, transactions, timestamp, votes, start, finish).get
   }
 
   def verify(header: Header): Boolean
@@ -87,7 +155,11 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
-                     votes: Array[Byte]): Header = {
+                     votes: Array[Byte],
+                     startingNonce: Long,
+                     finishingNonce: Long
+                    ): Option[Header] = {
+    require(finishingNonce >= startingNonce)
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -104,8 +176,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     digest.update(I, 0, I.length)
 
     @tailrec
-    def generateHeader(): Header = {
-      val nonce = Random.nextLong()
+    def generateHeader(nonce: Long): Option[Header] = {
+      log.info("Trying nonce: " + nonce)
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
@@ -115,14 +187,14 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         correctWorkDone(realDifficulty(newHeader), difficulty)
       })
       headerWithSuitableSolution match {
-        case Some(headerWithFoundSolution) =>
+        case headerWithFoundSolution: Some[Header] =>
           headerWithFoundSolution
         case None =>
-          generateHeader()
+          if (nonce == finishingNonce) None else generateHeader(nonce + 1)
       }
     }
 
-    generateHeader()
+    generateHeader(startingNonce)
   }
 
   override def verify(header: Header): Boolean =
@@ -137,21 +209,30 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     }.getOrElse(false)
 
   override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
+
+  override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
 }
 
 
-class FakePowScheme(levelOpt:Option[Int]) extends PoWScheme {
+class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
-  override def prove(parentOpt: Option[Header], nBits: Long, stateRoot: ADDigest, adProofsRoot: Digest32,
-                     transactionsRoot: Digest32, timestamp: Timestamp, votes: Array[Byte]): Header = {
+  override def prove(parentOpt: Option[Header],
+                     nBits: Long,
+                     stateRoot: ADDigest,
+                     adProofsRoot: Digest32,
+                     transactionsRoot: Digest32,
+                     timestamp: Timestamp,
+                     votes: Array[Byte],
+                     startingNonce: Long,
+                     finishingNonce: Long): Option[Header] = {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
 
-    new Header(version, parentId, interlinks,
+    Some(new Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
-      nonce = 0L, Ints.toByteArray(level))
+      nonce = 0L, Ints.toByteArray(level)))
   }
 
   override def verify(header: Header): Boolean = true

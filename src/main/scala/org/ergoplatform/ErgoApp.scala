@@ -65,12 +65,15 @@ class ErgoApp(args: Seq[String]) extends Application {
   //todo: remove
   Thread.sleep(4000)
 
-  val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
-  miner ! StartMining
+  if (ergoSettings.nodeSettings.mining) {
+    val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
+    miner ! StartMining
+  }
 }
 
 object ErgoApp extends App {
   new ErgoApp(args).run()
+
   def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
 
   def initHistoryService(ref: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): HistoryService =

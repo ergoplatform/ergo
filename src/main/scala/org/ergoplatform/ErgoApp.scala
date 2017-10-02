@@ -35,21 +35,21 @@ class ErgoApp(args: Seq[String]) extends Application {
   //TODO remove after Scorex update
   override implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
-  override lazy val apiRoutes: Seq[ApiRoute] = Seq(
+  override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
+
+  override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings),
     PeersApiRoute(peerManagerRef, networkController, settings),
     HistoryApiRoute(ErgoApp.initHistoryService(nodeViewHolderRef, ergoSettings), settings),
     StateApiRoute(ErgoApp.initStateService(nodeViewHolderRef, ergoSettings), settings))
 
-  override lazy val apiTypes: Set[Class[_]] = Set(
+  override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
     classOf[PeersApiRoute],
     classOf[HistoryApiRoute],
     classOf[StateApiRoute]
   )
-
-  override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
 
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef, ergoSettings)
@@ -76,17 +76,17 @@ object ErgoApp extends App {
 
   def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
 
-  def initHistoryService(ref: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): HistoryService =
+  def initHistoryService(viewHolderRef: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): HistoryService =
     if (settings.nodeSettings.ADState) {
-      new HistoryActorServiceImpl[DigestState](ref)
+      new HistoryActorServiceImpl[DigestState](viewHolderRef)
     } else {
-      new HistoryActorServiceImpl[UtxoState](ref)
+      new HistoryActorServiceImpl[UtxoState](viewHolderRef)
     }
 
-  def initStateService(ref: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): StateService =
+  def initStateService(viewHolderRef: ActorRef, settings: ErgoSettings)(implicit ec: ExecutionContext): StateService =
     if (settings.nodeSettings.ADState) {
-      new StateActorServiceImpl[DigestState](ref)
+      new StateActorServiceImpl[DigestState](viewHolderRef)
     } else {
-      new StateActorServiceImpl[UtxoState](ref)
+      new StateActorServiceImpl[UtxoState](viewHolderRef)
     }
 }

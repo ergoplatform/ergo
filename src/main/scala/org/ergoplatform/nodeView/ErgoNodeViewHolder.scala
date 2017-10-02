@@ -4,6 +4,7 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -30,7 +31,9 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
 
   //todo: complete this
   override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-  Map(???,
+  Map(Header.modifierTypeId -> HeaderSerializer,
+    BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+    ADProofs.modifierTypeId -> ADProofSerializer,
     Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {

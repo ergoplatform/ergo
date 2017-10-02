@@ -35,6 +35,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
       new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage
     ).get
 
+  override val maxRollbackDepth = 10
+
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
@@ -44,6 +46,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = Try {
+    require(txs.nonEmpty)
     require(persistentProver.digest.sameElements(rootHash))
     require(storage.version.get.sameElements(rootHash))
     require(store.lastVersionID.get.data.sameElements(rootHash))
@@ -127,7 +130,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
       .flatMap(_.toOption)
 
   def randomBox(): Option[AnyoneCanSpendNoncedBox] =
-    persistentProver.avlProver.randomWalk().map(_._1).map(boxById).flatten
+    persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
 
 
   override def rollbackVersions: Iterable[VersionTag] =

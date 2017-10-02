@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers
 
 import io.circe.Json
+import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -17,12 +18,16 @@ case class ErgoFullBlock(header: Header,
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override val parentId = header.parentId
+  override val parentId: ModifierId = header.parentId
 
   override lazy val id: ModifierId =
     ModifierId @@ Algos.hash(header.id ++ blockTransactions.id ++ aDProofs.map(_.id).getOrElse(Array()))
 
-  override lazy val json: Json = ???
+  override lazy val json: Json = Map(
+    "header" -> header.json,
+    "blockTransactions" -> blockTransactions.json,
+    "adPoofs" -> aDProofs.map(_.json).getOrElse(Map.empty[String, String].asJson)
+  ).asJson
 
   override type M = ErgoFullBlock
 

@@ -6,13 +6,15 @@ import akka.actor.{ActorRef, Props}
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoGenerators, SequentialAkkaFixture}
-import scorex.core.LocalInterface.LocallyGeneratedModifier
+import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
@@ -159,6 +161,27 @@ class DigestErgoNodeViewHolderSpecification extends SequentialAkkaFixture with E
       v.history.lastHeaders(10).size
     }
     expectMsg(2)
+  }
+
+  property("add transaction to the memory pool"){ fixture =>
+    import fixture._
+
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    val toSpend = wusAfterGenesis.takeBoxes(1).head
+
+    val tx = AnyoneCanSpendTransaction(IndexedSeq(toSpend.nonce), IndexedSeq(toSpend.value))
+
+    digestHolder ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Int] { v =>
+      v.pool.size
+    }
+
+    expectMsg(1)
   }
 
   ignore("apply invalid full block"){ fixture =>

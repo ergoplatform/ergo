@@ -22,7 +22,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
 
-  override def maxRollbackDepth: Int = store.rollbackVersions().size
+  override val maxRollbackDepth = 10
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>

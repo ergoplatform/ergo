@@ -1,8 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, Cancellable}
-import org.ergoplatform.local.ErgoMiner.{ProduceCandidate, MineBlock, StartMining, StopMining}
-import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
+import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, CandidateBlock, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -28,6 +28,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
     case StartMining =>
       log.info("Starting Mining")
       self ! ProduceCandidate
+      mining = true
 
     case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, CandidateBlock] { v =>
@@ -35,7 +36,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
 
         val timestamp = System.currentTimeMillis()
-        val votes = Array.fill(5)(0:Byte)
+        val votes = Array.fill(5)(0: Byte)
         CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest, adProof, txs, timestamp, votes)
       }
 
@@ -44,6 +45,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       self ! MineBlock(candidate)
 
     case StopMining =>
+      mining = false
 
     case MineBlock(candidate) =>
       val start = startingNonce
@@ -52,14 +54,16 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
       log.info(s"Trying nonces from $start till $finish")
 
-      ergoSettings.chainSettings.poWScheme.proveBlock(
-        candidate,
-        start,
-        finish
-      ) match {
+      powScheme.proveBlock(candidate, start, finish) match {
         case Some(newBlock) =>
           log.info("New block found: " + newBlock)
+
           viewHolder ! LocallyGeneratedModifier[Header](newBlock.header)
+          viewHolder ! LocallyGeneratedModifier[BlockTransactions](newBlock.blockTransactions)
+          newBlock.aDProofs.foreach { adp =>
+            viewHolder ! LocallyGeneratedModifier[ADProofs](adp)
+          }
+
           self ! ProduceCandidate
         case None =>
           self ! MineBlock(candidate)

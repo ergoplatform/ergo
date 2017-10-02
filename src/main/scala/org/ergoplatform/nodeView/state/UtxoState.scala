@@ -38,6 +38,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
       new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage
     ).get
 
+  override val maxRollbackDepth = 10
+
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
@@ -47,6 +49,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = Try {
+    require(txs.nonEmpty)
     require(persistentProver.digest.sameElements(rootHash))
     require(storage.version.get.sameElements(rootHash))
     require(store.lastVersionID.get.data.sameElements(rootHash))
@@ -66,11 +69,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
     val digest = persistentProver.digest
 
-    persistentProver.checkTree(true)
-
     persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
-
-    persistentProver.checkTree(true)
 
     proof -> digest
   }
@@ -133,10 +132,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       .map(AnyoneCanSpendNoncedBoxSerializer.parseBytes)
       .flatMap(_.toOption)
 
+  def randomBox(): Option[AnyoneCanSpendNoncedBox] =
+    persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
+
+
   override def rollbackVersions: Iterable[VersionTag] =
     persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
 
-  override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if(tx.boxIdsToOpen.forall { k =>
+  override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if (tx.boxIdsToOpen.forall { k =>
     persistentProver.unauthenticatedLookup(k).isDefined
   }) Success() else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
 }

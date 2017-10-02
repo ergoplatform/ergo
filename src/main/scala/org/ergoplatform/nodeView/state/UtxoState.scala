@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
+import org.slf4j.Logger
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
@@ -25,6 +26,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   import UtxoState.metadata
+
+  override def maxRollbackDepth: Int = store.rollbackVersions().size
 
   implicit val hf = new Blake2b256Unsafe
   private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)

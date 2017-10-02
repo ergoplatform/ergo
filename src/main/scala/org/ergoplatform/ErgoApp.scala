@@ -1,21 +1,21 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.local.ErgoMiner.StartMining
+import org.ergoplatform.api.routes.HistoryApiRoute
+import org.ergoplatform.api.services.HistoryActorService
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.Settings
-import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
@@ -23,19 +23,30 @@ class ErgoApp(args: Seq[String]) extends Application {
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
+  implicit val ec = actorSystem.dispatcher
+
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
   //TODO remove after Scorex update
   override implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
+
+
   override lazy val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings),
-    PeersApiRoute(peerManagerRef, networkController, settings))
+    PeersApiRoute(peerManagerRef, networkController, settings),
+    HistoryApiRoute(historyService, settings))
 
-  override lazy val apiTypes: Set[Class[_]] = Set(classOf[UtilsApiRoute], classOf[PeersApiRoute])
+  override lazy val apiTypes: Set[Class[_]] = Set(classOf[UtilsApiRoute], classOf[PeersApiRoute], classOf[HistoryApiRoute])
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
+
+  val historyService = if (ergoSettings.nodeSettings.ADState) {
+    new HistoryActorService[DigestState](nodeViewHolderRef)
+  } else {
+    new HistoryActorService[UtxoState](nodeViewHolderRef)
+  }
 
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef, ergoSettings)

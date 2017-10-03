@@ -35,7 +35,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   //TODO remove after Scorex update
   override implicit lazy val settings: Settings = ergoSettings.scorexSettings
 
-  override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq()
+  override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(

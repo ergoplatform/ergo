@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
-import org.slf4j.Logger
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._

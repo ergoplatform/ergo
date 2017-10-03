@@ -32,9 +32,9 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   //todo: complete this
   override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
   Map(Header.modifierTypeId -> HeaderSerializer,
-    BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
-    ADProofs.modifierTypeId -> ADProofSerializer,
-    Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
+      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+      ADProofs.modifierTypeId -> ADProofSerializer,
+      Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)

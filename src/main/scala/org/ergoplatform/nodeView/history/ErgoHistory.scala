@@ -169,25 +169,29 @@ trait ErgoHistory
     * @return Ids of modifiers, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
-    val ids = info.lastHeaderIds
-    val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
-    val theirHeight = heightOf(lastHeaderInHistory).get
-    val heightFrom = Math.min(height, theirHeight + size)
-    val startId = headerIdsAtHeight(heightFrom).head
-    val startHeader = typedModifierById[Header](startId).get
-    val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
-      .headers.map(h => Header.modifierTypeId -> h.id)
-    val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
-      case Some(bestFullBlockHeight) =>
-        val heightFrom = Math.min(height, bestFullBlockHeight + size)
-        val startId = headerIdsAtHeight(heightFrom).head
-        val startHeader = typedModifierById[Header](startId).get
-        val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
-        headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
-          (BlockTransactions.modifierTypeId, h.transactionsId)))
-      case _ => Seq()
+    if(isEmpty){
+      info.startingPoints
+    } else {
+      val ids = info.lastHeaderIds
+      val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
+      val theirHeight = heightOf(lastHeaderInHistory).get
+      val heightFrom = Math.min(height, theirHeight + size)
+      val startId = headerIdsAtHeight(heightFrom).head
+      val startHeader = typedModifierById[Header](startId).get
+      val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
+        .headers.map(h => Header.modifierTypeId -> h.id)
+      val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
+        case Some(bestFullBlockHeight) =>
+          val heightFrom = Math.min(height, bestFullBlockHeight + size)
+          val startId = headerIdsAtHeight(heightFrom).head
+          val startHeader = typedModifierById[Header](startId).get
+          val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
+          headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
+            (BlockTransactions.modifierTypeId, h.transactionsId)))
+        case _ => Seq()
+      }
+      headerIds ++ fullBlockContinuation
     }
-    headerIds ++ fullBlockContinuation
   }.toOption
 
   /**

@@ -2,11 +2,17 @@ package org.ergoplatform.api.routes
 
 import javax.ws.rs.Path
 
-import akka.actor.ActorRefFactory
+import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
+import akka.pattern.ask
 import io.circe.syntax._
 import io.swagger.annotations._
-import org.ergoplatform.api.services.HistoryService
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.settings.ErgoSettings
+import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.Settings
 
@@ -14,31 +20,42 @@ import scala.concurrent.Future
 
 @Path("/history")
 @Api(value = "/history", produces = "application/json")
-case class HistoryApiRoute(service: HistoryService,
-                           override val settings: Settings)
+case class HistoryApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
-  private def getHeight: Future[ScorexApiResponse] = service.getHeight.map { v =>
+  override val settings: Settings = ergoSettings.scorexSettings
+
+  private val digest: Boolean = ergoSettings.nodeSettings.ADState
+
+  private val request = if (digest) {
+    GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
+  } else {
+    GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
+  }
+
+  private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
+
+  private def getHeight: Future[ScorexApiResponse] = getHistory.map{ _.height }.map { v =>
     SuccessApiResponse(Map("height" -> v).asJson)
   }
 
-  private def getBestHeader: Future[Option[ScorexApiResponse]] = service.getBestHeader.map {
+  private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestHeaderOpt }.map {
     _.map { header => SuccessApiResponse(header.json) }
   }
 
-  private def getBestFullBlock: Future[Option[ScorexApiResponse]] = service.getBestFullBlock.map {
+  private def getBestFullBlock: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestFullBlockOpt }.map {
     _.map { block => SuccessApiResponse(block.json)}
   }
 
-  private def getLastHeaders(n: Int): Future[ScorexApiResponse] = service.getLastHeaders(n).map { v =>
+  private def getLastHeaders(n: Int): Future[ScorexApiResponse] = getHistory.map{ _.lastHeaders(n) }.map { v =>
     SuccessApiResponse(Map("headers" -> v.headers.map(_.json)).asJson)
   }
 
-  private def getModifierById(id: String): Future[Option[ScorexApiResponse]] = service.getModifierById(id).map {
+  private def getModifierById(id: String): Future[Option[ScorexApiResponse]] = getHistory.map{ _.modifierById(id) }.map {
     _.map { modifier => SuccessApiResponse(modifier.json)}
   }
 
-  private def getCurrentDifficulty: Future[ScorexApiResponse] = service.getCurrentDifficulty.map { v =>
+  private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map{ _.requiredDifficulty }.map { v =>
     SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)
   }
 

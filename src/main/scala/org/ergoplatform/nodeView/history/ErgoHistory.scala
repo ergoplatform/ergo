@@ -311,8 +311,9 @@ trait ErgoHistory
     this -> progressInto
   }
 
-  //todo: fix
-  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = ???
+  //todo: fix / finish
+  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value =
+    ModifierSemanticValidity.Valid
 }
 
 object ErgoHistory extends ScorexLogging {

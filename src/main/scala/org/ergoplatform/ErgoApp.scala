@@ -59,13 +59,16 @@ class ErgoApp(args: Seq[String]) extends Application {
     Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
       networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
 
-  val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
-  txGen ! StartGeneration
-
-  //todo: remove
-  Thread.sleep(4000)
 
   if (ergoSettings.nodeSettings.mining) {
+    //only a miner is generating tx load
+    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+    txGen ! StartGeneration
+
+
+    //todo: remove
+    Thread.sleep(4000)
+
     val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
     miner ! StartMining
   }

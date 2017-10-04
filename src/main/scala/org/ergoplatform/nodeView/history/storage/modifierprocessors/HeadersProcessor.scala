@@ -143,6 +143,9 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
     } else {
       Success()
+    }.recoverWith{case thr =>
+      log.warn("Validation error: ", thr)
+      Failure(thr)
     }
   }
 

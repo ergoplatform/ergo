@@ -25,7 +25,7 @@ import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
-class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
+class ErgoSanity extends HistoryTests[P, TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
   //with StateApplyChangesTest[P, TX, PM, B, ST]
   //with WalletSecretsTest[P, TX, PM]
@@ -41,7 +41,7 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
-  override val history: ErgoHistory = generateHistory(verifyTransactions = true, ADState = false,
+  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false,
     PoPoWBootstrap = false, -1)
 
   override val memPool: MPool = ErgoMemPool.empty
@@ -74,6 +74,8 @@ class ErgoSanity extends HistoryAppendBlockTest[P, TX, PM, SI, HT]
 
   override def semanticallyValidModifier(state: ST): PM =
     validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
+
+  override def semanticallyInvalidModifier(state: ST): PM = invalidErgoFullBlockGen.sample.get
 }
 
 object ErgoSanity {

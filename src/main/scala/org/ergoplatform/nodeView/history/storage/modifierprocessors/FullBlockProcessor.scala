@@ -21,7 +21,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     */
   override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.db.get(BestFullBlockKey).map(ModifierId @@ _.data)
 
-  protected def getFullBlock(h: Header): ErgoFullBlock
+  protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
@@ -55,8 +55,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
         val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)
         assert(prevChain.head == newChain.head)
-        val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.map(getFullBlock)
-        val toApply: Seq[ErgoFullBlock] = newChain.tail.headers.map(getFullBlock)
+
+        //todo: is flatMap in next two lines safe?
+        val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
+        val toApply: Seq[ErgoFullBlock] = newChain.tail.headers.flatMap(getFullBlock)
         assert(toRemove.nonEmpty)
         assert(toApply.nonEmpty)
         if (config.blocksToKeep >= 0) {

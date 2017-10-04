@@ -70,9 +70,8 @@ trait ErgoHistory
     * Complete block of the best chain with transactions.
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */
-  def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
-    getFullBlock(typedModifierById[Header](bestFullBlockIdOpt.get).get)
-  }.toOption
+  def bestFullBlockOpt: Option[ErgoFullBlock] =
+    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
@@ -233,10 +232,11 @@ trait ErgoHistory
     }
   }
 
-  protected def getFullBlock(header: Header): ErgoFullBlock = {
+  protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
-    val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs)
+    typedModifierById[BlockTransactions](header.transactionsId).map{ txs =>
+      ErgoFullBlock(header, txs, aDProofs)
+    }
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {

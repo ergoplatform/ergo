@@ -12,6 +12,10 @@ import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.utils.ScorexLogging
 
+import scala.util.{Failure, Try}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
@@ -32,19 +36,31 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       mining = true
 
     case ProduceCandidate =>
-      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, CandidateBlock] { v =>
-        val txs = v.state.filterValid(v.pool.take(1000).toSeq)
-        println("txs to put in a block: " + txs)
-        val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
+      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+        if (v.pool.size > 0) {
+          Try {
+            val txs = v.state.filterValid(v.pool.take(1000).toSeq)
+            val (adProof, adDigest) = v.state.proofsForTransactions(txs).get
 
-        val timestamp = System.currentTimeMillis()
-        val votes = Array.fill(5)(0: Byte)
-        CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest, adProof, txs, timestamp, votes)
+            val timestamp = System.currentTimeMillis()
+            val votes = Array.fill(5)(0: Byte)
+            CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest,
+              adProof, txs, timestamp, votes)
+          }.recoverWith{case thr =>
+            log.warn("Error when trying to generate a block: ", thr)
+            Failure(thr)
+          }.toOption
+        } else None
       }
 
-    case candidate: CandidateBlock =>
-      startingNonce = Long.MinValue
-      self ! MineBlock(candidate)
+    case candidateOpt: Option[CandidateBlock] =>
+      candidateOpt match {
+        case Some(candidateBlock) =>
+          startingNonce = Long.MinValue
+          self ! MineBlock(candidateBlock)
+        case None =>
+          context.system.scheduler.scheduleOnce(100.millis)(self ! ProduceCandidate)
+      }
 
     case StopMining =>
       mining = false

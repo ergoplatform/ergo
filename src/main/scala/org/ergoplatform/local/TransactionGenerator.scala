@@ -17,11 +17,11 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 class TransactionGenerator(viewHolder: ActorRef) extends Actor with ScorexLogging {
-  var txGenerator: Cancellable = null
+  var txGenerator: Cancellable = _
 
   override def receive: Receive = {
     case StartGeneration =>
-      txGenerator = context.system.scheduler.schedule(50 millis, 500 millis)(self ! GetState)
+      txGenerator = context.system.scheduler.schedule(50.millis, 500.millis)(self ! GetState)
 
     case GetState =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool,

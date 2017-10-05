@@ -14,6 +14,7 @@ import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Try}
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {

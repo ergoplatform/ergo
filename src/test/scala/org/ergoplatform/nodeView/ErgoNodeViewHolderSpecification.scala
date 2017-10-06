@@ -133,7 +133,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     expectMsg(SuccessfulModification(genesis.header, None))
 
     digestHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
-   //   expectMsg(SuccessfulModification(genesis.blockTransactions, None))  todo: why no message?
+    //expectMsg(SuccessfulModification(genesis.blockTransactions, None)) // todo: why no message?
 
     digestHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
     expectMsg(SuccessfulModification(genesis.aDProofs.get, None))
@@ -324,10 +324,17 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
+
     utxoHolder ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+
+    utxoHolder ! LocallyGeneratedModifier(genesis.header)
+    expectMsg(SuccessfulModification(genesis.header, None))
 
     utxoHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
     expectMsg(SuccessfulModification(genesis.blockTransactions, None))
+
+    utxoHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    //expectMsg(SuccessfulModification(genesis.aDProofs.get, None)) // todo: why no message?
 
     utxoHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt

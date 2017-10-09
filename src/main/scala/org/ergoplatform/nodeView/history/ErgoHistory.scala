@@ -298,8 +298,8 @@ trait ErgoHistory
     def validityRowsForHeader(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
       Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
     }
-
-    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
+//TODO why do we need this assert?
+//    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
       historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
         ByteArrayWrapper(Array(1.toByte))))

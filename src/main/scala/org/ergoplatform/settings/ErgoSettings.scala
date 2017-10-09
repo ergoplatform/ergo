@@ -20,7 +20,7 @@ object ErgoSettings extends ScorexLogging {
   val configPath: String = "ergo"
 
   def read(userConfigPath: Option[String]): ErgoSettings = {
-    fromConfig(readConfigFromPath(userConfigPath: Option[String]))
+    fromConfig(readConfigFromPath(userConfigPath))
   }
 
   private def fromConfig(config: Config): ErgoSettings = {

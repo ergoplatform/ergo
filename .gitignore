@@ -19,8 +19,11 @@ Dockerfile
 
 # db files
 *.data
-
+ergo/
 
 # for temporary experiments
 sheet.scala
 project/project/
+
+
+

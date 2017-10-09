@@ -70,9 +70,8 @@ trait ErgoHistory
     * Complete block of the best chain with transactions.
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */
-  def bestFullBlockOpt: Option[ErgoFullBlock] = Try {
-    getFullBlock(typedModifierById[Header](bestFullBlockIdOpt.get).get)
-  }.toOption
+  def bestFullBlockOpt: Option[ErgoFullBlock] =
+    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
@@ -169,25 +168,29 @@ trait ErgoHistory
     * @return Ids of modifiers, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
-    val ids = info.lastHeaderIds
-    val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
-    val theirHeight = heightOf(lastHeaderInHistory).get
-    val heightFrom = Math.min(height, theirHeight + size)
-    val startId = headerIdsAtHeight(heightFrom).head
-    val startHeader = typedModifierById[Header](startId).get
-    val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
-      .headers.map(h => Header.modifierTypeId -> h.id)
-    val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
-      case Some(bestFullBlockHeight) =>
-        val heightFrom = Math.min(height, bestFullBlockHeight + size)
-        val startId = headerIdsAtHeight(heightFrom).head
-        val startHeader = typedModifierById[Header](startId).get
-        val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
-        headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
-          (BlockTransactions.modifierTypeId, h.transactionsId)))
-      case _ => Seq()
+    if(isEmpty){
+      info.startingPoints
+    } else {
+      val ids = info.lastHeaderIds
+      val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
+      val theirHeight = heightOf(lastHeaderInHistory).get
+      val heightFrom = Math.min(height, theirHeight + size)
+      val startId = headerIdsAtHeight(heightFrom).head
+      val startHeader = typedModifierById[Header](startId).get
+      val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
+        .headers.map(h => Header.modifierTypeId -> h.id)
+      val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
+        case Some(bestFullBlockHeight) =>
+          val heightFrom = Math.min(height, bestFullBlockHeight + size)
+          val startId = headerIdsAtHeight(heightFrom).head
+          val startHeader = typedModifierById[Header](startId).get
+          val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
+          headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
+            (BlockTransactions.modifierTypeId, h.transactionsId)))
+        case _ => Seq()
+      }
+      headerIds ++ fullBlockContinuation
     }
-    headerIds ++ fullBlockContinuation
   }.toOption
 
   /**
@@ -245,10 +248,11 @@ trait ErgoHistory
     }
   }
 
-  protected def getFullBlock(header: Header): ErgoFullBlock = {
+  protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
-    val txs = typedModifierById[BlockTransactions](header.transactionsId).get
-    ErgoFullBlock(header, txs, aDProofs)
+    typedModifierById[BlockTransactions](header.transactionsId).map{ txs =>
+      ErgoFullBlock(header, txs, aDProofs)
+    }
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
@@ -335,7 +339,7 @@ trait ErgoHistory
             val (validChain, invalidatedChain) = (bestValidFullOpt, bestFullBlockOpt) match {
               case (Some(bestValid), Some(bestFull)) =>
                 val headersChain = commonBlockThenSuffixes(bestValid, bestFull.header)
-                (headersChain._1.headers.map(h => getFullBlock(h)), headersChain._2.headers.map(h => getFullBlock(h)))
+                (headersChain._1.headers.flatMap(h => getFullBlock(h)), headersChain._2.headers.flatMap(h => getFullBlock(h)))
               case _ =>
                 val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
                 (headersChain._1.headers, headersChain._2.headers)
@@ -343,7 +347,7 @@ trait ErgoHistory
             assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
             val branchPoint: Some[ModifierId] = invalidatedChain.head match {
               case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
-              case header => Some(header.id)
+              case header: Header => Some(header.id)
             }
 
             val toInsert = validityRow ++ changedLinks

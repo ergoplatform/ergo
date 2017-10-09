@@ -17,7 +17,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2-SNAPSHOT",
   "org.scorexfoundation" %% "scorex-core" % "2.0.0-RC3-SNAPSHOT",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.10",
+  "org.scorexfoundation" %% "avl-iodb" % "0.2.11",
   "com.storm-enroute" %% "scalameter" % "0.8.2",
   "com.iheart" %% "ficus" % "1.4.1",
 
@@ -25,7 +25,8 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % "2.0.0-RC3-SNAPSHOT" % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test"
+  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.0.9" % "test"
 )
 
 javaOptions in run ++= Seq("-Xmx2G")

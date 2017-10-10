@@ -1,13 +1,17 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import scorex.core.consensus.ModifierSemanticValidity
 
 import scala.util.Random
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
-  private def genHistory() =
-    generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+  private def genHistory(height: Int = 0): ErgoHistory = {
+    val inHistory = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    if (height > 0) applyChain(inHistory, genChain(height, bestFullOptToSeq(inHistory)))
+    else inHistory
+  }
 
   property("bootstrap from headers and last full blocks") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
@@ -38,6 +42,127 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.answer shouldBe answer
     si.lastHeaderIds.last shouldEqual chain.last.header.id
     si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
+  }
+
+  property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
+    var history = genHistory()
+
+    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    chain.foreach { fullBlock =>
+      history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
+      history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Absent
+
+      history = history.append(fullBlock.header).get._1
+      history = history.append(fullBlock.aDProofs.get).get._1
+      history = history.append(fullBlock.blockTransactions).get._1
+
+      history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+      history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+
+      history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
+      history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
+      history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
+    }
+
+  }
+
+  property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {
+    var history = genHistory(1)
+
+    assert(history.bestFullBlockOpt.isDefined)
+
+    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    assert(!(chain.head.header.parentId sameElements Header.GenesisParentId))
+
+    history = applyChain(history, chain)
+
+    chain.reverse.foreach { fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+
+      history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
+
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    }
+  }
+
+  property("reportSemanticValidity(valid = false) should mark invalid all forks containing this header") {
+    var history = genHistory()
+
+    val inChain = genChain(2, bestFullOptToSeq(history))
+    history = applyChain(history, inChain)
+
+    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
+    history = applyChain(history, fork1)
+    val fork2 = genChain(3, bestFullOptToSeq(history)).tail
+    history = applyChain(history, fork2)
+
+    history.reportSemanticValidity(inChain.last.header, valid = false, inChain.last.parentId)
+
+    fork1.foreach { fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    }
+
+    fork2.foreach { fullBlock =>
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    }
+  }
+
+  property("reportSemanticValidity(valid = false) should return blocks to rollback and to process") {
+    var history = genHistory(3)
+    val common = history.bestFullBlockOpt.get
+
+    val fork1 = genChain(3, Seq(common)).tail
+    val fork2 = genChain(2, Seq(common)).tail
+    history = applyChain(history, fork1)
+    history = applyChain(history, fork2)
+
+    history.bestHeaderOpt.get shouldBe fork1.last.header
+
+    val res = history.reportSemanticValidity(fork1.head.header, valid = false, common.parentId)
+
+    history.bestHeaderOpt.get shouldBe fork2.last.header
+    history.bestFullBlockOpt.get shouldBe fork2.last
+  }
+
+  property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
+    var history = genHistory()
+    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    history = applyChain(history, chain)
+
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get shouldEqual chain.last.header
+
+    val invalidChain = chain.takeRight(2)
+
+    val report = history.reportSemanticValidity(invalidChain.head.header, valid = false, invalidChain.head.header.id)
+    history = report._1
+    val processInfo = report._2
+    processInfo.toApply.isEmpty shouldBe true
+    processInfo.branchPoint.get shouldEqual invalidChain.head.header.parentId
+    processInfo.toRemove shouldEqual invalidChain
+
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get.id shouldEqual invalidChain.head.parentId
   }
 
   property("Report invalid for best full block") {
@@ -102,7 +227,20 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
-  property("process fork") {
+  property("process fork from genesis") {
+    val genesis = genChain(1, Seq())
+    var history = applyChain(genHistory(), genesis)
+    val fork1 = genChain(1, Seq(history.bestFullBlockOpt.get)).tail
+    val fork2 = genChain(2, Seq(history.bestFullBlockOpt.get)).tail
+
+    history = applyChain(history, fork1)
+    history.bestHeaderOpt.get shouldBe fork1.last.header
+
+    history = applyChain(history, fork2)
+    history.bestHeaderOpt.get shouldBe fork2.last.header
+  }
+
+  property("process fork from existing chain") {
     var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
 
     assert(history.bestFullBlockOpt.isDefined)

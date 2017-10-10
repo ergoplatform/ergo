@@ -16,7 +16,7 @@ import scorex.core._
 import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.{Base16, Base58}
+import scorex.crypto.encode.Base58
 
 import scala.util.{Failure, Try}
 
@@ -78,7 +78,7 @@ trait ErgoHistory
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     val modifier = historyStorage.modifierById(id)
-    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Base16.encode(id)} expected")
+    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Algos.encode(id)} expected")
     modifier
   }
 
@@ -194,6 +194,22 @@ trait ErgoHistory
   }.toOption
 
   /**
+    * @return all possible forks, that contains specified header
+    */
+  private[history] def continuationHeaderChains(header: Header): Seq[HeaderChain] = {
+    def loop(acc: Seq[Header]): Seq[HeaderChain] = {
+      val bestHeader = acc.last
+      val currentHeight = heightOf(bestHeader.id).get
+      val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
+        .filter(_.parentId sameElements bestHeader.id)
+      if (nextLevelHeaders.isEmpty) Seq(HeaderChain(acc))
+      else nextLevelHeaders.map(h => acc :+ h).flatMap(chain => loop(chain))
+    }
+    loop(Seq(header))
+  }
+
+
+  /**
     *
     * @param answer - whether it is answer to other node request or not
     * @return Node ErgoSyncInfo
@@ -241,9 +257,7 @@ trait ErgoHistory
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
-    val otherHeightOpt = heightOf(header2.id)
-    assert(otherHeightOpt.isDefined)
-    val otherHeight = otherHeightOpt.get
+    assert(contains(header2))
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
@@ -251,7 +265,7 @@ trait ErgoHistory
         r
       } else {
         val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
-        if (biggerOther.length < otherHeight) {
+        if (!otherChain.head.isGenesis) {
           loop(biggerOther.size, biggerOther)
         } else {
           throw new Error(s"Common point not found for headers $header1 and $header2")
@@ -280,40 +294,87 @@ trait ErgoHistory
   //todo: fix
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      lastApplied: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    /*
-        val headerId = modifier match {
-          case h: Header => h.id
-          case proof: ADProof => typedModifierById[Header](proof.headerId).map(h => h.id).get
-          case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => h.id).get
-
-          case snapshot: UTXOSnapshotChunk => ???
-          case m =>
-            log.warn(s"reportInvalid for invalid modifier type: $m")
-            ???
-        }*/
-
-
-    if (!valid) {
-      val (idsToRemove: Seq[ByteArrayWrapper], toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = modifier match {
-        case h: Header => toDrop(h)
-        case proof: ADProofs => typedModifierById[Header](proof.headerId).map(h => toDrop(h)).getOrElse(Seq())
-        case txs: BlockTransactions => typedModifierById[Header](txs.headerId).map(h => toDrop(h)).getOrElse(Seq())
-        case snapshot: UTXOSnapshotChunk => toDrop(snapshot)
-        case m =>
-          log.warn(s"reportInvalid for invalid modifier type: $m")
-          Seq(ByteArrayWrapper(m.id)) -> Seq()
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    def validityRowsForHeader(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+      Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
+    }
+//TODO why do we need this assert?
+//    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
+    if (valid) {
+      historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+        ByteArrayWrapper(Array(1.toByte))))
+      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+    } else {
+      val headerOpt: Option[Header] = modifier match {
+        case h: Header => Some(h)
+        case full: ErgoFullBlock => Some(full.header)
+        case proof: ADProofs => typedModifierById[Header](proof.headerId)
+        case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
+        case _ => None
       }
-      historyStorage.update(ModifierId @@ Algos.hash(modifier.id ++ "reportInvalid".getBytes), idsToRemove, toInsert)
+      headerOpt match {
+        case Some(h) =>
+          val invalidatedHeaders = continuationHeaderChains(h).flatMap(_.headers).distinct
+          log.info(s"Invalidated header ${h.encodedId} and linked ${invalidatedHeaders.map(_.encodedId).mkString(",")}")
+          val validityRow = invalidatedHeaders.flatMap(h => validityRowsForHeader(h))
+          def isStillValid(id: ModifierId): Boolean = !invalidatedHeaders.exists(_.id sameElements id)
+          def loopHeightDown(height: Int): Header = {
+            assert(height >= 0, s"Mark genesis invalid is not true")
+            headerIdsAtHeight(height).find(id => isStillValid(id)).flatMap(id => typedModifierById[Header](id)) match {
+              case Some(header) => header
+              case None => loopHeightDown(height - 1)
+            }
+          }
+
+          val branchValidHeader: Header = loopHeightDown(height)
+          val bestValidFullOpt: Option[Header] = bestFullBlockOpt.flatMap(h => heightOf(h.header.id))
+            .map(loopHeightDown)
+
+          if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
+            historyStorage.db.update(validityKey(modifier.id), Seq(), validityRow)
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+          } else {
+            val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
+              (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
+            val (validChain, invalidatedChain) = (bestValidFullOpt, bestFullBlockOpt) match {
+              case (Some(bestValid), Some(bestFull)) =>
+                val headersChain = commonBlockThenSuffixes(bestValid, bestFull.header)
+                (headersChain._1.headers.flatMap(h => getFullBlock(h)), headersChain._2.headers.flatMap(h => getFullBlock(h)))
+              case _ =>
+                val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
+                (headersChain._1.headers, headersChain._2.headers)
+            }
+            assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
+            val branchPoint: Some[ModifierId] = invalidatedChain.head match {
+              case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
+              case header: Header => Some(header.id)
+            }
+
+            val toInsert = validityRow ++ changedLinks
+            historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
+
+            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail, validChain.tail, Seq())
+          }
+        case None =>
+          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+            ByteArrayWrapper(Array(0.toByte))))
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+      }
     }
 
-    lazy val progressInto = ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq()) //todo: dumb values, fix
-    this -> progressInto
   }
 
-  //todo: fix / finish
-  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value =
-    ModifierSemanticValidity.Valid
+  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = {
+    historyStorage.db.get(validityKey(modifierId)) match {
+      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
+      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case None if contains(modifierId) => ModifierSemanticValidity.Unknown
+      case None => ModifierSemanticValidity.Absent
+      case m =>
+        log.error(s"Incorrect validity status: $m")
+        ModifierSemanticValidity.Absent
+    }
+  }
 }
 
 object ErgoHistory extends ScorexLogging {

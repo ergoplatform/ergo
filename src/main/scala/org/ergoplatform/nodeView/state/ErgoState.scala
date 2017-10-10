@@ -81,6 +81,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
   //33 bytes
+  //TODO replace to Algos.decode
   val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
 
@@ -102,10 +103,9 @@ object ErgoState extends ScorexLogging {
   }
 }
 
-
 /**
   * Tool to print new target digest in case of initial utxo state re-generation
   */
 object DigestPrinter extends App {
-  println(Base16.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
+  println(Algos.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
 }

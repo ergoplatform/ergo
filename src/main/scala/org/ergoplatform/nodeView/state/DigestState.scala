@@ -5,11 +5,11 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.settings.Algos
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,7 +38,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten match {
         case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${Base16.encode(mod.id)}")
+          log.info(s"Valid modifier applied to DigestState: ${Algos.encode(mod.id)}")
           s
         case Failure(e) =>
           log.warn(s"Modifier $mod is not valid: ", e)

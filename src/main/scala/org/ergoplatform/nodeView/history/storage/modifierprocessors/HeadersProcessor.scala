@@ -11,8 +11,8 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.{NetworkTime, ScorexLogging}
-import scorex.crypto.encode.Base16
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -22,6 +22,8 @@ import scala.util.{Failure, Success, Try}
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ScorexLogging {
+
+  protected val historyStorage: HistoryStorage
 
   val powScheme: PoWScheme
 
@@ -39,6 +41,8 @@ trait HeadersProcessor extends ScorexLogging {
   protected lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.epochLength)
 
+  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
+
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
@@ -47,7 +51,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
 
-  protected def validityKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
+  protected def validityKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(ModifierId @@ _.data)
 
@@ -80,7 +84,7 @@ trait HeadersProcessor extends ScorexLogging {
 
     //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
-      log.info(s"New best header ${Base16.encode(header.id)}")
+      log.info(s"New best header ${Algos.encode(header.id)}")
       //TODO Notify node view holder that it should download transactions ?
       ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {
@@ -94,7 +98,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @param header - header we're going to remove from history
     * @return ids to remove, new data to apply
     */
-  protected def toDrop(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
+  protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
+
+
     val modifierId = header.id
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))
@@ -107,6 +113,7 @@ trait HeadersProcessor extends ScorexLogging {
       Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
     } else Seq()
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
+
   }
 
   /**
@@ -124,7 +131,7 @@ trait HeadersProcessor extends ScorexLogging {
         Success()
       }
     } else if (parentOpt.isEmpty) {
-      Failure(new Error(s"Parent header with id ${Base16.encode(header.parentId)} not defined"))
+      Failure(new Error(s"Parent header with id ${Algos.encode(header.parentId)} not defined"))
     } else if (header.timestamp - NetworkTime.time() > MaxTimeDrift) {
       Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${NetworkTime.time()}"))
     } else if (header.timestamp <= parentOpt.get.timestamp) {
@@ -141,6 +148,8 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
+    } else if (isSemanticallyValid(header.parentId) == ModifierSemanticValidity.Invalid) {
+      Failure(new Error(s"Parent header is marked as semantically invalid"))
     } else {
       Success()
     }.recoverWith{case thr =>
@@ -148,8 +157,6 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(thr)
     }
   }
-
-  protected val historyStorage: HistoryStorage
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 

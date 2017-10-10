@@ -18,6 +18,7 @@ trait ChainGenerator {
   val powScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
+
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
   def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
@@ -56,6 +57,7 @@ trait ChainGenerator {
       txs,
       Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time())),
       votes)
+
     genChain(height - 1, block +: acc)
   }
 

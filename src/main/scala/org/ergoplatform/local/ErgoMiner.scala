@@ -19,8 +19,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
-  private var cancellableOpt: Option[Cancellable] = None
-
   private var mining = false
   private var startingNonce = Long.MinValue
 

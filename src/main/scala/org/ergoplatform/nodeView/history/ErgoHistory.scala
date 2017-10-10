@@ -168,7 +168,7 @@ trait ErgoHistory
     * @return Ids of modifiers, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
-    if(isEmpty){
+    if (isEmpty) {
       info.startingPoints
     } else {
       val ids = info.lastHeaderIds
@@ -205,6 +205,7 @@ trait ErgoHistory
       if (nextLevelHeaders.isEmpty) Seq(HeaderChain(acc))
       else nextLevelHeaders.map(h => acc :+ h).flatMap(chain => loop(chain))
     }
+
     loop(Seq(header))
   }
 
@@ -226,9 +227,9 @@ trait ErgoHistory
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
   def lastHeaders(count: Int): HeaderChain =
-  bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
-    .getOrElse(HeaderChain.empty)
+    bestHeaderOpt
+      .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
+      .getOrElse(HeaderChain.empty)
 
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
@@ -250,7 +251,7 @@ trait ErgoHistory
 
   protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
-    typedModifierById[BlockTransactions](header.transactionsId).map{ txs =>
+    typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
       ErgoFullBlock(header, txs, aDProofs)
     }
   }
@@ -298,8 +299,9 @@ trait ErgoHistory
     def validityRowsForHeader(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
       Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
     }
-//TODO why do we need this assert?
-//    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
+
+    //TODO why do we need this assert?
+    //    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
       historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
         ByteArrayWrapper(Array(1.toByte))))
@@ -317,7 +319,9 @@ trait ErgoHistory
           val invalidatedHeaders = continuationHeaderChains(h).flatMap(_.headers).distinct
           log.info(s"Invalidated header ${h.encodedId} and linked ${invalidatedHeaders.map(_.encodedId).mkString(",")}")
           val validityRow = invalidatedHeaders.flatMap(h => validityRowsForHeader(h))
+
           def isStillValid(id: ModifierId): Boolean = !invalidatedHeaders.exists(_.id sameElements id)
+
           def loopHeightDown(height: Int): Header = {
             assert(height >= 0, s"Mark genesis invalid is not true")
             headerIdsAtHeight(height).find(id => isStillValid(id)).flatMap(id => typedModifierById[Header](id)) match {
@@ -455,7 +459,6 @@ object ErgoHistory extends ScorexLogging {
         throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +
           s"poPoWBootstrap==${m._1}")
     }
-
     history
   }
 }

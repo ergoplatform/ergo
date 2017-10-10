@@ -1,12 +1,10 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{HeaderChain, PoPoWProof}
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
-
-import scala.util.Random
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
@@ -82,6 +80,23 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
         continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
       }
     }
+  }
+
+  property("continuationHeaderChains()") {
+    var history = genHistory()
+    //put 2 blocks
+    val inChain = genHeaderChain(2, history)
+    history = applyHeaderChain(history, inChain)
+    //apply 2 different forks
+    val fork1 = genHeaderChain(2, history).tail
+    val fork2 = genHeaderChain(3, history).tail
+    history = applyHeaderChain(history, fork1)
+    history = applyHeaderChain(history, fork2)
+    //get continuationHeaderChains
+    val continuations = history.continuationHeaderChains(inChain.last)
+    continuations.length shouldBe 2
+    continuations.flatMap(_.headers.tail).map(_.encodedId).toSet should contain theSameElementsAs
+      (fork1.headers ++ fork2.headers).map(_.encodedId).toSet
   }
 
   property("commonBlockThenSuffixes()") {

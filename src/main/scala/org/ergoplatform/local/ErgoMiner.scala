@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
 import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.nodeView.history.ErgoHistory

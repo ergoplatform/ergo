@@ -60,10 +60,6 @@ class ErgoApp(args: Seq[String]) extends Application {
     val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
     txGen ! StartGeneration
 
-
-    //todo: remove
-    Thread.sleep(4000)
-
     val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
     miner ! StartMining
   }

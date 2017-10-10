@@ -124,8 +124,7 @@ trait ErgoGenerators extends CoreGenerators {
 
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
-    //todo: return updHolder
-    val (transactions, updHolder) = validTransactionsFromBoxHolder(boxHolder)
+    val (transactions, _) = validTransactionsFromBoxHolder(boxHolder)
     validFullBlock(parentOpt, utxoState, transactions)
   }
 

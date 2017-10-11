@@ -50,7 +50,8 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")
         if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
-      case (Some(pevBest), Some(prevBestScore), Some(currentScore)) if currentScore >= prevBestScore =>
+        //TODO currentScore == prevBestScore
+      case (Some(pevBest), Some(prevBestScore), Some(currentScore)) if currentScore > prevBestScore =>
         log.info(s"Process fork for new best header ${header.encodedId} with transactions and proofs")
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
         val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)

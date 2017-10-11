@@ -228,16 +228,27 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from genesis") {
-    val genesis = genChain(1, Seq())
-    var history = applyChain(genHistory(), genesis)
+    val genesis = genChain(1, Seq()).head
+    var history = applyChain(genHistory(), Seq(genesis))
     val fork1 = genChain(1, Seq(history.bestFullBlockOpt.get)).tail
     val fork2 = genChain(2, Seq(history.bestFullBlockOpt.get)).tail
 
     history = applyChain(history, fork1)
     history.bestHeaderOpt.get shouldBe fork1.last.header
 
-    history = applyChain(history, fork2)
+    history = applyChain(history, fork2.dropRight(1))
+    val lastBlock = fork2.last
+    history = history.append(lastBlock.header).get._1.append(lastBlock.blockTransactions).get._1
+
+    val changes = history.append(lastBlock.aDProofs.get).get
+    history = changes._1
     history.bestHeaderOpt.get shouldBe fork2.last.header
+
+    val processInfo = changes._2
+    processInfo.branchPoint.get shouldEqual genesis.header.id
+    processInfo.toRemove should contain theSameElementsAs fork1
+    processInfo.toApply should contain theSameElementsAs fork2
+
   }
 
   property("process fork from existing chain") {
@@ -246,14 +257,26 @@ class VerifyADHistorySpecification extends HistorySpecification {
     assert(history.bestFullBlockOpt.isDefined)
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 0) {
-        val fork1 = genChain(forkLength, Seq(history.bestFullBlockOpt.get)).tail
-        val fork2 = genChain(forkLength + 1, Seq(history.bestFullBlockOpt.get)).tail
+        val branchPoint = history.bestFullBlockOpt.get
+        val fork1 = genChain(forkLength, Seq(branchPoint)).tail
+        val fork2 = genChain(forkLength + 1, Seq(branchPoint)).tail
 
         history = applyChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last.header
 
-        history = applyChain(history, fork2)
+        history = applyChain(history, fork2.dropRight(1))
+        val lastBlock = fork2.last
+        history = history.append(lastBlock.header).get._1.append(lastBlock.blockTransactions).get._1
+
+        val changes = history.append(lastBlock.aDProofs.get).get
+        history = changes._1
         history.bestHeaderOpt.get shouldBe fork2.last.header
+
+        val processInfo = changes._2
+        processInfo.branchPoint.get shouldEqual branchPoint.header.id
+        processInfo.toRemove should contain theSameElementsAs fork1
+        processInfo.toApply should contain theSameElementsAs fork2
+
       }
     }
   }

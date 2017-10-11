@@ -58,10 +58,14 @@ class DigestState private(override val version: VersionTag, override val rootHas
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
-    case fb: ErgoFullBlock => this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+    case fb: ErgoFullBlock =>
+      log.info(s"Got new full block with header id ${fb.header.encodedId}")
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
 
     //todo: fail here? or not?
-    case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
+    case a: Any =>
+      log.info(s"Unhandled modifier: $a")
+      Try(this)
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {

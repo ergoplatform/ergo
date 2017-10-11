@@ -464,7 +464,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
 
 
   //TODO make it work for both types
-  ignore("DigestState: switching to a better chain") { fixture => import fixture._
+  property("DigestState: switching to a better chain") { fixture => import fixture._
 
     val digestHolder = getDigestHolder
     val dir = createTempDir
@@ -490,17 +490,17 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
 
-    val chain2block2 = validFullBlock(Some(genesis.header), wusChain2Block1)
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
 
     digestHolder ! LocallyGeneratedModifier(chain2block2.header)
     digestHolder ! LocallyGeneratedModifier(chain2block2.blockTransactions)
     digestHolder ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
 
 
-    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
+    digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[String]] { v =>
+      v.history.bestFullBlockOpt.map(_.header.encodedId)
     }
-    expectMsg(10 seconds, Some(chain2block2))
+    expectMsg(10 seconds, Some(chain2block2.header.encodedId))
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
       v.history.bestHeaderOpt

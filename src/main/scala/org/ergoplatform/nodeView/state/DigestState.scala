@@ -38,7 +38,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten match {
         case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${Algos.encode(mod.id)}")
+          log.info(s"Valid modifier applied to DigestState: ${fb.header.encodedId}")
           s
         case Failure(e) =>
           log.warn(s"Modifier $mod is not valid: ", e)
@@ -60,7 +60,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock =>
       log.info(s"Got new full block with header id ${fb.header.encodedId}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
 
     //todo: fail here? or not?
     case a: Any =>
@@ -69,6 +69,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
+    log.info(s"Rollback Digest State to ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data

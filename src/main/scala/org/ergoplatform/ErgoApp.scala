@@ -17,13 +17,15 @@ import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.Settings
 
+import scala.concurrent.ExecutionContextExecutor
+
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
   override type TX = AnyoneCanSpendTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
-  implicit val ec = actorSystem.dispatcher
+  implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 

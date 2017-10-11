@@ -1,7 +1,5 @@
 package org.ergoplatform
 
-import java.io.File
-
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
@@ -10,29 +8,30 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.ModifierId
+import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.NetworkTime
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
-import scorex.testkit.properties.mempool.MempoolTransactionsTest
+import scorex.testkit.properties.mempool.{MempoolFilterPerformanceTest, MempoolTransactionsTest}
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
-class ErgoSanity extends HistoryTests[P, TX, PM, SI, HT]
+trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
   //with StateApplyChangesTest[P, TX, PM, B, ST]
   //with WalletSecretsTest[P, TX, PM]
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
   with MempoolTransactionsTest[P, TX, MPool]
   // todo: convert MempoolFilterPerformanceTest to benchmark
-  //  with MempoolFilterPerformanceTest[P, TX, MPool]
+  //with MempoolFilterPerformanceTest[P, TX, MPool]
   // with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
   //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
   with ErgoGenerators
@@ -41,8 +40,8 @@ class ErgoSanity extends HistoryTests[P, TX, PM, SI, HT]
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false,
-    PoPoWBootstrap = false, -1)
+//  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false,
+//    PoPoWBootstrap = false, -1)
 
   override val memPool: MPool = ErgoMemPool.empty
 
@@ -66,16 +65,6 @@ class ErgoSanity extends HistoryTests[P, TX, PM, SI, HT]
   override def syntacticallyInvalidModifier(history: HT): PM =
     syntacticallyValidModifier(history).copy(parentId = ModifierId @@ Random.randomBytes(32))
 
-  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map { bh =>
-    val f = new File(s"/tmp/ergo/${scala.util.Random.nextInt(10000000)}")
-    f.mkdirs()
-    WrappedUtxoState(bh, f)
-  }
-
-  override def semanticallyValidModifier(state: ST): PM =
-    validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
-
-  override def semanticallyInvalidModifier(state: ST): PM = invalidErgoFullBlockGen.sample.get
 }
 
 object ErgoSanity {
@@ -85,6 +74,9 @@ object ErgoSanity {
   type PM = ErgoPersistentModifier
   type SI = ErgoSyncInfo
   type HT = ErgoHistory
-  type ST = UtxoState
+  type UTXO_ST = UtxoState
+  type DIGEST_ST = DigestState
   type MPool = ErgoMemPool
 }
+
+

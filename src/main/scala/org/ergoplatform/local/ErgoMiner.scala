@@ -56,9 +56,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
               }
             }._1
 
-            val bxsbaw = txsNoConflict.flatMap(_.boxIdsToOpen).map(k => ByteArrayWrapper(k))
-            println("seq size: " + bxsbaw.size + " set size: " + bxsbaw.toSet.size)
-
             val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
             val timestamp = System.currentTimeMillis()

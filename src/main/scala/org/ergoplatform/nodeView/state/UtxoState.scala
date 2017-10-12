@@ -58,13 +58,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       require(storage.version.get.sameElements(rootHash))
       require(store.lastVersionID.get.data.sameElements(rootHash))
 
-      persistentProver.checkTree(true)
+      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
+      //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
-          if (opRes.isFailure) println(opRes)
+          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
           opRes
         })
       }.ensuring(_.isSuccess)

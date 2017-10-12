@@ -463,7 +463,50 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
 
 
 
-  //TODO make it work for both types
+  property("UTXOState: switching to a better chain") { fixture => import fixture._
+
+    val utxoHolder = getUtxoHolder
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    utxoHolder ! LocallyGeneratedModifier(genesis.header)
+    utxoHolder ! LocallyGeneratedModifier(genesis.blockTransactions)
+    utxoHolder ! LocallyGeneratedModifier(genesis.aDProofs.get)
+
+    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    utxoHolder ! LocallyGeneratedModifier(chain1block1.header)
+    utxoHolder ! LocallyGeneratedModifier(chain1block1.blockTransactions)
+    utxoHolder ! LocallyGeneratedModifier(chain1block1.aDProofs.get)
+
+    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    utxoHolder ! LocallyGeneratedModifier(chain2block1.header)
+    utxoHolder ! LocallyGeneratedModifier(chain2block1.blockTransactions)
+    utxoHolder ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
+
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+
+    utxoHolder ! LocallyGeneratedModifier(chain2block2.header)
+    utxoHolder ! LocallyGeneratedModifier(chain2block2.blockTransactions)
+    utxoHolder ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
+
+
+    utxoHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[String]] { v =>
+      v.history.bestFullBlockOpt.map(_.header.encodedId)
+    }
+    expectMsg(10 seconds, Some(chain2block2.header.encodedId))
+
+    utxoHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[Header]] { v =>
+      v.history.bestHeaderOpt
+    }
+    expectMsg(Some(chain2block2.header))
+  }
+
   property("DigestState: switching to a better chain") { fixture => import fixture._
 
     val digestHolder = getDigestHolder

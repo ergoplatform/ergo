@@ -67,7 +67,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
           if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
         }
-        ProgressInfo(Some(prevChain.head.id), toRemove, toApply, toDownload = Seq())
+        ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, toApply, toDownload = Seq())
       case (None, _, _) =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)

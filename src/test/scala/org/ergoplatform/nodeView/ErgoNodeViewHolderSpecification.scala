@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoGenerators, SequentialAkkaFixture}
+import org.scalatest.Matchers
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.EventType._
@@ -22,7 +23,7 @@ import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.duration._
 
-class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators {
+class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGenerators with Matchers {
 
   class HolderFixture extends AkkaFixture with FileUtils {
     def getDigestHolder: ActorRef = {
@@ -183,7 +184,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     expectMsg(2)
   }
 
-  property("DigestState: add transaction to the memory pool"){ fixture => import fixture._
+  property("DigestState: add transaction to the memory pool") { fixture => import fixture._
     val digestHolder = getDigestHolder
 
     val dir = createTempDir
@@ -204,7 +205,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     expectMsg(1)
   }
 
-  property("Digest State: apply invalid full block"){ fixture => import fixture._
+  property("Digest State: apply invalid full block") { fixture => import fixture._
 
     val digestHolder = getDigestHolder
     val dir = createTempDir
@@ -388,7 +389,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     expectMsg(2)
   }
 
-  property("UtxoState: add transaction to the memory pool"){ fixture => import fixture._
+  property("UtxoState: add transaction to the memory pool") { fixture => import fixture._
     val utxoHolder = getUtxoHolder
 
     val dir = createTempDir
@@ -409,7 +410,7 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     expectMsg(1)
   }
 
-  property("Utxo State: apply invalid full block"){ fixture => import fixture._
+  property("Utxo State: apply invalid full block") { fixture => import fixture._
 
     val utxoHolder = getUtxoHolder
     val dir = createTempDir
@@ -532,13 +533,13 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     digestHolder ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
-
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+
+    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 
     digestHolder ! LocallyGeneratedModifier(chain2block2.header)
     digestHolder ! LocallyGeneratedModifier(chain2block2.blockTransactions)
     digestHolder ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
-
 
     digestHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[String]] { v =>
       v.history.bestFullBlockOpt.map(_.header.encodedId)

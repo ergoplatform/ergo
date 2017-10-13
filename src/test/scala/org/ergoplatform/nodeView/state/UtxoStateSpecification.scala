@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
@@ -71,46 +72,10 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("applyModifier() - 2 valid blocks chain") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
-
-      val block = validFullBlock(parentOpt = None, us, bh)
-      val us2 = us.applyModifier(block).get
-
-      val block2 = validFullBlock(parentOpt = Some(block.header), us2, bh)
-      val us3 = us2.applyModifier(block2).get
-
-    }
-  }
-
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       val state = createUtxoState
       state.applyModifier(b).isFailure shouldBe true
-    }
-  }
-
-  property("rollback - 1 block back") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
-
-      val block = validFullBlock(parentOpt = None, us, bh)
-      val us2 = us.applyModifier(block).get
-
-      us.rootHash.sameElements(us2.rootHash) shouldBe false
-
-      val us3 = us2.rollbackTo(us.version).get
-      us3.rootHash shouldBe us.rootHash
-      us3.version shouldBe us.version
-
-      bh.sortedBoxes.take(100).map(_.id).foreach { boxId =>
-        us3.boxById(boxId).isDefined shouldBe true
-      }
-
-      us3.applyModifier(block).get.rootHash shouldBe us2.rootHash
     }
   }
 
@@ -120,13 +85,12 @@ class UtxoStateSpecification extends PropSpec
         val us = createUtxoState(bh)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val us2 = us.applyModifier(genesis).get
-        us2.rootHash shouldEqual genesis.header.stateRoot
+        val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+        wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
-
-        val (finalState: UtxoState, _) = (0 until depth).foldLeft((us2, genesis)) { (sb, i) =>
+        val (finalState: WrappedUtxoState, _) = (0 until depth).foldLeft((wusAfterGenesis, genesis)) { (sb, i) =>
           val state = sb._1
-          val block = validFullBlock(parentOpt = Some(sb._2.header), state, bh)
+          val block = validFullBlock(parentOpt = Some(sb._2.header), state)
           (state.applyModifier(block).get, block)
         }
 
@@ -134,4 +98,5 @@ class UtxoStateSpecification extends PropSpec
       }
     }
   }
+
 }

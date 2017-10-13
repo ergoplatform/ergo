@@ -489,13 +489,11 @@ class ErgoNodeViewHolderSpecification extends SequentialAkkaFixture with ErgoGen
     utxoHolder ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
-
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
 
     utxoHolder ! LocallyGeneratedModifier(chain2block2.header)
     utxoHolder ! LocallyGeneratedModifier(chain2block2.blockTransactions)
     utxoHolder ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
-
 
     utxoHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[String]] { v =>
       v.history.bestFullBlockOpt.map(_.header.encodedId)

@@ -52,14 +52,14 @@ class DigestState private(override val version: VersionTag, override val rootHas
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
     val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(rootHash)))
+    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
     new DigestState(newVersion, newRootHash, store)
   }
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock =>
-      log.info(s"Got new full block with id ${fb.encodedId}")
+      log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
       //TODO full block id
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
 
@@ -70,10 +70,11 @@ class DigestState private(override val version: VersionTag, override val rootHas
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
-    log.info(s"Rollback Digest State to ${Algos.encoder.encode(version)}")
+    log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
+      log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store)
     }
   }

@@ -55,7 +55,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         log.info(s"Process fork for new best header ${header.encodedId} with transactions and proofs")
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
         val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)
-        assert(prevChain.head == newChain.head)
 
         //todo: is flatMap in next two lines safe?
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)

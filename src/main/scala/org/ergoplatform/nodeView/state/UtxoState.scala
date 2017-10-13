@@ -45,33 +45,42 @@ class UtxoState(override val version: VersionTag, val store: Store)
   }
 
   //TODO not efficient at all
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = Try {
-    require(txs.nonEmpty)
-    require(persistentProver.digest.sameElements(rootHash))
-    require(storage.version.get.sameElements(rootHash))
-    require(store.lastVersionID.get.data.sameElements(rootHash))
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    persistentProver.checkTree(true)
+    def rollback(): Try[Unit] = Try(
+      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
+    ).flatten
 
-    val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-      t.flatMap(_ => {
-        val opRes = persistentProver.performOneOperation(m)
-        if (opRes.isFailure) log.warn(s"Failed to generate proofs: $opRes", opRes.failed.get)
-        opRes
-      })
-    }.ensuring(_.isSuccess)
+    Try {
+      require(txs.nonEmpty)
+      require(persistentProver.digest.sameElements(rootHash))
+      require(storage.version.get.sameElements(rootHash))
+      require(store.lastVersionID.get.data.sameElements(rootHash))
 
-    val proof = persistentProver.generateProofAndUpdateStorage()
+      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
+      //persistentProver.checkTree(true)
 
-    val digest = persistentProver.digest
+      val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          val opRes = persistentProver.performOneOperation(m)
+          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
+          opRes
+        })
+      }.ensuring(_.isSuccess)
 
-    persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+      val proof = persistentProver.generateProofAndUpdateStorage()
 
-    proof -> digest
+      val digest = persistentProver.digest
+
+      proof -> digest
+    } match {
+      case Success(res) => rollback().map(_ => res)
+      case Failure(e) => rollback().flatMap(_ => Failure(e))
+    }
   }
 
-  override val rootHash: ADDigest = persistentProver.digest
+  override lazy val rootHash: ADDigest = persistentProver.digest
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver

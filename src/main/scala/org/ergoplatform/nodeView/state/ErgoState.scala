@@ -28,7 +28,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  //TODO: kushti: AVL+ tree root, not Merkle
   def rootHash(): ADDigest
 
   //TODO implement correctly

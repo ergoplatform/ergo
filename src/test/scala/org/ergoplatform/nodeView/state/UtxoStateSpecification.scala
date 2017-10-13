@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.VersionTag
 
 
 class UtxoStateSpecification extends PropSpec
@@ -70,6 +71,20 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
+  property("applyModifier() - 2 valid blocks chain") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh)
+      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+
+      val block = validFullBlock(parentOpt = None, us, bh)
+      val us2 = us.applyModifier(block).get
+
+      val block2 = validFullBlock(parentOpt = Some(block.header), us2, bh)
+      val us3 = us2.applyModifier(block2).get
+
+    }
+  }
+
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       val state = createUtxoState
@@ -96,6 +111,27 @@ class UtxoStateSpecification extends PropSpec
       }
 
       us3.applyModifier(block).get.rootHash shouldBe us2.rootHash
+    }
+  }
+
+  property("rollback - n blocks back") {
+    forAll(boxesHolderGen, smallInt) { (bh, depth) =>
+      whenever(depth > 0 && depth <= 5) {
+        val us = createUtxoState(bh)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+        val genesis = validFullBlock(parentOpt = None, us, bh)
+        val us2 = us.applyModifier(genesis).get
+        us2.rootHash shouldEqual genesis.header.stateRoot
+
+
+        val (finalState: UtxoState, _) = (0 until depth).foldLeft((us2, genesis)) { (sb, i) =>
+          val state = sb._1
+          val block = validFullBlock(parentOpt = Some(sb._2.header), state, bh)
+          (state.applyModifier(block).get, block)
+        }
+
+        finalState.rollbackTo(VersionTag @@ genesis.id).get.rootHash shouldEqual genesis.header.stateRoot
+      }
     }
   }
 }

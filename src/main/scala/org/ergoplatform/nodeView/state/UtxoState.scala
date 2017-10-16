@@ -85,11 +85,15 @@ class UtxoState(override val version: VersionTag, val store: Store)
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    val hash = ADDigest @@ store.get(ByteArrayWrapper(version)).get.data
-    p.rollback(hash).map { _ =>
-      new UtxoState(version, store) {
-        override protected lazy val persistentProver = p
-      }
+    store.get(ByteArrayWrapper(version)) match {
+      case Some(hash) =>
+        p.rollback(ADDigest @@ hash.data).map { _ =>
+          new UtxoState(version, store) {
+            override protected lazy val persistentProver = p
+          }
+        }
+      case None =>
+        Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
     }
   }
 
@@ -120,7 +124,9 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
-            log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}")
+            log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}|${fb.header.encodedId}")
+            assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
+            assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
@@ -179,7 +185,7 @@ object UtxoState {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+    val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
 
     new UtxoState(ErgoState.genesisStateVersion, store) {
       override protected lazy val persistentProver =

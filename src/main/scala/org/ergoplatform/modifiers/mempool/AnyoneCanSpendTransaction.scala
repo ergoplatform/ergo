@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Algos.hash
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.{Base16, Base58}
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -41,11 +41,10 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Val
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
-    //    "newBoxes" -> newBoxes.map(b => Base58.encode(b.id).asJson).asJson,
-    //    "boxesToRemove" -> boxIdsToOpen.map(id => Base58.encode(id).asJson).asJson,
-    "from" -> from.map { s =>
+    "from" -> (from zip boxIdsToOpen).map {case (nonce, id) =>
       Map(
-        "nonce" -> s.asJson
+        "nonce" -> nonce.asJson,
+        "id" -> Base16.encode(id).asJson
       ).asJson
     }.asJson,
     "to" -> to.map { s =>

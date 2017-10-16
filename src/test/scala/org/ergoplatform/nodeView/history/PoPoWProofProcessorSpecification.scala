@@ -120,10 +120,6 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
 
     proof.innerchain(1) shouldBe h9
 
-
-    println(h7.bytes)
-    println(proof.innerchain(0).bytes)
-
     DefaultFakePowScheme.realDifficulty(proof.innerchain(0)) shouldBe (proof.innerchain(0).requiredDifficulty * 4)
 
     new PoPoWProofUtils(DefaultFakePowScheme).validate(proof).isSuccess shouldBe true

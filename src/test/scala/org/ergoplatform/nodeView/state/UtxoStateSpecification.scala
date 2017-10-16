@@ -3,9 +3,11 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.VersionTag
 
 
 class UtxoStateSpecification extends PropSpec
@@ -77,25 +79,24 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("rollback - 1 block back") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+  property("rollback - n blocks back") {
+    forAll(boxesHolderGen, smallInt) { (bh, depth) =>
+      whenever(depth > 0 && depth <= 5) {
+        val us = createUtxoState(bh)
+        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+        val genesis = validFullBlock(parentOpt = None, us, bh)
+        val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+        wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
-      val block = validFullBlock(parentOpt = None, us, bh)
-      val us2 = us.applyModifier(block).get
+        val (finalState: WrappedUtxoState, _) = (0 until depth).foldLeft((wusAfterGenesis, genesis)) { (sb, i) =>
+          val state = sb._1
+          val block = validFullBlock(parentOpt = Some(sb._2.header), state)
+          (state.applyModifier(block).get, block)
+        }
 
-      us.rootHash.sameElements(us2.rootHash) shouldBe false
-
-      val us3 = us2.rollbackTo(us.version).get
-      us3.rootHash shouldBe us.rootHash
-      us3.version shouldBe us.version
-
-      bh.sortedBoxes.take(100).map(_.id).foreach { boxId =>
-        us3.boxById(boxId).isDefined shouldBe true
+        finalState.rollbackTo(VersionTag @@ genesis.id).get.rootHash shouldEqual genesis.header.stateRoot
       }
-
-      us3.applyModifier(block).get.rootHash shouldBe us2.rootHash
     }
   }
+
 }

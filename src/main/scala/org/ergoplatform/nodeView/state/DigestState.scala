@@ -38,7 +38,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten match {
         case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${fb.header.encodedId}")
+          log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
           s
         case Failure(e) =>
           log.warn(s"Modifier $mod is not valid: ", e)

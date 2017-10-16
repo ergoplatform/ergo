@@ -50,11 +50,11 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")
         if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
-      case (Some(pevBest), Some(prevBestScore), Some(currentScore)) if currentScore >= prevBestScore =>
+        //TODO currentScore == prevBestScore
+      case (Some(pevBest), Some(prevBestScore), Some(currentScore)) if currentScore > prevBestScore =>
         log.info(s"Process fork for new best header ${header.encodedId} with transactions and proofs")
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
         val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)
-        assert(prevChain.head == newChain.head)
 
         //todo: is flatMap in next two lines safe?
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
@@ -66,7 +66,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)
           if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
         }
-        ProgressInfo(Some(prevChain.head.id), toRemove, toApply, toDownload = Seq())
+        ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, toApply, toDownload = Seq())
       case (None, _, _) =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)

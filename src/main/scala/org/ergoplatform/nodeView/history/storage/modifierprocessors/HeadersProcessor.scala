@@ -84,11 +84,11 @@ trait HeadersProcessor extends ScorexLogging {
 
     //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
-      log.info(s"New best header ${Algos.encode(header.id)}")
+      log.info(s"New best header ${Algos.encode(header.id)} with score ${scoreOf(header.id)}")
       //TODO Notify node view holder that it should download transactions ?
       ProgressInfo(None, Seq(), Seq(header), Seq())
     } else {
-      log.info(s"New orphaned header ${header.encodedId}, best: ${}")
+      log.info(s"New orphaned header ${header.encodedId} with score ${scoreOf(header.id)}")
       ProgressInfo(None, Seq(), Seq(), Seq())
     }
   }

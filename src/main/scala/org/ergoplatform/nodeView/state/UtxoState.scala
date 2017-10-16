@@ -3,16 +3,16 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
+import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
@@ -45,36 +45,46 @@ class UtxoState(override val version: VersionTag, val store: Store)
   }
 
   //TODO not efficient at all
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = Try {
-    require(txs.nonEmpty)
-    require(persistentProver.digest.sameElements(rootHash))
-    require(storage.version.get.sameElements(rootHash))
-    require(store.lastVersionID.get.data.sameElements(rootHash))
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    persistentProver.checkTree(true)
+    def rollback(): Try[Unit] = Try(
+      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
+    ).flatten
 
-    val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-      t.flatMap(_ => {
-        val opRes = persistentProver.performOneOperation(m)
-        if (opRes.isFailure) println(opRes)
-        opRes
-      })
-    }.ensuring(_.isSuccess)
+    Try {
+      require(txs.nonEmpty)
+      require(persistentProver.digest.sameElements(rootHash))
+      require(storage.version.get.sameElements(rootHash))
+      require(store.lastVersionID.get.data.sameElements(rootHash))
 
-    val proof = persistentProver.generateProofAndUpdateStorage()
+      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
+      //persistentProver.checkTree(true)
 
-    val digest = persistentProver.digest
+      val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          val opRes = persistentProver.performOneOperation(m)
+          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
+          opRes
+        })
+      }.ensuring(_.isSuccess)
 
-    persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+      val proof = persistentProver.generateProofAndUpdateStorage()
 
-    proof -> digest
+      val digest = persistentProver.digest
+
+      proof -> digest
+    } match {
+      case Success(res) => rollback().map(_ => res)
+      case Failure(e) => rollback().flatMap(_ => Failure(e))
+    }
   }
 
-  override val rootHash: ADDigest = persistentProver.digest
+  override lazy val rootHash: ADDigest = persistentProver.digest
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
+    log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
     val hash = ADDigest @@ store.get(ByteArrayWrapper(version)).get.data
     p.rollback(hash).map { _ =>
       new UtxoState(version, store) {
@@ -110,11 +120,12 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
+            log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}")
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
-          log.warn(s"Error while applying a modifier ${mod.id}: ", e)
+          log.warn(s"Error while applying a modifier ${mod.encodedId}: ", e)
           Failure(e)
       }
 
@@ -142,7 +153,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
   override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if (tx.boxIdsToOpen.forall { k =>
     persistentProver.unauthenticatedLookup(k).isDefined
-  }) Success() else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
+  }) Success()
+  else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
 }
 
 object UtxoState {

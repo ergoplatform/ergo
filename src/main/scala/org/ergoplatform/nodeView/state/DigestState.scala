@@ -38,7 +38,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten match {
         case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${Algos.encode(mod.id)}")
+          log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
           s
         case Failure(e) =>
           log.warn(s"Modifier $mod is not valid: ", e)
@@ -52,22 +52,28 @@ class DigestState private(override val version: VersionTag, override val rootHas
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
     val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(rootHash)))
+    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
     new DigestState(newVersion, newRootHash, store)
   }
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
-    case fb: ErgoFullBlock => this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+    case fb: ErgoFullBlock =>
+      log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
 
     //todo: fail here? or not?
-    case a: Any => log.info(s"Unhandled modifier: $a"); Try(this)
+    case a: Any =>
+      log.info(s"Unhandled modifier: $a")
+      Try(this)
   }
 
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
+    log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
+      log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store)
     }
   }

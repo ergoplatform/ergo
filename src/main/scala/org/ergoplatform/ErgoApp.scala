@@ -15,7 +15,7 @@ import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
-import scorex.core.settings.Settings
+import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -30,14 +30,14 @@ class ErgoApp(args: Seq[String]) extends Application {
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
   //TODO remove after Scorex update
-  override implicit lazy val settings: Settings = ergoSettings.scorexSettings
+  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
-    UtilsApiRoute(settings),
-    PeersApiRoute(peerManagerRef, networkController, settings),
+    UtilsApiRoute(settings.restApi),
+    PeersApiRoute(peerManagerRef, networkController, settings.restApi),
     HistoryApiRoute(nodeViewHolderRef, ergoSettings),
     StateApiRoute(nodeViewHolderRef, ergoSettings))
 

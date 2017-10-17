@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.{ModifierId, NodeViewModifier}
+import scorex.core.ModifierId
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -18,7 +18,7 @@ import scorex.testkit.generators.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
 
-  val anyoneCanSpendProposition = AnyoneCanSpendProposition
+  lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
     from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))

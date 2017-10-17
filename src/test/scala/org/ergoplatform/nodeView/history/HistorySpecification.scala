@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history
 
-import io.circe.Json
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
@@ -9,7 +8,7 @@ import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.core.settings.Settings
+import scorex.core.settings.ScorexSettings
 import scorex.testkit.TestkitHelpers
 
 import scala.concurrent.duration._
@@ -55,9 +54,7 @@ trait HistorySpecification extends PropSpec
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix)
-    val scorexSettings: Settings = new Settings {
-      override def settingsJSON: Map[String, Json] = Map()
-    }
+    val scorexSettings: ScorexSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, DefaultFakePowScheme)
 
     val dir = createTempDir

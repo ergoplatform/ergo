@@ -351,6 +351,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(chain1block1.aDProofs.get)
     }
 
+    utxoHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(chain1block1))
+
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
     a ! LocallyGeneratedModifier(chain2block1.header)
@@ -358,6 +363,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(chain2block1.blockTransactions)
       a ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
     }
+
+    utxoHolder ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+      v.history.bestFullBlockOpt
+    }
+    expectMsg(Some(chain1block1))
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)

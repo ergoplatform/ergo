@@ -60,7 +60,6 @@ class DigestState private(override val version: VersionTag, override val rootHas
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock =>
       log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      //TODO full block id
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
 
     //todo: fail here? or not?

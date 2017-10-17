@@ -22,6 +22,7 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
+import scorex.testkit.properties.state.box.BoxStateChangesGenerationTest
 import scorex.utils.Random
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
@@ -34,7 +35,7 @@ class ErgoSanity extends HistoryTests[P, TX, PM, SI, HT]
   // todo: convert MempoolFilterPerformanceTest to benchmark
   //  with MempoolFilterPerformanceTest[P, TX, MPool]
   // with MempoolRemovalTest[P, TX, MPool, PM, HT, SI]
-  //  with BoxStateChangesGenerationTest[P, TX, PM, B, ST, SI, HT]
+  //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
   with ErgoGenerators
   with HistorySpecification {
 

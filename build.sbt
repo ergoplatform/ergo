@@ -29,6 +29,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http-testkit" % "10.0.9" % "test"
 )
 
+coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
+
+fork := true
+
 javaOptions in run ++= Seq("-Xmx2G")
 
 homepage := Some(url("http://ergoplatform.org/"))

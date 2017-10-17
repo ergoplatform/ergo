@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
-import scorex.core.settings.Settings
+import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
@@ -23,7 +23,7 @@ import scala.concurrent.Future
 case class HistoryApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
-  override val settings: Settings = ergoSettings.scorexSettings
+  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   private val digest: Boolean = ergoSettings.nodeSettings.ADState
 

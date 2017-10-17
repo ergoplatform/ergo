@@ -11,10 +11,9 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
-import scorex.core.settings.{RESTApiSettings, ScorexSettings}
+import scorex.core.settings.RESTApiSettings
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.Future

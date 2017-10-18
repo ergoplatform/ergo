@@ -26,7 +26,6 @@ object ErgoSettings extends ScorexLogging {
 
   private def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
-    val settingsFilename = config.as[String](s"$configPath.legacySettingsFilename")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")

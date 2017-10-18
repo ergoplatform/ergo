@@ -2,7 +2,7 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransactionSerializer, TransactionIdsForHeaderSerializer}
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBoxSerializer
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendPropositionSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -32,6 +32,13 @@ class SerializationTests extends PropSpec
 
   property("AnyoneCanSpendBoxGen serialization") {
     checkSerializationRoundtrip(anyoneCanSpendBoxGen, AnyoneCanSpendNoncedBoxSerializer)
+  }
+
+  property("AnyoneCanSpendPropositionBoxGen serialization") {
+    checkSerializationRoundtrip(anyoneCanSpendProposition, AnyoneCanSpendPropositionSerializer)
+
+    AnyoneCanSpendPropositionSerializer.Length shouldEqual 1
+    AnyoneCanSpendPropositionSerializer.ByteValue shouldEqual Array.fill(1)(-127: Byte)
   }
 
   property("AnyoneCanSpendTransactionGen serialization") {

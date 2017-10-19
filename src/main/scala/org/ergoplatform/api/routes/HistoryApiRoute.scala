@@ -11,7 +11,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.RESTApiSettings
@@ -20,12 +19,8 @@ import scala.concurrent.Future
 
 @Path("/history")
 @Api(value = "/history", produces = "application/json")
-case class HistoryApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings, digest: Boolean)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
-
-  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
-
-  private val digest: Boolean = ergoSettings.nodeSettings.ADState
 
   private val request = if (digest) {
     GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)

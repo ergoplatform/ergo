@@ -45,7 +45,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
           Failure(e)
       }
       
-    case h: Header => Success(new UtxoState(VersionTag @@ h.id, this.store))
+    case h: Header => Success(new UtxoState(this.store))
 
     case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
   }

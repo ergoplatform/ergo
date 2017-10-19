@@ -8,7 +8,7 @@ import scorex.testkit.utils.FileUtils
 
 trait ErgoTestHelpers extends TestkitHelpers with FileUtils {
 
-  def createUtxoState: UtxoState = UtxoState.create(None, createTempDir)
+  def createUtxoState: UtxoState = UtxoState.create(createTempDir)
 
   def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir)
 

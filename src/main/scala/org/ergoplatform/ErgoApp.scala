@@ -38,8 +38,8 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
-    HistoryApiRoute(nodeViewHolderRef, ergoSettings),
-    StateApiRoute(nodeViewHolderRef, ergoSettings))
+    HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
+    StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
@@ -53,8 +53,8 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
-      networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+    Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
+    (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
 
 
   if (ergoSettings.nodeSettings.mining) {

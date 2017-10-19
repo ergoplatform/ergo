@@ -18,7 +18,11 @@ class UtxoErgoNodeViewHolder(settings: ErgoSettings) extends ErgoNodeViewHolder[
     val dir = new File(settings.directory)
     dir.mkdirs()
 
-    val utxoState = ErgoState.generateGenesisUtxoState(dir)._1
+    val utxoState = if (!dir.exists()) {
+      ErgoState.generateGenesisUtxoState(dir)._1
+    } else {
+      UtxoState.create(dir)
+    }
 
     val history = ErgoHistory.readOrGenerate(settings)
 

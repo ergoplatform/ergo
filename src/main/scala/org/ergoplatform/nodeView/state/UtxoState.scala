@@ -21,19 +21,20 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store)
+class UtxoState(val store: Store)
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
-  import UtxoState.metadata
+  import UtxoState._
+
+  // id of last applied block
+  override def version: VersionTag = store.lastVersionID.map(v => VersionTag @@ v.data).getOrElse(ErgoState.genesisStateVersion)
 
   implicit val hf = new Blake2b256Unsafe
-  private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
+  // todo: move node parameters to settings
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] =
-    PersistentBatchAVLProver.create(
-      new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize)), storage
-    ).get
+    PersistentBatchAVLProver.create(new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = np.keySize, valueLengthOpt = Some(np.valueSize)), storage).get
 
   override val maxRollbackDepth = 10
 
@@ -88,7 +89,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
         p.rollback(ADDigest @@ hash.data).map { _ =>
-          new UtxoState(version, store) {
+          new UtxoState(store) {
             override protected lazy val persistentProver = p
           }
         }
@@ -128,7 +129,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
-            new UtxoState(VersionTag @@ fb.id, store)
+            new UtxoState(store)
           }
         case Failure(e) =>
           log.warn(s"Error while applying a modifier ${mod.encodedId}: ", e)
@@ -136,7 +137,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
       }
 
     case h: Header =>
-      Success(new UtxoState(VersionTag @@ h.id, this.store))
+      // todo: apply header?
+      Success(new UtxoState(this.store))
 
 
     case a: Any =>
@@ -165,6 +167,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
+  private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
 
   private def metadata(modId: VersionTag, stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
@@ -174,20 +177,18 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
   }
 
-
-  //todo: check database state, read version from it
-  def create(versionTag: Option[VersionTag], dir: File): UtxoState = {
+  def create(dir: File): UtxoState = {
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
-    new UtxoState(versionTag.getOrElse(ErgoState.genesisStateVersion), store)
+    new UtxoState(store)
   }
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
-    val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](np.keySize, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
 
-    new UtxoState(ErgoState.genesisStateVersion, store) {
+    new UtxoState(store) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,

@@ -84,7 +84,8 @@ object ErgoState extends ScorexLogging {
   val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
 
-  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
+  // todo ???
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ afterGenesisStateDigest.tail
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
     val stateDir = new File(s"${settings.directory}/state")
@@ -97,7 +98,7 @@ object ErgoState extends ScorexLogging {
 
 
       if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, stateDir).toOption
-      else Some(UtxoState.create(None, stateDir))
+      else Some(UtxoState.create(stateDir))
     }
   }
 }

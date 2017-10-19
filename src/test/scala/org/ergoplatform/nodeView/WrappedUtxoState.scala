@@ -13,8 +13,8 @@ import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag}
 import scala.util.{Failure, Success, Try}
 
 
-class WrappedUtxoState(override val version: VersionTag, store: Store, val versionedBoxHolder: VersionedInMemoryBoxHolder)
-  extends UtxoState(version ,store) {
+class WrappedUtxoState(store: Store, val versionedBoxHolder: VersionedInMemoryBoxHolder)
+  extends UtxoState(store) {
 
   private type TCPMOD =
     TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
@@ -26,7 +26,7 @@ class WrappedUtxoState(override val version: VersionTag, store: Store, val versi
   override def rollbackTo(version: VersionTag): Try[WrappedUtxoState] = super.rollbackTo(version) match {
     case Success(us) =>
       val updHolder = versionedBoxHolder.rollback(ByteArrayWrapper(us.version))
-      Success(new WrappedUtxoState(version, us.store, updHolder))
+      Success(new WrappedUtxoState(us.store, updHolder))
     case Failure(e) => Failure(e)
   }
 
@@ -39,10 +39,10 @@ class WrappedUtxoState(override val version: VersionTag, store: Store, val versi
             ByteArrayWrapper(us.version),
             changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
             changes.toAppend.map(_.box))
-          Success(new WrappedUtxoState(VersionTag @@ mod.id, us.store, updHolder))
+          Success(new WrappedUtxoState(us.store, updHolder))
         case _ =>
           val updHolder = versionedBoxHolder.applyChanges(ByteArrayWrapper(us.version), Seq(), Seq())
-          Success(new WrappedUtxoState(VersionTag @@ mod.id, us.store, updHolder))
+          Success(new WrappedUtxoState(us.store, updHolder))
       }
     case Failure(e) => Failure(e)
   }
@@ -63,6 +63,6 @@ object WrappedUtxoState {
       IndexedSeq(version),
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
 
-    new WrappedUtxoState(ErgoState.genesisStateVersion, us.store, vbh)
+    new WrappedUtxoState(us.store, vbh)
   }
 }

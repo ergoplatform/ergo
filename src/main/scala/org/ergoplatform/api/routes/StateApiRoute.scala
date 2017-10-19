@@ -21,12 +21,8 @@ import scala.concurrent.Future
 
 @Path("/state")
 @Api(value = "/state", produces = "application/json")
-case class StateApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+case class StateApiRoute(nodeViewActorRef: ActorRef, override val settings: RESTApiSettings, digest: Boolean)
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
-
-  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
-
-  private val digest: Boolean = ergoSettings.nodeSettings.ADState
 
   private val request = if (digest) {
     GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, DigestState](_.state)

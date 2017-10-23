@@ -41,7 +41,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    IndexedSeq(AnyoneCanSpendNoncedBox(height, height))
+    //TODO fix
+    randomBox().toIndexedSeq
   }
 
   //TODO not efficient at all
@@ -61,13 +62,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+      //todo .get
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
           if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
           opRes
         })
-      }.ensuring(_.isSuccess)
+      }.get
 
       val proof = persistentProver.generateProofAndUpdateStorage()
 

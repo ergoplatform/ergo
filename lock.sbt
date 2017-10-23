@@ -64,7 +64,7 @@ dependencyOverrides in ThisBuild ++= Set(
   "org.scala-tools.testing" % "test-interface" % "0.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.11",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2-SNAPSHOT",
-  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-16-gfd7bb1b",
+  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-21-g384d7f6-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.0.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",

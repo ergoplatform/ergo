@@ -14,9 +14,9 @@ import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.utils.ScorexLogging
 
-import scala.util.{Failure, Try}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
@@ -37,36 +37,40 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
     case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
-        if (v.pool.size > 0) {
-          Try {
-            //only transactions valid from against the current utxo state we take from the mem pool
-            //todo: move magic number to testnet settings
-            val txs = v.state.filterValid(v.pool.take(1000).toSeq)
+        val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
+        val coinbase: AnyoneCanSpendTransaction = {
+          val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
+          AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+        }
 
-            //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
-            //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
-            //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
-            // the pool
-            val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
-              val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
-              if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-                (s :+ tx) -> (keys ++ bxsBaw)
-              } else {
-                (s, keys)
-              }
-            }._1
+        Try {
+          //only transactions valid from against the current utxo state we take from the mem pool
+          //todo: move magic number to testnet settings
+          val txs = coinbase +: v.state.filterValid(v.pool.take(1000).toSeq)
 
-            val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
+          //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
+          //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
+          //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
+          // the pool
+          val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
+            val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+            if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+              (s :+ tx) -> (keys ++ bxsBaw)
+            } else {
+              (s, keys)
+            }
+          }._1
 
-            val timestamp = System.currentTimeMillis()
-            val votes = Array.fill(5)(0: Byte)
-            CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest,
-              adProof, txsNoConflict, timestamp, votes)
-          }.recoverWith { case thr =>
-            log.warn("Error when trying to generate a block: ", thr)
-            Failure(thr)
-          }.toOption
-        } else None
+          val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
+
+          val timestamp = System.currentTimeMillis()
+          val votes = Array.fill(5)(0: Byte)
+          CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
+            adProof, txsNoConflict, timestamp, votes)
+        }.recoverWith { case thr =>
+          log.warn("Error when trying to generate a block: ", thr)
+          Failure(thr)
+        }.toOption
       }
 
     case candidateOpt: Option[CandidateBlock] =>

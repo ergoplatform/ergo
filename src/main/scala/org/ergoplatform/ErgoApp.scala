@@ -59,8 +59,8 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   if (ergoSettings.nodeSettings.mining) {
     //only a miner is generating tx load
-    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
-    txGen ! StartGeneration
+//    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+//    txGen ! StartGeneration
 
     val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
     miner ! StartMining

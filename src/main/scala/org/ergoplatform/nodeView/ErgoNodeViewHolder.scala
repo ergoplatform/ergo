@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView
 
-import java.io.File
-
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
@@ -45,8 +43,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
-    val dir = new File(settings.directory)
-    dir.mkdirs()
+    val dir = ErgoState.stateDir(settings).ensuring(_.mkdirs()) //state db folder should be empty
 
     val state = (
       if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir)
@@ -69,7 +66,6 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     */
   override def restoreState: Option[NodeView] = {
     ErgoState.readOrGenerate(settings).map { state =>
-
       //todo: ensure that history is in certain mode
       val history = ErgoHistory.readOrGenerate(settings)
       val wallet = ErgoWallet.readOrGenerate(settings)

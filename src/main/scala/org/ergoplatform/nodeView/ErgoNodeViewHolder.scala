@@ -16,7 +16,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{NodeViewHolder, NodeViewModifier}
-import ErgoNodeViewHolder.{genesisDigest, genesisUtxo, restoreStateDigest, restoreStateUtxo}
+import ErgoNodeViewHolder.{genesisDigest, genesisUtxo}
 
 
 abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings)
@@ -55,7 +55,27 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   override def restoreState: Option[NodeView] =
-    (if (settings.nodeSettings.ADState) restoreStateDigest(settings) else restoreStateUtxo(settings)) map {t =>
+    ErgoState.readOrGenerate(settings).map {
+      case ds: DigestState =>
+        //todo: ensure that history is in certain mode
+        val history = ErgoHistory.readOrGenerate(settings)
+
+        val wallet = ErgoWallet.readOrGenerate(settings)
+
+        val memPool = ErgoMemPool.empty
+
+        (history, ds, wallet, memPool)
+
+      case us: UtxoState =>
+        //todo: ensure that history is in certain mode
+        val history = ErgoHistory.readOrGenerate(settings)
+
+        val wallet = ErgoWallet.readOrGenerate(settings)
+
+        val memPool = ErgoMemPool.empty
+
+        (history, us, wallet, memPool)
+    }.map { t =>
       (t._1, t._2.asInstanceOf[MS], t._3, t._4)
     }
 }
@@ -70,37 +90,6 @@ object ErgoNodeViewHolder {
   def createActor(system: ActorSystem, settings: ErgoSettings): ActorRef = {
     if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings))
     else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings))
-  }
-
-  def restoreStateDigest(settings: ErgoSettings): Option[(ErgoHistory, DigestState, ErgoWallet, ErgoMemPool)] = {
-    ErgoState.readOrGenerate(settings).map {
-      case ds: DigestState =>
-        //todo: ensure that history is in certain mode
-        val history = ErgoHistory.readOrGenerate(settings)
-
-        val wallet = ErgoWallet.readOrGenerate(settings)
-
-        val memPool = ErgoMemPool.empty
-
-        (history, ds, wallet, memPool)
-      case _ => ??? //shouldn't be here
-    }
-  }
-
-  def restoreStateUtxo(settings: ErgoSettings): Option[(ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool)] = {
-    ErgoState.readOrGenerate(settings).map {
-      case us: UtxoState =>
-        //todo: ensure that history is in certain mode
-        val history = ErgoHistory.readOrGenerate(settings)
-
-        val wallet = ErgoWallet.readOrGenerate(settings)
-
-        val memPool = ErgoMemPool.empty
-
-        (history, us, wallet, memPool)
-
-      case _ => ??? //shouldn't be here
-    }
   }
 
   def genesisDigest(settings: ErgoSettings): (ErgoHistory, DigestState, ErgoWallet, ErgoMemPool) = {

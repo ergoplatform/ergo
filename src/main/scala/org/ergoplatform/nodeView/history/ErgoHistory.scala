@@ -71,7 +71,7 @@ trait ErgoHistory
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */
   def bestFullBlockOpt: Option[ErgoFullBlock] =
-    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
+  bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
@@ -143,6 +143,8 @@ trait ErgoHistory
         }
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
         HistoryComparisonResult.Older
+      case Some(_) if info.lastHeaderIds.isEmpty =>
+        HistoryComparisonResult.Younger
       case Some(_) =>
         //Compare headers chain
         val ids = info.lastHeaderIds
@@ -170,6 +172,13 @@ trait ErgoHistory
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     if (isEmpty) {
       info.startingPoints
+    } else if (info.lastHeaderIds.isEmpty) {
+      val heightFrom = Math.min(height, size)
+      val startId = headerIdsAtHeight(heightFrom).head
+      val startHeader = typedModifierById[Header](startId).get
+      val headers = headerChainBack(size, startHeader, _ => false)
+      headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId), (Header.modifierTypeId, h.id),
+        (BlockTransactions.modifierTypeId, h.transactionsId)))
     } else {
       val ids = info.lastHeaderIds
       val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
@@ -177,15 +186,15 @@ trait ErgoHistory
       val heightFrom = Math.min(height, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, (h: Header) => h.isGenesis)
+      val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, _ => false)
         .headers.map(h => Header.modifierTypeId -> h.id)
       val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
         case Some(bestFullBlockHeight) =>
           val heightFrom = Math.min(height, bestFullBlockHeight + size)
           val startId = headerIdsAtHeight(heightFrom).head
           val startHeader = typedModifierById[Header](startId).get
-          val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, (h: Header) => h.isGenesis)
-          headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId),
+          val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, _ => false)
+          headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId), (Header.modifierTypeId, h.id),
             (BlockTransactions.modifierTypeId, h.transactionsId)))
         case _ => Seq()
       }
@@ -226,11 +235,8 @@ trait ErgoHistory
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int): HeaderChain =
-    bestHeaderOpt
-      .map(bestHeader => headerChainBack(count, bestHeader, b => b.isGenesis))
-      .getOrElse(HeaderChain.empty)
-
+  def lastHeaders(count: Int): HeaderChain = bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, b => false)).getOrElse(HeaderChain.empty)
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
@@ -265,7 +271,7 @@ trait ErgoHistory
       if (r._1.head == r._2.head) {
         r
       } else {
-        val biggerOther = headerChainBack(numberBack, otherChain.head, (h: Header) => h.isGenesis) ++ otherChain.tail
+        val biggerOther = headerChainBack(numberBack, otherChain.head, _ => false) ++ otherChain.tail
         if (!otherChain.head.isGenesis) {
           loop(biggerOther.size, biggerOther)
         } else {

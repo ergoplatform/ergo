@@ -102,16 +102,19 @@ class UtxoState(override val version: VersionTag, val store: Store)
   //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
-    transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
+    transactions.foreach(tx => tx.semanticValidity.get)
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
       })
-    }.ensuring(_.isSuccess)
+    }.get
 
-    assert(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
+    if(!expectedDigest.sameElements(persistentProver.digest)) {
+      throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+        s"${Algos.encode(persistentProver.digest)} given")
+    }
   }
 
   //todo: utxo snapshot could go here
@@ -133,7 +136,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
-          log.warn(s"Error while applying a modifier ${mod.encodedId}: ", e)
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId}: ", e)
           Failure(e)
       }
 

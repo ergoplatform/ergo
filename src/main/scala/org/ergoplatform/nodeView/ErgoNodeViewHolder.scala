@@ -48,9 +48,10 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     val dir = new File(settings.directory)
     dir.mkdirs()
 
-    val state =
-      (if(settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir)
-      else ErgoState.generateGenesisUtxoState(dir)._1).asInstanceOf[MS]
+    val state = (
+      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir)
+      else ErgoState.generateGenesisUtxoState(dir)._1
+      ).asInstanceOf[MS]
 
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings)

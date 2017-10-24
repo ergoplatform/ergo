@@ -85,7 +85,7 @@ object DigestState {
 
   //todo: rework, this method is very wrong
   def create(version: VersionTag, rootHashOpt: Option[ADDigest], dir: File): Try[DigestState] = Try {
-    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings 
+    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings
 
     rootHashOpt match {
 
@@ -102,6 +102,4 @@ object DigestState {
         new DigestState(version, rootHash, store)
     }
   }
-
-  def create(rootHash: ADDigest, dir: File): Try[DigestState] = create(ErgoState.genesisStateVersion, Some(rootHash), dir)
 }

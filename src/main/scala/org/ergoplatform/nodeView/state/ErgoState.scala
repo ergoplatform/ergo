@@ -77,7 +77,7 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
-    DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
+    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir).get //todo: .get
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -96,7 +96,7 @@ object ErgoState extends ScorexLogging {
       None
     } else {
       //todo: considering db state
-      if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, dir).toOption
+      if (settings.nodeSettings.ADState) DigestState.create(None, None, dir).toOption
       else Some(UtxoState.create(dir))
     }
   }

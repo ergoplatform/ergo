@@ -95,9 +95,8 @@ object ErgoState extends ScorexLogging {
     } else {
       //todo: considering db state
 
-
       if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, stateDir).toOption
-      else Some(UtxoState.create(None, stateDir))
+      else Some(UtxoState.create(stateDir))
     }
   }
 }

@@ -12,5 +12,5 @@ trait ErgoTestHelpers extends TestkitHelpers with FileUtils {
 
   def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir)
 
-  def createDigestState(digest: ADDigest): DigestState = DigestState.create(digest, createTempDir).get
+  def createDigestState(digest: ADDigest): DigestState = DigestState.create(None, None, createTempDir).get
 }

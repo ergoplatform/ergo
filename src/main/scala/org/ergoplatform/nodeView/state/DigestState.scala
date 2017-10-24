@@ -85,7 +85,7 @@ object DigestState {
 
   //todo: rework, this method is very wrong
   def create(version: VersionTag, rootHashOpt: Option[ADDigest], dir: File): Try[DigestState] = Try {
-    val store = new LSMStore(dir, keepVersions = 10)
+    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings 
 
     rootHashOpt match {
 

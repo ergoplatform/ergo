@@ -64,34 +64,34 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSetting
   }
 
   @Path("/height")
-  @ApiOperation(value = "Current history tree height", httpMethod = "GET, POST")
+  @ApiOperation(value = "Current history tree height", httpMethod = "GET")
   @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with current height")))
   def height: Route = path("height") {
-    (get | post) {
+    get {
       toJsonResponse(getHeight)
     }
   }
 
   @Path("/best-header")
-  @ApiOperation(value = "Current history best header", notes = "Optional response.", httpMethod = "GET, POST")
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with best header")))
+  @ApiOperation(value = "Current history best header", notes = "Optional response.", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with best header")))
   def bestHeader: Route = path("best-header") {
-    (get | post) {
+    get {
       toJsonOptionalResponse(getBestHeader)
     }
   }
 
   @Path("/best-full-block")
-  @ApiOperation(value = "Current history best full block", notes = "Optional response.", httpMethod = "GET, POST")
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with best full block")))
+  @ApiOperation(value = "Current history best full block", notes = "Optional response.", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with best full block")))
   def bestFullBlock: Route = path("best-full-block") {
-    (get | post) {
+    get {
       toJsonOptionalResponse(getBestFullBlock)
     }
   }
 
   @Path("/last-headers/{count}")
-  @ApiOperation(value = "Last {count} headers.", httpMethod = "GET, POST")
+  @ApiOperation(value = "Last {count} headers.", httpMethod = "GET")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "count",
       value = "Count of messages to get",
@@ -100,30 +100,30 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSetting
       dataType = "Int",
       defaultValue = "10")
   ))
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with last {count} headers")))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with last {count} headers")))
   def lastHeaders: Route = path("last-headers" / IntNumber.?) { n =>
-    (get | post) {
+    get {
       toJsonResponse(getLastHeaders(n.getOrElse(10)))
     }
   }
 
   @Path("/modifier/{id}")
-  @ApiOperation(value = "Get modifier by Id", notes = "Optional response.", httpMethod = "GET, POST")
+  @ApiOperation(value = "Get modifier by Id", notes = "Optional response.", httpMethod = "GET")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "id", value = "Modifier Id", required = true, paramType = "path", dataType = "String")
   ))
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with modifier")))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with modifier")))
   def modifierById: Route = path("modifier" / Segment) { id =>
-    (get | post) {
+    get {
       toJsonOptionalResponse(getModifierById(id))
     }
   }
 
   @Path("/current-difficulty")
-  @ApiOperation(value = "Current difficulty", httpMethod = "GET, POST")
+  @ApiOperation(value = "Current difficulty", httpMethod = "GET")
   @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with current difficulty")))
   def currentDifficulty: Route = path("current-difficulty") {
-    (get |post) {
+    get {
       toJsonResponse(getCurrentDifficulty)
     }
   }

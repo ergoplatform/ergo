@@ -22,7 +22,13 @@ import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessf
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
-class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix")) with ImplicitSender with PropSpecLike with ErgoGenerators with Matchers with FileUtils with BeforeAndAfterAll {
+class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
+  with ImplicitSender
+  with PropSpecLike
+  with ErgoGenerators
+  with Matchers
+  with FileUtils
+  with BeforeAndAfterAll {
 
   case class NodeViewHolderConfig(adState: Boolean, verifyTransactions: Boolean, popowBootstrap: Boolean) {
     override def toString: String = {
@@ -199,7 +205,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! historyHeight(c)
     expectMsg(-1)
 
-        a ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+    a ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
 
     //sending header
     a ! LocallyGeneratedModifier[Header](block.header)
@@ -226,8 +232,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    a ! NodeViewHolder.Subscribe(Seq(SemanticallyFailedPersistentModifier, SuccessfulSemanticallyValidModifier,
-      SyntacticallyFailedPersistentModifier, SuccessfulSyntacticallyValidModifier))
+    a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     a ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -238,8 +243,10 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
       if (c.adState) {
         expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
+        expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
       }
       else {
+        expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
         expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
       }
 
@@ -391,7 +398,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Some(chain2block2.header))
   })
 
-  //TODO: fix switcing for a better chain cases for all configs
+  //TODO: fix switching for a better chain cases for all configs
   val cases = List(t1, t2, t3, t4, t5, t6, t7 /*, t8*/)
 
   allConfigs.foreach { c =>

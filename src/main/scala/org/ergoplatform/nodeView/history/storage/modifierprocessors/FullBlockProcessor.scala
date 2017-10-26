@@ -46,13 +46,13 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
     val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
     (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(header.id)) match {
-      case (Some(pevBest), _, _) if header.parentId sameElements pevBest.header.id =>
-        log.info(s"New best header ${header.encodedId} with transactions and proofs at the end of the chain")
+      case (Some(pevBest), _, Some(currentScore)) if header.parentId sameElements pevBest.header.id =>
+        log.info(s"New best full block with header ${header.encodedId} at the end of the chain. Score = $currentScore")
         if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
-        //TODO currentScore == prevBestScore
+      //TODO currentScore == prevBestScore
       case (Some(pevBest), Some(prevBestScore), Some(currentScore)) if currentScore > prevBestScore =>
-        log.info(s"Process fork for new best header ${header.encodedId} with transactions and proofs")
+        log.info(s"Process fork for new best full block with header ${header.encodedId}. Score = $currentScore")
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
         val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)
 
@@ -67,7 +67,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           if (bestHeight > config.blocksToKeep) pruneBlockDataAt(toClean)
         }
         ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, toApply, toDownload = Seq())
-      case (None, _, _) =>
+      case (None, _, _) if config.blocksToKeep < 0 && header.isGenesis=>
+        log.info(s"Initialize full chain with genesis header ${header.encodedId} with transactions and proofs")
+        bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
+      case (None, _, _) if config.blocksToKeep >= 0 =>
         log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case _ =>

@@ -179,11 +179,10 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
   }
 
-
-  //todo: check database state, read version from it
-  def create(versionTag: Option[VersionTag], dir: File): UtxoState = {
+  def create(dir: File): UtxoState = {
     val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
-    new UtxoState(versionTag.getOrElse(ErgoState.genesisStateVersion), store)
+    val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
+    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store)
   }
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {

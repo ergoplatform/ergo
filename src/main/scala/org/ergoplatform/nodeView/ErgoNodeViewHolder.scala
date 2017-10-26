@@ -26,7 +26,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
-  override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
+  override lazy val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,

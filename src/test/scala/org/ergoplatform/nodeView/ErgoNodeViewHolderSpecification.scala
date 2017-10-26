@@ -6,7 +6,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -18,7 +18,7 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder.EventType._
-import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SuccessfulModification}
+import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
@@ -184,41 +184,42 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   })
 
   val t2 = new TestCase("check history after genesis", (c, a) => {
-       a ! bestHeaderOpt(c)
-       expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(None)
   })
 
   val t3 = new TestCase("apply valid block header", (c, a) => {
-        val dir = createTempDir
-        val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
-        val block = validFullBlock(None, us, bh)
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val block = validFullBlock(None, us, bh)
 
-        a ! bestHeaderOpt(c)
-        expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(None)
 
-        a ! historyHeight(c)
-        expectMsg(-1)
+    a ! historyHeight(c)
+    expectMsg(-1)
 
-        a ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+    a ! NodeViewHolder.Subscribe(Seq(SemanticallyFailedPersistentModifier, SuccessfulSemanticallyValidModifier,
+      SyntacticallyFailedPersistentModifier, SuccessfulSyntacticallyValidModifier))
 
-        //sending header
-        a ! LocallyGeneratedModifier[Header](block.header)
-        expectMsg(SuccessfulModification(block.header, None))
+    //sending header
+    a ! LocallyGeneratedModifier[Header](block.header)
+    expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-        a ! historyHeight(c)
-        expectMsg(0)
+    a ! historyHeight(c)
+    expectMsg(0)
 
-        a ! heightOf(block.header.id, c)
-        expectMsg(Some(0))
+    a ! heightOf(block.header.id, c)
+    expectMsg(Some(0))
 
-        a ! lastHeadersLength(10, c)
-        expectMsg(1)
+    a ! lastHeadersLength(10, c)
+    expectMsg(1)
 
-        a ! openSurfaces(c)
-        expectMsg(Seq(ByteArrayWrapper(block.header.id)))
+    a ! openSurfaces(c)
+    expectMsg(Seq(ByteArrayWrapper(block.header.id)))
 
-        a ! bestHeaderOpt(c)
-        expectMsg(Some(block.header))
+    a ! bestHeaderOpt(c)
+    expectMsg(Some(block.header))
   })
 
   val t4 = new TestCase("apply valid block as genesis", (c, a) => {
@@ -226,17 +227,22 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    a ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+    a ! NodeViewHolder.Subscribe(Seq(SemanticallyFailedPersistentModifier, SuccessfulSemanticallyValidModifier,
+      SyntacticallyFailedPersistentModifier, SuccessfulSyntacticallyValidModifier))
 
     a ! LocallyGeneratedModifier(genesis.header)
-    expectMsg(SuccessfulModification(genesis.header, None))
+    expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
     if (c.verifyTransactions) {
       a ! LocallyGeneratedModifier(genesis.blockTransactions)
       a ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
-      if (c.adState) {expectMsg(SuccessfulModification(genesis.aDProofs.get, None))}
-      else {expectMsg(SuccessfulModification(genesis.blockTransactions, None))}
+      if (c.adState) {
+        expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
+      }
+      else {
+        expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
+      }
 
       a ! bestFullBlock(c)
       expectMsg(Some(genesis))
@@ -387,10 +393,10 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   })
 
   //TODO: fix switcing for a better chain cases for all configs
-  val cases = List(t1, t2, t3, t4, t5, t6, t7/*, t8*/)
+  val cases = List(t1, t2, t3, t4, t5, t6, t7 /*, t8*/)
 
   allConfigs.foreach { c =>
-    cases.foreach{ t =>
+    cases.foreach { t =>
       property(s"$c - ${t.name}") {
         val a = actorRef(c)
         t.test(c, a)

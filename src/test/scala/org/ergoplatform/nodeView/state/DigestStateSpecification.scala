@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.VersionTag
 import scorex.crypto.authds.ADDigest
 
 class DigestStateSpecification extends PropSpec
@@ -11,6 +12,7 @@ class DigestStateSpecification extends PropSpec
   with ErgoGenerators
   with ErgoTestHelpers {
 
+  private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   property("validate() - valid block") {
@@ -20,14 +22,14 @@ class DigestStateSpecification extends PropSpec
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
-      val ds = createDigestState(us.rootHash)
+      val ds = createDigestState(us.version, us.rootHash)
       ds.validate(block).get
     }
   }
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyAdDigest)
+      val state = createDigestState(emptyVersion, emptyAdDigest)
       state.validate(b).isFailure shouldBe true
     }
   }
@@ -39,14 +41,14 @@ class DigestStateSpecification extends PropSpec
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
-      val ds = createDigestState(us.rootHash)
+      val ds = createDigestState(us.version, us.rootHash)
       ds.applyModifier(block).isSuccess shouldBe true
     }
   }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyAdDigest)
+      val state = createDigestState(emptyVersion, emptyAdDigest)
       state.applyModifier(b).isFailure shouldBe true
     }
   }
@@ -58,7 +60,7 @@ class DigestStateSpecification extends PropSpec
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
-      val ds = createDigestState(us.rootHash)
+      val ds = createDigestState(us.version, us.rootHash)
 
       ds.rollbackVersions.size shouldEqual 1
 

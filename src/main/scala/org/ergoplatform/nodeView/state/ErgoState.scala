@@ -57,6 +57,8 @@ object ErgoState extends ScorexLogging {
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
+  def stateDir(settings: ErgoSettings) = new File(s"${settings.directory}/state")
+
   def generateGenesisUtxoState(stateDir: File): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
     lazy val genesisSeed = Long.MaxValue
@@ -75,7 +77,7 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
-    DigestState.create(afterGenesisStateDigest, stateDir).get //todo: .get
+    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir).get //todo: .get
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -87,17 +89,15 @@ object ErgoState extends ScorexLogging {
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
   def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
-    val stateDir = new File(s"${settings.directory}/state")
-    stateDir.mkdirs()
+    val dir = stateDir(settings)
+    dir.mkdirs()
 
-    if (stateDir.listFiles().isEmpty) {
+    if (dir.listFiles().isEmpty) {
       None
     } else {
       //todo: considering db state
-
-
-      if (settings.nodeSettings.ADState) DigestState.create(ErgoState.genesisStateVersion, None, stateDir).toOption
-      else Some(UtxoState.create(None, stateDir))
+      if (settings.nodeSettings.ADState) DigestState.create(None, None, dir).toOption
+      else Some(UtxoState.create(dir))
     }
   }
 }

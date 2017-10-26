@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.Serializer
@@ -38,7 +38,48 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     System.exit(100) // this actor shouldn't be restarted at all so kill the whole app if that happened
   }
 
+  /**
+    * Hard-coded initial view all the honest nodes in a network are making progress from.
+    */
+  override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
+    val dir = ErgoState.stateDir(settings).ensuring(d => d.mkdirs() || d.listFiles().isEmpty)
+
+    val state = (
+      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir)
+      else ErgoState.generateGenesisUtxoState(dir)._1
+      ).asInstanceOf[MS]
+
+    //todo: ensure that history is in certain mode
+    val history = ErgoHistory.readOrGenerate(settings)
+
+    val wallet = ErgoWallet.readOrGenerate(settings)
+
+    val memPool = ErgoMemPool.empty
+
+    (history, state, wallet, memPool)
+  }
+
+  /**
+    * Restore a local view during a node startup. If no any stored view found
+    * (e.g. if it is a first launch of a node) None is to be returned
+    */
+  override def restoreState: Option[NodeView] = {
+    ErgoState.readOrGenerate(settings).map { state =>
+      //todo: ensure that history is in certain mode
+      val history = ErgoHistory.readOrGenerate(settings)
+      val wallet = ErgoWallet.readOrGenerate(settings)
+      val memPool = ErgoMemPool.empty
+      (history, state.asInstanceOf[MS], wallet, memPool)
+    }
+  }
+
 }
+
+private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings)
+  extends ErgoNodeViewHolder[DigestState](settings)
+
+private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings)
+  extends ErgoNodeViewHolder[UtxoState](settings)
 
 object ErgoNodeViewHolder {
   def createActor(system: ActorSystem, settings: ErgoSettings): ActorRef = {

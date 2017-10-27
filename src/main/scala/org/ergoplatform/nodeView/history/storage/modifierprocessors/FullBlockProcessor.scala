@@ -68,10 +68,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         }
         ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, toApply, toDownload = Seq())
       case (None, _, _) if config.blocksToKeep < 0 && header.isGenesis=>
-        log.info(s"Initialize full chain with genesis header ${header.encodedId} with transactions and proofs")
+        log.info(s"Initialize full block chain with genesis header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case (None, _, _) if config.blocksToKeep >= 0 =>
-        log.info(s"Initialize full chain with new best header ${header.encodedId} with transactions and proofs")
+        log.info(s"Initialize full block chain with new best header ${header.encodedId} with transactions and proofs")
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")

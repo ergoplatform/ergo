@@ -97,10 +97,9 @@ class UtxoState(override val version: VersionTag, val store: Store)
     }
   }
 
-  //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
-    transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
+    transactions.foreach(tx => require(tx.semanticValidity.isSuccess))
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
@@ -109,11 +108,10 @@ class UtxoState(override val version: VersionTag, val store: Store)
       })
     }.ensuring(_.isSuccess)
 
-    assert(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
+    require(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
   }
 
   //todo: utxo snapshot could go here
-  //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
@@ -125,9 +123,9 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
             log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}|${fb.header.encodedId}")
-            assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
-            assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
-            assert(fb.header.ADProofsRoot.sameElements(proofHash))
+            require(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
+            require(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
+            require(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
@@ -195,7 +193,7 @@ object UtxoState {
           paranoidChecks = true
         ).get
 
-      assert(persistentProver.digest.sameElements(storage.version.get))
+      require(persistentProver.digest.sameElements(storage.version.get))
     }
   }
 }

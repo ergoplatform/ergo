@@ -18,7 +18,7 @@ class DigestStateSpecification extends PropSpec
   property("validate() - valid block") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+      bh.sortedBoxes.foreach(box => require(us.boxById(box.id).isDefined))
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
@@ -37,7 +37,7 @@ class DigestStateSpecification extends PropSpec
   property("applyModifier() - valid block") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+      bh.sortedBoxes.foreach(box => require(us.boxById(box.id).isDefined))
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
@@ -56,7 +56,7 @@ class DigestStateSpecification extends PropSpec
   property("rollback & rollback versions") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+      bh.sortedBoxes.foreach(box => require(us.boxById(box.id).isDefined))
 
       val block = validFullBlock(parentOpt = None, us, bh)
 

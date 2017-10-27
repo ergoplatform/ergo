@@ -11,7 +11,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   import LinearDifficultyControl._
 
-  assert(epochLength > 0 && epochLength < Int.MaxValue / UseLastEpochs)
+  require(epochLength > 0 && epochLength < Int.MaxValue / UseLastEpochs)
 
   /**
     * @return heights of previous headers required for block recalculation

@@ -243,14 +243,14 @@ trait HeadersProcessor extends ScorexLogging {
     val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-    assert(heights.last == parentHeight, s"${heights.last} == $parentHeight")
+    require(heights.last == parentHeight, s"${heights.last} == $parentHeight")
     if (heights.length == 1) {
       difficultyCalculator.calculate(Seq((parentHeight, parent)))
     } else {
       val chain = headerChainBack(heights.max - heights.min + 1, parent, (h: Header) => false)
-      assert(chain.length == (heights.min to heights.max).length, s"${chain.length} == ${(heights.min to heights.max).length}")
+      require(chain.length == (heights.min to heights.max).length, s"${chain.length} == ${(heights.min to heights.max).length}")
       val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
-      assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
+      require(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
       difficultyCalculator.calculate(previousHeaders)
     }
   }

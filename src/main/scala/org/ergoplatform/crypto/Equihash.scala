@@ -51,10 +51,10 @@ object Equihash {
   private val byteMask = BigInteger.valueOf(0xFF)
 
   def expandArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Byte] = {
-    assert(bitLen >= 8 && wordSize >= 7 + bitLen)
+    require(bitLen >= 8 && wordSize >= 7 + bitLen)
 
     val outWidth = (bitLen + 7) / 8 + bytePad
-    assert(outLen == 8 * outWidth * inp.length / bitLen)
+    require(outLen == 8 * outWidth * inp.length / bitLen)
     val out = new Array[Byte](outLen)
 
     val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
@@ -89,10 +89,10 @@ object Equihash {
   }
 
   def compressArray(inp: Array[Byte], outLen: Int, bitLen: Int, bytePad: Int = 0): Array[Byte] = {
-    assert(bitLen >= 8 && wordSize >= 7 + bitLen)
+    require(bitLen >= 8 && wordSize >= 7 + bitLen)
 
     val inWidth = (bitLen + 7) / 8 + bytePad
-    assert(outLen == bitLen * inp.length / (8 * inWidth))
+    require(outLen == bitLen * inp.length / (8 * inWidth))
     val out = new Array[Byte](outLen)
 
     val bitLenMask = BigInteger.valueOf((1 << bitLen) - 1)
@@ -265,13 +265,13 @@ object Equihash {
     * @return Return True if solution is valid, False if not.
     */
   def validateSolution(n: Char, k: Char, personal: Array[Byte], header: Array[Byte], solutionIndices: Seq[Int]): Boolean = {
-    assert(n > 1)
-    assert(k >= 3)
-    assert(n % 8 == 0)
-    assert(n % (k + 1) == 0)
+    require(n > 1)
+    require(k >= 3)
+    require(n % 8 == 0)
+    require(n % (k + 1) == 0)
 
     val solutionLen = Math.pow(2, k).toInt
-    assert(solutionIndices.size == solutionLen)
+    require(solutionIndices.size == solutionLen)
 
     // Check for duplicate indices.
     if (solutionIndices.toSet.size != solutionIndices.size) {

@@ -72,7 +72,7 @@ trait ChainGenerator {
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
     blocks.foldLeft(historyIn) { (history, block) =>
       val historyWithTxs = history.append(block.header).get._1.append(block.blockTransactions).get._1
-      assert(historyWithTxs.contains(block.blockTransactions.id))
+      require(historyWithTxs.contains(block.blockTransactions.id))
       block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
     }
   }

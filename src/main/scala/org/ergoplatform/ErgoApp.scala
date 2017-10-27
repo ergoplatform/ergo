@@ -15,7 +15,7 @@ import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
-import scorex.core.settings.Settings
+import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -30,16 +30,16 @@ class ErgoApp(args: Seq[String]) extends Application {
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
   //TODO remove after Scorex update
-  override implicit lazy val settings: Settings = ergoSettings.scorexSettings
+  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
-    UtilsApiRoute(settings),
-    PeersApiRoute(peerManagerRef, networkController, settings),
-    HistoryApiRoute(nodeViewHolderRef, ergoSettings),
-    StateApiRoute(nodeViewHolderRef, ergoSettings))
+    UtilsApiRoute(settings.restApi),
+    PeersApiRoute(peerManagerRef, networkController, settings.restApi),
+    HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
+    StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
@@ -53,8 +53,8 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(classOf[NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]],
-      networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec))
+    Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
+    (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
 
 
   if (ergoSettings.nodeSettings.mining) {

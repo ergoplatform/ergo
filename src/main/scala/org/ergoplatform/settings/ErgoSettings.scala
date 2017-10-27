@@ -3,21 +3,22 @@ package org.ergoplatform.settings
 import java.io.File
 
 import com.typesafe.config.{Config, ConfigFactory}
-import io.circe
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
-import scorex.core.settings.Settings
+import scorex.core.settings.ScorexSettings
+import scorex.core.settings._
 import scorex.core.utils.ScorexLogging
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
                         nodeSettings: NodeConfigurationSettings,
-                        scorexSettings: Settings)
+                        scorexSettings: ScorexSettings)
 
 object ErgoSettings extends ScorexLogging {
 
   val configPath: String = "ergo"
+  val scorexConfigPath: String = "scorex"
 
   def read(userConfigPath: Option[String]): ErgoSettings = {
     fromConfig(readConfigFromPath(userConfigPath))
@@ -25,15 +26,12 @@ object ErgoSettings extends ScorexLogging {
 
   private def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
-    val settingsFilename = config.as[String](s"$configPath.legacySettingsFilename")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
-    val legacySettings = new Settings {
-      override val settingsJSON: Map[String, circe.Json] = settingsFromFile(settingsFilename).ensuring(_.nonEmpty)
-    }
+    val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
-    ErgoSettings(directory, chainSettings, nodeSettings, legacySettings)
+    ErgoSettings(directory, chainSettings, nodeSettings, scorexSettings)
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

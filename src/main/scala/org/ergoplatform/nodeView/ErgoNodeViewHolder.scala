@@ -19,7 +19,7 @@ import scorex.core.{NodeViewHolder, NodeViewModifier}
 abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
-  override lazy val networkChunkSize: Int = settings.scorexSettings.networkChunkSize
+  override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
 
   override type MS = StateType
   override type SI = ErgoSyncInfo
@@ -27,7 +27,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
-  override lazy val modifierCompanions: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
+  override lazy val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,

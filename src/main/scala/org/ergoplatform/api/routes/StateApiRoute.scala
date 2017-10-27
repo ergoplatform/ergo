@@ -52,19 +52,19 @@ case class StateApiRoute(nodeViewActorRef: ActorRef, override val settings: REST
   }
 
   @Path("/version")
-  @ApiOperation(value = "Current state version", httpMethod = "GET, POST")
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with version")))
+  @ApiOperation(value = "Current state version", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with version")))
   def version: Route = path("version") {
-    (get | post) {
+    get {
       toJsonResponse(getVersion)
     }
   }
 
   @Path("/type")
-  @ApiOperation(value = "Current state type", httpMethod = "GET, POST")
-  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with with type (utxo or digest)")))
+  @ApiOperation(value = "Current state type", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with type (utxo or digest)")))
   def stateType: Route = path("type") {
-    (get | post) {
+    get {
       toJsonResponse(getType)
     }
   }

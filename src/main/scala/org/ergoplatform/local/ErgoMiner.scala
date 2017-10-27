@@ -21,7 +21,7 @@ import scala.util.{Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
-  private var mining = false
+  private var isMining = false
   private var startingNonce = Long.MinValue
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
@@ -31,9 +31,11 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   override def receive: Receive = {
     case StartMining =>
-      log.info("Starting Mining")
-      self ! ProduceCandidate
-      mining = true
+      if (!isMining && ergoSettings.nodeSettings.mining) {
+        log.info("Starting Mining")
+        self ! ProduceCandidate
+        isMining = true
+      }
 
     case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
@@ -90,7 +92,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       }
 
     case StopMining =>
-      mining = false
+      isMining = false
 
     case MineBlock(candidate) =>
       val start = startingNonce

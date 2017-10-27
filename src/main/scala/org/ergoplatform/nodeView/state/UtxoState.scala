@@ -129,14 +129,16 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
-            log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}|${fb.header.encodedId}")
+            log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
+              s"root hash ${Algos.encode(rootHash)}")
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
-          log.warn(s"Error while applying full block with header ${fb.header.encodedId}: ", e)
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+            s" ${Algos.encode(rootHash)}: ", e)
           Failure(e)
       }
 

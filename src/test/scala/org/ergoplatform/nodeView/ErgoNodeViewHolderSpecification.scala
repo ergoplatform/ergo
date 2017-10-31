@@ -205,7 +205,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! historyHeight(c)
     expectMsg(-1)
 
-    a ! NodeViewHolder.Subscribe(Seq(SuccessfulPersistentModifier, FailedPersistentModifier))
+    a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     //sending header
     a ! LocallyGeneratedModifier[Header](block.header)

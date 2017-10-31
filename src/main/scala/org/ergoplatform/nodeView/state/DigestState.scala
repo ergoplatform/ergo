@@ -89,11 +89,13 @@ object DigestState {
     (versionOpt, rootHashOpt) match {
 
       case (Some(version), Some(rootHash)) =>
+        require(store.lastVersionID.get.data.sameElements(version))
+
         if (store.lastVersionID.isDefined) {
           new DigestState(version, rootHash, store)
         } else {
           new DigestState(version, rootHash, store).update(version, rootHash).get //sync store
-        }.ensuring(store.lastVersionID.get.data.sameElements(version))
+        }
 
       case (None, None) =>
         val version = ADDigest @@ store.get(store.lastVersionID.get).get.data

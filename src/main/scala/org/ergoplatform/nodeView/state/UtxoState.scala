@@ -47,9 +47,11 @@ class UtxoState(override val version: VersionTag, val store: Store)
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    def rollback(): Try[Unit] = Try(
-      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
-    ).flatten
+    def rollback(): Try[Unit] = Try {
+      val result = persistentProver.rollback(rootHash)
+      require(result.isSuccess && persistentProver.digest.sameElements(rootHash))
+      result
+    }.flatten
 
     Try {
       require(txs.nonEmpty)
@@ -61,13 +63,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+      val result = mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
           if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
           opRes
         })
-      }.ensuring(_.isSuccess)
+      }
+      require(result.isSuccess)
 
       val proof = persistentProver.generateProofAndUpdateStorage()
 
@@ -102,11 +105,12 @@ class UtxoState(override val version: VersionTag, val store: Store)
     transactions.foreach(tx => require(tx.semanticValidity.isSuccess))
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+    val result = mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
       })
-    }.ensuring(_.isSuccess)
+    }
+    require(result.isSuccess)
 
     require(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
   }
@@ -180,7 +184,10 @@ object UtxoState {
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
-    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
+    bh.sortedBoxes.foreach(b => {
+     val result = p.performOneOperation(Insert(b.id, ADValue @@ b.bytes))
+      require(result.isSuccess)
+    })
 
     val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
 

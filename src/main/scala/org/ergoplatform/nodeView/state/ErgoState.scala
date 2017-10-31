@@ -70,10 +70,10 @@ object ErgoState extends ScorexLogging {
 
     val bh = BoxHolder(initialBoxes)
 
-    UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
-      log.info("Genesis UTXO state generated")
-      us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
-    }) -> bh
+    val us = UtxoState.fromBoxHolder(bh, stateDir)
+    log.info("Genesis UTXO state generated")
+    require(us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion))
+    us -> bh
   }
 
   def generateGenesisDigestState(stateDir: File): DigestState = {
@@ -106,5 +106,7 @@ object ErgoState extends ScorexLogging {
   * Tool to print new target digest in case of initial utxo state re-generation
   */
 object DigestPrinter extends App {
-  println(Algos.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
+  val tmp = new File("/tmp/ergo11/")
+  require(tmp.mkdirs())
+  println(Algos.encode(ErgoState.generateGenesisUtxoState(tmp)._1.rootHash))
 }

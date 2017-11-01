@@ -41,7 +41,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    IndexedSeq(AnyoneCanSpendNoncedBox(height, height))
+    //TODO fix
+    randomBox().toIndexedSeq
   }
 
   //TODO not efficient at all
@@ -61,13 +62,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+      //todo .get
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
           if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
           opRes
         })
-      }.ensuring(_.isSuccess)
+      }.get
 
       val proof = persistentProver.generateProofAndUpdateStorage()
 
@@ -100,16 +102,19 @@ class UtxoState(override val version: VersionTag, val store: Store)
   //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
-    transactions.foreach(tx => assert(tx.semanticValidity.isSuccess))
+    transactions.foreach(tx => tx.semanticValidity.get)
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
       })
-    }.ensuring(_.isSuccess)
+    }.get
 
-    assert(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
+    if(!expectedDigest.sameElements(persistentProver.digest)) {
+      throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+        s"${Algos.encode(persistentProver.digest)} given")
+    }
   }
 
   //todo: utxo snapshot could go here
@@ -124,14 +129,16 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
-            log.info(s"Valid modifier applied to UtxoState: ${fb.encodedId}|${fb.header.encodedId}")
+            log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
+              s"root hash ${Algos.encode(rootHash)}")
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
-          log.warn(s"Error while applying a modifier ${mod.encodedId}: ", e)
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+            s" ${Algos.encode(rootHash)}: ", e)
           Failure(e)
       }
 

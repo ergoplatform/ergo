@@ -49,23 +49,24 @@ class ErgoApp(args: Seq[String]) extends Application {
     classOf[StateApiRoute]
   )
 
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
+
+  if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
+    minerRef ! StartMining
+  }
+
   override val localInterface: ActorRef = actorSystem.actorOf(
-    Props(classOf[ErgoLocalInterface], nodeViewHolderRef, ergoSettings)
+    Props(classOf[ErgoLocalInterface], nodeViewHolderRef, minerRef, ergoSettings)
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
     (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
 
+  //only a miner is generating tx load
+  //    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+  //    txGen ! StartGeneration
 
-  if (ergoSettings.nodeSettings.mining) {
-    //only a miner is generating tx load
-    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
-    txGen ! StartGeneration
-
-    val miner = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
-    miner ! StartMining
-  }
 }
 
 object ErgoApp extends App {

@@ -12,16 +12,16 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{NetworkTime, ScorexLogging}
 
-import scala.util.{Failure, Try}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
-  private var mining = false
+  private var isMining = false
   private var startingNonce = Long.MinValue
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
@@ -31,17 +31,25 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   override def receive: Receive = {
     case StartMining =>
-      log.info("Starting Mining")
-      self ! ProduceCandidate
-      mining = true
+      if (!isMining && ergoSettings.nodeSettings.mining) {
+        log.info("Starting Mining")
+        self ! ProduceCandidate
+        isMining = true
+      }
 
     case ProduceCandidate =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
-        if (v.pool.size > 0) {
+        val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
+        if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
+          val coinbase: AnyoneCanSpendTransaction = {
+            val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
+            AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+          }
+
           Try {
             //only transactions valid from against the current utxo state we take from the mem pool
             //todo: move magic number to testnet settings
-            val txs = v.state.filterValid(v.pool.take(1000).toSeq)
+            val txs = coinbase +: v.state.filterValid(v.pool.take(1000).toSeq)
 
             //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
             //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
@@ -58,15 +66,19 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
             val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
-            val timestamp = System.currentTimeMillis()
+            val timestamp = NetworkTime.time()
             val votes = Array.fill(5)(0: Byte)
-            CandidateBlock(v.history.bestHeaderOpt, Constants.InitialNBits, adDigest,
+            CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
               adProof, txsNoConflict, timestamp, votes)
+
           }.recoverWith { case thr =>
             log.warn("Error when trying to generate a block: ", thr)
             Failure(thr)
           }.toOption
-        } else None
+        } else {
+          //Do not try to mine genesis block when offlineGeneration = false
+          None
+        }
       }
 
     case candidateOpt: Option[CandidateBlock] =>
@@ -75,11 +87,12 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
           startingNonce = Long.MinValue
           self ! MineBlock(candidateBlock)
         case None =>
-          context.system.scheduler.scheduleOnce(100.millis)(self ! ProduceCandidate)
+          //Failed to create candidate, e.g. we're not trying to mine now
+          context.system.scheduler.scheduleOnce(1.second)(self ! ProduceCandidate)
       }
 
     case StopMining =>
-      mining = false
+      isMining = false
 
     case MineBlock(candidate) =>
       val start = startingNonce

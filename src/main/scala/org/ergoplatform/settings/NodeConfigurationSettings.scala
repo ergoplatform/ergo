@@ -10,5 +10,5 @@ case class NodeConfigurationSettings(ADState: Boolean,
                                      blocksToKeep: Int,
                                      PoPoWBootstrap: Boolean,
                                      minimalSuffix: Int,
-                                     mining: Boolean = false,
-                                     offlineGeneration: Boolean = false)
+                                     mining: Boolean,
+                                     offlineGeneration: Boolean)

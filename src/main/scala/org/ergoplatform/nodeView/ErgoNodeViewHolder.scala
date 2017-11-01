@@ -10,10 +10,9 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
-import scorex.core.{NodeViewHolder, NodeViewModifier}
+import scorex.core.{ModifierTypeId, NodeViewHolder, NodeViewModifier}
 
 
 abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings)
@@ -74,6 +73,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       (history, state.asInstanceOf[MS], wallet, memPool)
     }
   }
+
 }
 
 private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings)

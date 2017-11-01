@@ -5,7 +5,7 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.{ErgoApp, Version}
 import scorex.core.settings.ScorexSettings
 import scorex.core.settings._
 import scorex.core.utils.ScorexLogging
@@ -24,6 +24,11 @@ object ErgoSettings extends ScorexLogging {
     fromConfig(readConfigFromPath(userConfigPath))
   }
 
+  private def updatedScorexInfoWithVersion(scorexSettings: ScorexSettings): ScorexSettings = {
+    scorexSettings.copy(restApi =
+      scorexSettings.restApi.copy(swaggerInfo = scorexSettings.restApi.swaggerInfo.copy(version = Version.VersionString)))
+  }
+
   private def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
 
@@ -31,7 +36,7 @@ object ErgoSettings extends ScorexLogging {
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
-    ErgoSettings(directory, chainSettings, nodeSettings, scorexSettings)
+    ErgoSettings(directory, chainSettings, nodeSettings, updatedScorexInfoWithVersion(scorexSettings))
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

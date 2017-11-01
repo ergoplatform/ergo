@@ -1,4 +1,5 @@
-import _root_.sbt.Keys._
+import sbt.Keys._
+import sbt._
 
 organization := "org.ergoplatform"
 
@@ -13,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "2.0.0-RC3-106-gce9f931-SNAPSHOT"
+val scorexVersion = "2.0.0-RC3-108-g3d45720-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
@@ -39,3 +40,18 @@ javaOptions in run ++= Seq("-Xmx2G")
 homepage := Some(url("http://ergoplatform.org/"))
 
 licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
+
+sourceGenerators in Compile += Def.task {
+  val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
+  val versionExtractor = """(\d+)\.(\d+)\.(\d+).*""".r
+  val versionExtractor(major, minor, bugfix) = version.value
+  IO.write(versionFile,
+    s"""package org.ergoplatform
+       |
+       |object Version {
+       |  val VersionString = "${version.value}"
+       |  val VersionTuple = ($major, $minor, $bugfix)
+       |}
+       |""".stripMargin)
+  Seq(versionFile)
+}

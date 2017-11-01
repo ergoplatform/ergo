@@ -55,3 +55,37 @@ sourceGenerators in Compile += Def.task {
        |""".stripMargin)
   Seq(versionFile)
 }
+
+test in assembly := {}
+
+assemblyMergeStrategy in assembly := {
+  case "logback.xml" => MergeStrategy.first
+  case other => (assemblyMergeStrategy in assembly).value(other)
+}
+
+enablePlugins(sbtdocker.DockerPlugin)
+
+Defaults.itSettings
+configs(IntegrationTest)
+inConfig(IntegrationTest)(Seq(
+  parallelExecution := false,
+  test := (test dependsOn docker).value,
+  testOptions += Tests.Filter(_.endsWith("Suite"))
+))
+
+dockerfile in docker := {
+  val configTemplate = (resourceDirectory in IntegrationTest).value / "template.conf"
+  val startErgo = (sourceDirectory in IntegrationTest).value / "container" / "start-ergo.sh"
+
+  new Dockerfile {
+    from("anapsix/alpine-java:8_server-jre")
+    add(assembly.value, "/opt/ergo/ergo.jar")
+    add(Seq(configTemplate, startErgo), "/opt/ergo/")
+    run("chmod", "+x", "/opt/ergo/start-ergo.sh")
+    entryPoint("/opt/ergo/start-ergo.sh")
+  }
+}
+
+buildOptions in docker := BuildOptions(
+  removeIntermediateContainers = BuildOptions.Remove.OnSuccess
+)

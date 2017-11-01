@@ -47,11 +47,8 @@ class UtxoState(override val version: VersionTag, val store: Store)
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    def rollback(): Try[Unit] = {
-      persistentProver.rollback(rootHash).flatMap(_ =>
-        if (persistentProver.digest.sameElements(rootHash)) {
-          Failure(new IllegalStateException("Proved digest isn't equal to root hash"))
-        } else Success())
+    def rollback(): Try[Unit] = persistentProver.rollback(rootHash).map { _ =>
+      require(persistentProver.digest.sameElements(rootHash), "Proved digest isn't equal to root hash")
     }
 
     Try {

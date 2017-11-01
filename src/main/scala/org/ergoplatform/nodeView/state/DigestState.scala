@@ -89,21 +89,22 @@ object DigestState {
     (versionOpt, rootHashOpt) match {
 
       case (Some(version), Some(rootHash)) =>
-        require(store.lastVersionID.get.data.sameElements(version))
-
-        if (store.lastVersionID.isDefined) {
-          new DigestState(version, rootHash, store)
-        } else {
+        store.lastVersionID.fold(
           new DigestState(version, rootHash, store).update(version, rootHash).get //sync store
+        ) { v =>
+          require(v.data.sameElements(version))
+          new DigestState(version, rootHash, store)
         }
 
       case (None, None) =>
         val version = ADDigest @@ store.get(store.lastVersionID.get).get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-
         new DigestState(VersionTag @@ version, ADDigest @@ rootHash, store)
 
-      case _ => ???
+      case _ => throw new IllegalArgumentException(s"Cannot create digest state from " +
+        s"versionOpt: $versionOpt," +
+        s"rootHash: $rootHashOpt," +
+        s"dir: ${dir.getAbsolutePath} ")
     }
   }
 }

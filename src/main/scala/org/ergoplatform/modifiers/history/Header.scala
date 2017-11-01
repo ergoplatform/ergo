@@ -73,7 +73,7 @@ case class Header(version: Version,
     "parentId" -> Algos.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
     "nonce" -> nonce.asJson,
-    "equihashSolutions" -> equihashSolutions.asJson,
+    "equihashSolutions" -> Algos.encode(equihashSolutions).asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
     "votes" -> Algos.encode(votes).asJson

@@ -53,7 +53,7 @@ trait HistorySpecification extends PropSpec
     val blockInterval = 1.minute
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix)
+      PoPoWBootstrap, minimalSuffix, false, false)
     val scorexSettings: ScorexSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, DefaultFakePowScheme)
 

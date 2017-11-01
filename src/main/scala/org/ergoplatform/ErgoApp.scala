@@ -15,6 +15,7 @@ import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
+import org.ergoplatform.Version.VersionString
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor

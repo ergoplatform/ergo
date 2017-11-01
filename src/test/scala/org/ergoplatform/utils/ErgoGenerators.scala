@@ -108,7 +108,7 @@ trait ErgoGenerators extends CoreGenerators {
     val boxes = wus.takeBoxes(spentBoxesCounts.sum)
 
       boxes.foreach { b =>
-        assert(wus.boxById(b.id).isDefined)
+        require(wus.boxById(b.id).isDefined)
       }
 
 
@@ -132,7 +132,7 @@ trait ErgoGenerators extends CoreGenerators {
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
     val transactions = validTransactionsFromUtxoState(utxoState)
     transactions.flatMap(_.boxIdsToOpen).foreach { bid =>
-      assert(utxoState.boxById(bid).isDefined)
+      require(utxoState.boxById(bid).isDefined)
     }
     validFullBlock(parentOpt, utxoState, transactions)
   }

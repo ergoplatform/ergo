@@ -22,7 +22,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
     with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
   with ModifierWithDigest {
 
-  assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
+  require(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
@@ -63,7 +63,8 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
       if (index == bytes.length) {
         BlockTransactions(headerId, acc)
       } else {
-        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2)).ensuring(_ % 8 == 0)
+        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
+        require(txLength % 8 == 0)
         val tx = AnyoneCanSpendTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)).get
         parseTransactions(index + 2 + txLength, acc :+ tx)
       }

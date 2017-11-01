@@ -94,7 +94,7 @@ class LinearDifficultyControlSpecification extends PropSpec
   def diffGen: Gen[BigInt] = for {
     rnd <- Arbitrary.arbitrary[BigInt]
     diff = if (rnd < 0) -rnd + minDiff else rnd + minDiff
-    _ = assert(diff > 0, s"$diff,$minDiff,$rnd")
+    _ = require(diff > 0, s"$diff,$minDiff,$rnd")
   } yield diff
 
 

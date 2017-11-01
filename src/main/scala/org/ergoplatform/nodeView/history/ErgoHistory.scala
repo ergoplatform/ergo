@@ -78,7 +78,7 @@ trait ErgoHistory
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     val modifier = historyStorage.modifierById(id)
-    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Algos.encode(id)} expected")
+    require(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Algos.encode(id)} expected")
     modifier
   }
 
@@ -263,8 +263,8 @@ trait ErgoHistory
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
-    assert(contains(header1))
-    assert(contains(header2))
+    require(contains(header1))
+    require(contains(header2))
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
@@ -306,8 +306,8 @@ trait ErgoHistory
       Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
     }
 
-    //TODO why do we need this assert?
-    //    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
+    //TODO why do we need this require?
+    //    require(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
       historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
         ByteArrayWrapper(Array(1.toByte))))
@@ -329,7 +329,7 @@ trait ErgoHistory
           def isStillValid(id: ModifierId): Boolean = !invalidatedHeaders.exists(_.id sameElements id)
 
           def loopHeightDown(height: Int): Header = {
-            assert(height >= 0, s"Mark genesis invalid is not true")
+            require(height >= 0, s"Mark genesis invalid is not true")
             headerIdsAtHeight(height).find(id => isStillValid(id)).flatMap(id => typedModifierById[Header](id)) match {
               case Some(header) => header
               case None => loopHeightDown(height - 1)
@@ -354,7 +354,7 @@ trait ErgoHistory
                 val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
                 (headersChain._1.headers, headersChain._2.headers)
             }
-            assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
+            require(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
             val branchPoint: Some[ModifierId] = invalidatedChain.head match {
               case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
               case header: Header => Some(header.id)

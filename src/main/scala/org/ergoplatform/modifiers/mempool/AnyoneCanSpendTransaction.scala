@@ -75,12 +75,14 @@ object AnyoneCanSpendTransaction {
 object AnyoneCanSpendTransactionSerializer extends Serializer[AnyoneCanSpendTransaction] {
 
   override def toBytes(m: AnyoneCanSpendTransaction): Array[Byte] = {
-    Bytes.concat(
+    val bytes = Bytes.concat(
       Ints.toByteArray(m.from.length),
       Ints.toByteArray(m.to.length),
       m.from.foldLeft(Array[Byte]())((a, b) => Bytes.concat(a, Longs.toByteArray(b))),
       m.to.foldLeft(Array[Byte]())((a, b) => Bytes.concat(a, Longs.toByteArray(b)))
-    ).ensuring(_.length % 8 == 0)
+    )
+    require(bytes.length % 8 == 0)
+    bytes
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[AnyoneCanSpendTransaction] = Try {

@@ -40,8 +40,11 @@ object TransactionIdsForHeaderSerializer extends Serializer[TransactionIdsForHea
 
   val fixedSize = NodeViewModifier.ModifierIdSize
 
-  override def toBytes(obj: TransactionIdsForHeader): Array[Byte] =
-    Bytes.concat(obj.ids: _*).ensuring(_.length % fixedSize == 0)
+  override def toBytes(obj: TransactionIdsForHeader): Array[Byte] = {
+    val bytes = Bytes.concat(obj.ids: _*)
+    require(bytes.length % fixedSize == 0)
+    bytes
+  }
 
   override def parseBytes(bytes: Array[Byte]): Try[TransactionIdsForHeader] = Try {
     require(bytes.length % fixedSize == 0)

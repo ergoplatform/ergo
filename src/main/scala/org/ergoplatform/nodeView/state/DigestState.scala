@@ -27,7 +27,7 @@ class DigestState private(override val version: VersionTag, override val rootHas
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        assert(ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
+        require(ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
 
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot
@@ -89,19 +89,21 @@ object DigestState {
     (versionOpt, rootHashOpt) match {
 
       case (Some(version), Some(rootHash)) =>
-        if (store.lastVersionID.isDefined) {
-          new DigestState(version, rootHash, store)
-        } else {
-          new DigestState(version, rootHash, store).update(version, rootHash).get //sync store
-        }.ensuring(store.lastVersionID.get.data.sameElements(version))
+        store.lastVersionID.fold {
+          val state = new DigestState(version, rootHash, store).update(version, rootHash).get //sync store
+          require(store.lastVersionID.get.data.sameElements(version))
+          state
+        } { _ => new DigestState(version, rootHash, store)}
 
       case (None, None) =>
         val version = ADDigest @@ store.get(store.lastVersionID.get).get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-
         new DigestState(VersionTag @@ version, ADDigest @@ rootHash, store)
 
-      case _ => ???
+      case _ => throw new IllegalArgumentException(s"Cannot create digest state from " +
+        s"versionOpt: $versionOpt," +
+        s"rootHash: $rootHashOpt," +
+        s"dir: ${dir.getAbsolutePath} ")
     }
   }
 }

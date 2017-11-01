@@ -41,16 +41,15 @@ class UtxoState(override val version: VersionTag, val store: Store)
     * @return boxes, that miner (or any user) can take to himself when he creates a new block
     */
   def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[AnyoneCanSpendNoncedBox] = {
-    //TODO fix
-    randomBox().toIndexedSeq
+    IndexedSeq(AnyoneCanSpendNoncedBox(height, height))
   }
 
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    def rollback(): Try[Unit] = Try(
-      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
-    ).flatten
+    def rollback(): Try[Unit] = persistentProver.rollback(rootHash).map { _ =>
+      require(persistentProver.digest.sameElements(rootHash), "Proved digest isn't equal to root hash")
+    }
 
     Try {
       require(txs.nonEmpty)
@@ -62,14 +61,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
       //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-      //todo .get
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+      val result = mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
           if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
           opRes
         })
-      }.get
+      }
+      require(result.isSuccess)
 
       val proof = persistentProver.generateProofAndUpdateStorage()
 
@@ -99,26 +98,22 @@ class UtxoState(override val version: VersionTag, val store: Store)
     }
   }
 
-  //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
-    transactions.foreach(tx => tx.semanticValidity.get)
+    transactions.foreach(tx => require(tx.semanticValidity.isSuccess))
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+    val result = mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
       })
-    }.get
-
-    if(!expectedDigest.sameElements(persistentProver.digest)) {
-      throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-        s"${Algos.encode(persistentProver.digest)} given")
     }
+    require(result.isSuccess)
+
+    require(expectedDigest.sameElements(persistentProver.digest), "digest after txs application is wrong")
   }
 
   //todo: utxo snapshot could go here
-  //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
@@ -131,9 +126,9 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val proofHash = ADProofs.proofDigest(proofBytes)
             log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
               s"root hash ${Algos.encode(rootHash)}")
-            assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
-            assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
-            assert(fb.header.ADProofsRoot.sameElements(proofHash))
+            require(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
+            require(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
+            require(fb.header.ADProofsRoot.sameElements(proofHash))
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
@@ -189,7 +184,10 @@ object UtxoState {
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
-    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
+    bh.sortedBoxes.foreach(b => {
+     val result = p.performOneOperation(Insert(b.id, ADValue @@ b.bytes))
+      require(result.isSuccess)
+    })
 
     val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
 
@@ -202,7 +200,7 @@ object UtxoState {
           paranoidChecks = true
         ).get
 
-      assert(persistentProver.digest.sameElements(storage.version.get))
+      require(persistentProver.digest.sameElements(storage.version.get))
     }
   }
 }

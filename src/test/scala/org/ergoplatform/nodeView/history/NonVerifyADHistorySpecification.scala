@@ -8,9 +8,11 @@ import scorex.core.consensus.History.HistoryComparisonResult
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
-  private def genHistory() =
-    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
-      .ensuring(_.bestFullBlockOpt.isEmpty)
+  private def genHistory() = {
+    val h = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    require(h.bestFullBlockOpt.isEmpty)
+    h
+  }
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 

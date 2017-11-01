@@ -12,16 +12,22 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   val MaxM = 11
   val MaxK = 11
 
-  private def genHistory() =
-    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
-      .ensuring(_.bestFullBlockOpt.isEmpty)
+  private def genHistory() = {
+    val h = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    require(h.bestFullBlockOpt.isEmpty)
+    h
+  }
 
   val history = genHistory()
-  val chain = genHeaderChain(acc =>
-    acc
-      .dropRight(MaxK)
-      .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM, history.bestHeaderOpt.toSeq
-  ).ensuring(_.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
+  val chain = {
+    val chain = genHeaderChain(acc =>
+      acc
+        .dropRight(MaxK)
+        .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM, history.bestHeaderOpt.toSeq
+    )
+    require(chain.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
+    chain
+  }
 
   private lazy val popowHistory = applyHeaderChain(history, chain)
 

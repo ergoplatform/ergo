@@ -152,7 +152,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Parent header is marked as semantically invalid"))
     } else {
       Success()
-    }.recoverWith{case thr =>
+    }.recoverWith { case thr =>
       log.warn("Validation error: ", thr)
       Failure(thr)
     }
@@ -189,16 +189,17 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
-    def loop(block: Header, acc: Seq[Header]): Seq[Header] = {
-      if (until(block) || (acc.length == limit)) {
+    def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
+      if (acc.length == limit || until(header)) {
         acc
       } else {
-        typedModifierById[Header](block.parentId) match {
+        typedModifierById[Header](header.parentId) match {
           case Some(parent: Header) =>
             loop(parent, acc :+ parent)
-          case _ =>
-            log.warn(s"No parent header in history for block $block")
+          case None if acc.contains(header) =>
             acc
+          case _ =>
+            acc :+ header
         }
       }
     }

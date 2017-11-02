@@ -56,6 +56,8 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
+mainClass in assembly := Some("org.ergoplatform.ErgoApp")
+
 test in assembly := {}
 
 assemblyMergeStrategy in assembly := {

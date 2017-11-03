@@ -1,13 +1,10 @@
 package org.ergoplatform.it
 
 import com.typesafe.config.Config
-import com.wavesplatform.it.api._
-import com.wavesplatform.settings.WavesSettings
 import org.asynchttpclient._
+import org.ergoplatform.it.api.{NetworkNodeApi, NodeApi}
 import org.ergoplatform.settings.ErgoSettings
 import org.slf4j.LoggerFactory
-import scorex.transaction.TransactionParser.TransactionType
-import scorex.utils.LoggerFacade
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -20,7 +17,7 @@ class Node(config: Config, val nodeInfo: NodeInfo, override val client: AsyncHtt
   val accountSeed: String = config.getString("account-seed")
   val settings: ErgoSettings = ErgoSettings.fromConfig(config)
 
-  override protected val log = LoggerFacade(LoggerFactory.getLogger(s"${getClass.getName}.${settings.networkSettings.nodeName}"))
+  override protected val log = LoggerFactory.getLogger(s"${getClass.getName}.${settings.scorexSettings.network.nodeName}")
 
   override val chainId: Char = 'I'
   override val nodeName: String = s"it-test-client-to-${nodeInfo.networkIpAddress}"
@@ -29,8 +26,5 @@ class Node(config: Config, val nodeInfo: NodeInfo, override val client: AsyncHtt
   override val nodeRestPort: Int = nodeInfo.hostRestApiPort
   override val matcherRestPort: Int = nodeInfo.hostMatcherApiPort
   override val networkPort: Int = nodeInfo.hostNetworkPort
-  override val blockDelay: FiniteDuration = settings.blockchainSettings.genesisSettings.averageBlockDelay
-
-  def fee(txValue: TransactionType.Value, asset: String = "WAVES"): Long =
-    settings.feesSettings.fees(txValue.id).find(_.asset == asset).get.fee
+  override val blockDelay: FiniteDuration = settings.chainSettings.blockInterval
 }

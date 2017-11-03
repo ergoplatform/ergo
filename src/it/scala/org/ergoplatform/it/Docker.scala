@@ -13,7 +13,7 @@ import com.spotify.docker.client.DockerClient.RemoveContainerParam
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, NetworkConfig, PortBinding}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import org.asynchttpclient.Dsl._
-import scorex.utils.ScorexLogging
+import scorex.core.utils.ScorexLogging
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Await

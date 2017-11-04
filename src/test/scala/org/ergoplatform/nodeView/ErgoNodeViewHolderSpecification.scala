@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
@@ -109,7 +109,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def poolSize(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.pool.size)
 
-  def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, ByteArrayWrapper](v => ByteArrayWrapper(v.state.rootHash))
+  def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, String](v => Algos.encode(v.state.rootHash))
 
   class TestCase(val name: String, val test: (NodeViewHolderConfig, ActorRef) => Unit)
 
@@ -250,7 +250,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(block.blockTransactions)
       a ! LocallyGeneratedModifier(block.aDProofs.get)
       a ! rootHash(c)
-      expectMsg(ByteArrayWrapper(wusAfterBlock.rootHash))
+      expectMsg(Algos.encode(wusAfterBlock.rootHash))
     }
 
     a ! bestHeaderOpt(c)
@@ -273,7 +273,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Some(brokenBlock.header))
   })
 
-  val t8 = new TestCase("switching for a better chain", (c, a) => {
+  def switch: (NodeViewHolderConfig, ActorRef) => Unit = (c: NodeViewHolderConfig, a: ActorRef) => {
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -284,6 +284,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(genesis.blockTransactions)
       a ! LocallyGeneratedModifier(genesis.aDProofs.get)
     }
+
+    a ! rootHash(c)
+    expectMsg(Algos.encode(wusAfterGenesis.rootHash))
 
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
@@ -327,7 +330,20 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! bestHeaderOpt(c)
     expectMsg(Some(chain2block2.header))
 
-  })
+    a ! rootHash(c)
+    expectMsg(Algos.encode(chain2block2.header.stateRoot))
+
+  }
+
+  val t8 = new TestCase("switching for a better chain", switch)
+
+  property("Switching for a better chain base") {
+    val c = NodeViewHolderConfig(false, true, false)
+    val a = actorRef(c)
+
+    switch(c, a)
+
+  }
 
   //TODO: fix switching for a better chain cases for all configs
   val cases = List(t1, t2, t3, t4, t5, t6, t7 /*, t8*/)

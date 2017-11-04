@@ -47,6 +47,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   }
 
   type H = ErgoHistory
+  type S = ErgoState[_]
   type D = DigestState
   type U = UtxoState
   type W = ErgoWallet
@@ -80,106 +81,35 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     }
   }
 
-  def checkAfterGenesisState(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Boolean] { v =>
-      v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Boolean] { v =>
-      v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
-    }
+  def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
+    v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
   }
 
-  def bestHeaderOpt(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[Header]] { v =>
-      v.history.bestHeaderOpt
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[Header]] { v =>
-      v.history.bestHeaderOpt
-    }
+  def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
+
+  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.height)
+
+  def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
+
+  def lastHeadersLength(count: Int, c: C) =
+    GetDataFromCurrentView[H, S, W, P, Int](v => v.history.lastHeaders(count).size)
+
+
+  def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ByteArrayWrapper]] { v =>
+    v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
   }
 
-  def historyHeight(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.history.height
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.history.height
-    }
+  def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
+    v.history.bestFullBlockOpt
   }
 
-  def heightOf(id: ModifierId, c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[Int]] { v =>
-      v.history.heightOf(id)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[Int]] { v =>
-      v.history.heightOf(id)
-    }
+  def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
+    v.history.bestFullBlockOpt.map(_.header.encodedId)
   }
 
-  def lastHeadersLength(count: Int, c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.history.lastHeaders(count).size
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.history.lastHeaders(count).size
-    }
-  }
+  def poolSize(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.pool.size)
 
-  def openSurfaces(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Seq[ByteArrayWrapper]] { v =>
-      v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Seq[ByteArrayWrapper]] { v =>
-      v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
-    }
-  }
-
-  def bestFullBlock(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-  }
-
-  def bestFullBlockEncodedId(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[String]] { v =>
-      v.history.bestFullBlockOpt.map(_.header.encodedId)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[String]] { v =>
-      v.history.bestFullBlockOpt.map(_.header.encodedId)
-    }
-  }
-
-  def poolSize(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.pool.size
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.pool.size
-    }
-  }
-
-  def rootHash(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, ByteArrayWrapper] { v =>
-      ByteArrayWrapper(v.state.rootHash)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, ByteArrayWrapper] { v =>
-      ByteArrayWrapper(v.state.rootHash)
-    }
-  }
-
+  def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, ByteArrayWrapper](v => ByteArrayWrapper(v.state.rootHash))
 
   class TestCase(val name: String, val test: (NodeViewHolderConfig, ActorRef) => Unit)
 
@@ -396,6 +326,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
     a ! bestHeaderOpt(c)
     expectMsg(Some(chain2block2.header))
+
   })
 
   //TODO: fix switching for a better chain cases for all configs

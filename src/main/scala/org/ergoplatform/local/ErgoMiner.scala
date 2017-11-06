@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
+import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
 import org.ergoplatform.modifiers.history.CandidateBlock
@@ -67,7 +68,8 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
             val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
             val timestamp = NetworkTime.time()
-            val votes = Array.fill(5)(0: Byte)
+            val votes = 0.toByte +: Ints.toByteArray(ergoSettings.scorexSettings.network.
+              nodeNonce.map(x => (x % Int.MaxValue).toInt).getOrElse(0))
             CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
               adProof, txsNoConflict, timestamp, votes)
 

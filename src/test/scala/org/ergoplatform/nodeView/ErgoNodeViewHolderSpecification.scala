@@ -61,6 +61,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     NodeViewHolderConfig(true, true, false),
     NodeViewHolderConfig(false, true, true),
     NodeViewHolderConfig(false, true, false),
+    //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
   def actorRef(c: NodeViewHolderConfig): ActorRef = {
@@ -222,10 +223,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
-    val toSpend = wusAfterGenesis.takeBoxes(1).head
-    val tx = AnyoneCanSpendTransaction(IndexedSeq(toSpend.nonce), IndexedSeq(toSpend.value))
+    val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
 
+    a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
     a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    expectNoMsg()
     a ! poolSize(c)
     expectMsg(1)
   })
@@ -299,7 +301,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    expectMsg(Some(chain1block1))
+    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(Some(chain1block1.header))
 
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
@@ -312,7 +316,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    expectMsg(Some(chain1block1))
+    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(Some(chain1block1.header))
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
@@ -337,20 +343,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t8 = new TestCase("switching for a better chain", switch)
 
-  property("Switching for a better chain base") {
-    val c = NodeViewHolderConfig(false, true, false)
-    val a = actorRef(c)
-
-    switch(c, a)
-
-  }
-
-  //TODO: fix switching for a better chain cases for all configs
-  val cases = List(t1, t2, t3, t4, t5, t6, t7 /*, t8*/)
+  val cases = List(t1, t2, t3, t4, t5, t6, t7, t8)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>
-      property(s"$c - ${t.name}") {
+      property(s"${t.name} - $c") {
         val a = actorRef(c)
         t.test(c, a)
         system.stop(a)

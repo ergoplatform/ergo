@@ -223,10 +223,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
-    val toSpend = wusAfterGenesis.takeBoxes(1).head
-    val tx = AnyoneCanSpendTransaction(IndexedSeq(toSpend.nonce), IndexedSeq(toSpend.value))
+    val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
 
+    a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
     a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    expectNoMsg()
     a ! poolSize(c)
     expectMsg(1)
   })

@@ -45,7 +45,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     val dir = ErgoState.stateDir(settings).ensuring(d => d.mkdirs() || d.listFiles().isEmpty)
 
     val state = (
-      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir)
+      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir, settings.nodeSettings)
       else ErgoState.generateGenesisUtxoState(dir)._1
       ).asInstanceOf[MS]
 

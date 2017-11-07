@@ -15,7 +15,7 @@ class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with ScorexLogg
 
   private val nonGeneratingPeerConfig = ConfigFactory.parseString(
     """
-      |waves.miner.enable=no
+      |ergo.node.mining=no
     """.stripMargin
   )
 

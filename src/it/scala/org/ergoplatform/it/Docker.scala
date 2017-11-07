@@ -25,8 +25,7 @@ case class NodeInfo(
                      containerNetworkPort: Int,
                      apiIpAddress: String,
                      networkIpAddress: String,
-                     containerId: String,
-                     hostMatcherApiPort: Int)
+                     containerId: String)
 
 class Docker(suiteConfig: Config = ConfigFactory.empty,
              tag: String = "") extends AutoCloseable with ScorexLogging {
@@ -49,11 +48,11 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     close()
   }
 
-  private def knownPeers = seedAddress.fold("")(sa => s"-Dwaves.network.known-peers.0=$sa")
+  private def knownPeers = seedAddress.fold("")(sa => s"-Dscorex.network.knownPeers.0=$sa")
 
-  private val networkName = "waves-" + this.##.toLong.toHexString
+  private val networkName = "inner-" + this.##.toLong.toHexString
 
-  private val wavesNetwork = client.createNetwork(NetworkConfig.builder().driver("bridge").name(networkName).build())
+  private val innerNetwork = client.createNetwork(NetworkConfig.builder().driver("bridge").name(networkName).build())
 
   def startNode(nodeConfig: Config): Node = {
     val configOverrides = s"$knownPeers ${renderProperties(asProperties(nodeConfig.withFallback(suiteConfig)))}"
@@ -64,14 +63,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
 
-    val restApiPort = actualConfig.getString("waves.rest-api.port")
-    val networkPort = actualConfig.getString("waves.network.port")
-    val matcherApiPort = actualConfig.getString("waves.matcher.port")
+    val restApiPort = actualConfig.getString("scorex.restApi.port")
+    val networkPort = actualConfig.getString("scorex.network.port")
 
     val portBindings = new ImmutableMap.Builder[String, java.util.List[PortBinding]]()
       .put(restApiPort, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .put(networkPort, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
-      .put(matcherApiPort, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .build()
 
     val hostConfig = HostConfig.builder()
@@ -79,13 +76,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
 
     val containerConfig = ContainerConfig.builder()
-      .image("com.wavesplatform/waves:latest")
-      .exposedPorts(restApiPort, networkPort, matcherApiPort)
+      .image("org.ergoplatform/ergo:latest")
+      .exposedPorts(restApiPort, networkPort)
       .hostConfig(hostConfig)
-      .env(s"WAVES_OPTS=$configOverrides", s"WAVES_PORT=$networkPort")
+      .env(s"OPTS=$configOverrides", s"PORT=$networkPort")
       .build()
 
-    val containerId = client.createContainer(containerConfig, actualConfig.getString("waves.network.node-name") + "-" +
+    val containerId = client.createContainer(containerConfig, actualConfig.getString("scorex.network.nodeName") + "-" +
       this.##.toLong.toHexString).id()
     connectToNetwork(containerId)
     client.startContainer(containerId)
@@ -99,14 +96,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       networkPort.toInt,
       containerInfo.networkSettings().ipAddress(),
       containerInfo.networkSettings().networks().asScala(networkName).ipAddress(),
-      containerId,
-      extractHostPort(ports, matcherApiPort))
+      containerId)
     val node = new Node(actualConfig, nodeInfo, http)
     if (seedAddress.isEmpty) {
       seedAddress = Some(s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}")
     }
     nodes += containerId -> node
-    Await.result(node.lastBlock, Duration.Inf)
     node
   }
 
@@ -127,7 +122,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       saveLogs()
 
       nodes.keys.foreach(id => client.removeContainer(id, RemoveContainerParam.forceKill()))
-      client.removeNetwork(wavesNetwork.id())
+      client.removeNetwork(innerNetwork.id())
       client.close()
     }
   }
@@ -155,10 +150,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def disconnectFromNetwork(containerId: String): Unit =  client.disconnectFromNetwork(containerId, wavesNetwork.id())
+  def disconnectFromNetwork(containerId: String): Unit =  client.disconnectFromNetwork(containerId, innerNetwork.id())
   def disconnectFromNetwork(node: Node): Unit = disconnectFromNetwork(node.nodeInfo.containerId)
 
-  def connectToNetwork(containerId: String): Unit = client.connectToNetwork(containerId, wavesNetwork.id())
+  def connectToNetwork(containerId: String): Unit = client.connectToNetwork(containerId, innerNetwork.id())
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId)
 }
 

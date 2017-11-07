@@ -19,13 +19,13 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.it.util._
 import io.circe.syntax._
+import io.circe.generic.auto._
 
 trait NodeApi {
   import NodeApi._
 
   def restAddress: String
   def nodeRestPort: Int
-  def matcherRestPort: Int
   def blockDelay: FiniteDuration
 
   protected val client: AsyncHttpClient = new DefaultAsyncHttpClient
@@ -104,7 +104,7 @@ trait NodeApi {
 
   def transactionInfo(txId: String): Future[Transaction] = get(s"/transactions/info/$txId").as[Transaction]
 
-  def status: Future[Status] = get("/node/status").as[Status]
+  def status: Future[Status] = get("/debug/status").as[Status]
 
   def ensureTxDoesntExist(txId: String): Future[Unit] =
     utx.zip(findTransactionInfo(txId)).flatMap({
@@ -188,7 +188,6 @@ object NodeApi extends ScorexLogging {
 
   case class Transaction(`type`: Int, id: String, fee: Long, timestamp: Long)
 
-  // todo ???
-  case class Status(blockGeneratorStatus: Option[String], historySynchronizationStatus: Option[String])
+  case class Status(status: String)
 
 }

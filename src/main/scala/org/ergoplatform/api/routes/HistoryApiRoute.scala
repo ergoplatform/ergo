@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.RESTApiSettings
+import scorex.crypto.encode.Base58
 
 import scala.concurrent.Future
 
@@ -42,6 +43,11 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
     _.map { block => SuccessApiResponse(block.json)}
   }
 
+  private def getHeaderIdsAtHeight(h: Int): Future[Option[ScorexApiResponse]] = getHistory.map{ _.headerIdsAtHeight(h) }.map {
+    headerIds => headerIds.headOption
+      .map(_ => SuccessApiResponse(headerIds.map(h => Base58.encode(h)).asJson))
+  }
+
   private def getLastHeaders(n: Int): Future[ScorexApiResponse] = getHistory.map{ _.lastHeaders(n) }.map { v =>
     SuccessApiResponse(Map("headers" -> v.headers.map(_.json)).asJson)
   }
@@ -55,7 +61,7 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
   }
 
   override val route = pathPrefix("history") {
-    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty)
+    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight)
   }
 
   @Path("/height")
@@ -73,6 +79,15 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
   def bestHeader: Route = path("best-header") {
     get {
       toJsonOptionalResponse(getBestHeader)
+    }
+  }
+
+  @Path("/header-ids-by-height")
+  @ApiOperation(value = "Header ids by height", notes = "Optional response.", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with array of header ids")))
+  def blockIdByHeight: Route = path("best-full-block" / IntNumber) { h =>
+    get {
+      toJsonOptionalResponse(getHeaderIdsAtHeight(h))
     }
   }
 

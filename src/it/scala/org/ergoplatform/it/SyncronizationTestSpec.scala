@@ -6,6 +6,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import scala.concurrent.Await.result
 import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class SyncronizationTestSpec(nodes: Seq[Node]) extends TestFourNodesSuite with ScalaFutures with IntegrationPatience
   with Matchers {

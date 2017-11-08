@@ -311,7 +311,7 @@ trait ErgoHistory
     if (valid) {
       historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
         ByteArrayWrapper(Array(1.toByte))))
-      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
     } else {
       val headerOpt: Option[Header] = modifier match {
         case h: Header => Some(h)
@@ -342,7 +342,7 @@ trait ErgoHistory
 
           if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
             historyStorage.db.update(validityKey(modifier.id), Seq(), validityRow)
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
@@ -363,12 +363,14 @@ trait ErgoHistory
             val toInsert = validityRow ++ changedLinks
             historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
 
-            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail, validChain.tail, Seq())
+            //TODO ???
+            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail,
+              validChain.tail.headOption, Seq())
           }
         case None =>
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(0.toByte))))
-          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }
     }
 

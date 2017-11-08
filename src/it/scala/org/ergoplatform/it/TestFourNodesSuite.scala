@@ -47,7 +47,7 @@ class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with ScorexLogg
   }
 
   override def nestedSuites: IndexedSeq[Suite] = IndexedSeq(
-    ???
+    new SyncronizationTestSpec(allNodes)
   )
   override protected def afterAll(): Unit = docker.close()
 }

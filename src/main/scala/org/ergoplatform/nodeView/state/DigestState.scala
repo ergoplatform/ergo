@@ -19,11 +19,14 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
-                            store: Store,
+                            val store: Store,
                             settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
+
+  store.lastVersionID
+    .foreach(id => assert(version sameElements id.data, "version should always be equal to store.version"))
 
   override val maxRollbackDepth = 10
 

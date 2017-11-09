@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
@@ -47,6 +47,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   }
 
   type H = ErgoHistory
+  type S = ErgoState[_]
   type D = DigestState
   type U = UtxoState
   type W = ErgoWallet
@@ -60,6 +61,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     NodeViewHolderConfig(true, true, false),
     NodeViewHolderConfig(false, true, true),
     NodeViewHolderConfig(false, true, false),
+    //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
   def actorRef(c: NodeViewHolderConfig): ActorRef = {
@@ -80,106 +82,35 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     }
   }
 
-  def checkAfterGenesisState(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Boolean] { v =>
-      v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Boolean] { v =>
-      v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
-    }
+  def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
+    v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
   }
 
-  def bestHeaderOpt(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[Header]] { v =>
-      v.history.bestHeaderOpt
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[Header]] { v =>
-      v.history.bestHeaderOpt
-    }
+  def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
+
+  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.height)
+
+  def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
+
+  def lastHeadersLength(count: Int, c: C) =
+    GetDataFromCurrentView[H, S, W, P, Int](v => v.history.lastHeaders(count).size)
+
+
+  def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ByteArrayWrapper]] { v =>
+    v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
   }
 
-  def historyHeight(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.history.height
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.history.height
-    }
+  def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
+    v.history.bestFullBlockOpt
   }
 
-  def heightOf(id: ModifierId, c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[Int]] { v =>
-      v.history.heightOf(id)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[Int]] { v =>
-      v.history.heightOf(id)
-    }
+  def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
+    v.history.bestFullBlockOpt.map(_.header.encodedId)
   }
 
-  def lastHeadersLength(count: Int, c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.history.lastHeaders(count).size
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.history.lastHeaders(count).size
-    }
-  }
+  def poolSize(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.pool.size)
 
-  def openSurfaces(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Seq[ByteArrayWrapper]] { v =>
-      v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Seq[ByteArrayWrapper]] { v =>
-      v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
-    }
-  }
-
-  def bestFullBlock(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-  }
-
-  def bestFullBlockEncodedId(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Option[String]] { v =>
-      v.history.bestFullBlockOpt.map(_.header.encodedId)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Option[String]] { v =>
-      v.history.bestFullBlockOpt.map(_.header.encodedId)
-    }
-  }
-
-  def poolSize(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, Int] { v =>
-      v.pool.size
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, Int] { v =>
-      v.pool.size
-    }
-  }
-
-  def rootHash(c: C) = if (c.adState) {
-    GetDataFromCurrentView[H, D, W, P, ByteArrayWrapper] { v =>
-      ByteArrayWrapper(v.state.rootHash)
-    }
-  } else {
-    GetDataFromCurrentView[H, U, W, P, ByteArrayWrapper] { v =>
-      ByteArrayWrapper(v.state.rootHash)
-    }
-  }
-
+  def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, String](v => Algos.encode(v.state.rootHash))
 
   class TestCase(val name: String, val test: (NodeViewHolderConfig, ActorRef) => Unit)
 
@@ -292,10 +223,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
-    val toSpend = wusAfterGenesis.takeBoxes(1).head
-    val tx = AnyoneCanSpendTransaction(IndexedSeq(toSpend.nonce), IndexedSeq(toSpend.value))
+    val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
 
+    a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
     a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    expectNoMsg()
     a ! poolSize(c)
     expectMsg(1)
   })
@@ -320,7 +252,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(block.blockTransactions)
       a ! LocallyGeneratedModifier(block.aDProofs.get)
       a ! rootHash(c)
-      expectMsg(ByteArrayWrapper(wusAfterBlock.rootHash))
+      expectMsg(Algos.encode(wusAfterBlock.rootHash))
     }
 
     a ! bestHeaderOpt(c)
@@ -343,7 +275,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Some(brokenBlock.header))
   })
 
-  val t8 = new TestCase("switching for a better chain", (c, a) => {
+  def switch: (NodeViewHolderConfig, ActorRef) => Unit = (c: NodeViewHolderConfig, a: ActorRef) => {
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -354,6 +286,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(genesis.blockTransactions)
       a ! LocallyGeneratedModifier(genesis.aDProofs.get)
     }
+
+    a ! rootHash(c)
+    expectMsg(Algos.encode(wusAfterGenesis.rootHash))
 
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
@@ -366,7 +301,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    expectMsg(Some(chain1block1))
+    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(Some(chain1block1.header))
 
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
@@ -379,7 +316,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    expectMsg(Some(chain1block1))
+    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    a ! bestHeaderOpt(c)
+    expectMsg(Some(chain1block1.header))
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
@@ -396,14 +335,19 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
     a ! bestHeaderOpt(c)
     expectMsg(Some(chain2block2.header))
-  })
 
-  //TODO: fix switching for a better chain cases for all configs
-  val cases = List(t1, t2, t3, t4, t5, t6, t7 /*, t8*/)
+    a ! rootHash(c)
+    expectMsg(Algos.encode(chain2block2.header.stateRoot))
+
+  }
+
+  val t8 = new TestCase("switching for a better chain", switch)
+
+  val cases = List(t1, t2, t3, t4, t5, t6, t7, t8)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>
-      property(s"$c - ${t.name}") {
+      property(s"${t.name} - $c") {
         val a = actorRef(c)
         t.test(c, a)
         system.stop(a)

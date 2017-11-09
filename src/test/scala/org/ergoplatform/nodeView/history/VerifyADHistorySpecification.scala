@@ -255,7 +255,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
 
     assert(history.bestFullBlockOpt.isDefined)
-    forAll(smallInt) { forkLength: Int =>
+    forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val branchPoint = history.bestFullBlockOpt.get
         val fork1 = genChain(forkLength, Seq(branchPoint)).tail

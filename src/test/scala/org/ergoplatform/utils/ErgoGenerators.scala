@@ -18,6 +18,7 @@ import scorex.testkit.generators.CoreGenerators
 
 trait ErgoGenerators extends CoreGenerators {
 
+  lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
   lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {

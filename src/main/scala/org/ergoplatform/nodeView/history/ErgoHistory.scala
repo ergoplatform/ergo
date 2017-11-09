@@ -71,7 +71,7 @@ trait ErgoHistory
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */
   def bestFullBlockOpt: Option[ErgoFullBlock] =
-  bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
+    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
@@ -306,12 +306,33 @@ trait ErgoHistory
       Seq(h.id, h.transactionsId, h.ADProofsId).map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte)))
     }
 
-    //TODO why do we need this assert?
-    //    assert(contains(modifier), "Trying to reportSemanticValidity for non-existing modifier")
     if (valid) {
-      historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
-        ByteArrayWrapper(Array(1.toByte))))
-      this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+      modifier match {
+        case fb: ErgoFullBlock =>
+          val bestHeader = bestHeaderOpt.get
+          val h = fb.header
+          val ids = Seq(fb.id, fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id)
+            .map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte)))
+
+          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+            ByteArrayWrapper(Array(1.toByte))))
+
+          val modHeight = heightOf(h.id).get
+          if (h == bestHeader) {
+            //applied best header to history
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+          } else {
+            //in fork processing
+            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements h.id)
+            val toApply = getFullBlock(chainBack.head)
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
+          }
+        case _ =>
+          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+            ByteArrayWrapper(Array(1.toByte))))
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+      }
+
     } else {
       val headerOpt: Option[Header] = modifier match {
         case h: Header => Some(h)
@@ -342,7 +363,7 @@ trait ErgoHistory
 
           if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
             historyStorage.db.update(validityKey(modifier.id), Seq(), validityRow)
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
@@ -363,12 +384,14 @@ trait ErgoHistory
             val toInsert = validityRow ++ changedLinks
             historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
 
-            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail, validChain.tail, Seq())
+            //TODO ???
+            this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail,
+              validChain.tail.headOption, Seq())
           }
         case None =>
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(0.toByte))))
-          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), Seq(), Seq())
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }
     }
 

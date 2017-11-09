@@ -18,7 +18,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       popowHistory.applicable(snapshot) shouldBe true
       val processInfo = popowHistory.append(snapshot).get._2
-      processInfo.toApply shouldEqual Seq(snapshot)
+      processInfo.toApply shouldEqual Some(snapshot)
       popowHistory.applicable(snapshot) shouldBe false
     }
   }

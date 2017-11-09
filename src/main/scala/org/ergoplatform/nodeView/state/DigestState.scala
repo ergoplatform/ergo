@@ -17,13 +17,16 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-class DigestState private(override val version: VersionTag,
-                          override val rootHash: ADDigest,
-                          store: Store,
-                          settings: NodeConfigurationSettings)
+class DigestState protected(override val version: VersionTag,
+                            override val rootHash: ADDigest,
+                            val store: Store,
+                            settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
+
+  store.lastVersionID
+    .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
 
   override val maxRollbackDepth = 10
 
@@ -107,10 +110,11 @@ object DigestState {
     (versionOpt, rootHashOpt) match {
 
       case (Some(version), Some(rootHash)) =>
-        if (store.lastVersionID.isDefined) {
+        if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
           new DigestState(version, rootHash, store, settings)
         } else {
-          new DigestState(version, rootHash, store, settings).update(version, rootHash).get //sync store
+          val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
+          new DigestState(inVersion, rootHash, store, settings).update(version, rootHash).get //sync store
         }.ensuring(store.lastVersionID.get.data.sameElements(version))
 
       case (None, None) =>

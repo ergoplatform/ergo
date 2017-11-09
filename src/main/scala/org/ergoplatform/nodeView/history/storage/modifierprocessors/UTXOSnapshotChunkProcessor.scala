@@ -19,7 +19,7 @@ trait UTXOSnapshotChunkProcessor {
   def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     val toInsert = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(Array(1.toByte))))
     historyStorage.insert(m.id, toInsert)
-    ProgressInfo(None, Seq(), Seq(m), Seq())
+    ProgressInfo(None, Seq(), Some(m), Seq())
   }
 
   def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {

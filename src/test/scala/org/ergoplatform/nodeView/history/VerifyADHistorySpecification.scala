@@ -247,7 +247,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val processInfo = changes._2
     processInfo.branchPoint.get shouldEqual genesis.id
     processInfo.toRemove should contain theSameElementsAs fork1
-    processInfo.toApply should contain theSameElementsAs fork2
+    processInfo.toApply shouldBe fork2.headOption
 
   }
 
@@ -275,7 +275,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
         val processInfo = changes._2
         processInfo.branchPoint.get shouldEqual branchPoint.id
         processInfo.toRemove should contain theSameElementsAs fork1
-        processInfo.toApply should contain theSameElementsAs fork2
+        processInfo.toApply shouldBe fork2.headOption
 
       }
     }

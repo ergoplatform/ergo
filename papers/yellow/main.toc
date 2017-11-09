@@ -1,13 +1,15 @@
-\contentsline {section}{\numberline {0.1}Introduction}{1}{section.0.1}
-\contentsline {section}{\numberline {0.2}Multiple Modes}{1}{section.0.2}
-\contentsline {subsection}{\numberline {0.2.1}Full-Node Mode}{1}{subsection.0.2.1}
-\contentsline {subsection}{\numberline {0.2.2}Pruned Full-Node Mode}{1}{subsection.0.2.2}
-\contentsline {subsection}{\numberline {0.2.3}Light Full-Node Mode}{2}{subsection.0.2.3}
-\contentsline {subsection}{\numberline {0.2.4}Light-SPV Mode}{2}{subsection.0.2.4}
-\contentsline {subsection}{\numberline {0.2.5}Mode-Related Settings}{2}{subsection.0.2.5}
-\contentsline {section}{\numberline {0.3}Ergo Block Structure}{2}{section.0.3}
-\contentsline {section}{\numberline {0.4}Ergo Modifiers Processing}{3}{section.0.4}
-\contentsline {subsection}{\numberline {0.4.1}Modifiers processing}{3}{subsection.0.4.1}
-\contentsline {subsection}{\numberline {0.4.2}Bootstrap}{3}{subsection.0.4.2}
-\contentsline {subsection}{\numberline {0.4.3}regular}{3}{subsection.0.4.3}
-\contentsline {section}{References}{4}{chapter*.2}
+\contentsline {section}{\numberline {0.1}Introduction}{2}{section.0.1}
+\contentsline {section}{\numberline {0.2}Multiple Modes}{2}{section.0.2}
+\contentsline {subsection}{\numberline {0.2.1}Full-Node Mode}{2}{subsection.0.2.1}
+\contentsline {subsection}{\numberline {0.2.2}Pruned Full-Node Mode}{2}{subsection.0.2.2}
+\contentsline {subsection}{\numberline {0.2.3}Light Full-Node Mode}{3}{subsection.0.2.3}
+\contentsline {subsection}{\numberline {0.2.4}Light-SPV Mode}{3}{subsection.0.2.4}
+\contentsline {subsection}{\numberline {0.2.5}Mode-Related Settings}{3}{subsection.0.2.5}
+\contentsline {section}{\numberline {0.3}Ergo Block Structure}{3}{section.0.3}
+\contentsline {section}{\numberline {0.4}Ergo Modifiers Processing}{4}{section.0.4}
+\contentsline {subsection}{\numberline {0.4.1}Modifiers processing}{4}{subsection.0.4.1}
+\contentsline {subsection}{\numberline {0.4.2}Bootstrap}{4}{subsection.0.4.2}
+\contentsline {subsection}{\numberline {0.4.3}regular}{4}{subsection.0.4.3}
+\contentsline {section}{\numberline {0.5}Protocol Updates}{4}{section.0.5}
+\contentsline {section}{\numberline {0.6}Peer-to-Peer Network}{4}{section.0.6}
+\contentsline {section}{References}{5}{chapter*.2}

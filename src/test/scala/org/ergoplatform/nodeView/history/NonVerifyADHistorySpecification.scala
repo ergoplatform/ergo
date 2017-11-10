@@ -18,7 +18,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       popowHistory.applicable(snapshot) shouldBe true
       val processInfo = popowHistory.append(snapshot).get._2
-      processInfo.toApply shouldEqual Seq(snapshot)
+      processInfo.toApply shouldEqual Some(snapshot)
       popowHistory.applicable(snapshot) shouldBe false
     }
   }
@@ -71,7 +71,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = ensureMinimalHeight(history, BlocksInChain + 1)
     val chain = history.lastHeaders(BlocksInChain)
 
-    forAll(smallInt) { forkLength: Int =>
+    forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
         val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength - 1).id), None)
         val continuation = history.continuationIds(si, forkLength).get

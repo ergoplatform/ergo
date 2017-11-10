@@ -80,7 +80,7 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("rollback - n blocks back") {
-    forAll(boxesHolderGen, smallInt) { (bh, depth) =>
+    forAll(boxesHolderGen, smallPositiveInt) { (bh, depth) =>
       whenever(depth > 0 && depth <= 5) {
         val us = createUtxoState(bh)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))

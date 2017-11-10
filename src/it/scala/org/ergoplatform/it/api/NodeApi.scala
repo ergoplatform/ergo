@@ -74,7 +74,8 @@ trait NodeApi {
 
   def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
 
-  def height: Future[Int] = get("/history/height").as[Json].map(v => v.hcursor.downField("height").as[Int].right.get)
+  def height: Future[Int] = get("/history/height").map(r =>
+    ergoJsonAnswerAs[Json](r.getResponseBody).hcursor.downField("height").as[Int].right.get)
 
 //  def blockAt(height: Int) = get(s"/blocks/at/$height").as[Block]
 

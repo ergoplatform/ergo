@@ -76,4 +76,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 1b90cc657b5c843a86f5b681e992cffd40f026bb
+// LIBRARY_DEPENDENCIES_HASH d380179002b89fa62e0c860310db689a0518aa63

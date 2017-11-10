@@ -1,6 +1,6 @@
 package org.ergoplatform.it
 
-import org.scalatest.Matchers
+import org.scalatest.{FreeSpec, Matchers}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
 import scala.concurrent.Await.result
@@ -8,7 +8,7 @@ import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class SyncronizationTestSpec(nodes: Seq[Node]) extends TestFourNodesSuite with ScalaFutures with IntegrationPatience
+class SyncronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
   with Matchers {
 
   "Generate 30 blocks" in {

@@ -18,6 +18,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import org.ergoplatform.it.util._
 import io.circe.syntax._
+import io.circe.parser._
 import io.circe.generic.auto._
 
 trait NodeApi {
@@ -54,7 +55,8 @@ trait NodeApi {
     post(s"http://$restAddress", nodeRestPort, path,
       (rb: RequestBuilder) => rb.setHeader("Content-type", "application/json").setBody(body))
 
-  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = Json.fromString(body).hcursor.downField("data").as[A].right.get
+  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A =
+    parse(body).right.get.hcursor.get("data").right.get
 
   def blacklist(networkIpAddress: String, hostNetworkPort: Int): Future[Unit] =
     post("/debug/blacklist", s"$networkIpAddress:$hostNetworkPort").map(_ => ())

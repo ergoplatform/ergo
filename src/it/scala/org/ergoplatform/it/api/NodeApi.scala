@@ -183,7 +183,7 @@ object NodeApi extends ScorexLogging {
   case class UnexpectedStatusCodeException(request: Request, response: Response) extends Exception(s"Request: ${request.getUrl}\n" +
     s"Unexpected status code (${response.getStatusCode}): ${response.getResponseBody}")
 
-  case class Peer(address: String, declaredAddress: String, peerName: String)
+  case class Peer(declaredAddress: String, nodeName: String, nodeNonce: String)
 
   case class BlacklistedPeer(hostname : String, timestamp: Long, reason: String)
 

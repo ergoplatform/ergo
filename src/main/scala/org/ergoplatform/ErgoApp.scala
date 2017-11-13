@@ -16,6 +16,7 @@ import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import org.ergoplatform.Version.VersionString
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
@@ -60,8 +61,8 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
-    (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
+    Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
+      settings.network)))
 
   //only a miner is generating tx load
   //    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))

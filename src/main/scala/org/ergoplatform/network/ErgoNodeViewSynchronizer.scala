@@ -14,5 +14,5 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                networkSettings: NetworkSettings) extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
   ErgoSyncInfo, ErgoSyncInfoMessageSpec.type](networkControllerRef, viewHolderRef, localInterfaceRef,
   syncInfoSpec, networkSettings){
-
+  override protected val deliveryTracker = new ErgoDeliveryTracker
 }

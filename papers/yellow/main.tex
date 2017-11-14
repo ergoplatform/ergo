@@ -125,6 +125,9 @@
 \section{Introduction}
 \subsection{Multiple Modes}
 Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to fullnode mode, which is similar to Bitcoin fullnode, Ergo reference implementation will support Light-SPV, Light-Fullnode, Pruned-Fullnode modes.
+\subsection{Full-Node Mode}
+Like in Bitcoin, a full node is storing all the full blocks since genesis block. Full node checks proofs of work, linking structure correctness (parent block id, interlink elements), and all the transactions in all the blocks. A fullnode is storing all the full blocks forever. It is also holding full UTXO set to be able to validate an arbitrary transaction.
+The only optimization a fullnode is doing is that is is skipping downloading and checking AD-transformation block part (see below in the "Light-Fullnode" section).
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

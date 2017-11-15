@@ -16,6 +16,8 @@ case class ErgoFullBlock(header: Header,
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
+  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
+
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override val parentId: ModifierId = header.parentId

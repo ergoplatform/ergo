@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "2.0.0-RC3-243-ga26117f-SNAPSHOT"
+val scorexVersion = "2.0.0-RC3-212-gf63652b-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",

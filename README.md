@@ -20,3 +20,9 @@ heavy validation attacks
 It will be a White Paper with a brief description, and also a Yellow Paper with detailed specification.
 At the moment, there are only [Yellow Paper drafts](https://github.com/ergoplatform/ergo/tree/master/papers/yellow), and 
 the reference implementation code should be considered as a specification.
+
+## Installation
+
+### Docker Quick Start
+
+    sudo docker run --rm -p 9001:9001 -p 9051:9051 -v ergo:/tmp/ergo/node1/data andyceo/ergo

@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.{HistoryApiRoute, StateApiRoute}
+import org.ergoplatform.api.routes.{DebugApiRoute, HistoryApiRoute, StateApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
@@ -41,13 +41,15 @@ class ErgoApp(args: Seq[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
     HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
-    StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
+    StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
+    DebugApiRoute(settings.restApi))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
     classOf[PeersApiRoute],
     classOf[HistoryApiRoute],
-    classOf[StateApiRoute]
+    classOf[StateApiRoute],
+    classOf[DebugApiRoute]
   )
 
   val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))

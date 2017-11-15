@@ -29,7 +29,7 @@ object ErgoSettings extends ScorexLogging {
       scorexSettings.restApi.copy(swaggerInfo = scorexSettings.restApi.swaggerInfo.copy(version = Version.VersionString)))
   }
 
-  private def fromConfig(config: Config): ErgoSettings = {
+  def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")

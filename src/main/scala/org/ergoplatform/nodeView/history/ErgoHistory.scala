@@ -323,8 +323,10 @@ trait ErgoHistory
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             //in fork processing
-            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements h.id)
-            val toApply = getFullBlock(chainBack.head)
+            val chainBack = headerChainBack(height - modHeight, bestHeader, head => h.parentId sameElements h.id)
+            //block in the best chain that link to this header
+            val toApply = chainBack.headOption.flatMap(opt =>  getFullBlock(opt)).filter(_.parentId sameElements h.id)
+            assert(toApply.nonEmpty, "Should never be here, State is inconsistent")
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>

@@ -123,7 +123,411 @@
 \maketitle
 
 \section{Introduction}
+\subsection{Multiple Modes}
+Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node mode, which is similar to Bitcoin fullnode, Ergo reference implementation will support Light-SPV, Light-Fullnode, Pruned-Fullnode modes.
+\subsection{Full-Node Mode}
+Like in Bitcoin, a full node is storing all the full blocks since genesis block. Full node checks proofs of work, linking structure correctness (parent block id, interlink elements), and all the transactions in all the blocks. A fullnode is storing all the full blocks forever. It is also holding full UTXO set to be able to validate an arbitrary transaction.
+The only optimization a fullnode is doing is that is is skipping downloading and checking AD-transformation block part (see below in the "Light-Fullnode" section).
+For full node regime, modifiers precessing workflow is as follows:
+\begin{enumerate}
+   \item Send ErgoSyncInfo message to connected peers.
+   \item Get response with INV message, containing ids of blocks, better than our best block.
+   \item Request headers for all ids from 2.
+   \item On receiving header:
+   \begin{minted}{java}
+if(History.apply(header).isSuccess) {
+    if(!isInitialBootstrapping) Broadcast INV for this header   
+    Request transaction ids from this block
+ } else {
+    blacklist peer
+ }
+\end{minted}
+\hfill
+\break
+   \item On receiving transaction ids from header:
+   \begin{minted}{java}
+   Mempool.apply(transactionIdsForHeader)
+  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+    request transaction with txId
+  }
+   \end{minted}
+   \item On receiving a transaction:
+   \begin{minted}{java}
+   if(Mempool.apply(transaction).isSuccess) {
+    if(!isInitialBootstrapping) Broadcast INV for this transaction
+    Mempool.getHeadersWithAllTransactions { BlockTransactions =>
+       GOTO 7
+    }
+ }
+   \end{minted}
+   \item Now we have BlockTransactions: all transactions corresponding to some Header
+   \begin{minted}{java}
+    if(History.apply(BlockTransactions) == Success(ProgressInfo)) {
+      if(!isInitialBootstrapping) Broadcast INV for BlockTransactions
+     /*We should notify our neighbours, that now we have all the transactions
+     State apply modifiers (may be empty for block in a fork chain)
+     and generate ADProofs for them.
+     TODO requires different interface from scorex-core,
+     because it should return ADProofs
+     TODO when mininal state apply Progress info,
+     it may also create UTXOSnapshot
+     (e.g. every 30000 blocks like in Ethereum).
+     This UTXOSnapshot should be required for mining by Rollerchain*/
+     if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+       if("mode"="full" || "mode"=="pruned-full") ADProofs.foreach ( ADProof => History.apply(ADProof))
+       if("mode"=="pruned-full" || "mode"=="light-full") drop BlockTransactions and ADProofs older than BlocksToKeep
+     } else {
+       //Drop Header from history, because it's transaction sequence is not valid
+       History.drop(BlockTransactions.headerId)
+     }
+  } else {
+    blacklist peer who sent header
+  }
+   \end{minted}
+\end{enumerate}
 
+\subsection{Pruned Full-Node Mode}
+This mode is similar to fast-sync in Geth or Grothendieck, warp-mode in Parity (all the three are Ethereum protocol clients), but makes more aggressive optimizations. In particular, a pruned-fullnode is not down- loading and storing full blocks not residing in a target blockchain suffix, and also removing full blocks going out of the suffix.
+In detail, a pruned client is downloading all the headers, then, by using them, it checks proofs-of-work and linking structure(or parent id only?). Then it downloads a UTXO snapshot for some height from its peers. Finally, full blocks after the snapshot are to be downloaded and applied to get a current UTXO set.
+A pruned fullnode is also skipping AD-transformation block part, like a fullnode. Additional setting: "suffix" - how much full blocks to store(w. some minimum set?).
+Its regular modifiers processing is the same as for fullnode regime, while its bootstrap process is different:
+\begin{enumerate}
+\item Send ErgoSyncInfo message to connected peers.
+\item Get response with INV message, containing ids of blocks, better than our best block.
+\item Request headers for all ids from 2.
+\item On receiving header:
+\begin{minted}{java}
+if(History.apply(header).isSuccess) {
+    if(!(localScore == networkScore)) GOTO 1
+    else GOTO 5
+ } else {
+    blacklist peer
+ }
+\end{minted}
+\item Request historical UTXOSnapshotManifest for at least BlocksToKeep back.
+\item On receiving UTXOSnapshotManifest:
+\begin{minted}{java}
+UTXOSnapshotManifest.chunks.foreach { chunk => 
+    request chunk from sender() //Or from random fullnode
+  }
+\end{minted}
+\item On receiving UTXOSnapshotChunk:
+\begin{minted}{java}
+State.applyChunk(UTXOSnapshotChunk) match {
+     case Success(Some(newMinimalState)) => GOTO 8
+     case Success(None) => stay at 7 
+     /*we need more chunks to construct state. 
+     TODO periodicaly request missed chunks*/
+     case Failure(e) => ???
+     //UTXOSnapshotChunk or constcucted state roothash is invalid  
+  }
+\end{minted}
+\item Request BlockTransactions starting from State we have
+\begin{minted}{java}
+History.headersStartingFromId(State.headerId).foreach { header => 
+    send message(GetBlockTransactionsForHeader(header)) to Random fullnode
+  }
+\end{minted}
+\item On receiving BlockTransactions: same as in Fullnode.7 .
+\item Operate as Fullnode.
+
+
+\end{enumerate}
+
+\subsection{Light Full-Node Mode}
+This mode is based on an idea to use a 2-party authenticated dynamic dictionary built on top of UTXO set. A light-fullnode holds only a root digest of a dictionary. It check all the full blocks, or some suffix of the full blockchain, depending on setting, thus starting from a trusted pre-genesis digest or some digest in the blockchain. A light-fullnode is using AD-transformations (authenticated dictionary transformations) block section containing batch-proof for UTXO transformations to get a new digest from an old one. It also checks all the transactions, but doesn’t store anything but a single digest for that. Details can be found in the paper https://eprint.iacr.org/2016/994. \par
+Additional settings : "depth" - from which block in the past to check transactions (if 0, then go from genesis). \par
+"additional-checks" - light-fullnode trusts previous digest and checks current digest validity by using the previous one as well as AD-transformations. \par
+"additional-depth" - depth to start additional checks from.
+\begin{enumerate}
+\item Send ErgoSyncInfo message to connected peers.
+\item Get response with INV message, containing ids of blocks, better than our best block.
+\item Request headers for all ids from 2.
+\item On receiving header:
+\begin{minted}{java}
+if(History.apply(header).isSuccess) {
+    if(!(localScore == networkScore)) GOTO 1
+    else GOTO 5
+ } else {
+    blacklist peer
+ }
+\end{minted}
+\item Request BlockTransactions and ADProofs starting from BlocksToKeep back in History (just 1 last header after node botstrapping):
+\begin{minted}{java}
+History.lastBestHeaders(BlocksToKeep).foreach { header => 
+    send message(GetBlockTransactionsForHeader(header)) to Random fullnode
+    send message(GetAdProofsHeader(header)) to Random fullnode
+  }
+\end{minted}
+\item On receiving modifier BlockTransactions or ADProofs:
+\begin{minted}{java}
+if(History.apply(modifier) == Success(ProgressInfo)) {
+  /* TODO if history now contains both ADProofs and BlockTransactions,
+  it should return ProgressInfo with both of them, otherwise
+  it should return empty ProgressInfo */
+if(State().apply(ProgressInfo) == Success((newState, ADProofs)))
+{
+if("mode"=="pruned-full") drop BlockTransactions and ADProofs older than BlocksToKeep
+} 
+else {
+         /*Drop Header from history, because it's transaction sequence is not valid*/
+         History.drop(BlockTransactions.headerId)
+     }
+  }
+\end{minted}
+\end{enumerate}
+
+\subsection{Light-SPV Mode}
+This mode is not about checking any full blocks. Like in Bitcoin, an SPV node is downloading block headers only, and so checks only proofs of work and links. Unlike Bitcoin’s SPV, the Light-SPV is downloading and checking not all the headers but a sublinear(in blockchain length) number of them(in benchmarks, this is about just tens of kilobytes instead of tens or hundreds of megabytes for Bitcoin/Ethereum).
+Light-SPV mode is intended to be useful for mobile phones and low-end hardware.
+\subsubsection{Bootstrap}
+\begin{enumerate}
+\item Send GetPoPoWProof for all connections.
+\item On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better, than it's current best header chain).
+\item GOTO regular regime.
+\end{enumerate}
+\subsubsection{Regular}
+\begin{enumerate}
+\item Send ErgoSyncInfo message to connected peers
+\item Get response with INV message, containing ids of blocks, better than our best block.
+\item Request headers for all ids from 2.
+\item On receiving header:
+\begin{minted}{java}
+ if(History.apply(header).isSuccess) {
+    State.apply(header) // just change state roothash
+    if(!isInitialBootstrapping) Broadcast INV for this header
+ } else {
+    blacklist peer
+ }
+\end{minted}
+\end{enumerate}
+\subsection{Mode-Related Settings}
+Ergo has the following settings determines a mode:
+\begin{itemize}
+\item ADState: Boolean - keeps state roothash only.
+\item VerifyTransactions: Boolean - download block transactions and verify them (requires BlocksToKeep == 0 if disabled).
+\item PoPoWBootstrap: Boolean - download PoPoW proof only
+\item BlocksToKeep: Int - number of last blocks to keep with transactions, for all other blocks it keep header
+only. Keep all blocks from genesis if negative
+\item MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant).
+\end{itemize}
+\par 
+‘if(VerifyTransactions == false) require(BlocksToKeep == 0)‘ Mode from **"multimode.md"** can be determined as follows:
+
+\section{Ergo Block Structure}
+\subsection{ErgoMinimalHeader is a minimal data amount, required to calculate blockId:}
+payloadRootHash: Array[Byte] - root hash (or simple hash of all payload data) of block payload.
+nonce: Int - field to iterate and generate valid PoW.
+\subsection{ErgoHeader is a header to keep in History and transfer:}
+\begin{tabular}{ |p{3cm}||p{3cm}|p{3cm}|  }
+ \hline
+ \hline
+ Field     &  Size &  Description  \\
+ \hline
+ version  &  1 &  block version, to be increased on every soft- and hardfork  \\
+ \hline
+ parentId &  32 &  id of parent block  \\
+ \hline
+ interlinkesRoot &  32 &  root hash of interlinks structure  \\
+ \hline
+ ADProofsRoot &  32 &  hash of ADProofs for transactions in a block \\
+ \hline
+ stateRoot &  32 &  root hash (for an AVL+ tree) of a state after block application  \\
+ \hline
+ transactionsRoot  &  32 &  root hash (for a Merkle tree) of transactions in a block  \\
+ \hline
+ timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
+ \hline
+ nonce &  8 &  Proof-of-Work nonce  \\
+ \hline
+\end{tabular}
+
+\newline
+\hfill
+\break
+
+Some of this fields may be calculated by node by itself: 
+
+   \begin{itemize}
+     \item parentId: if(status==bootstrap && PoPoWBootstrap == false).
+     \item interlinksRoot: if(PoPoWBootstrap == false).
+     \item ADProofsRoot: if(status==regular && ADState==false && BlocksToKeep>0).
+     \item stateRoot: if(status==regular && ADState==false && BlocksToKeep>0).
+     \end{itemize}
+
+\section{Ergo Modifiers Processing}
+This section describes processing algorithm for Ergo modifiers in all security modes. Unlike most of blockchain systems, Ergo have the following types of **modifiers**: In-memory:
+\begin{enumerate}
+\item In-memory:
+\begin{itemize}
+\item Transaction - in-memory modifier.
+\item TransactionIdsForHeader - ids of transactions in concrete block.
+\item UTXOSnapshotManifest - ids of UTXO chunks and
+\end{itemize}
+\item Persistent:
+\begin{itemize}
+\item BlockTransactions - Sequence of transactions, corresponding to 1 block.
+\item ADProofs - proof of transaction correctness relative to corresponding UTXO.
+\item Header, that contains data required to verify PoW, link to previous block, state root hash and root hash to it's payload (BlockTransactions, ADProofs, Interlinks ...).
+\item UTXOSnapshotChunk - part of UTXO.
+\item PoPoWProof
+\end{itemize}
+Ergo will have the following parameters, that will determine concrete security regime:
+\begin{itemize}
+\item ADState: Boolean - keep state roothash only.
+\item VerifyTransactions: Boolean - download block transactions and verify them (requires BlocksToKeep == 0 if disabled).
+\item PoPoWBootstrap: Boolean - download PoPoW proof only.
+\item BlocksToKeep: Int - number of last blocks to keep with transactions, for all other blocks it keep header only. Keep all blocks from genesis if negative.
+\item MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant).
+\begin{minted}{java}
+if(VerifyTransactions == false) require(BlocksToKeep == 0)
+\end{minted}
+\end{itemize}
+Mode from "multimode.md" can be determined as follows:
+\begin{minted}{java}
+mode = if(ADState == false && VerifyTransactions == true
+&& PoPoWBootstrap == false && BlocksToKeep < 0) "full"
+else if(ADState == false && VerifyTransactions == true
+&& PoPoWBootstrap == false && BlocksToKeep >= 0) "pruned-full"
+else if(ADState == true && VerifyTransactions == true
+&& PoPoWBootstrap == false) "light-full"
+else if(ADState == true && VerifyTransactions == false
+&& PoPoWBootstrap == true && BlocksToKeep == 0) "light-spv"
+else if(ADState == true && VerifyTransactions == true
+&& PoPoWBootstrap == true && BlocksToKeep == 0) "light-full-PoPoW"
+else //Other combinations are possible
+\end{minted}
+\end{enumerate}
+\subsection{Modifiers processing}
+\begin{minted}{java}
+def updateHeadersChainToBestInNetwork() = {
+  1.2.1. Send ErgoSyncInfo message to connected peers
+  1.2.2. Get response with INV message,
+  containing ids of blocks, better than our best block
+  1.2.3. Request headers for all ids from 1.2.2.
+  1.2.4. On receiving header
+   if(History.apply(header).isSuccess) {
+      if(!(localScore == networkScore)) GOTO 1.2.1
+   } else {
+      blacklist peer
+      GOTO 1.2.1
+   }
+}
+\end{minted}
+
+\subsection{bootstrap}
+\subsubsection{Download headers:}
+\begin{minted}{java}
+if(PoPoW) {
+ 1.1.1. Send GetPoPoWProof(suffix = Max(MinimalSuffix ,BlocksToKeep)) for all connections
+ 1.1.2. On receive PoPoWProof apply it to History
+  /* 
+  History should be able to determine, 
+  whether this PoPoWProof is better, than it's current best header chain */
+} else {
+  updateHeadersChainToBestInNetwork()
+}
+\end{minted}
+\subsubsection{Download initial State to start process transactions:}
+\begin{minted}{java}
+if(ADState == true) {
+  Initialize state with state roothash from block header BlocksToKeep ago
+} else if(BlocksToKeep < 0 || BlocksToKeep > History.headersHeight) {
+  Initialize state with genesis State
+} else {
+/*
+We need to download full state BlocksToKeep back in history
+TODO what if we can download state only "BlocksToKeep - N" 
+or "BlocksToKeep + N" blocks back? 
+*/
+  2.1. Request historical UTXOSnapshotManifest for at least BlocksToKeep back
+  2.2. On receiving UTXOSnapshotManifest: 
+    UTXOSnapshotManifest.chunks.foreach ( chunk => request chunk from sender()
+/*Or from random fullnode*/
+  2.3. On receiving UTXOSnapshotChunk
+  State.applyChunk(UTXOSnapshotChunk) match {
+     case Success(Some(newMinimalState)) => GOTO 3
+     case Success(None) => stay at 2.3
+     /*we need more chunks to construct state. TODO periodicaly request missed chunks*/
+     case Failure(e) => ??? 
+     /*UTXOSnapshotChunk or constcucted state roothash is invalid*/  
+  }
+}
+\end{minted}
+\subsubsection{Update State to best headers height:}
+\begin{minted}{java}
+ if(State.bestHeader == History.bestHeader) {
+    //Do nothing, State is already updated
+  } else if(VerifyTransactions == false) {
+/*Just update State rootshash to best header in history*/
+    State.setBestHeader(History.bestHeader)
+  } else {
+/*we have headers chain better then full block */        
+    3.1. 
+      assert(history contains header chain from State.bestHeader to History.bestHeaders)
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+        sendToRandomFullNode(GetBlockTransactionsForHeader(header))
+        if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
+      }
+    3.2. On receiving modifiers ADProofs or BlockTransactions
+      /*TODO History should return non-empty ProgressInfo
+      only if it contains both ADProofs and BlockTransactions,
+      or it contains BlockTransactions and ADState==false*/
+      if(History.apply(modifier) == Success(ProgressInfo)) {
+        if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
+          if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
+          if(BlocksToKeep>=0) 
+          /*remove BlockTransactions and ADProofs older than BlocksToKeep from history*/
+        } else {
+      /*Drop Header from history, 
+      because it's transaction sequence is not valid*/
+          History.drop(modifier.headerId)
+        }
+      } else {
+        blacklistPeer
+      }
+      GOTO 3
+    }
+\end{minted}
+\subsubsection{GOTO regular mode.}
+\begin{minted}{java}
+
+\end{minted}
+\subsection{Regular}
+Two infinite loops in different threads with the following functions inside:
+\begin{enumerate}
+\item UpdateHeadersChainToBestInNetwork()
+\item Download and update full blocks when needed
+\end{enumerate}
+\begin{minted}{java}
+ if(State.bestHeader == History.bestHeader) {
+    //Do nothing, State is already updated
+  } else if(VerifyTransactions == false) {
+    //Just update State rootshash to best header in history
+    State.setBestHeader(History.bestHeader)
+  } else {
+    //we have headers chain better then full block         
+    3.1. Request transaction ids from all headers without transactions
+      assert(history contains header chain from State.bestHeader to History.bestHeaders)
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+        sendToRandomFullNode(GetTransactionIdsForHeader(header))
+        if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
+      }
+    3.2. On receiving TransactionIdsForHeader:
+      Mempool.apply(TransactionIdsForHeader)
+      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+        request transaction with txId
+      }
+    3.3. On receiving a transaction:
+      if(Mempool.apply(transaction).isSuccess) {
+         Broadcast INV for this transaction
+         Mempool.getHeadersWithAllTransactions { BlockTransactions =>
+            GOTO 3.4 //now we have BlockTransactions
+         }
+      }
+    3.4. (same as 3.2. from bootstrap)
+  }
+\end{minted}
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}
 \addcontentsline{toc}{section}{References}

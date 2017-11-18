@@ -288,23 +288,23 @@ trait ErgoHistory
       modifier match {
         case fb: ErgoFullBlock =>
           val bestHeader = bestHeaderOpt.get
-          val h = fb.header
           val ids = Seq(fb.id, fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id)
             .map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte)))
 
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(1.toByte))))
 
-          val modHeight = heightOf(h.id).get
-          if (h == bestHeader) {
+          val bestFull = bestFullBlockOpt.get
+          if (fb == bestFull) {
             //applied best header to history
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             //in fork processing
-            val chainBack = headerChainBack(height - modHeight, bestHeader, head => h.parentId sameElements h.id)
+            val modHeight = heightOf(fb.header.id).get
+            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
-            val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt)).filter(_.parentId sameElements h.id)
-            assert(toApply.nonEmpty, "Should never be here, State is inconsistent")
+            val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
+            assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>

@@ -42,7 +42,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected def viewHolderEvents: Receive = onSemanticallySuccessfulModifier orElse onDownloadRequest orElse
-    super.viewHolderEvents
+    onCheckModifiersToDownload orElse super.viewHolderEvents
 
   def onDownloadRequest: Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>

@@ -36,7 +36,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-      mod.toSeq.foreach(m => broadcastModifierInv(m))
+//      mod.toSeq.foreach(m => broadcastModifierInv(m))
     case SemanticallySuccessfulModifier(mod) =>
       broadcastModifierInv(mod)
   }

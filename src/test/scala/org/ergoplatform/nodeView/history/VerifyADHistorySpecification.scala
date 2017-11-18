@@ -185,25 +185,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
-  property("continuationIds() should contain ids of adProofs and blockTransactions") {
-    var history = genHistory()
-
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-
-    history = applyChain(history, chain)
-    forAll(smallInt) { forkLength: Int =>
-      whenever(forkLength > 1) {
-        val theirBestFull = Some(chain(chain.size - forkLength).header.id)
-        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id))
-        val continuation = history.continuationIds(si, forkLength).get
-
-        continuation.count(_._1 == ADProofs.modifierTypeId) shouldBe forkLength - 1
-        continuation.count(_._1 == BlockTransactions.modifierTypeId) shouldBe forkLength - 1
-
-      }
-    }
-  }
-
   property("prune old blocks test") {
     val blocksToPrune = 20
 

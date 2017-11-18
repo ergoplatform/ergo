@@ -25,4 +25,12 @@ the reference implementation code should be considered as a specification.
 
 ### Docker Quick Start
 
-    sudo docker run --rm -p 9001:9001 -p 9051:9051 -v ergo:/tmp/ergo/node1/data andyceo/ergo
+Ergo has officially supported Docker package. To run Ergo as a console application with logs in console:
+
+    sudo docker run --rm -p 9001:9001 -p 9051:9051 -v ergo:/tmp/ergo/node1/data ergoplatform/ergo
+
+To run Ergo as a service:
+
+    sudo docker run -d -p 9001:9001 -p 9051:9051 -v ergo:/tmp/ergo/node1/data ergoplatform/ergo
+
+In the examples above we use named Docker volume `ergo`, that will store node data.

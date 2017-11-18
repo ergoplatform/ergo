@@ -57,6 +57,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
   }
+  minerRef ! StartMining
 
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef, minerRef, ergoSettings)

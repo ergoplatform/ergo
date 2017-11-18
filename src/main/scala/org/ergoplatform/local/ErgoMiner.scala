@@ -27,9 +27,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
 
-  override def preStart(): Unit = {
-  }
-
   override def receive: Receive = {
     case StartMining =>
       if (!isMining && ergoSettings.nodeSettings.mining) {
@@ -42,6 +39,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
         val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
         if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
+
           val coinbase: AnyoneCanSpendTransaction = {
             val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
             AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))

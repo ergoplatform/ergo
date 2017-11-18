@@ -82,8 +82,10 @@ trait HeadersProcessor extends ScorexLogging {
     val dataToInsert = toInsert(header)
     historyStorage.insert(header.id, dataToInsert)
 
-    //todo: why the first check?
-    if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
+    if (bestHeaderIdOpt.isEmpty) {
+      log.info(s"Initialize header chain with header ${Algos.encode(header.id)}")
+      ProgressInfo(None, Seq(), Some(header), toDownload(header))
+    } else if (bestHeaderIdOpt.get sameElements header.id) {
       log.info(s"New best header ${Algos.encode(header.id)} with score ${scoreOf(header.id)}")
       ProgressInfo(None, Seq(), Some(header), toDownload(header))
     } else {

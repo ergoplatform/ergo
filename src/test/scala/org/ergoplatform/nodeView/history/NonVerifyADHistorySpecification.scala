@@ -47,7 +47,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id), None)
+    def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id))
 
     val common = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, common)
@@ -73,7 +73,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
-        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength - 1).id), None)
+        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength - 1).id))
         val continuation = history.continuationIds(si, forkLength).get
         continuation.length shouldBe forkLength
         continuation.last._2 shouldEqual chain.last.id

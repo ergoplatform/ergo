@@ -41,7 +41,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val si = history.syncInfo(answer)
     si.answer shouldBe answer
     si.lastHeaderIds.last shouldEqual chain.last.header.id
-    si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
   }
 
   property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
@@ -195,7 +194,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     forAll(smallInt) { forkLength: Int =>
       whenever(forkLength > 1) {
         val theirBestFull = Some(chain(chain.size - forkLength).header.id)
-        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
+        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id))
         val continuation = history.continuationIds(si, forkLength).get
 
         continuation.count(_._1 == ADProofs.modifierTypeId) shouldBe forkLength - 1

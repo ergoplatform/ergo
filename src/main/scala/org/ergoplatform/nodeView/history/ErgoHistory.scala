@@ -140,12 +140,8 @@ trait ErgoHistory
         val ids = info.lastHeaderIds
         ids.view.reverse.find(m => contains(m)) match {
           case Some(lastId) =>
-            val ourDiffOpt = heightOf(lastId).map(h => height - h)
-            if (ourDiffOpt.exists(ourDiff => ourDiff > (ids.length - ids.indexWhere(_ sameElements lastId)))) {
-              HistoryComparisonResult.Younger
-            } else {
-              HistoryComparisonResult.Older
-            }
+            //TODO We anyway have our fork to send. is it ok?
+            HistoryComparisonResult.Younger
           case None => HistoryComparisonResult.Nonsense
         }
       case None =>

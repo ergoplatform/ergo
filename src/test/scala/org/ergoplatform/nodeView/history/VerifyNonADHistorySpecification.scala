@@ -49,7 +49,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   }
 
   property("compare() for full chain") {
-    def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))
+    def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id))
 
     var history = genHistory()
 
@@ -68,10 +68,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
 
-    //Equals Header chain, different full chain
-    history.compare(getInfo(fork1).copy(fullBlockIdOpt = None)) shouldBe HistoryComparisonResult.Equal
-    val worstFullBlock = getInfo(fork1).copy(fullBlockIdOpt = Some(fork1(fork1.length - 2).header.id))
-    history.compare(worstFullBlock) shouldBe HistoryComparisonResult.Younger
   }
 
   property("Appended headers and transactions blocks to best chain in tx history") {

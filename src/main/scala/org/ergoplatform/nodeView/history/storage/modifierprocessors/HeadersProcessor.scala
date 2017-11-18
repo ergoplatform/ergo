@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{Header, HeaderChain, HistoryModifierSerializer, PoWScheme}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -70,9 +70,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @return height of modifier with such id if is in History
     */
   def heightOf(id: ModifierId): Option[Int] =
-  historyStorage.db
-    .get(headerHeightKey(id))
-    .map(b => Ints.fromByteArray(b.data))
+    historyStorage.db
+      .get(headerHeightKey(id))
+      .map(b => Ints.fromByteArray(b.data))
 
   /**
     * @param header - header to process
@@ -85,11 +85,20 @@ trait HeadersProcessor extends ScorexLogging {
     //todo: why the first check?
     if (bestHeaderIdOpt.isEmpty || (bestHeaderIdOpt.get sameElements header.id)) {
       log.info(s"New best header ${Algos.encode(header.id)} with score ${scoreOf(header.id)}")
-      //TODO Notify node view holder that it should download transactions ?
-      ProgressInfo(None, Seq(), Some(header), Seq())
+      ProgressInfo(None, Seq(), Some(header), toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} with score ${scoreOf(header.id)}")
-      ProgressInfo(None, Seq(), None, Seq())
+      ProgressInfo(None, Seq(), None, toDownload(header))
+    }
+  }
+
+  private def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+    (config.verifyTransactions, config.ADState) match {
+      case (true, true) =>
+        Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
+      case (true, false) =>
+        Seq((BlockTransactions.modifierTypeId, h.transactionsId))
+      case (false, _) => Seq()
     }
   }
 
@@ -167,9 +176,9 @@ trait HeadersProcessor extends ScorexLogging {
     * @return score of header with such id if is in History
     */
   protected def scoreOf(id: ModifierId): Option[BigInt] =
-  historyStorage.db
-    .get(headerScoreKey(id))
-    .map(b => BigInt(b.data))
+    historyStorage.db
+      .get(headerScoreKey(id))
+      .map(b => BigInt(b.data))
 
   /**
     * @param height - block height

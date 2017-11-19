@@ -49,7 +49,7 @@ trait HistorySpecification extends PropSpec
                       PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
-                      useLastEpochs: Int = 1): ErgoHistory = {
+                      useLastEpochs: Int = 10): ErgoHistory = {
 
     val blockInterval = 1.minute
     val minimalSuffix = 2

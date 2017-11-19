@@ -25,11 +25,12 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Should calculate difficulty correctly") {
-    val epochLength = 2
+    val epochLength = 3
+    val useLastEpochs = 3
 
     var history = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0,
-      epochLength = epochLength)
-    val blocksBeforeRecalculate = epochLength * history.difficultyCalculator.useLastEpochs + 1
+      epochLength = epochLength, useLastEpochs = useLastEpochs)
+    val blocksBeforeRecalculate = epochLength * useLastEpochs + 1
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
     history.requiredDifficulty should not be Constants.InitialDifficulty

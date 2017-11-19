@@ -38,8 +38,8 @@ trait HeadersProcessor extends ScorexLogging {
   //Maximum time in future block header main contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  protected lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.epochLength)
+  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
+    chainSettings.useLastEpochs ,chainSettings.epochLength)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
 

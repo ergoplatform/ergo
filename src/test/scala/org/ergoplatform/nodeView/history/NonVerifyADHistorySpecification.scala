@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
+import scorex.crypto.encode.Base58
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
@@ -25,10 +26,10 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   property("Should calculate difficulty correctly") {
     val epochLength = 2
-    val blocksBeforeRecalculate = epochLength * LinearDifficultyControl.UseLastEpochs + 1
 
     var history = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0,
       epochLength = epochLength)
+    val blocksBeforeRecalculate = epochLength * history.difficultyCalculator.useLastEpochs + 1
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
     history.requiredDifficulty should not be Constants.InitialDifficulty
@@ -71,7 +72,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, chain)
     val ci = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), BlocksInChain).get
     ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
-    chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
+    chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Base58.encode(c._2))
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {

@@ -70,6 +70,15 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     var history = genHistory()
     val chain = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, chain)
+
+    val smallerLimit = 2
+    val ci0 = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), smallerLimit).get
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Base58.encode(c._2))
+
+    val biggerLimit = BlocksInChain + 2
+    val ci1 = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), biggerLimit).get
+    chain.headers.map(_.encodedId) should contain theSameElementsAs ci1.map(c => Base58.encode(c._2))
+
     val ci = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), BlocksInChain).get
     ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
     chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Base58.encode(c._2))

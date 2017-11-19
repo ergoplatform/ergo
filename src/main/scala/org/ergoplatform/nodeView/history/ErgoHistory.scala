@@ -159,7 +159,7 @@ trait ErgoHistory
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(height, size) - 1
+      val heightFrom = Math.min(height, size - 1)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)

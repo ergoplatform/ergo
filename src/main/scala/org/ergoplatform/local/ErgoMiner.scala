@@ -66,10 +66,8 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
             val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
             val timestamp = NetworkTime.time()
-            val votes = 0.toByte +: Ints.toByteArray(ergoSettings.scorexSettings.network.
-              nodeNonce.map(x => (x % Int.MaxValue).toInt).getOrElse(0))
-            CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
-              adProof, txsNoConflict, timestamp, votes)
+            val votes = ergoSettings.scorexSettings.network.nodeName.map(_.toByte).takeRight(5).toArray
+            CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest, adProof, txsNoConflict, timestamp, votes)
 
           }.recoverWith { case thr =>
             log.warn("Error when trying to generate a block: ", thr)

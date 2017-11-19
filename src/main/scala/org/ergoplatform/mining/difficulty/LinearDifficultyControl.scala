@@ -7,25 +7,26 @@ import scorex.core.utils.ScorexLogging
 import scala.concurrent.duration.FiniteDuration
 
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
+                              val useLastEpochs: Int,
                               epochLength: Int) extends ScorexLogging {
 
   import LinearDifficultyControl._
 
-  assert(epochLength > 0 && epochLength < Int.MaxValue / UseLastEpochs)
+  assert(epochLength > 0 && epochLength < Int.MaxValue / useLastEpochs)
 
   /**
     * @return heights of previous headers required for block recalculation
     */
   def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
-    if ((height - 1) % epochLength == 0 && height > epochLength * UseLastEpochs) {
-      (0 to UseLastEpochs).map(i => (height - 1) - i * epochLength).reverse
+    if ((height - 1) % epochLength == 0 && height > epochLength * useLastEpochs) {
+      (0 to useLastEpochs).map(i => (height - 1) - i * epochLength).reverse
     } else {
       Seq(height - 1)
     }
   }
 
   def calculate(previousHeaders: Seq[(Int, Header)]): Difficulty = {
-    if (previousHeaders.size == UseLastEpochs + 1) {
+    if (previousHeaders.size == useLastEpochs + 1) {
       val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
         val start = d.head
         val end = d.last
@@ -61,7 +62,6 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 }
 
 object LinearDifficultyControl {
-  val UseLastEpochs: Int = 4
   val PrecisionConstant: Int = 1000000000
 
 }

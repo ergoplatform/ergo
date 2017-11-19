@@ -20,8 +20,8 @@ class LinearDifficultyControlSpecification extends PropSpec
   val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
   val Epoch = 123
 
-  val control = new LinearDifficultyControl(1.minute, Epoch)
-  val UseLastEpochs = LinearDifficultyControl.UseLastEpochs
+  val UseLastEpochs = 2
+  val control = new LinearDifficultyControl(1.minute, Epoch, UseLastEpochs)
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
     val height = Epoch * (UseLastEpochs + 1) + 1

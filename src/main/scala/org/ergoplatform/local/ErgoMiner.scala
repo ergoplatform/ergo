@@ -1,9 +1,9 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
-import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -17,7 +17,7 @@ import scorex.core.utils.{NetworkTime, ScorexLogging}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Random, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
@@ -67,7 +67,9 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
             val timestamp = NetworkTime.time()
             val votes = ergoSettings.scorexSettings.network.nodeName.map(_.toByte).takeRight(5).toArray
-            CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest, adProof, txsNoConflict, timestamp, votes)
+            val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
+              .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
+            CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, votes)
 
           }.recoverWith { case thr =>
             log.warn("Error when trying to generate a block: ", thr)
@@ -109,8 +111,9 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
             viewHolder ! LocallyGeneratedModifier(adp)
           }
 
-          //TODO should be small for real system
-          context.system.scheduler.scheduleOnce(1.second)(self ! ProduceCandidate)
+          //TODO should be 0 for real system
+          val miningDelay = Random.nextInt(1000)
+          context.system.scheduler.scheduleOnce(miningDelay.millis)(self ! ProduceCandidate)
         case None =>
           self ! ProduceCandidate
       }

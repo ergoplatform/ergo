@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
@@ -58,11 +58,20 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Older
+    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
     history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
+  }
+
+  property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
+    var history = genHistory()
+    val chain = genHeaderChain(BlocksInChain, history)
+    history = applyHeaderChain(history, chain)
+    val ci = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), BlocksInChain).get
+    ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
+    chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {

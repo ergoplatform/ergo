@@ -111,7 +111,8 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
             viewHolder ! LocallyGeneratedModifier(adp)
           }
 
-          context.system.scheduler.scheduleOnce(100.millis)(self ! ProduceCandidate)
+          //TODO should be small for real system
+          context.system.scheduler.scheduleOnce(1.second)(self ! ProduceCandidate)
         case None =>
           self ! ProduceCandidate
       }

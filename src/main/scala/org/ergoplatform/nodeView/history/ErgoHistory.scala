@@ -153,7 +153,7 @@ trait ErgoHistory
   /**
     * @param info other's node sync info
     * @param size max return size
-    * @return Ids of modifiers, that node with info should download and apply to synchronize
+    * @return Ids of headerss, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     if (isEmpty) {
@@ -163,8 +163,7 @@ trait ErgoHistory
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
-      headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId), (Header.modifierTypeId, h.id),
-        (BlockTransactions.modifierTypeId, h.transactionsId)))
+      headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds
       val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get

@@ -81,15 +81,16 @@ trait HeadersProcessor extends ScorexLogging {
   protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(header)
     historyStorage.insert(header.id, dataToInsert)
+    val score = scoreOf(header.id).getOrElse(-1)
 
     if (bestHeaderIdOpt.isEmpty) {
-      log.info(s"Initialize header chain with header ${Algos.encode(header.id)}")
+      log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
       ProgressInfo(None, Seq(), Some(header), toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
-      log.info(s"New best header ${Algos.encode(header.id)} with score ${scoreOf(header.id)}")
+      log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
       ProgressInfo(None, Seq(), Some(header), toDownload(header))
     } else {
-      log.info(s"New orphaned header ${header.encodedId} with score ${scoreOf(header.id)}")
+      log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
       ProgressInfo(None, Seq(), None, toDownload(header))
     }
   }

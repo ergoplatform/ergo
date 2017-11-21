@@ -13,6 +13,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   import LinearDifficultyControl._
 
   assert(epochLength > 0 && epochLength < Int.MaxValue / useLastEpochs)
+  assert(useLastEpochs > 1, "Will only work correct when useLastEpochs > 1")
 
   /**
     * @return heights of previous headers required for block recalculation
@@ -31,8 +32,8 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
         val start = d.head
         val end = d.last
         require(end._1 - start._1 == epochLength, s"Incorrect heights interval for $d")
-        val diff = end._2.requiredDifficulty * desiredInterval.toMillis / (end._2.timestamp - start._2.timestamp)
-        ((end._1 + start._1) / 2, diff)
+        val diff = end._2.requiredDifficulty * desiredInterval.toMillis * epochLength / (end._2.timestamp - start._2.timestamp)
+        (end._1, diff)
       }
       val newDiff = interpolate(data)
       log.info(s"New difficulty $newDiff calculated from data $data")

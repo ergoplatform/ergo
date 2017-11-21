@@ -35,9 +35,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
         val diff = end._2.requiredDifficulty * desiredInterval.toMillis * epochLength / (end._2.timestamp - start._2.timestamp)
         (end._1, diff)
       }
-      val newDiff = interpolate(data)
-      log.info(s"New difficulty $newDiff calculated from data $data")
-      newDiff
+      interpolate(data)
     } else previousHeaders.maxBy(_._1)._2.requiredDifficulty
   }
 

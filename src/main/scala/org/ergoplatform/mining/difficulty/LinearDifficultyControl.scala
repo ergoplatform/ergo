@@ -32,7 +32,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
         val end = d.last
         require(end._1 - start._1 == epochLength, s"Incorrect heights interval for $d")
         val diff = end._2.requiredDifficulty * desiredInterval.toMillis / (end._2.timestamp - start._2.timestamp)
-        (end._1 + start._1 / 2, diff)
+        ((end._1 + start._1) / 2, diff)
       }
       val newDiff = interpolate(data)
       log.info(s"New difficulty $newDiff calculated from data $data")

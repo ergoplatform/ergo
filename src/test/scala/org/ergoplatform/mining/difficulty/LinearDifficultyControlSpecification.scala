@@ -102,7 +102,7 @@ class LinearDifficultyControlSpecification extends PropSpec
 
   property("calculate() for different epoch lengths and constant hashrate") {
     forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
-      whenever(useLastEpochs > 1) {
+      whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1)
           .map(i => (i, header.copy(timestamp = header.timestamp + i * interval)))
@@ -117,9 +117,10 @@ class LinearDifficultyControlSpecification extends PropSpec
     forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
-        val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map{i =>
+        val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map { i =>
           (i, header.copy(timestamp = header.timestamp + i * interval,
-            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step)))}
+            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step)))
+        }
 
         previousHeaders.length shouldBe useLastEpochs + 1
         val expectedDifficulty = previousHeaders.last._2.requiredDifficulty + step

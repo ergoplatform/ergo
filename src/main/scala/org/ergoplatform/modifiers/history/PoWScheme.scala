@@ -177,7 +177,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
     @tailrec
     def generateHeader(nonce: Long): Option[Header] = {
-      log.info("Trying nonce: " + nonce)
+      log.debug("Trying nonce: " + nonce)
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
@@ -190,7 +190,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         case headerWithFoundSolution: Some[Header] =>
           headerWithFoundSolution
         case None =>
-          if (nonce == finishingNonce) None else generateHeader(nonce + 1)
+          if (nonce + 1 == finishingNonce) None else generateHeader(nonce + 1)
       }
     }
 

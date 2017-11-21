@@ -112,6 +112,22 @@ class LinearDifficultyControlSpecification extends PropSpec
     }
   }
 
+  property("calculate() for different epoch lengths and linear hashrate") {
+    val step = 1000
+    forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
+      whenever(useLastEpochs > 1) {
+        val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
+        val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map{i =>
+          (i, header.copy(timestamp = header.timestamp + i * interval,
+            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step)))}
+
+        previousHeaders.length shouldBe useLastEpochs + 1
+        val expectedDifficulty = previousHeaders.last._2.requiredDifficulty + step
+        val error = BigDecimal(control.calculate(previousHeaders) - expectedDifficulty) / BigDecimal(expectedDifficulty)
+        error should be < BigDecimal(1) / LinearDifficultyControl.PrecisionConstant
+      }
+    }
+  }
 
   def equalsWithPrecision(i: BigInt, j: BigInt): Unit = {
     require((BigDecimal(i - j) / BigDecimal(j)).toDouble < precision, s"$i and $j are too different")

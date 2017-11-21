@@ -29,6 +29,16 @@ class LinearDifficultyControlSpecification extends PropSpec
       Seq(height - 4 * Epoch - 1, height - 3 * Epoch - 1, height - 2 * Epoch - 1, height - Epoch - 1, height - 1)
   }
 
+  property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
+    forAll(Gen.choose(2, 1000)) { useLastEpochs1 =>
+      val useLastEpochs = 3
+      val control = new LinearDifficultyControl(1.minute, useLastEpochs, 1)
+      val height = useLastEpochs + 1
+      control.previousHeadersRequiredForRecalculation(height) shouldEqual (0 until height)
+    }
+  }
+
+
   property("previousHeadersRequiredForRecalculation() should return previous block if there should not be difficulty recalculation") {
     control.previousHeadersRequiredForRecalculation(Epoch / 2 + 1) shouldBe Seq(Epoch / 2)
     control.previousHeadersRequiredForRecalculation(Epoch + 1) shouldBe Seq(Epoch)

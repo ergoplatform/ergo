@@ -2,6 +2,7 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
+import org.ergoplatform.settings.Constants
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.duration.FiniteDuration
@@ -35,7 +36,8 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
         val diff = end._2.requiredDifficulty * desiredInterval.toMillis * epochLength / (end._2.timestamp - start._2.timestamp)
         (end._1, diff)
       }
-      interpolate(data)
+      val diff = interpolate(data)
+      if (diff >= 1) diff else Constants.InitialDifficulty
     } else previousHeaders.maxBy(_._1)._2.requiredDifficulty
   }
 

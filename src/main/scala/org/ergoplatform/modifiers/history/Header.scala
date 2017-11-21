@@ -76,6 +76,7 @@ case class Header(version: Version,
     "equihashSolutions" -> Algos.encode(equihashSolutions).asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
+    "difficulty" -> RequiredDifficulty.decodeCompactBits(nBits).asJson,
     "votes" -> Algos.encode(votes).asJson
   ).asJson
 

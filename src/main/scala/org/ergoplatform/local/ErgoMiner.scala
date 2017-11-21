@@ -23,7 +23,7 @@ import scala.util.{Failure, Random, Try}
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
   private var isMining = false
-  private var startingNonce = Long.MinValue
+  private var startingNonce = 0
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
 
@@ -84,7 +84,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
     case candidateOpt: Option[CandidateBlock] =>
       candidateOpt match {
         case Some(candidateBlock) =>
-          startingNonce = Long.MinValue
           self ! MineBlock(candidateBlock)
         case None =>
           //Failed to create candidate, e.g. we're not trying to mine now
@@ -99,7 +98,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       val finish = start + 10
       startingNonce = finish
 
-      log.info(s"Trying nonces from $start till $finish")
+      log.info(s"Trying nonces $start-$finish with difficulty ${RequiredDifficulty.decodeCompactBits(candidate.nBits)}")
 
       powScheme.proveBlock(candidate, start, finish) match {
         case Some(newBlock) =>
@@ -111,6 +110,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
             viewHolder ! LocallyGeneratedModifier(adp)
           }
 
+          startingNonce = 0
           //TODO should be 0 for real system
           val miningDelay = Random.nextInt(1000)
           context.system.scheduler.scheduleOnce(miningDelay.millis)(self ! ProduceCandidate)

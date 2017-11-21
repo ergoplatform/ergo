@@ -67,7 +67,7 @@ class LinearDifficultyControlSpecification extends PropSpec
     }
   }
 
-  property("calculate() vectors") {
+  property("interpolate() vectors") {
     val diff = BigInt("675204474840679645414180963439886534428")
     control.interpolate(Seq((799167010, diff), (799167133, diff), (799167256, diff), (799167379, diff))) shouldBe diff
 
@@ -88,12 +88,15 @@ class LinearDifficultyControlSpecification extends PropSpec
   }
 
 
-  property("calculate() for linear hashrate growth") {
-    forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
-      val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff * i))
-      val newDiff = control.interpolate(previousDifficulties)
-      val expected = previousDifficulties.map(_._2).max + diff
-      equalsWithPrecision(expected, newDiff)
+  property("interpolate() for linear hashrate growth") {
+    forAll(epochGen, diffGen, smallPositiveInt, smallPositiveInt) { (startEpoch, diff, epoch, useLastEpochs) =>
+      whenever(useLastEpochs > 1) {
+        val control = new LinearDifficultyControl(1.minute, useLastEpochs, epoch)
+        val previousDifficulties = (startEpoch * epoch until (useLastEpochs + startEpoch) * epoch by epoch).map(i => (i, diff * i))
+        val newDiff = control.interpolate(previousDifficulties)
+        val expected = previousDifficulties.map(_._2).max + diff
+        equalsWithPrecision(expected, newDiff)
+      }
     }
   }
 

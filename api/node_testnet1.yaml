@@ -505,13 +505,12 @@ paths:
       tags:
         - blocks
       parameters:
-        blockId:
-          - in: path
-            name: blockId
-            required: true
-            description: ID of a wanted block
-            schema:
-              type: string
+        - in: path
+          name: blockId
+          required: true
+          description: ID of a wanted block
+          schema:
+            type: string
       responses:
         200:
           description: Block header object
@@ -532,13 +531,12 @@ paths:
       tags:
         - blocks
       parameters:
-        blockId:
-          - in: path
-            name: blockId
-            required: true
-            description: ID of a wanted block
-            schema:
-              type: string
+        - in: path
+          name: blockId
+          required: true
+          description: ID of a wanted block
+          schema:
+            type: string
       responses:
         200:
           description: Block transaction object
@@ -559,13 +557,12 @@ paths:
       tags:
         - blocks
       parameters:
-        blockId:
-          - in: path
-            name: blockId
-            required: true
-            description: ID of a wanted block
-            schema:
-              type: string
+        - in: path
+          name: blockId
+          required: true
+          description: ID of a wanted block
+          schema:
+            type: string
       responses:
         200:
           description: Block ADProofs object
@@ -627,7 +624,12 @@ paths:
       tags:
         - transactions
       parameters:
-        $ref: '#/components/parameters/path_TransactionId'
+        - in: path
+          name: transactionId
+          required: true
+          description: ID of a wanted transaction
+          schema:
+            $ref: '#/components/schemas/TransactionId'
       responses:
         200:
           description: Anyone can spend transactions object

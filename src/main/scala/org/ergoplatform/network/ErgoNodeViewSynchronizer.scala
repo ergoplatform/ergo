@@ -14,7 +14,6 @@ import scorex.core.network.NetworkController.SendToNetwork
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
-import scorex.core.utils.NetworkTime
 import scorex.core.{ModifierId, ModifierTypeId, NodeViewHolder}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,7 +28,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   syncInfoSpec, networkSettings) {
   override protected val deliveryTracker = new ErgoDeliveryTracker
 
-  private val toDownloadCheckInterval = 5.seconds
+  private val toDownloadCheckInterval = 3.seconds
 
   override def preStart(): Unit = {
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.DownloadNeeded))
@@ -58,7 +57,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected def viewHolderEvents: Receive = onSemanticallySuccessfulModifier orElse onDownloadRequest orElse
-    onCheckModifiersToDownload orElse super.viewHolderEvents
+    onCheckModifiersToDownload orElse onMissedModifiers orElse super.viewHolderEvents
 
   def onDownloadRequest: Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
@@ -67,9 +66,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      val currentTime = NetworkTime.time()
-      val outdatedIds = deliveryTracker.toDownload.filter(_._2._2 < currentTime - toDownloadCheckInterval.toMillis)
-      outdatedIds.foreach(i => requestDownload(i._2._1, ModifierId @@ i._1.array))
+      deliveryTracker.removeOutdatedToDownload()
+      deliveryTracker.downloadRetry().foreach(i => requestDownload(i._2.tp, i._1))
+
   }
 
 

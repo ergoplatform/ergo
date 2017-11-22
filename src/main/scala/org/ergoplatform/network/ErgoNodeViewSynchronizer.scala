@@ -51,7 +51,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-    //Do nothing, will other nodes will request this modifiers via ProgressInfo.toDownload
+    //Do nothing, other nodes will request required modifiers via ProgressInfo.toDownload
     case SemanticallySuccessfulModifier(mod) =>
       broadcastModifierInv(mod)
   }

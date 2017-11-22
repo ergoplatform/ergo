@@ -1,0 +1,744 @@
+openapi: "3.0.0"
+
+info:
+  version: "0.1"
+  title: Ergo Node API
+  description: API docs for Ergo Node. Models are shared between all Ergo products.
+  contact:
+    name: Ergo Platform Team
+    email: ergoplatform@protonmail.com
+    url: https://ergoplatform.org
+  license:
+    name: CC0 1.0 Universal
+    url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+
+servers:
+  # todo make it real
+  - url: https://nodes.ergoplatform.com/api/
+    description: Testnet1
+
+components:
+  schemas:
+    # Objects
+    AnyoneCanSpendTransactionInput:
+      type: object
+      required:
+        - id
+        - index
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        index:
+          description: _Index_ | Index of a output in transaction
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
+
+    AnyoneCanSpendTransactionOutput:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          description: _Amount_ | Amount of Ergo token
+          type: number
+          minimum: 0
+          example: 14.7
+
+    AnyoneCanSpendTransaction:
+      type: object
+      description: Transaction without any lockers and unlockers
+      required:
+        - id
+        - from
+        - to
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        from:
+          description: Many transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/AnyoneCanSpendTransactionInput'
+        to:
+          description: Many transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
+
+    TransactionId:
+      description: _TransactionId_ | Base16-encoded transaction id bytes
+      type: object
+      required:
+        - transactionId
+      properties:
+        transactionId:
+          type: string
+          # todo example
+          example: 123
+
+    FullBlock:
+      description: Block with header and transactions
+      type: object
+      required:
+        - header
+        - transactions
+        - ADProofs
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        transactions:
+          $ref: '#/components/schemas/BlockTransactions'
+        ADProofs:
+          $ref: '#/components/schemas/BlockADProofs'
+
+    BlockHeader:
+      type: object
+      required:
+        - id
+        - timestamp
+        - reference
+        - version
+        - interlinks
+        - ADProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - votes
+        - nonce
+        - equihashSolutions
+        - height
+      properties:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          type: integer
+          # int32
+          format: int64
+          example: 1501505945003
+        reference:
+          $ref: '#/components/schemas/ModifierId'
+        version:
+           type: integer
+           # int32
+           format: int64
+           example: 2
+        interlinks:
+          # todo better description
+          description: Interlinks
+          type: array
+          items:
+            $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
+        ADProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        nBits:
+          # todo actually it is unsigned int?
+          type: integer
+          format: int64
+        votes:
+          $ref: '#/components/schemas/Votes'
+        nonce:
+          type: integer
+          # int32
+          format: int64
+          example: 324573
+        equihashSolutions:
+          description: Base58-encoded equihash solutions
+          type: string
+          # todo example
+          example: 123
+        height:
+          $ref: '#/components/schemas/BlockHeight'
+
+    BlockTransactions:
+      type: object
+      required:
+        - headerId
+        - transactions
+      properties:
+        headerId:
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          description: Anyone can spend transaction objects
+          type: array
+          items:
+            $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+
+    ModifierId:
+      description: _ModifierId_ | Base58-encoded modifier id
+      type: object
+      required:
+        - modifierId
+      properties:
+        modifierId:
+          type: string
+          # todo example
+          example: 123
+
+    BlockADProofs:
+      type: object
+      required:
+        - headerId
+        - proofBytes
+        - digest
+      properties:
+        headerId:
+          $ref: '#/components/schemas/ModifierId'
+        proofBytes:
+          $ref: '#/components/schemas/SerializedAdProof'
+        digest:
+          $ref: '#/components/schemas/Digest32'
+
+    Digest32:
+      description: _Digest32_ | Base58-encoded 32 byte digest
+      type: object
+      required:
+        - digest
+      properties:
+        digest:
+          type: string
+          # todo example
+          example: 123
+
+    ADDigest:
+      description: _ADDigest_ | Base58-encoded 33 byte digest - digest with extra byte with tree height
+      type: object
+      required:
+        - ADDigest
+      properties:
+        ADDigest:
+          type: string
+          # todo example
+          example: 123
+
+    SerializedAdProof:
+      description: _SerializedAdProof_ | Base58-encoded ad proofs
+      type: object
+      required:
+        - ADProof
+      properties:
+        ADProof:
+          type: string
+          # todo example
+          example: 123
+
+    BlockHeight:
+      description: _BlockHeight_ | Index of a block in blockchain
+      type: object
+      required:
+        - height
+      properties:
+        height:
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
+
+    Votes:
+      description: _Votes_ | Base58-encoded votes array
+      type: object
+      required:
+        - votes
+      properties:
+        votes:
+          type: string
+          # todo example?
+          example: 667
+
+    BlockSignature:
+      description: _BlockSignature_ | Base58-encoded block signature
+      type: object
+      required:
+        - signature
+      properties:
+        signature:
+          type: string
+          example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
+
+    TransactionStatus:
+      description: _TransactionStatus_ | Status of a transaction
+      type: object
+      required:
+        - status
+        - confirmations
+      properties:
+        status:
+          type: string
+          enum:
+            - "confirmed"
+            - "unconfirmed"
+        confirmations:
+          type: integer
+          # int32
+          format: int64
+          minimum: -1
+          example: 327
+
+    TransactionsCount:
+      description: _TransactionsCount_ | Number of transactions in the unconfirmed transactions pool
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          maximum: 10000
+          example: 327
+
+    PeersCount:
+      description: _PeersCount_ | Number of connected peers
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 327
+
+    Peer:
+      type: object
+      required:
+        - address
+        - name
+        - nonce
+      properties:
+        address:
+          type: string
+          example: 127.0.0.1:5673
+        name:
+          type: string
+          example: mynode
+        nonce:
+          type: integer
+          # int32
+          format: int64
+          example: 123456
+
+    NodeInfo:
+      type: object
+      required:
+        - name
+        - version
+        - height
+        - blockId
+        - previousBlockId
+        - peerCount
+        - unconfirmedCount
+      properties:
+        name:
+          type: string
+          example: my-node-1
+        version:
+          type: string
+          example: 0.0.1
+        height:
+          $ref: '#/components/schemas/BlockHeight'
+        blockId:
+          $ref: '#/components/schemas/ModifierId'
+        previousBlockId:
+          $ref: '#/components/schemas/ModifierId'
+        peerCount:
+          $ref: '#/components/schemas/PeersCount'
+        unconfirmedCount:
+          $ref: '#/components/schemas/TransactionsCount'
+
+    # Errors
+    ApiError:
+      type: string
+      example:
+        # Transaction signature doesn't match transaction data
+        - invalid.transaction.signature
+        # Parameter `offset` is out of range
+        - invalid.offset.out.of.range
+        # Provided transaction ID is invalid
+        - invalid.transaction.id
+        # Provided timestamp is invalid
+        - invalid.transaction.timestamp
+        # Provided block signature is invalid
+        - invalid.block.signature
+        # Provided height is invalid
+        - invalid.block.height
+        # Provided amount in invalid
+        - invalid.transaction.amount
+        # Provided box nonce in invalid
+        - invalid.box.nonce
+
+  requestBodies:
+    AnyoneCanSpendTransaction:
+      $ref: "#/components/schemas/AnyoneCanSpendTransaction"
+
+    Peer:
+      $ref: "#/components/schemas/Peer"
+
+paths:
+  /blocks:
+    get:
+      summary: Get the list of block ids
+      operationId: getBlockIds
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: heightFrom
+          required: false
+          description: Height in the blockchain to start getting blocks at
+          schema:
+            type: integer
+            # int32
+            format: int64
+        - in: query
+          name: heightTo
+          required: false
+          description: Height in the blockchain to end getting blocks at
+          schema:
+            type: integer
+            # int32
+            format: int64
+        - in: query
+          name: limit
+          required: false
+          description: The number of items in list to return
+          schema:
+            type: integer
+            # int32
+            format: int64
+            minimum: 10
+            maximum: 100
+            default: 50
+        - in: query
+          name: offset
+          required: false
+          description: The number of items in list to skip
+          schema:
+            type: integer
+            # int32
+            format: int64
+            default: 0
+      responses:
+        200:
+          # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
+          description: List of block ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModifierId'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/at/{blockHeight}:
+    get:
+      summary: Get the block ids at a given height
+      operationId: getFullBlockAt
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height of a wanted block
+          schema:
+            type: integer
+            # int32
+            format: int64
+      responses:
+        200:
+          description: Array of block ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModifierId'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{blockId}:
+    get:
+      summary: Get the full block info by a given signature
+      operationId: getFullBlockById
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: blockId
+          required: true
+          description: ID of a wanted block
+          schema:
+            type: string
+      responses:
+        200:
+          description: Block object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullBlock'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{blockId}/header:
+    get:
+      summary: Get the block header info by a given signature
+      operationId: getBlockHeaderById
+      tags:
+        - blocks
+      parameters:
+        blockId:
+          - in: path
+            name: blockId
+            required: true
+            description: ID of a wanted block
+            schema:
+              type: string
+      responses:
+        200:
+          description: Block header object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockHeader'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{blockId}/transactions:
+    get:
+      summary: Get the block transactions info by a given signature
+      operationId: getBlockTransactionsById
+      tags:
+        - blocks
+      parameters:
+        blockId:
+          - in: path
+            name: blockId
+            required: true
+            description: ID of a wanted block
+            schema:
+              type: string
+      responses:
+        200:
+          description: Block transaction object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockTransactions'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{blockId}/ADProofs:
+    get:
+      summary: Get the block transactions info by a given signature
+      operationId: getBlockADProofsById
+      tags:
+        - blocks
+      parameters:
+        blockId:
+          - in: path
+            name: blockId
+            required: true
+            description: ID of a wanted block
+            schema:
+              type: string
+      responses:
+        200:
+          description: Block ADProofs object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockADProofs'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /info:
+    get:
+      summary: Get the information about the Node
+      operationId: getNodeInfo
+      tags:
+        - info
+      responses:
+        200:
+          description: Node info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfo'
+
+  /transactions:
+    post:
+      summary: Send an anyone can spend transaction
+      operationId: sendTransaction
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestBodies/AnyoneCanSpendTransaction'
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                description: ID of the new transaction
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/TransactionId'
+        400:
+          content:
+            application/json:
+              $ref: '#/components/schemas/ApiError'
+
+  /transactions/{transactionId}:
+    get:
+      summary: Get the details of a given transaction, its status and the height of block it belongs to
+      operationId: getTransactionById
+      tags:
+        - transactions
+      parameters:
+        $ref: '#/components/parameters/path_TransactionId'
+      responses:
+        200:
+          description: Anyone can spend transactions object
+          content:
+            application/json:
+              $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed:
+    get:
+      summary: Get current of the unconfirmed transactions pool
+      operationId: getUnconfirmedTransactions
+      tags:
+        - transactions
+      responses:
+        200:
+          description: Array with anyone can spend transactions objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+        400:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/size:
+    get:
+      summary: Get current size of the unconfirmed transactions pool
+      operationId: getUnconfirmedTransactionsSize
+      tags:
+        - transactions
+      responses:
+        200:
+          description: Object with UTX size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsCount'
+
+  /peers/all:
+    get:
+      summary: Get all known peers
+      operationId: getAllPeers
+      tags:
+        - peers
+      responses:
+        200:
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+
+  /peers/connected:
+    get:
+      summary: Get current connected peers
+      operationId: getConnectedPeers
+      tags:
+        - peers
+      responses:
+        200:
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+
+  /peers/connect:
+    post:
+      summary: Get current size of the unconfirmed transactions pool
+      operationId: connectToPeer
+      tags:
+        - peers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Peer"
+      responses:
+        200:
+          description: Peer was connected
+        400:
+          content:
+            application/json:
+              $ref: '#/components/schemas/ApiError'
+
+  /peers/blacklisted:
+    get:
+      summary: Get blacklisted peers
+      operationId: getBlacklistedPeers
+      tags:
+        - peers
+      responses:
+        200:
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                    $ref: '#/components/schemas/Peer'

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
@@ -14,6 +14,14 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
+
+  property("missedModifiersForFullChain") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep, Seq())
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    history.missedModifiersForFullChain().isEmpty shouldBe true
+  }
 
   property("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>

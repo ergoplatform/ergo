@@ -13,6 +13,16 @@ class VerifyADHistorySpecification extends HistorySpecification {
     else inHistory
   }
 
+  property("missedModifiersForFullChain") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep, Seq())
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    val missed = history.missedModifiersForFullChain()
+    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
+    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
+  }
+
   property("bootstrap from headers and last full blocks") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header

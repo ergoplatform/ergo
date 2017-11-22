@@ -8,7 +8,7 @@ import scala.collection.mutable
 
 class ErgoDeliveryTracker extends DeliveryTracker {
 
-  val toDownload = mutable.Map[MapKey, (ModifierTypeId, Long)]()
+  val toDownload:mutable.Map[MapKey, (ModifierTypeId, Long)] = mutable.Map[MapKey, (ModifierTypeId, Long)]()
 
   def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
     toDownload.put(key(modifierId), (modifierTypeId, NetworkTime.time()))
@@ -20,11 +20,9 @@ class ErgoDeliveryTracker extends DeliveryTracker {
       val eo = expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3)
       for (e <- eo) expecting -= e
       delivered(key(mid)) = cp
-    }
-    else {
+    } else {
       deliveredSpam(key(mid)) = cp
     }
-//    super.receive(mtid, mid, cp)
   }
 
 

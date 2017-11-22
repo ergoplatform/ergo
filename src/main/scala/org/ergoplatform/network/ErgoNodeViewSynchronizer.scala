@@ -4,8 +4,11 @@ import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
-import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, MissedModifiers}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkController.SendToNetwork
 import scorex.core.network.message.Message
@@ -32,11 +35,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.DownloadNeeded))
     super.preStart()
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
+    initializeToDownload()
+  }
+
+  protected def initializeToDownload(): Unit = {
+    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, MissedModifiers] { v =>
+      MissedModifiers(v.history.missedModifiersForFullChain())
+    }
+  }
+
+  protected def onMissedModifiers(): Receive = {
+    case MissedModifiers(ids) =>
+      ids.foreach(id => requestDownload(id._1, id._2))
+
   }
 
   protected val onSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-    //      mod.toSeq.foreach(m => broadcastModifierInv(m))
+    //Do nothing, will other nodes will request this modifiers via ProgressInfo.toDownload
     case SemanticallySuccessfulModifier(mod) =>
       broadcastModifierInv(mod)
   }
@@ -68,5 +84,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
+
+  case class MissedModifiers(m: Seq[(ModifierTypeId, ModifierId)])
 
 }

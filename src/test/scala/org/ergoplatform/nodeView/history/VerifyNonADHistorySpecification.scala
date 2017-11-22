@@ -2,10 +2,8 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{HeaderChain, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.ErgoState
-import scorex.core.consensus.History.HistoryComparisonResult
 
 import scala.util.Random
 
@@ -13,6 +11,16 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
+
+  property("missedModifiersForFullChain") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep, Seq())
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    val missed = history.missedModifiersForFullChain()
+    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
+    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2).isEmpty shouldBe true
+  }
 
   property("append header as genesis") {
     val history = genHistory()

@@ -236,6 +236,18 @@ trait ErgoHistory
     }
   }
 
+  def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
+    if (config.verifyTransactions && config.ADState) {
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
+    } else if (config.verifyTransactions) {
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId)))
+    } else {
+      Seq()
+    }
+  }
+
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1))
     assert(contains(header2))

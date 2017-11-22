@@ -85,13 +85,13 @@ components:
       required:
         - header
         - transactions
-        - ADProofs
+        - adProofs
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
         transactions:
           $ref: '#/components/schemas/BlockTransactions'
-        ADProofs:
+        adProofs:
           $ref: '#/components/schemas/BlockADProofs'
 
     BlockHeader:
@@ -102,7 +102,7 @@ components:
         - reference
         - version
         - interlinks
-        - ADProofsRoot
+        - adProofsRoot
         - stateRoot
         - transactionsRoot
         - nBits
@@ -131,7 +131,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
-        ADProofsRoot:
+        adProofsRoot:
           $ref: '#/components/schemas/Digest32'
         stateRoot:
           $ref: '#/components/schemas/ADDigest'
@@ -210,9 +210,9 @@ components:
       description: _ADDigest_ | Base58-encoded 33 byte digest - digest with extra byte with tree height
       type: object
       required:
-        - ADDigest
+        - digest
       properties:
-        ADDigest:
+        digest:
           type: string
           # todo example
           example: 123
@@ -221,9 +221,9 @@ components:
       description: _SerializedAdProof_ | Base58-encoded ad proofs
       type: object
       required:
-        - ADProof
+        - proof
       properties:
-        ADProof:
+        proof:
           type: string
           # todo example
           example: 123
@@ -357,7 +357,7 @@ components:
     # Errors
     ApiError:
       type: string
-      example:
+      enum:
         # Transaction signature doesn't match transaction data
         - invalid.transaction.signature
         # Parameter `offset` is out of range

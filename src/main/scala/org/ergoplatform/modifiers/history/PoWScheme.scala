@@ -11,13 +11,13 @@ import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
-import scala.util.{Random, Try}
 import scala.util.control.NonFatal
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
+import scala.util.{Random, Try}
 
 
 case class CandidateBlock(parentOpt: Option[Header],
@@ -77,8 +77,7 @@ trait PoWScheme {
   }
 
   def proveBlock(candidateBlock: CandidateBlock,
-                 startingNonce: Long,
-                 finishingNonce: Long): Option[ErgoFullBlock] = {
+                 nonce: Long): Option[ErgoFullBlock] = {
 
     val parentOpt: Option[Header] = candidateBlock.parentOpt
     val nBits: Long = candidateBlock.nBits
@@ -91,8 +90,7 @@ trait PoWScheme {
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, votes, startingNonce, finishingNonce).map { h =>
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, nonce, nonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
 
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))

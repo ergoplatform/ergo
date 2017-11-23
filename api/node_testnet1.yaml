@@ -356,24 +356,29 @@ components:
 
     # Errors
     ApiError:
-      type: string
-      enum:
-        # Transaction signature doesn't match transaction data
-        - invalid.transaction.signature
-        # Parameter `offset` is out of range
-        - invalid.offset.out.of.range
-        # Provided transaction ID is invalid
-        - invalid.transaction.id
-        # Provided timestamp is invalid
-        - invalid.transaction.timestamp
-        # Provided block signature is invalid
-        - invalid.block.signature
-        # Provided height is invalid
-        - invalid.block.height
-        # Provided amount in invalid
-        - invalid.transaction.amount
-        # Provided box nonce in invalid
-        - invalid.box.nonce
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          enum:
+            # Transaction signature doesn't match transaction data
+            - invalid.transaction.signature
+            # Parameter `offset` is out of range
+            - invalid.offset.out.of.range
+            # Provided transaction ID is invalid
+            - invalid.transaction.id
+            # Provided timestamp is invalid
+            - invalid.transaction.timestamp
+            # Provided block signature is invalid
+            - invalid.block.signature
+            # Provided height is invalid
+            - invalid.block.height
+            # Provided amount in invalid
+            - invalid.transaction.amount
+            # Provided box nonce in invalid
+            - invalid.box.nonce
 
   requestBodies:
     AnyoneCanSpendTransaction:

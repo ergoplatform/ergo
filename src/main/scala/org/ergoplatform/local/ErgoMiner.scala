@@ -4,7 +4,8 @@ import akka.actor.{Actor, ActorRef}
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -16,13 +17,15 @@ import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
 
   private var isMining = false
-  private var startingNonce = 0
+  private var nonce = 0
   private var candidateOpt: Option[CandidateBlock] = None
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
@@ -34,8 +37,13 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   override def receive: Receive = {
     case SemanticallySuccessfulModifier(mod) =>
-      if (isMining && mod.modifierTypeId == Header.modifierTypeId) {
-        produceCandidate()
+      if (isMining) {
+        mod match {
+          case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
+            produceCandidate()
+
+          case _ =>
+        }
       }
 
     case StartMining =>
@@ -43,26 +51,37 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         log.info("Starting Mining")
         isMining = true
         produceCandidate()
+        self ! MineBlock
       }
 
     case cOpt: Option[CandidateBlock] =>
-      cOpt.foreach(c => candidateOpt = Some(c))
-      self ! MineBlock(0)
-
-    case MineBlock(nonce) =>
-      candidateOpt.foreach { candidate =>
-        powScheme.proveBlock(candidate, nonce) match {
-          case Some(newBlock) =>
-            log.info("New block found: " + newBlock)
-
-            viewHolder ! LocallyGeneratedModifier(newBlock.header)
-            viewHolder ! LocallyGeneratedModifier(newBlock.blockTransactions)
-            newBlock.aDProofs.foreach { adp =>
-              viewHolder ! LocallyGeneratedModifier(adp)
-            }
-          case None =>
-            self ! MineBlock(nonce + 1)
+      cOpt.foreach { c =>
+        log.debug(s"New candidate $c")
+        if (c.parentOpt.map(_.height).getOrElse(0) > candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)) {
+          nonce = 0
         }
+        candidateOpt = Some(c)
+      }
+
+    case MineBlock =>
+      nonce = nonce + 1
+      candidateOpt match {
+        case Some(candidate) =>
+          powScheme.proveBlock(candidate, nonce) match {
+            case Some(newBlock) =>
+              log.info("New block found: " + newBlock)
+
+              viewHolder ! LocallyGeneratedModifier(newBlock.header)
+              viewHolder ! LocallyGeneratedModifier(newBlock.blockTransactions)
+              newBlock.aDProofs.foreach { adp =>
+                viewHolder ! LocallyGeneratedModifier(adp)
+              }
+              context.system.scheduler.scheduleOnce(100.millis)(self ! MineBlock)
+            case None =>
+              self ! MineBlock
+          }
+        case None =>
+          context.system.scheduler.scheduleOnce(1.second)(self ! MineBlock)
       }
   }
 
@@ -119,6 +138,6 @@ object ErgoMiner {
 
   case object StartMining
 
-  case class MineBlock(nonce: Long)
+  case object MineBlock
 
 }

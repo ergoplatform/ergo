@@ -18,9 +18,7 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
 
   override protected def onSuccessfulTransaction(tx: AnyoneCanSpendTransaction): Unit = {}
 
-  override protected def onNoBetterNeighbour(): Unit = {
-    miner ! StartMining
-  }
+  override protected def onNoBetterNeighbour(): Unit = {}
 
   override protected def onBetterNeighbourAppeared(): Unit = {}
 

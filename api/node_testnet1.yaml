@@ -154,7 +154,11 @@ components:
           # todo example
           example: 123
         height:
-          $ref: '#/components/schemas/BlockHeight'
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
 
     BlockTransactions:
       type: object
@@ -227,19 +231,6 @@ components:
           type: string
           # todo example
           example: 123
-
-    BlockHeight:
-      description: _BlockHeight_ | Index of a block in blockchain
-      type: object
-      required:
-        - height
-      properties:
-        height:
-          type: integer
-          # int32
-          format: int64
-          minimum: 0
-          example: 667
 
     Votes:
       description: _Votes_ | Base58-encoded votes array
@@ -344,7 +335,11 @@ components:
           type: string
           example: 0.0.1
         height:
-          $ref: '#/components/schemas/BlockHeight'
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
         blockId:
           $ref: '#/components/schemas/ModifierId'
         previousBlockId:
@@ -353,39 +348,6 @@ components:
           $ref: '#/components/schemas/PeersCount'
         unconfirmedCount:
           $ref: '#/components/schemas/TransactionsCount'
-
-    # Errors
-    ApiError:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          type: string
-          enum:
-            # Transaction signature doesn't match transaction data
-            - invalid.transaction.signature
-            # Parameter `offset` is out of range
-            - invalid.offset.out.of.range
-            # Provided transaction ID is invalid
-            - invalid.transaction.id
-            # Provided timestamp is invalid
-            - invalid.transaction.timestamp
-            # Provided block signature is invalid
-            - invalid.block.signature
-            # Provided height is invalid
-            - invalid.block.height
-            # Provided amount in invalid
-            - invalid.transaction.amount
-            # Provided box nonce in invalid
-            - invalid.box.nonce
-
-  requestBodies:
-    AnyoneCanSpendTransaction:
-      $ref: "#/components/schemas/AnyoneCanSpendTransaction"
-
-    Peer:
-      $ref: "#/components/schemas/Peer"
 
 paths:
   /blocks:
@@ -441,11 +403,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ModifierId'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Parameter `offset` is out of range
+                  - invalid.offset.out.of.range
 
   /blocks/at/{blockHeight}:
     get:
@@ -471,11 +436,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ModifierId'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided height is invalid
+                  - invalid.block.height
 
   /blocks/{blockId}:
     get:
@@ -484,6 +452,7 @@ paths:
       tags:
         - blocks
       parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
           name: blockId
           required: true
@@ -497,11 +466,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FullBlock'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided block id is invalid
+                  - invalid.block.id
 
   /blocks/{blockId}/header:
     get:
@@ -510,6 +482,7 @@ paths:
       tags:
         - blocks
       parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
           name: blockId
           required: true
@@ -523,11 +496,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockHeader'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided block id is invalid
+                  - invalid.block.id
 
   /blocks/{blockId}/transactions:
     get:
@@ -536,6 +512,7 @@ paths:
       tags:
         - blocks
       parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
           name: blockId
           required: true
@@ -549,11 +526,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockTransactions'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided block id is invalid
+                  - invalid.block.id
 
   /blocks/{blockId}/ADProofs:
     get:
@@ -562,6 +542,7 @@ paths:
       tags:
         - blocks
       parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
           name: blockId
           required: true
@@ -575,11 +556,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockADProofs'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided block id is invalid
+                  - invalid.block.id
 
   /info:
     get:
@@ -606,7 +590,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/requestBodies/AnyoneCanSpendTransaction'
+              $ref: '#/components/schemas/AnyoneCanSpendTransaction'
       responses:
         200:
           content:
@@ -617,10 +601,19 @@ paths:
                   application/json:
                     schema:
                       $ref: '#/components/schemas/TransactionId'
-        400:
+        default:
           content:
             application/json:
-              $ref: '#/components/schemas/ApiError'
+              type: string
+              enum:
+                # Transaction signature doesn't match transaction data
+                - invalid.transaction.signature
+                # Provided timestamp is invalid
+                - invalid.transaction.timestamp
+                # Provided amount in invalid
+                - invalid.transaction.amount
+                # Provided box nonce in invalid
+                - invalid.box.nonce
 
   /transactions/{transactionId}:
     get:
@@ -641,11 +634,14 @@ paths:
           content:
             application/json:
               $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-        400:
+        default:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiError'
+                type: string
+                enum:
+                  # Provided transaction ID is invalid
+                  - invalid.transaction.id
 
   /transactions/unconfirmed:
     get:
@@ -662,11 +658,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-        400:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed/size:
     get:
@@ -729,10 +720,15 @@ paths:
       responses:
         200:
           description: Peer was connected
-        400:
+        default:
+          description: unexpected error
           content:
             application/json:
-              $ref: '#/components/schemas/ApiError'
+              schema:
+                type: string
+                enum:
+                  - invalid.peer.address
+                  - invalid.peer.nonce
 
   /peers/blacklisted:
     get:

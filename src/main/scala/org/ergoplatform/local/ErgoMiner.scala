@@ -29,6 +29,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
   private var candidateOpt: Option[CandidateBlock] = None
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
+  private val startTime = NetworkTime.time()
 
   override def preStart(): Unit = {
     viewHolder ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
@@ -41,6 +42,13 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         mod match {
           case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
             produceCandidate()
+
+          case _ =>
+        }
+      } else if (ergoSettings.nodeSettings.mining) {
+        mod match {
+          case f: ErgoFullBlock if f.header.timestamp >= startTime =>
+            self ! StartMining
 
           case _ =>
         }

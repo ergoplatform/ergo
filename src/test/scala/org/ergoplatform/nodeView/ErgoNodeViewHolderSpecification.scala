@@ -365,12 +365,16 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(block1.aDProofs.get)
     }
 
-    //TODO touch of roothash here fixes the problem
-    //    a ! rootHash(c)
-    //    expectMsg(Algos.encode(block1.header.stateRoot))
-
     system.stop(a)
+
     val a2 = actorRef(c, nodeViewDir)
+    //retry modifiers, as they may not be applied yet
+    a2 ! LocallyGeneratedModifier(block1.header)
+    if (c.verifyTransactions) {
+      a2 ! LocallyGeneratedModifier(block1.blockTransactions)
+      a2 ! LocallyGeneratedModifier(block1.aDProofs.get)
+    }
+
     a2 ! rootHash(c)
     expectMsg(Algos.encode(block1.header.stateRoot))
   }

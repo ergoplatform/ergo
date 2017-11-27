@@ -302,8 +302,6 @@ components:
       type: object
       required:
         - address
-        - name
-        - nonce
       properties:
         address:
           type: string
@@ -312,6 +310,11 @@ components:
           type: string
           example: mynode
         nonce:
+          type: integer
+          # int32
+          format: int64
+          example: 123456
+        lastSeen:
           type: integer
           # int32
           format: int64
@@ -436,6 +439,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ModifierId'
+        404:
+          description: Blocks at this height doesn't exist
         default:
           content:
             application/json:
@@ -466,6 +471,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FullBlock'
+        404:
+          description: Block with this id doesn't exist
         default:
           content:
             application/json:
@@ -496,6 +503,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockHeader'
+        404:
+          description: Block with this id doesn't exist
         default:
           content:
             application/json:
@@ -526,6 +535,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockTransactions'
+        404:
+          description: Block with this id doesn't exist
         default:
           content:
             application/json:
@@ -556,6 +567,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockADProofs'
+        404:
+          description: Block with this id doesn't exist
         default:
           content:
             application/json:
@@ -634,6 +647,8 @@ paths:
           content:
             application/json:
               $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+        404:
+          description: Transaction with this id doesn't exist
         default:
           content:
             application/json:
@@ -716,10 +731,11 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Peer"
+              type: string
+              example: 127.0.0.1:5673
       responses:
         200:
-          description: Peer was connected
+          description: Attempt to connect to the peer
         default:
           description: unexpected error
           content:
@@ -728,7 +744,6 @@ paths:
                 type: string
                 enum:
                   - invalid.peer.address
-                  - invalid.peer.nonce
 
   /peers/blacklisted:
     get:

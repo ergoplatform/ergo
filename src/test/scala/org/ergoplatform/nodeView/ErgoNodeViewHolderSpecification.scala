@@ -341,7 +341,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   }
 
-  property("NVH reopen") {
+  property("NodeViewHolder start from inconsistent state") {
     val c = NodeViewHolderConfig(false, true, false)
     val nodeViewDir = Some(createTempDir)
     val a = actorRef(c, nodeViewDir)
@@ -360,10 +360,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
     a ! LocallyGeneratedModifier(block1.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(block1.blockTransactions)
-      a ! LocallyGeneratedModifier(block1.aDProofs.get)
-    }
+    a ! LocallyGeneratedModifier(block1.aDProofs.get)
+    a ! GetDataFromCurrentView[H, S, W, P, Boolean](v => v.history.append(block1.blockTransactions).isSuccess)
+    expectMsg(true)
 
     system.stop(a)
 

@@ -75,5 +75,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 object ErgoApp extends App {
   new ErgoApp(args).run()
 
-  def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
+  def forceStopApplication(code: Int = 1): Unit =
+    new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
 }

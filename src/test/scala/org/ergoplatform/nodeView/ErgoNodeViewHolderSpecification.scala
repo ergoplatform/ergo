@@ -364,6 +364,12 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! GetDataFromCurrentView[H, S, W, P, Boolean](v => v.history.append(block1.blockTransactions).isSuccess)
     expectMsg(true)
 
+    a ! bestFullBlock(c)
+    expectMsg(Some(block1))
+
+    a ! rootHash(c)
+    expectMsg(Algos.encode(genesis.header.stateRoot))
+
     system.stop(a)
 
     val a2 = actorRef(c, nodeViewDir)

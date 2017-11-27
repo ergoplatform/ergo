@@ -1,13 +1,14 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Chars, Ints}
+import io.circe.Json
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
@@ -18,6 +19,7 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
 import scala.util.{Random, Try}
+import io.circe.syntax._
 
 
 case class CandidateBlock(parentOpt: Option[Header],
@@ -26,7 +28,18 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[AnyoneCanSpendTransaction],
                           timestamp: Timestamp,
-                          votes: Array[Byte])
+                          votes: Array[Byte]) {
+  lazy val json: Json = Map(
+    "parentId" -> parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
+    "nBits" -> nBits.asJson,
+    "stateRoot" -> Algos.encode(stateRoot).asJson,
+    "adProofBytes" -> Algos.encode(adProofBytes).asJson,
+    "timestamp" -> timestamp.asJson,
+    "transactions" -> transactions.map(_.json).asJson,
+    "votes" -> Algos.encode(votes).asJson
+  ).asJson
+
+}
 
 trait PoWScheme {
 

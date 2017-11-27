@@ -1,6 +1,8 @@
 package org.ergoplatform.local
 
+import io.circe.syntax._
 import akka.actor.{Actor, ActorRef}
+import io.circe.Json
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -11,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
@@ -30,6 +32,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
   private val startTime = NetworkTime.time()
+  private val votes = ergoSettings.scorexSettings.network.nodeName.map(_.toByte).takeRight(5).toArray
 
   override def preStart(): Unit = {
     viewHolder ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
@@ -91,6 +94,9 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
         case None =>
           context.system.scheduler.scheduleOnce(1.second)(self ! MineBlock)
       }
+
+    case MiningStatusRequest =>
+      sender ! MiningStatusResponse(isMining, votes, candidateOpt)
   }
 
   private def produceCandidate(): Unit = {
@@ -124,7 +130,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
           val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
           val timestamp = NetworkTime.time()
-          val votes = ergoSettings.scorexSettings.network.nodeName.map(_.toByte).takeRight(5).toArray
           val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
             .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
           CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, votes)
@@ -147,5 +152,15 @@ object ErgoMiner {
   case object StartMining
 
   case object MineBlock
+
+  case object MiningStatusRequest
+
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
+    lazy val json: Json = Map(
+      "isMining" -> isMining.asJson,
+      "votes" -> Algos.encode(votes).asJson,
+      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+    ).asJson
+  }
 
 }

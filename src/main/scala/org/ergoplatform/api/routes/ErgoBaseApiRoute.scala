@@ -1,8 +1,8 @@
 package org.ergoplatform.api.routes
 
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.Route
-import scorex.core.api.http.{ApiError, ApiRoute, ScorexApiResponse}
+import scorex.core.api.http.{ApiRoute, ScorexApiResponse}
 
 import scala.concurrent.Future
 
@@ -20,7 +20,7 @@ trait ErgoBaseApiRoute extends ApiRoute {
   protected def toJsonOptionalResponse(fn: Future[Option[ScorexApiResponse]]): Route = {
     onSuccess(fn) {
       case Some(v) => toJsonResponse(v)
-      case None => toJsonResponse(ApiError(404, "not-found"))
+      case None => withCors(complete(StatusCodes.NotFound))
     }
   }
 

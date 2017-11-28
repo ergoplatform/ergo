@@ -14,7 +14,7 @@ import scorex.core.settings.RESTApiSettings
 @Api(value = "/mining", produces = "application/json")
 case class MiningApiRoute(miner: ActorRef, override val settings: RESTApiSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
-  override val route = pathPrefix("debug") {
+  override val route = pathPrefix("mining") {
     concat(status)
   }
 

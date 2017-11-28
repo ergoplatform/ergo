@@ -136,6 +136,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
+            assert(fb.header.stateRoot sameElements persistentProver.digest)
             new UtxoState(VersionTag @@ fb.id, store)
           }
         case Failure(e) =>
@@ -146,7 +147,6 @@ class UtxoState(override val version: VersionTag, val store: Store)
 
     case h: Header =>
       Success(new UtxoState(VersionTag @@ h.id, this.store))
-
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")

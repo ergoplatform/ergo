@@ -2,10 +2,8 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{HeaderChain, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.ErgoState
-import scorex.core.consensus.History.HistoryComparisonResult
 
 import scala.util.Random
 
@@ -13,6 +11,16 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
+
+  property("missedModifiersForFullChain") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep, Seq())
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    val missed = history.missedModifiersForFullChain()
+    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
+    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2).isEmpty shouldBe true
+  }
 
   property("append header as genesis") {
     val history = genHistory()
@@ -46,32 +54,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     val actualHeader = history.append(header).get._1.bestHeaderOpt.get
     actualHeader shouldBe header
-  }
-
-  property("compare() for full chain") {
-    def getInfo(c: Seq[ErgoFullBlock]) = ErgoSyncInfo(answer = true, c.map(_.header.id), Some(c.last.header.id))
-
-    var history = genHistory()
-
-    history = applyChain(history, genChain(BlocksInChain, bestFullOptToSeq(history)))
-
-    val fork1 = genChain(BlocksInChain, bestFullOptToSeq(history))
-    val fork2 = genChain(BlocksInChain + 1, bestFullOptToSeq(history))
-
-    history = applyChain(history, fork1.tail)
-    history.bestHeaderOpt.get shouldBe fork1.last.header
-
-    //Compare different headers chain
-    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Older
-    history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
-
-    //Equals Header chain, different full chain
-    history.compare(getInfo(fork1).copy(fullBlockIdOpt = None)) shouldBe HistoryComparisonResult.Equal
-    val worstFullBlock = getInfo(fork1).copy(fullBlockIdOpt = Some(fork1(fork1.length - 2).header.id))
-    history.compare(worstFullBlock) shouldBe HistoryComparisonResult.Younger
   }
 
   property("Appended headers and transactions blocks to best chain in tx history") {

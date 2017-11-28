@@ -13,6 +13,16 @@ class VerifyADHistorySpecification extends HistorySpecification {
     else inHistory
   }
 
+  property("missedModifiersForFullChain") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep, Seq())
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    val missed = history.missedModifiersForFullChain()
+    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
+    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
+  }
+
   property("bootstrap from headers and last full blocks") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
@@ -41,7 +51,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val si = history.syncInfo(answer)
     si.answer shouldBe answer
     si.lastHeaderIds.last shouldEqual chain.last.header.id
-    si.fullBlockIdOpt.get shouldEqual history.bestFullBlockIdOpt.get
   }
 
   property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
@@ -183,25 +192,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
       val (repHistory, _) = history.reportSemanticValidity(fullBlock.blockTransactions, false, parentHeader.id)
       repHistory.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       repHistory.bestHeaderOpt.get shouldBe parentHeader
-    }
-  }
-
-  property("continuationIds() should contain ids of adProofs and blockTransactions") {
-    var history = genHistory()
-
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-
-    history = applyChain(history, chain)
-    forAll(smallInt) { forkLength: Int =>
-      whenever(forkLength > 1) {
-        val theirBestFull = Some(chain(chain.size - forkLength).header.id)
-        val si = ErgoSyncInfo(answer = true, chain.map(_.header.id), theirBestFull)
-        val continuation = history.continuationIds(si, forkLength).get
-
-        continuation.count(_._1 == ADProofs.modifierTypeId) shouldBe forkLength - 1
-        continuation.count(_._1 == BlockTransactions.modifierTypeId) shouldBe forkLength - 1
-
-      }
     }
   }
 

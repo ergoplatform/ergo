@@ -48,14 +48,15 @@ trait HistorySpecification extends PropSpec
                       ADState: Boolean,
                       PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
-                      epochLength: Int = 100000000): ErgoHistory = {
+                      epochLength: Int = 100000000,
+                      useLastEpochs: Int = 10): ErgoHistory = {
 
     val blockInterval = 1.minute
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, false, false)
     val scorexSettings: ScorexSettings = null
-    val chainSettings = ChainSettings(blockInterval, epochLength, DefaultFakePowScheme)
+    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, nodeSettings, scorexSettings)

@@ -10,6 +10,8 @@ case class HeaderChain(headers: Seq[Header]) {
 
   def head: Header = headers.head
 
+  def headOption: Option[Header] = headers.headOption
+
   def last: Header = headers.last
 
   def tail: HeaderChain = HeaderChain(headers.tail)

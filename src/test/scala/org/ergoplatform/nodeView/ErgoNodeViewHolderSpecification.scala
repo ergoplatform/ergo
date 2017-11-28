@@ -64,8 +64,8 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
-  def actorRef(c: NodeViewHolderConfig): ActorRef = {
-    val dir: File = createTempDir
+  def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
+    val dir: File = dirOpt.getOrElse(createTempDir)
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
     val settings = defaultSettings.copy(
       nodeSettings = defaultSettings.nodeSettings.copy(
@@ -340,6 +340,50 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Algos.encode(chain2block2.header.stateRoot))
 
   }
+
+  property("NodeViewHolder start from inconsistent state") {
+    val c = NodeViewHolderConfig(false, true, false)
+    val nodeViewDir = Some(createTempDir)
+    val a = actorRef(c, nodeViewDir)
+
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    a ! LocallyGeneratedModifier(genesis.header)
+    if (c.verifyTransactions) {
+      a ! LocallyGeneratedModifier(genesis.blockTransactions)
+      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    }
+
+    val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    a ! LocallyGeneratedModifier(block1.header)
+    a ! LocallyGeneratedModifier(block1.aDProofs.get)
+    a ! GetDataFromCurrentView[H, S, W, P, Boolean](v => v.history.append(block1.blockTransactions).isSuccess)
+    expectMsg(true)
+
+    a ! bestFullBlock(c)
+    expectMsg(Some(block1))
+
+    a ! rootHash(c)
+    expectMsg(Algos.encode(genesis.header.stateRoot))
+
+    system.stop(a)
+
+    val a2 = actorRef(c, nodeViewDir)
+    //retry modifiers, as they may not be applied yet
+    a2 ! LocallyGeneratedModifier(block1.header)
+    if (c.verifyTransactions) {
+      a2 ! LocallyGeneratedModifier(block1.blockTransactions)
+      a2 ! LocallyGeneratedModifier(block1.aDProofs.get)
+    }
+
+    a2 ! rootHash(c)
+    expectMsg(Algos.encode(block1.header.stateRoot))
+  }
+
 
   val t8 = new TestCase("switching for a better chain", switch)
 

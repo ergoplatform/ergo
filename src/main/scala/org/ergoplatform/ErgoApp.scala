@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.{DebugApiRoute, HistoryApiRoute, StateApiRoute}
+import org.ergoplatform.api.routes.{DebugApiRoute, HistoryApiRoute, MiningApiRoute, StateApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
@@ -16,6 +16,7 @@ import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import org.ergoplatform.Version.VersionString
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
@@ -36,11 +37,14 @@ class ErgoApp(args: Seq[String]) extends Application {
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
 
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
+
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
     HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
+    MiningApiRoute(minerRef, settings.restApi),
     DebugApiRoute(settings.restApi))
 
   override val apiTypes: Set[Class[_]] = Set(
@@ -48,10 +52,9 @@ class ErgoApp(args: Seq[String]) extends Application {
     classOf[PeersApiRoute],
     classOf[HistoryApiRoute],
     classOf[StateApiRoute],
+    classOf[MiningApiRoute],
     classOf[DebugApiRoute]
   )
-
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -62,8 +65,8 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
-    (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
+    Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
+      settings.network)))
 
   //only a miner is generating tx load
   //    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
@@ -74,5 +77,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 object ErgoApp extends App {
   new ErgoApp(args).run()
 
-  def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
+  def forceStopApplication(code: Int = 1): Unit =
+    new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
 }

@@ -130,17 +130,7 @@ trait ErgoHistory
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
-        //Header chain is equals, compare full blocks
-        (info.fullBlockIdOpt, bestFullBlockIdOpt) match {
-          case (Some(theirBestFull), Some(ourBestFull)) if !(theirBestFull sameElements ourBestFull) =>
-            if (scoreOf(theirBestFull).exists(theirScore => scoreOf(ourBestFull).exists(_ > theirScore))) {
-              HistoryComparisonResult.Younger
-            } else {
-              HistoryComparisonResult.Older
-            }
-          case _ =>
-            HistoryComparisonResult.Equal
-        }
+        HistoryComparisonResult.Equal
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
         HistoryComparisonResult.Older
       case Some(_) if info.lastHeaderIds.isEmpty =>
@@ -150,12 +140,8 @@ trait ErgoHistory
         val ids = info.lastHeaderIds
         ids.view.reverse.find(m => contains(m)) match {
           case Some(lastId) =>
-            val ourDiffOpt = heightOf(lastId).map(h => height - h)
-            if (ourDiffOpt.exists(ourDiff => ourDiff > (ids.length - ids.indexWhere(_ sameElements lastId)))) {
-              HistoryComparisonResult.Younger
-            } else {
-              HistoryComparisonResult.Older
-            }
+            //TODO We anyway have our fork to send. is it ok?
+            HistoryComparisonResult.Younger
           case None => HistoryComparisonResult.Nonsense
         }
       case None =>
@@ -167,18 +153,18 @@ trait ErgoHistory
   /**
     * @param info other's node sync info
     * @param size max return size
-    * @return Ids of modifiers, that node with info should download and apply to synchronize
+    * @return Ids of headerss, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(height, size)
+      val heightFrom = Math.min(height, size - 1)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
-      headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId), (Header.modifierTypeId, h.id),
-        (BlockTransactions.modifierTypeId, h.transactionsId)))
+      assert(headers.headers.exists(_.height == 0), "Should always contain genesis header")
+      headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds
       val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
@@ -188,17 +174,7 @@ trait ErgoHistory
       val startHeader = typedModifierById[Header](startId).get
       val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, _ => false)
         .headers.map(h => Header.modifierTypeId -> h.id)
-      val fullBlockContinuation: ModifierIds = info.fullBlockIdOpt.flatMap(heightOf) match {
-        case Some(bestFullBlockHeight) =>
-          val heightFrom = Math.min(height, bestFullBlockHeight + size)
-          val startId = headerIdsAtHeight(heightFrom).head
-          val startHeader = typedModifierById[Header](startId).get
-          val headers = headerChainBack(heightFrom - bestFullBlockHeight, startHeader, _ => false)
-          headers.headers.flatMap(h => Seq((ADProofs.modifierTypeId, h.ADProofsId), (Header.modifierTypeId, h.id),
-            (BlockTransactions.modifierTypeId, h.transactionsId)))
-        case _ => Seq()
-      }
-      headerIds ++ fullBlockContinuation
+      headerIds
     }
   }.toOption
 
@@ -225,11 +201,9 @@ trait ErgoHistory
     * @return Node ErgoSyncInfo
     */
   override def syncInfo(answer: Boolean): ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfo(answer, Seq(), None)
+    ErgoSyncInfo(answer, Seq())
   } else {
-    ErgoSyncInfo(answer,
-      lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id),
-      bestFullBlockIdOpt)
+    ErgoSyncInfo(answer, lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
   }
 
   /**
@@ -259,6 +233,18 @@ trait ErgoHistory
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
       ErgoFullBlock(header, txs, aDProofs)
+    }
+  }
+
+  def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
+    if (config.verifyTransactions && config.ADState) {
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
+    } else if (config.verifyTransactions) {
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId)))
+    } else {
+      Seq()
     }
   }
 
@@ -310,21 +296,23 @@ trait ErgoHistory
       modifier match {
         case fb: ErgoFullBlock =>
           val bestHeader = bestHeaderOpt.get
-          val h = fb.header
           val ids = Seq(fb.id, fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id)
             .map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte)))
 
           historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(1.toByte))))
 
-          val modHeight = heightOf(h.id).get
-          if (h == bestHeader) {
+          val bestFull = bestFullBlockOpt.get
+          if (fb == bestFull) {
             //applied best header to history
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             //in fork processing
-            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements h.id)
-            val toApply = getFullBlock(chainBack.head)
+            val modHeight = heightOf(fb.header.id).get
+            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
+            //block in the best chain that link to this header
+            val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
+            assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>

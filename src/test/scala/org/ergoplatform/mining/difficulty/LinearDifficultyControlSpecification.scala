@@ -20,14 +20,24 @@ class LinearDifficultyControlSpecification extends PropSpec
   val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
   val Epoch = 123
 
-  val control = new LinearDifficultyControl(1.minute, Epoch)
-  val UseLastEpochs = LinearDifficultyControl.UseLastEpochs
+  val UseLastEpochs = 4
+  val control = new LinearDifficultyControl(1.minute, UseLastEpochs, Epoch)
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
     val height = Epoch * (UseLastEpochs + 1) + 1
     control.previousHeadersRequiredForRecalculation(height) shouldEqual
       Seq(height - 4 * Epoch - 1, height - 3 * Epoch - 1, height - 2 * Epoch - 1, height - Epoch - 1, height - 1)
   }
+
+  property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
+    forAll(Gen.choose(2, 1000)) { useLastEpochs1 =>
+      val useLastEpochs = 3
+      val control = new LinearDifficultyControl(1.minute, useLastEpochs, 1)
+      val height = useLastEpochs + 1
+      control.previousHeadersRequiredForRecalculation(height) shouldEqual (0 until height)
+    }
+  }
+
 
   property("previousHeadersRequiredForRecalculation() should return previous block if there should not be difficulty recalculation") {
     control.previousHeadersRequiredForRecalculation(Epoch / 2 + 1) shouldBe Seq(Epoch / 2)
@@ -57,7 +67,7 @@ class LinearDifficultyControlSpecification extends PropSpec
     }
   }
 
-  property("calculate() vectors") {
+  property("interpolate() vectors") {
     val diff = BigInt("675204474840679645414180963439886534428")
     control.interpolate(Seq((799167010, diff), (799167133, diff), (799167256, diff), (799167379, diff))) shouldBe diff
 
@@ -69,7 +79,7 @@ class LinearDifficultyControlSpecification extends PropSpec
 
   }
 
-  property("calculate() for constant hashrate") {
+  property("interpolate() for constant hashrate") {
     forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
       val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff))
       val newDiff = control.interpolate(previousDifficulties)
@@ -78,12 +88,45 @@ class LinearDifficultyControlSpecification extends PropSpec
   }
 
 
-  property("calculate() for linear hashrate growth") {
-    forAll(epochGen, diffGen) { (startEpoch: Int, diff: BigInt) =>
-      val previousDifficulties = (startEpoch * Epoch until (UseLastEpochs + startEpoch) * Epoch by Epoch).map(i => (i, diff * i))
-      val newDiff = control.interpolate(previousDifficulties)
-      val expected = previousDifficulties.map(_._2).max + diff
-      equalsWithPrecision(expected, newDiff)
+  property("interpolate() for linear hashrate growth") {
+    forAll(epochGen, diffGen, smallPositiveInt, smallPositiveInt) { (startEpoch, diff, epoch, useLastEpochs) =>
+      whenever(useLastEpochs > 1) {
+        val control = new LinearDifficultyControl(1.minute, useLastEpochs, epoch)
+        val previousDifficulties = (startEpoch * epoch until (useLastEpochs + startEpoch) * epoch by epoch).map(i => (i, diff * i))
+        val newDiff = control.interpolate(previousDifficulties)
+        val expected = previousDifficulties.map(_._2).max + diff
+        equalsWithPrecision(expected, newDiff)
+      }
+    }
+  }
+
+  property("calculate() for different epoch lengths and constant hashrate") {
+    forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
+      whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
+        val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
+        val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1)
+          .map(i => (i, header.copy(timestamp = header.timestamp + i * interval)))
+        previousHeaders.length shouldBe useLastEpochs + 1
+        control.calculate(previousHeaders) shouldBe header.requiredDifficulty
+      }
+    }
+  }
+
+  property("calculate() for different epoch lengths and linear hashrate") {
+    val step = 1000
+    forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
+      whenever(useLastEpochs > 1) {
+        val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
+        val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map { i =>
+          (i, header.copy(timestamp = header.timestamp + i * interval,
+            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step)))
+        }
+
+        previousHeaders.length shouldBe useLastEpochs + 1
+        val expectedDifficulty = previousHeaders.last._2.requiredDifficulty + step
+        val error = BigDecimal(control.calculate(previousHeaders) - expectedDifficulty) / BigDecimal(expectedDifficulty)
+        error should be < BigDecimal(1) / LinearDifficultyControl.PrecisionConstant
+      }
     }
   }
 

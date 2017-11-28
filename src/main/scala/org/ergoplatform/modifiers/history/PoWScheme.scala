@@ -1,23 +1,25 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Chars, Ints}
+import io.circe.Json
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
-import scala.util.{Random, Try}
 import scala.util.control.NonFatal
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
+import scala.util.{Random, Try}
+import io.circe.syntax._
 
 
 case class CandidateBlock(parentOpt: Option[Header],
@@ -26,7 +28,18 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[AnyoneCanSpendTransaction],
                           timestamp: Timestamp,
-                          votes: Array[Byte])
+                          votes: Array[Byte]) {
+  lazy val json: Json = Map(
+    "parentId" -> parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
+    "nBits" -> nBits.asJson,
+    "stateRoot" -> Algos.encode(stateRoot).asJson,
+    "adProofBytes" -> Algos.encode(adProofBytes).asJson,
+    "timestamp" -> timestamp.asJson,
+    "transactions" -> transactions.map(_.json).asJson,
+    "votes" -> Algos.encode(votes).asJson
+  ).asJson
+
+}
 
 trait PoWScheme {
 
@@ -77,8 +90,7 @@ trait PoWScheme {
   }
 
   def proveBlock(candidateBlock: CandidateBlock,
-                 startingNonce: Long,
-                 finishingNonce: Long): Option[ErgoFullBlock] = {
+                 nonce: Long): Option[ErgoFullBlock] = {
 
     val parentOpt: Option[Header] = candidateBlock.parentOpt
     val nBits: Long = candidateBlock.nBits
@@ -91,8 +103,7 @@ trait PoWScheme {
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, votes, startingNonce, finishingNonce).map { h =>
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, nonce, nonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
 
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
@@ -177,7 +188,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
     @tailrec
     def generateHeader(nonce: Long): Option[Header] = {
-      log.info("Trying nonce: " + nonce)
+      log.debug("Trying nonce: " + nonce)
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
@@ -190,7 +201,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         case headerWithFoundSolution: Some[Header] =>
           headerWithFoundSolution
         case None =>
-          if (nonce == finishingNonce) None else generateHeader(nonce + 1)
+          if (nonce + 1 == finishingNonce) None else generateHeader(nonce + 1)
       }
     }
 

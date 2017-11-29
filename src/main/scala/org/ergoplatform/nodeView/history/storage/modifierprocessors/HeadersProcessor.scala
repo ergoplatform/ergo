@@ -63,7 +63,12 @@ trait HeadersProcessor extends ScorexLogging {
   /**
     * @return height of best header
     */
-  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+
+  /**
+    * @return height of best header with transacions and proofs
+    */
+  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -156,7 +161,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}"))
     } else if (header.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       Failure(new Error(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
-    } else if (!heightOf(header.parentId).exists(h => height - h < MaxRollback)) {
+    } else if (!heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
       Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))

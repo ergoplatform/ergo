@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
@@ -52,6 +51,25 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       }
       lastHeaders.length shouldBe m
     }
+  }
+
+  property("History.isInBestChain") {
+    var history = genHistory()
+    val common = genHeaderChain(BlocksInChain, history)
+    history = applyHeaderChain(history, common)
+
+    val fork1 = genHeaderChain(BlocksInChain, history)
+    val fork2 = genHeaderChain(BlocksInChain + 1, history)
+
+    history = applyHeaderChain(history, fork1.tail)
+    history.bestHeaderOpt.get shouldBe fork1.last
+    fork1.headers.foreach(h => history.isInBestChain(h.id) shouldBe true)
+
+    history = applyHeaderChain(history, fork2.tail)
+    history.bestHeaderOpt.get shouldBe fork2.last
+    fork2.headers.foreach(h => history.isInBestChain(h.id) shouldBe true)
+    fork1.tail.headers.foreach(h => history.isInBestChain(h.id) shouldBe false)
+
   }
 
   property("Compare headers chain") {

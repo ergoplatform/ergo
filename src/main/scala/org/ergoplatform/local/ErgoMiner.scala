@@ -32,7 +32,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
   private val startTime = NetworkTime.time()
-  private val votes = ergoSettings.scorexSettings.network.nodeName.map(_.toByte).takeRight(5).toArray
+  private val votes: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
   override def preStart(): Unit = {
     viewHolder ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))

@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.NodeViewHolder._
+import scorex.core.consensus.History
 import scorex.core.network.NetworkController.SendToNetwork
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
@@ -45,8 +46,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def onMissedModifiers(): Receive = {
     case MissedModifiers(ids) =>
+      log.info(s"Initialize toDownload with ${ids.length} ids: ${History.idsToString(ids)}")
       ids.foreach(id => requestDownload(id._1, id._2))
-
   }
 
   protected val onSemanticallySuccessfulModifier: Receive = {

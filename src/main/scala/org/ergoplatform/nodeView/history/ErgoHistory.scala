@@ -167,8 +167,8 @@ trait ErgoHistory
       headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds
-      val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
-      val theirHeight = heightOf(lastHeaderInHistory).get
+      val lastHeaderInOurBestChain = ids.view.reverse.find(m => isInBestChain(m)).get
+      val theirHeight = heightOf(lastHeaderInOurBestChain).get
       val heightFrom = Math.min(headersHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get

@@ -159,7 +159,7 @@ trait ErgoHistory
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(height, size - 1)
+      val heightFrom = Math.min(headersHeight, size - 1)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
@@ -169,7 +169,7 @@ trait ErgoHistory
       val ids = info.lastHeaderIds
       val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
       val theirHeight = heightOf(lastHeaderInHistory).get
-      val heightFrom = Math.min(height, theirHeight + size)
+      val heightFrom = Math.min(headersHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, _ => false)
@@ -238,10 +238,10 @@ trait ErgoHistory
 
   def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
     if (config.verifyTransactions && config.ADState) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(headersHeight + 1, h, p => getFullBlock(p).isDefined).headers)
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
     } else if (config.verifyTransactions) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(headersHeight + 1, h, p => getFullBlock(p).isDefined).headers)
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId)))
     } else {
       Seq()
@@ -309,7 +309,7 @@ trait ErgoHistory
           } else {
             //in fork processing
             val modHeight = heightOf(fb.header.id).get
-            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
+            val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
             val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
             assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
@@ -345,7 +345,7 @@ trait ErgoHistory
             }
           }
 
-          val branchValidHeader: Header = loopHeightDown(height)
+          val branchValidHeader: Header = loopHeightDown(headersHeight)
           val bestValidFullOpt: Option[Header] = bestFullBlockOpt.flatMap(h => heightOf(h.header.id))
             .map(loopHeightDown)
 

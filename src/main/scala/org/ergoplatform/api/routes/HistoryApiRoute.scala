@@ -31,8 +31,11 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
 
   private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
 
-  private def getHeight: Future[ScorexApiResponse] = getHistory.map{ _.height }.map { v =>
-    SuccessApiResponse(Map("height" -> v).asJson)
+  private def getHeight: Future[ScorexApiResponse] = getHistory.map { h =>
+    SuccessApiResponse(Map(
+      "headers-height" -> h.headersHeight,
+      "full-height" -> h.fullBlockHeight
+    ).asJson)
   }
 
   private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestHeaderOpt }.map {

@@ -30,7 +30,7 @@ trait HistorySpecification extends PropSpec
   def bestFullOptToSeq(history: ErgoHistory): Seq[ErgoFullBlock] = history.bestFullBlockOpt.toSeq
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
-    val historyHeight = history.height
+    val historyHeight = history.headersHeight
     if (historyHeight < height) {
       history match {
         case _: EmptyBlockTransactionsProcessor =>

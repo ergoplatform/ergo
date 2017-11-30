@@ -211,6 +211,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @param startHeader - header to start
     * @param until       - stop condition
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
+    *         Note now it includes one header satisfying until condition!
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
@@ -229,7 +230,6 @@ trait HeadersProcessor extends ScorexLogging {
       }
     }
 
-    //TODO    if (bestHeaderIdOpt.isEmpty || (limit == 0) || until(startHeader)) HeaderChain(Seq())
     if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }

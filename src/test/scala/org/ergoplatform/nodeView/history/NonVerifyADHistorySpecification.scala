@@ -93,6 +93,32 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
   }
 
+  property("continuationIds() on forks") {
+    var history1 = genHistory()
+    var history2 = genHistory()
+    val inChain = genHeaderChain(2, history1)
+
+
+    //put genesis
+    history1 = applyHeaderChain(history1, inChain)
+    history2 = applyHeaderChain(history2, inChain)
+    val fork1 = genHeaderChain(BlocksInChain, history1).tail
+    val fork2 = genHeaderChain(BlocksInChain, history1).tail
+
+    //apply 2 different forks
+    history1 = applyHeaderChain(history1, fork1)
+    history2 = applyHeaderChain(history2, fork1.take(BlocksInChain / 3))
+    history2 = applyHeaderChain(history2, fork2.take(BlocksInChain / 2))
+    history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
+    history1.bestHeaderOpt.get shouldBe fork1.last
+
+    val si = history2.syncInfo(false)
+    val continuation = history1.continuationIds(si, BlocksInChain * 100).get
+
+    fork1.headers.foreach(h => continuation.exists(_._2 sameElements h.id) shouldBe true)
+
+  }
+
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
     var history = genHistory()
     val chain = genHeaderChain(BlocksInChain, history)

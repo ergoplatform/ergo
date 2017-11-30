@@ -8,15 +8,13 @@ import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerat
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
-import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
-import org.ergoplatform.Version.VersionString
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
@@ -68,9 +66,10 @@ class ErgoApp(args: Seq[String]) extends Application {
     Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
       settings.network)))
 
-  //only a miner is generating tx load
-  //    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
-  //    txGen ! StartGeneration
+  if (ergoSettings.testingSettings.transactionGeneration) {
+    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+    txGen ! StartGeneration
+  }
 
 }
 

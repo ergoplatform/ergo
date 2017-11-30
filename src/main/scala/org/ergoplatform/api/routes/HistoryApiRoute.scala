@@ -7,6 +7,7 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.swagger.annotations._
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -22,6 +23,10 @@ import scala.concurrent.Future
 @Api(value = "/history", produces = "application/json")
 case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings, digest: Boolean)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+
+  override val route = pathPrefix("history") {
+    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight, headersAt)
+  }
 
   private val request = if (digest) {
     GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
@@ -61,10 +66,6 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
 
   private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map{ _.requiredDifficulty }.map { v =>
     SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)
-  }
-
-  override val route = pathPrefix("history") {
-    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight)
   }
 
   @Path("/height")
@@ -117,6 +118,27 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
   def lastHeaders: Route = path("last-headers" / IntNumber.?) { n =>
     get {
       toJsonResponse(getLastHeaders(n.getOrElse(10)))
+    }
+  }
+
+  @Path("/headers/at/{height}")
+  @ApiOperation(value = "All headers at height {height}. First one is from the best chain", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "height",
+      value = "Height to get headers",
+      required = false,
+      paramType = "path",
+      dataType = "Int")
+  ))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with last {count} headers")))
+  def headersAt: Route = path("headers" / "at" / IntNumber) { height =>
+    get {
+      toJsonResponse {
+        getHistory.map { history =>
+          val headers = history.headerIdsAtHeight(height).flatMap(id => history.typedModifierById[Header](id))
+          SuccessApiResponse(Map("headers" -> headers.map(_.json)).asJson)
+        }
+      }
     }
   }
 

@@ -52,9 +52,10 @@ trait HistorySpecification extends PropSpec
                       useLastEpochs: Int = 10): ErgoHistory = {
 
     val blockInterval = 1.minute
+    val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, false, false)
+      PoPoWBootstrap, minimalSuffix, false, miningDelay, false)
     val scorexSettings: ScorexSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)
 

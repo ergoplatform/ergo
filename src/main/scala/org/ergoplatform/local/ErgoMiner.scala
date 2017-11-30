@@ -87,7 +87,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
               newBlock.aDProofs.foreach { adp =>
                 viewHolder ! LocallyGeneratedModifier(adp)
               }
-              context.system.scheduler.scheduleOnce(100.millis)(self ! MineBlock)
+              context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay)(self ! MineBlock)
             case None =>
               self ! MineBlock
           }

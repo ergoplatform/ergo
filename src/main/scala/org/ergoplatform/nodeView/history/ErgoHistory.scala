@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.{ByteArrayWrapper, LogStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -48,7 +48,7 @@ trait ErgoHistory
 
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
-  protected val storage: LSMStore
+  protected val storage: Store
 
   protected lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
@@ -413,7 +413,7 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
+    val db = new LogStore(iFile, keepVersions = 100)
 
     val nodeSettings = settings.nodeSettings
 
@@ -425,7 +425,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, true, false) =>
@@ -434,7 +434,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (false, true, true) =>
@@ -443,7 +443,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (false, true, false) =>
@@ -452,7 +452,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, false, true) =>
@@ -461,7 +461,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, false, false) =>
@@ -470,7 +470,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case m =>

@@ -67,7 +67,7 @@ class ErgoApp(args: Seq[String]) extends Application {
       settings.network)))
 
   if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
+    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef, ergoSettings.testingSettings))
     txGen ! StartGeneration
   }
 

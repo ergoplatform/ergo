@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "2.0.0-RC3-241-g4ccd248-SNAPSHOT"
+val scorexVersion = "2.0.0-RC3-245-gec6d99e-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.25",

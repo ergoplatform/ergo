@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewHolder, NodeViewModifier}
@@ -76,6 +77,18 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       val memPool = ErgoMemPool.empty
       val state = restoreConsistentState(stateIn.asInstanceOf[MS], history)
       (history, state, wallet, memPool)
+    }
+  }
+
+  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit ={
+    super.pmodModify(pmod)
+    minimalState() match {
+      case u:UtxoState if u.generatedProofs.nonEmpty =>
+        val proofs = u.generatedProofs
+        proofs.foreach(p => self ! LocallyGeneratedModifier(p))
+        val stateNew = new UtxoState(u.version, u.store, Seq())
+        nodeView = (history(), stateNew.asInstanceOf[MS], vault(), memoryPool())
+      case _ =>
     }
   }
 

@@ -45,7 +45,9 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
-    val dir = ErgoState.stateDir(settings).ensuring(d => d.mkdirs() || d.listFiles().isEmpty)
+    val dir = ErgoState.stateDir(settings)
+    dir.mkdir()
+    assert(dir.listFiles().isEmpty, s"Genesis directory $dir should always be empty")
 
     val state = (
       if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir, settings.nodeSettings)

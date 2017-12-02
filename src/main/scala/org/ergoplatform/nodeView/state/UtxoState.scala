@@ -21,7 +21,7 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store)
+class UtxoState(override val version: VersionTag, val store: Store, val generatedProofs: Seq[ADProofs])
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   import UtxoState.metadata
@@ -90,7 +90,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
         p.rollback(ADDigest @@ hash.data).map { _ =>
-          new UtxoState(version, store) {
+          new UtxoState(version, store, generatedProofs) {
             override protected lazy val persistentProver = p
           }
         }
@@ -111,7 +111,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
       })
     }.get
 
-    if(!expectedDigest.sameElements(persistentProver.digest)) {
+    if (!expectedDigest.sameElements(persistentProver.digest)) {
       throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
         s"${Algos.encode(persistentProver.digest)} given")
     }
@@ -131,13 +131,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
+            val newProofs = if (fb.aDProofs.isEmpty) Seq(ADProofs(fb.header.id, proofBytes)) else Seq()
             log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
               s"root hash ${Algos.encode(rootHash)}")
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
             assert(fb.header.stateRoot sameElements persistentProver.digest)
-            new UtxoState(VersionTag @@ fb.id, store)
+            new UtxoState(VersionTag @@ fb.id, store, generatedProofs ++ newProofs)
           }
         case Failure(e) =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -146,7 +147,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
       }
 
     case h: Header =>
-      Success(new UtxoState(VersionTag @@ h.id, this.store))
+      Success(new UtxoState(VersionTag @@ h.id, this.store, generatedProofs))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -186,7 +187,7 @@ object UtxoState {
   def create(dir: File): UtxoState = {
     val store = new QuickStore(dir, keepVersions = 20) // todo: magic number, move to settings
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
-    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store)
+    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, Seq())
   }
 
   def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
@@ -195,7 +196,7 @@ object UtxoState {
 
     val store = new QuickStore(dir, keepVersions = 200) // todo: magic number, move to settings
 
-    new UtxoState(ErgoState.genesisStateVersion, store) {
+    new UtxoState(ErgoState.genesisStateVersion, store, Seq()) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,

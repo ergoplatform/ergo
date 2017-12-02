@@ -80,7 +80,7 @@ case class Header(version: Version,
     "votes" -> Algos.encode(votes).asJson
   ).asJson
 
-  override lazy val toString: String = s"Header(${json.noSpaces}) Binary: ${Algos.encode(this.bytes)}"
+  override lazy val toString: String = s"Header(${json.noSpaces})"
 
   override type M = Header
 

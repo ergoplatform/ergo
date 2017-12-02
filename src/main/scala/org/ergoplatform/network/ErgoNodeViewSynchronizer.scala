@@ -24,10 +24,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                localInterfaceRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                               networkSettings: NetworkSettings) extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
-  ErgoSyncInfo, ErgoSyncInfoMessageSpec.type](networkControllerRef, viewHolderRef, localInterfaceRef,
-  syncInfoSpec, networkSettings) {
-  override protected val deliveryTracker = new ErgoDeliveryTracker
+                               networkSettings: NetworkSettings)
+  extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
+    ErgoSyncInfo, ErgoSyncInfoMessageSpec.type](networkControllerRef, viewHolderRef, localInterfaceRef,
+    syncInfoSpec, networkSettings) {
+  override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self)
 
   private val toDownloadCheckInterval = 3.seconds
 

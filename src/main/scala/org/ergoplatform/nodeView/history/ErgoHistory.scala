@@ -229,7 +229,7 @@ trait ErgoHistory
     }
   }
 
-  protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
+  def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
       ErgoFullBlock(header, txs, aDProofs)

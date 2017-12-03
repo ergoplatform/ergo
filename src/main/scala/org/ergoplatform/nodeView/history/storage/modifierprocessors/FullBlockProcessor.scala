@@ -51,17 +51,17 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
         bestBlockToTheEnd(newModRow, storageVersion, fullBlock)
       //TODO currentScore == prevBestScore
-      case (Some(pevBest), Some(prevBestScore), Some(score)) if score > prevBestScore =>
+      case (Some(prevBest), Some(prevBestScore), Some(score)) if score > prevBestScore =>
         log.info(s"Process fork for new best full block with header ${header.encodedId}. " +
           s"Height = ${header.height}, score = $score")
         historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(fullBlock.header.id))))
-        val (prevChain, newChain) = commonBlockThenSuffixes(pevBest.header, header)
+        val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, header)
 
         //todo: is flatMap in next two lines safe?
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
         val toApply: Seq[ErgoFullBlock] = newChain.tail.headers.flatMap(getFullBlock)
-        assert(toRemove.nonEmpty)
-        assert(toApply.nonEmpty)
+        assert(toRemove.nonEmpty, s"Should always have blocks to remove. Current = $header, prevBest = $prevBest")
+        assert(toApply.nonEmpty, s"Should always have blocks to apply. Current = $header, prevBest = $prevBest")
         if (config.blocksToKeep >= 0) {
           val bestHeight: Int = heightOf(toApply.last.header.id).get
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)

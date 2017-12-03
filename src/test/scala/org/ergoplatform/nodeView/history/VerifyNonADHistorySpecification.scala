@@ -19,7 +19,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     val missed = history.missedModifiersForFullChain()
     missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
-    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2).isEmpty shouldBe true
+    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
   }
 
   property("append header as genesis") {

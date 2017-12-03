@@ -25,7 +25,8 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   override val route = pathPrefix("history") {
-    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight, headersAt)
+    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight,
+      headersAt, fullBlocksAt)
   }
 
   private val request = if (digest) {
@@ -137,6 +138,27 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
         getHistory.map { history =>
           val headers = history.headerIdsAtHeight(height).flatMap(id => history.typedModifierById[Header](id))
           SuccessApiResponse(Map("headers" -> headers.map(_.json)).asJson)
+        }
+      }
+    }
+  }
+
+  @Path("/full-blocks/at/{height}")
+  @ApiOperation(value = "All full blocks at height {height}. First one is from the best chain", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "height",
+      value = "Height to get headers",
+      required = false,
+      paramType = "path",
+      dataType = "Int")
+  ))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with last {count} headers")))
+  def fullBlocksAt: Route = path("full-blocks" / "at" / IntNumber) { height =>
+    get {
+      toJsonResponse {
+        getHistory.map { history =>
+          val headers = history.headerIdsAtHeight(height).flatMap(id => history.typedModifierById[Header](id))
+          SuccessApiResponse(Map("full-blocks" -> headers.flatMap(history.getFullBlock).map(_.json)).asJson)
         }
       }
     }

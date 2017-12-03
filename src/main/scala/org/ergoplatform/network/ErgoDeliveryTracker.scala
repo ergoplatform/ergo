@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import akka.actor.{ActorContext, ActorRef}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.utils.NetworkTime
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -7,9 +8,13 @@ import scorex.core.{ModifierId, ModifierTypeId}
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-class ErgoDeliveryTracker extends DeliveryTracker {
+class ErgoDeliveryTracker(context: ActorContext,
+                          deliveryTimeout: FiniteDuration,
+                          maxDeliveryChecks: Int,
+                          nvsRef: ActorRef)
+  extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
-  val toDownload: mutable.Map[MapKey, ToDownloadStatus] = mutable.Map[MapKey, ToDownloadStatus]()
+  val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
   private val toDownloadRetryInterval = 5.seconds
   private val toDownloadLifetime = 5.minutes
 

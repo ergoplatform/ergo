@@ -229,7 +229,7 @@ trait ErgoHistory
     }
   }
 
-  protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
+  def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
       ErgoFullBlock(header, txs, aDProofs)
@@ -237,16 +237,14 @@ trait ErgoHistory
   }
 
   def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
-    val mod = if (config.verifyTransactions && config.ADState) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(headersHeight + 1, h, p => getFullBlock(p).isDefined).headers)
+    if (config.verifyTransactions && config.ADState) {
+      bestHeaderOpt.toSeq
+        .flatMap(h => headerChainBack(headersHeight + 1, h, p => contains(p.ADProofsId) && contains(p.transactionsId)).headers)
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
-    } else if (config.verifyTransactions) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(headersHeight + 1, h, p => getFullBlock(p).isDefined).headers)
-        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId)))
+        .filter(id => !contains(id._2))
     } else {
       Seq()
     }
-    mod.filter(id => !contains(id._2))
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {

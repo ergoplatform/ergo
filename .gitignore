@@ -14,6 +14,10 @@ target
 # standalone docker
 !Dockerfile
 
+# local application.conf
+local-application.conf
+my-application.conf
+
 # logs
 *.log
 

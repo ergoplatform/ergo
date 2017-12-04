@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -48,7 +48,7 @@ trait ErgoHistory
 
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
-  protected val storage: LSMStore
+  protected val storage: Store
 
   protected lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
 
@@ -159,7 +159,7 @@ trait ErgoHistory
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(height, size - 1)
+      val heightFrom = Math.min(headersHeight, size - 1)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
@@ -167,12 +167,12 @@ trait ErgoHistory
       headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds
-      val lastHeaderInHistory = ids.view.reverse.find(m => contains(m)).get
-      val theirHeight = heightOf(lastHeaderInHistory).get
-      val heightFrom = Math.min(height, theirHeight + size)
+      val lastHeaderInOurBestChain: ModifierId = ids.view.reverse.find(m => isInBestChain(m)).get
+      val theirHeight = heightOf(lastHeaderInOurBestChain).get
+      val heightFrom = Math.min(headersHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(heightFrom - theirHeight, startHeader, _ => false)
+      val headerIds = headerChainBack(size, startHeader, h => h.parentId sameElements lastHeaderInOurBestChain)
         .headers.map(h => Header.modifierTypeId -> h.id)
       headerIds
     }
@@ -229,7 +229,7 @@ trait ErgoHistory
     }
   }
 
-  protected def getFullBlock(header: Header): Option[ErgoFullBlock] = {
+  def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
     typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
       ErgoFullBlock(header, txs, aDProofs)
@@ -237,12 +237,11 @@ trait ErgoHistory
   }
 
   def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
-    if (config.verifyTransactions && config.ADState) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
+    if (config.verifyTransactions) {
+      bestHeaderOpt.toSeq
+        .flatMap(h => headerChainBack(headersHeight + 1, h, p => contains(p.ADProofsId) && contains(p.transactionsId)).headers)
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
-    } else if (config.verifyTransactions) {
-      bestHeaderOpt.toSeq.flatMap(h => headerChainBack(height + 1, h, p => getFullBlock(p).isDefined).headers)
-        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId)))
+        .filter(id => !contains(id._2))
     } else {
       Seq()
     }
@@ -309,7 +308,7 @@ trait ErgoHistory
           } else {
             //in fork processing
             val modHeight = heightOf(fb.header.id).get
-            val chainBack = headerChainBack(height - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
+            val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
             val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
             assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
@@ -345,7 +344,7 @@ trait ErgoHistory
             }
           }
 
-          val branchValidHeader: Header = loopHeightDown(height)
+          val branchValidHeader: Header = loopHeightDown(headersHeight)
           val bestValidFullOpt: Option[Header] = bestFullBlockOpt.flatMap(h => heightOf(h.header.id))
             .map(loopHeightDown)
 
@@ -412,7 +411,7 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val db = new LSMStore(iFile, maxJournalEntryCount = 10000)
+    val db = new LSMStore(iFile, keepVersions = 100)
 
     val nodeSettings = settings.nodeSettings
 
@@ -424,7 +423,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, true, false) =>
@@ -433,7 +432,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (false, true, true) =>
@@ -442,7 +441,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (false, true, false) =>
@@ -451,7 +450,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, false, true) =>
@@ -460,7 +459,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case (true, false, false) =>
@@ -469,7 +468,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: LSMStore = db
+          override protected val storage: Store = db
           override val powScheme = chainSettings.poWScheme
         }
       case m =>

@@ -1,5 +1,7 @@
 package org.ergoplatform.settings
 
+import scala.concurrent.duration.FiniteDuration
+
 /**
   * Configuration file for Ergo node regime
   *
@@ -11,4 +13,5 @@ case class NodeConfigurationSettings(ADState: Boolean,
                                      PoPoWBootstrap: Boolean,
                                      minimalSuffix: Int,
                                      mining: Boolean,
+                                     miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean)

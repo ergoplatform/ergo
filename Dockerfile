@@ -14,8 +14,8 @@ CMD ["/usr/bin/java", "-jar", "/target/scala-2.12/ergo-assembly-0.1.0.jar"]
 FROM openjdk:jre-alpine
 MAINTAINER Andrey Andreev <andyceo@yandex.ru> (@andyceo)
 COPY --from=builder /ergo/target/scala-2.12/ergo-assembly-0.1.0.jar /ergo.jar
-COPY --from=builder /ergo/src/main/resources/node1/application.conf /application.conf
 EXPOSE 9001 9051
-VOLUME ["/tmp/ergo/node1/data"]
+WORKDIR /root
+VOLUME ["/root/ergo/data"]
 ENTRYPOINT ["/usr/bin/java", "-jar", "/ergo.jar"]
-CMD ["application.conf"]
+CMD [""]

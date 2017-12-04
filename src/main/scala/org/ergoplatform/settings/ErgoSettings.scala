@@ -12,6 +12,7 @@ import scorex.core.utils.ScorexLogging
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
+                        testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings)
 
@@ -34,9 +35,10 @@ object ErgoSettings extends ScorexLogging {
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
+    val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
-    ErgoSettings(directory, chainSettings, nodeSettings, updatedScorexInfoWithVersion(scorexSettings))
+    ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, updatedScorexInfoWithVersion(scorexSettings))
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

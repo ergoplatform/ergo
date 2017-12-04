@@ -36,9 +36,11 @@ case class CandidateBlock(parentOpt: Option[Header],
     "adProofBytes" -> Algos.encode(adProofBytes).asJson,
     "timestamp" -> timestamp.asJson,
     "transactions" -> transactions.map(_.json).asJson,
+    "transactionsNumber" -> transactions.length.asJson,
     "votes" -> Algos.encode(votes).asJson
   ).asJson
 
+  override def toString = s"CandidateBlock(${json.noSpaces})"
 }
 
 trait PoWScheme {

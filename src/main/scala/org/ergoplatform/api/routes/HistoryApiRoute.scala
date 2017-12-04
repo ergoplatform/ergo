@@ -7,6 +7,7 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.swagger.annotations._
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -23,6 +24,11 @@ import scala.concurrent.Future
 case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings, digest: Boolean)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
+  override val route = pathPrefix("history") {
+    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight,
+      headersAt, fullBlocksAt)
+  }
+
   private val request = if (digest) {
     GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
   } else {
@@ -31,8 +37,11 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
 
   private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
 
-  private def getHeight: Future[ScorexApiResponse] = getHistory.map{ _.height }.map { v =>
-    SuccessApiResponse(Map("height" -> v).asJson)
+  private def getHeight: Future[ScorexApiResponse] = getHistory.map { h =>
+    SuccessApiResponse(Map(
+      "headers-height" -> h.headersHeight,
+      "full-height" -> h.fullBlockHeight
+    ).asJson)
   }
 
   private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestHeaderOpt }.map {
@@ -58,10 +67,6 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
 
   private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map{ _.requiredDifficulty }.map { v =>
     SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)
-  }
-
-  override val route = pathPrefix("history") {
-    concat(height, bestHeader, bestFullBlock, lastHeaders, modifierById, currentDifficulty, blockIdByHeight)
   }
 
   @Path("/height")
@@ -114,6 +119,48 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
   def lastHeaders: Route = path("last-headers" / IntNumber.?) { n =>
     get {
       toJsonResponse(getLastHeaders(n.getOrElse(10)))
+    }
+  }
+
+  @Path("/headers/at/{height}")
+  @ApiOperation(value = "All headers at height {height}. First one is from the best chain", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "height",
+      value = "Height to get headers",
+      required = false,
+      paramType = "path",
+      dataType = "Int")
+  ))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with last {count} headers")))
+  def headersAt: Route = path("headers" / "at" / IntNumber) { height =>
+    get {
+      toJsonResponse {
+        getHistory.map { history =>
+          val headers = history.headerIdsAtHeight(height).flatMap(id => history.typedModifierById[Header](id))
+          SuccessApiResponse(Map("headers" -> headers.map(_.json)).asJson)
+        }
+      }
+    }
+  }
+
+  @Path("/full-blocks/at/{height}")
+  @ApiOperation(value = "All full blocks at height {height}. First one is from the best chain", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "height",
+      value = "Height to get headers",
+      required = false,
+      paramType = "path",
+      dataType = "Int")
+  ))
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with last {count} headers")))
+  def fullBlocksAt: Route = path("full-blocks" / "at" / IntNumber) { height =>
+    get {
+      toJsonResponse {
+        getHistory.map { history =>
+          val headers = history.headerIdsAtHeight(height).flatMap(id => history.typedModifierById[Header](id))
+          SuccessApiResponse(Map("full-blocks" -> headers.flatMap(history.getFullBlock).map(_.json)).asJson)
+        }
+      }
     }
   }
 

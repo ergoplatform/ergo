@@ -39,7 +39,7 @@ trait HeadersProcessor extends ScorexLogging {
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs ,chainSettings.epochLength)
+    chainSettings.useLastEpochs, chainSettings.epochLength)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
 
@@ -63,7 +63,12 @@ trait HeadersProcessor extends ScorexLogging {
   /**
     * @return height of best header
     */
-  def height: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+
+  /**
+    * @return height of best header with transacions and proofs
+    */
+  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -73,6 +78,13 @@ trait HeadersProcessor extends ScorexLogging {
     historyStorage.db
       .get(headerHeightKey(id))
       .map(b => Ints.fromByteArray(b.data))
+
+  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h))
+    .exists(_ sameElements id)
+
+  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).exists(_ sameElements h.id)
+
+  private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
   /**
     * @param header - header to process
@@ -156,7 +168,7 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}"))
     } else if (header.requiredDifficulty != requiredDifficultyAfter(parentOpt.get)) {
       Failure(new Error(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parentOpt.get)}"))
-    } else if (!heightOf(header.parentId).exists(h => height - h < MaxRollback)) {
+    } else if (!heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
       Failure(new Error(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}"))
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
@@ -188,7 +200,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @return ids of headers on chosen height.
     *         Seq.empty we don't have any headers on this height (e.g. it is too big or we bootstrap in PoPoW regime)
     *         single id if no forks on this height
-    *         multiple ids if there are forks at chosen height
+    *         multiple ids if there are forks at chosen height.
+    *         First id is always from the best headers chain.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
     ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
@@ -198,6 +211,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @param startHeader - header to start
     * @param until       - stop condition
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
+    *         Note now it includes one header satisfying until condition!
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
@@ -238,9 +252,25 @@ trait HeadersProcessor extends ScorexLogging {
 
       val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(blockScore.toByteArray)
       val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
-      val headerIdsRow = heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray)
+      val headerIdsRow = if (blockScore > bestHeadersChainScore) {
+        // Best block. All blocks back should have their id in the first position
+        val self: (ByteArrayWrapper, ByteArrayWrapper) =
+          heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
+        val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
+        val forkHeaders = parentHeaderOpt.toSeq
+          .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
+          .filter(h => !isInBestChain(h))
+        val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
+          val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
+          heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
+        }
+        forkIds :+ self
+      } else {
+        // Orphaned block. Put id to the end
+        Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
+      }
       val modifierRow = ByteArrayWrapper(h.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))
-      Seq(scoreRow, heightRow, modifierRow, headerIdsRow) ++ bestRow
+      Seq(scoreRow, heightRow, modifierRow) ++ bestRow ++ headerIdsRow
     }
   }
 

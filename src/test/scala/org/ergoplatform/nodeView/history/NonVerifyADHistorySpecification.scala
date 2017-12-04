@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
@@ -54,6 +53,25 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
+  property("History.isInBestChain") {
+    var history = genHistory()
+    val common = genHeaderChain(BlocksInChain, history)
+    history = applyHeaderChain(history, common)
+
+    val fork1 = genHeaderChain(BlocksInChain, history)
+    val fork2 = genHeaderChain(BlocksInChain + 1, history)
+
+    history = applyHeaderChain(history, fork1.tail)
+    history.bestHeaderOpt.get shouldBe fork1.last
+    fork1.headers.foreach(h => history.isInBestChain(h.id) shouldBe true)
+
+    history = applyHeaderChain(history, fork2.tail)
+    history.bestHeaderOpt.get shouldBe fork2.last
+    fork2.headers.foreach(h => history.isInBestChain(h.id) shouldBe true)
+    fork1.tail.headers.foreach(h => history.isInBestChain(h.id) shouldBe false)
+
+  }
+
   property("Compare headers chain") {
     var history = genHistory()
 
@@ -73,6 +91,32 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
+  }
+
+  property("continuationIds() on forks") {
+    var history1 = genHistory()
+    var history2 = genHistory()
+    val inChain = genHeaderChain(2, history1)
+
+
+    //put genesis
+    history1 = applyHeaderChain(history1, inChain)
+    history2 = applyHeaderChain(history2, inChain)
+    val fork1 = genHeaderChain(BlocksInChain, history1).tail
+    val fork2 = genHeaderChain(BlocksInChain, history1).tail
+
+    //apply 2 different forks
+    history1 = applyHeaderChain(history1, fork1)
+    history2 = applyHeaderChain(history2, fork1.take(BlocksInChain / 3))
+    history2 = applyHeaderChain(history2, fork2.take(BlocksInChain / 2))
+    history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
+    history1.bestHeaderOpt.get shouldBe fork1.last
+
+    val si = history2.syncInfo(false)
+    val continuation = history1.continuationIds(si, BlocksInChain * 100).get
+
+    fork1.headers.foreach(h => continuation.exists(_._2 sameElements h.id) shouldBe true)
+
   }
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {

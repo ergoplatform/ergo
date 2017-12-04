@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -88,7 +88,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
 
-  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.height)
+  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.headersHeight)
 
   def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
 
@@ -102,6 +102,10 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
     v.history.bestFullBlockOpt
+  }
+
+  def modifierById(id: ModifierId) = GetDataFromCurrentView[H, S, W, P, Option[ErgoPersistentModifier]] { v =>
+    v.history.modifierById(id)
   }
 
   def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
@@ -340,6 +344,27 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Algos.encode(chain2block2.header.stateRoot))
 
   }
+
+  property("UTXO state should generate ADProofs and put them in history") {
+    val c = NodeViewHolderConfig(false, true, false)
+    val nodeViewDir = Some(createTempDir)
+    val a = actorRef(c, nodeViewDir)
+
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+
+    a ! LocallyGeneratedModifier(genesis.header)
+    a ! LocallyGeneratedModifier(genesis.blockTransactions)
+
+    a ! bestFullBlock(c)
+    expectMsg(Some(genesis))
+
+    a ! modifierById(genesis.aDProofs.get.id)
+    expectMsg(genesis.aDProofs)
+  }
+
 
   property("NodeViewHolder start from inconsistent state") {
     val c = NodeViewHolderConfig(false, true, false)

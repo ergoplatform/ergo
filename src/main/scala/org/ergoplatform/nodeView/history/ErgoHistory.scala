@@ -237,7 +237,7 @@ trait ErgoHistory
   }
 
   def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
-    if (config.verifyTransactions && config.ADState) {
+    if (config.verifyTransactions) {
       bestHeaderOpt.toSeq
         .flatMap(h => headerChainBack(headersHeight + 1, h, p => contains(p.ADProofsId) && contains(p.transactionsId)).headers)
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))

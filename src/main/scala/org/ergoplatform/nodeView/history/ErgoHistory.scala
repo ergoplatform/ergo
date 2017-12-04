@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, QuickStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -411,7 +411,7 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val db = new QuickStore(iFile, keepVersions = 100)
+    val db = new LSMStore(iFile, keepVersions = 100)
 
     val nodeSettings = settings.nodeSettings
 

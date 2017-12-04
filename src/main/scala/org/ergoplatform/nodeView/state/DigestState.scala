@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, QuickStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
@@ -105,7 +105,7 @@ object DigestState {
              rootHashOpt: Option[ADDigest],
              dir: File,
              settings: NodeConfigurationSettings): Try[DigestState] = Try {
-    val store = new QuickStore(dir, keepVersions = 10) //todo: read from settings
+    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
 

@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
@@ -34,8 +34,9 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
+  val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
@@ -43,7 +44,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     MiningApiRoute(minerRef, settings.restApi),
-    DebugApiRoute(nodeViewHolderRef, settings.restApi))
+    DebugApiRoute(nodeViewHolderRef, settings.restApi, nodeId))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],

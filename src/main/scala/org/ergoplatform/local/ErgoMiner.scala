@@ -23,7 +23,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
-class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
+class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[Byte]) extends Actor
+  with ScorexLogging {
 
   private var isMining = false
   private var nonce = 0
@@ -31,7 +32,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
   private val startTime = NetworkTime.time()
-  private val votes: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
+  private val votes: Array[Byte] = nodeId
 
   override def preStart(): Unit = {
     viewHolder ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))

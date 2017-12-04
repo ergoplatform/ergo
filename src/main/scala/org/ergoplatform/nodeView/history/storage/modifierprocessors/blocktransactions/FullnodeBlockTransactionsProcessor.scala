@@ -51,8 +51,6 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
           case Some(id) =>
             val parentFull = typedModifierById[Header](header.parentId).flatMap(h => getFullBlock(h))
             require(parentFull.isDefined, "Trying to apply transactions for header, which parent transactions are empty")
-            require(!adState || historyStorage.contains(header.ADProofsId),
-              "Trying to apply transactions for header without proofs in DigestState mode")
         }
 
       case _ =>

@@ -45,6 +45,7 @@ case class DebugApiRoute(nodeViewActorRef: ActorRef, override val settings: REST
               "full-height" -> bestFullBlock.map(_.header.height).getOrElse(-1).asJson,
               "best-header-id" -> bestHeader.map(_.encodedId).getOrElse("None").asJson,
               "best-full-header-id" -> bestFullBlock.map(_.header.encodedId).getOrElse("None").asJson,
+              "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty.toString).getOrElse("None").asJson,
               "utx-size" -> nvs.pool.size.asJson,
               "state-root" -> Algos.encode(nvs.state.rootHash()).asJson
             ).asJson

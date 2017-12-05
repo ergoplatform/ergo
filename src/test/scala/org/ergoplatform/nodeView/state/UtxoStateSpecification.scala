@@ -85,7 +85,7 @@ class UtxoStateSpecification extends PropSpec
         val us = createUtxoState(bh)
         bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+        val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, _) = (0 until depth).foldLeft((wusAfterGenesis, genesis)) { (sb, i) =>

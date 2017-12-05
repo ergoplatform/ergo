@@ -23,7 +23,66 @@ class VerifyADHistorySpecification extends HistorySpecification {
     missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
   }
 
-  property("bootstrap from headers and last full blocks") {
+  property("apply proofs and transactions in random order") {
+    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    val chain = genChain(3, Seq())
+
+    val block0 = chain.head
+    history.append(block0.header)
+    history.append(block0.blockTransactions)
+    history.append(block0.aDProofs.get)
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    val block1 = chain(1)
+    history.append(block1.header)
+    history.append(block1.aDProofs.get)
+    history.append(block1.blockTransactions)
+    history.bestFullBlockOpt shouldBe Some(block1)
+
+    val block2 = chain(2)
+    history.append(block2.header)
+    history.append(block2.aDProofs.get)
+    history.append(block2.blockTransactions)
+    history.bestFullBlockOpt shouldBe Some(block2)
+  }
+
+  property("should ignore proofs and transactions in incorrect order") {
+    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    val chain = genChain(3, Seq())
+
+    val block0 = chain.head
+    history.append(block0.header)
+    history.append(block0.blockTransactions)
+    history.append(block0.aDProofs.get)
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    //should not apply block 2
+    val block2 = chain(2)
+    history.append(block2.header)
+    history.append(block2.aDProofs.get)
+    history.append(block2.blockTransactions)
+    history.append(block2.aDProofs.get)
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    //should not apply block 1
+    val block1 = chain(1)
+    history.append(block1.header)
+    history.append(block1.aDProofs.get)
+    history.append(block1.blockTransactions)
+    history.bestFullBlockOpt shouldBe Some(block1)
+
+    //now should apply block 2
+    history.append(block2.header)
+    history.append(block2.aDProofs.get)
+    history.append(block2.blockTransactions)
+    history.append(block2.aDProofs.get)
+    history.bestFullBlockOpt shouldBe Some(block2)
+
+  }
+
+
+  //TODO fix this correctly
+  ignore("bootstrap from headers and last full blocks") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None

@@ -49,8 +49,8 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
           case None if config.blocksToKeep >= 0 =>
             //TODO State should be at this version!
           case Some(id) =>
-            val parentFull = typedModifierById[Header](header.parentId).flatMap(h => getFullBlock(h))
-            require(parentFull.isDefined, "Trying to apply transactions for header, which parent transactions are empty")
+            require(typedModifierById[Header](header.parentId).exists(h => contains(h.transactionsId)),
+              "Trying to apply transactions for header, which parent transactions are empty")
         }
 
       case _ =>

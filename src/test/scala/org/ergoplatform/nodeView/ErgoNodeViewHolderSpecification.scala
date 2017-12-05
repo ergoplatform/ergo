@@ -131,7 +131,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t3 = new TestCase("apply valid block header", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val block = validFullBlock(None, us, bh)
 
     a ! bestHeaderOpt(c)
@@ -164,7 +164,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t4 = new TestCase("apply valid block as genesis", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
     a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
@@ -192,9 +192,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t5 = new TestCase("apply full blocks after genesis", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -224,9 +224,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t6 = new TestCase("add transaction to memory pool", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
     val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
 
     a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
@@ -238,9 +238,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t7 = new TestCase("apply invalid full block", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -281,9 +281,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def switch: (NodeViewHolderConfig, ActorRef) => Unit = (c: NodeViewHolderConfig, a: ActorRef) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -351,9 +351,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val a = actorRef(c, nodeViewDir)
 
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     a ! LocallyGeneratedModifier(genesis.blockTransactions)
@@ -372,9 +372,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val a = actorRef(c, nodeViewDir)
 
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {

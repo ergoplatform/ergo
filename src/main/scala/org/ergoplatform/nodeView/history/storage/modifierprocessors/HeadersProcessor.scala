@@ -45,6 +45,8 @@ trait HeadersProcessor extends ScorexLogging {
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
+  def contains(id: ModifierId): Boolean
+
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))

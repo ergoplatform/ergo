@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
@@ -59,7 +60,7 @@ object ErgoState extends ScorexLogging {
 
   def stateDir(settings: ErgoSettings) = new File(s"${settings.directory}/state")
 
-  def generateGenesisUtxoState(stateDir: File): (UtxoState, BoxHolder) = {
+  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
     lazy val genesisSeed = Long.MaxValue
     lazy val rndGen = new scala.util.Random(genesisSeed)
@@ -70,7 +71,7 @@ object ErgoState extends ScorexLogging {
 
     val bh = BoxHolder(initialBoxes)
 
-    UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
       log.info("Genesis UTXO state generated")
       us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
@@ -88,7 +89,7 @@ object ErgoState extends ScorexLogging {
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
-  def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
+  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): Option[ErgoState[_]] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
@@ -97,14 +98,7 @@ object ErgoState extends ScorexLogging {
     } else {
       //todo: considering db state
       if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings).toOption
-      else Some(UtxoState.create(dir))
+      else Some(UtxoState.create(dir, nodeViewHolderRef))
     }
   }
-}
-
-/**
-  * Tool to print new target digest in case of initial utxo state re-generation
-  */
-object DigestPrinter extends App {
-  println(Algos.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
 }

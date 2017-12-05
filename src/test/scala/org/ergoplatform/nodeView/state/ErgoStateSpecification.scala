@@ -10,7 +10,7 @@ class ErgoStateSpecification extends PropSpec with Matchers with ErgoTestHelpers
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettings.read(None)
     val dir = createTempDir
-    val rootHash = ErgoState.generateGenesisUtxoState(dir)._1.rootHash
+    val rootHash = ErgoState.generateGenesisUtxoState(dir, None)._1.rootHash
     val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings.nodeSettings).rootHash
     rootHash shouldBe expectedRootHash
   }

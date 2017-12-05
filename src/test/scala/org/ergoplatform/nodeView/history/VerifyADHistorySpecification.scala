@@ -64,7 +64,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.append(block2.aDProofs.get)
     history.bestFullBlockOpt shouldBe Some(block0)
 
-    //should not apply block 1
+    //should apply block 1
     val block1 = chain(1)
     history.append(block1.header)
     history.append(block1.aDProofs.get)
@@ -75,7 +75,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.append(block2.header)
     history.append(block2.aDProofs.get)
     history.append(block2.blockTransactions)
-    history.append(block2.aDProofs.get)
     history.bestFullBlockOpt shouldBe Some(block2)
 
   }

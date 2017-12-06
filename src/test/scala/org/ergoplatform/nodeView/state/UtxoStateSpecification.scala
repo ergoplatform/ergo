@@ -1,12 +1,15 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.VersionTag
 
 
@@ -79,7 +82,7 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("rollback - n blocks back") {
+  property("rollback n blocks and apply again") {
     forAll(boxesHolderGen, smallPositiveInt) { (bh, depth) =>
       whenever(depth > 0 && depth <= 5) {
         val us = createUtxoState(bh)
@@ -88,15 +91,26 @@ class UtxoStateSpecification extends PropSpec
         val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
-        val (finalState: WrappedUtxoState, _) = (0 until depth).foldLeft((wusAfterGenesis, genesis)) { (sb, i) =>
-          val state = sb._1
-          val block = validFullBlock(parentOpt = Some(sb._2.header), state)
-          (state.applyModifier(block).get, block)
+        val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)
+          .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, i) =>
+            val state = sb._1
+            val block = validFullBlock(parentOpt = Some(sb._2.last.header), state)
+            (state.applyModifier(block).get, sb._2 ++ Seq(block))
+          }
+        val finalRoot = finalState.rootHash
+        finalRoot shouldEqual chain.last.header.stateRoot
+
+        val rollbackedState = finalState.rollbackTo(VersionTag @@ genesis.id).get
+        rollbackedState.rootHash shouldEqual genesis.header.stateRoot
+
+        val finalState2: WrappedUtxoState = chain.tail.foldLeft(rollbackedState) { (state, block) =>
+          state.applyModifier(block).get
         }
 
-        finalState.rollbackTo(VersionTag @@ genesis.id).get.rootHash shouldEqual genesis.header.stateRoot
+        finalState2.rootHash shouldEqual finalRoot
       }
     }
   }
+
 
 }

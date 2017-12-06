@@ -36,9 +36,7 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
             val txBoxes = (1 to Random.nextInt(10) + 1).flatMap(_ => v.state.randomBox())
             val txInputs = txBoxes.map(_.nonce)
             val values = txBoxes.map(_.value)
-
             val txOutputs = if(values.head % 2 == 0) IndexedSeq.fill(2)(values.head / 2) ++ values.tail else values
-
             AnyoneCanSpendTransaction(txInputs, txOutputs)
           }
         } else {

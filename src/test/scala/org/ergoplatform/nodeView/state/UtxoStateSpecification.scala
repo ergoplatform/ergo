@@ -82,6 +82,35 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
+  property("2 forks switching") {
+    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1).get
+    val chain1block2 = validFullBlock(Some(chain1block1.header), wusChain1Block1)
+
+    val (us2, bh2) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, None).applyModifier(genesis).get
+    val chain2block1 = validFullBlock(Some(genesis.header), wus2AfterGenesis)
+    val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1).get
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+
+    var (state, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    state = state.applyModifier(genesis).get
+
+    state = state.applyModifier(chain1block1).get
+
+    state = state.rollbackTo(VersionTag @@ genesis.id).get
+    state = state.applyModifier(chain2block1).get
+    state = state.applyModifier(chain2block2).get
+
+    state = state.rollbackTo(VersionTag @@ genesis.id).get
+    state = state.applyModifier(chain1block1).get
+    state = state.applyModifier(chain1block2).get
+
+  }
+
   property("rollback n blocks and apply again") {
     forAll(boxesHolderGen, smallPositiveInt) { (bh, depth) =>
       whenever(depth > 0 && depth <= 5) {

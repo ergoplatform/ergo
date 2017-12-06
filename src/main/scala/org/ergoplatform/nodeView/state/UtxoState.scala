@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import akka.actor.ActorRef
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, ShardedStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
@@ -192,7 +192,7 @@ object UtxoState {
   }
 
   def create(dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+    val store = new ShardedStore(dir) // todo: magic number, move to settings
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
   }
@@ -201,7 +201,7 @@ object UtxoState {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
+    val store = new ShardedStore(dir) // todo: magic number, move to settings
 
     new UtxoState(ErgoState.genesisStateVersion, store, nodeViewHolderRef) {
       override protected lazy val persistentProver =

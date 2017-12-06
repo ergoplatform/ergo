@@ -34,6 +34,8 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
   private val startTime = NetworkTime.time()
   private val votes: Array[Byte] = nodeId
 
+  private val transactionsInBlock = ergoSettings.testingSettings.transactionsInBlock
+
   override def preStart(): Unit = {
     viewHolder ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
   }
@@ -111,8 +113,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
           }
 
           //only transactions valid from against the current utxo state we take from the mem pool
-          //todo: move magic number to testnet settings
-          val txs = coinbase +: v.state.filterValid(v.pool.take(10).toSeq)
+          val txs = coinbase +: v.state.filterValid(v.pool.take(transactionsInBlock).toSeq)
 
           //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
           //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)

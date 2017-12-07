@@ -121,10 +121,10 @@ object DigestState {
         }.ensuring(store.lastVersionID.get.data.sameElements(version))
 
       case (None, None) =>
-        val version = ADDigest @@ store.get(store.lastVersionID.get).get.data
+        val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
 
-        new DigestState(VersionTag @@ version, ADDigest @@ rootHash, store, settings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings)
 
       case _ => ???
     }

@@ -58,6 +58,9 @@ object ErgoState extends ScorexLogging {
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
+  //TODO move to settings?
+  val KeepVersions = 200
+
   def stateDir(settings: ErgoSettings) = new File(s"${settings.directory}/state")
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {

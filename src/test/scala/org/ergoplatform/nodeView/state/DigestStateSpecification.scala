@@ -28,10 +28,8 @@ class DigestStateSpecification extends PropSpec
       ds.close()
 
       val state = DigestState.create(None, None, dir2, ErgoSettings.read(None).nodeSettings).get
-      state.version shouldEqual fb.id
+      state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
-
-
     }
   }
 

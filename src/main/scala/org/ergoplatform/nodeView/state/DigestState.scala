@@ -67,7 +67,7 @@ class DigestState protected(override val version: VersionTag,
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
       log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
       //TODO should not get this messages from node view holders

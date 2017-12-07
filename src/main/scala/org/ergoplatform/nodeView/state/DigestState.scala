@@ -53,7 +53,8 @@ class DigestState protected(override val version: VersionTag,
 
     case h: Header => Success()
 
-    case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
+    case a: Any =>
+      Failure(new Error(s"Modifier not validated: $a"))
   }
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {

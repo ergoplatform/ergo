@@ -96,11 +96,13 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
-        p.rollback(ADDigest @@ hash.data).map { _ =>
+        val rollbackResult = p.rollback(ADDigest @@ hash.data).map { _ =>
           new UtxoState(version, store, nodeViewHolderRef) {
             override protected lazy val persistentProver = p
           }
         }
+        store.clean(ErgoState.KeepVersions)
+        rollbackResult
       case None =>
         Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
     }
@@ -192,7 +194,7 @@ object UtxoState {
   }
 
   def create(dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
   }
@@ -201,7 +203,7 @@ object UtxoState {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
 
     new UtxoState(ErgoState.genesisStateVersion, store, nodeViewHolderRef) {
       override protected lazy val persistentProver =

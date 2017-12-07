@@ -174,10 +174,14 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   override def rollbackVersions: Iterable[VersionTag] =
     persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
 
-  override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if (tx.boxIdsToOpen.forall { k =>
-    persistentProver.unauthenticatedLookup(k).isDefined
-  }) Success()
-  else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
+  override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = {
+    val valid = tx.boxIdsToOpen.forall { k => persistentProver.unauthenticatedLookup(k).isDefined }
+    if (valid) {
+      Success()
+    } else {
+      Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
+    }
+  }
 }
 
 object UtxoState {

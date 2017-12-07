@@ -212,7 +212,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       history.contains(header) shouldBe true
       history.applicable(header) shouldBe false
       history.bestHeaderOpt.get shouldBe header
-      history.openSurfaceIds() shouldEqual Seq(header.id)
+      history.openSurfaceIds().map(Base58.encode) shouldEqual Seq(header.encodedId)
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }

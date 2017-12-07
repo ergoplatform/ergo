@@ -17,9 +17,9 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
 val scorexVersion = "2.0.0-RC3-257-ga8cf1ef-SNAPSHOT"
 
 libraryDependencies ++= Seq(
-  "org.scorexfoundation" %% "iodb" % "0.3.2",
+  "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.scorexfoundation" %% "scorex-core" % scorexVersion,
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.11",
+  "org.scorexfoundation" %% "avl-iodb" % "0.3.0" exclude("org.slf4j", "slf4j-api"),
   "com.storm-enroute" %% "scalameter" % "0.8.+",
   "com.iheart" %% "ficus" % "1.4.+",
 

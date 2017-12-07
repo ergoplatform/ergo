@@ -102,9 +102,9 @@ trait ErgoGenerators extends CoreGenerators {
 
 
   def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[AnyoneCanSpendTransaction] = {
-    val num = 10
+    val num = 5
 
-    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(20) + 1)
+    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
 
     val boxes = wus.takeBoxes(spentBoxesCounts.sum)
 

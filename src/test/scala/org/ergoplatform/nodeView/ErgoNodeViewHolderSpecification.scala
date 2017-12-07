@@ -22,6 +22,8 @@ import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessf
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
+import scala.concurrent.duration._
+
 class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   with ImplicitSender
   with PropSpecLike
@@ -334,7 +336,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       a ! LocallyGeneratedModifier(chain2block2.blockTransactions)
       a ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
       a ! bestFullBlockEncodedId(c)
-      expectMsg(Some(chain2block2.header.encodedId))
+      expectMsg(10.seconds, Some(chain2block2.header.encodedId))
     }
 
     a ! bestHeaderOpt(c)

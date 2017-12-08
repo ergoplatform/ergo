@@ -85,10 +85,9 @@ object ErgoState extends ScorexLogging {
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-  //33 bytes
-  //TODO replace to Algos.decode
-  val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
-  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
+  //33 bytes in Base58 encoding
+  val afterGenesisStateDigestHex: String = "2Ex5aoUXVCg47AYAsGwRBKarv5PEdig5ZuJwdzkvoxqu6o"
+  val afterGenesisStateDigest: ADDigest = ADDigest @@ Algos.decode(afterGenesisStateDigestHex).get
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 

@@ -38,7 +38,7 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
       case Some(header: Header) =>
         require(header.ADProofsRoot sameElements m.digest,
           s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest")
-        if(!header.isGenesis) {
+        if(!header.isGenesis && adState) {
           require(typedModifierById[Header](header.parentId).exists(h => contains(h.ADProofsId)),
             s"Trying to apply proofs ${m.encodedId} for header ${header.encodedId}, which parent proofs are empty")
         }

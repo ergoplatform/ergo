@@ -295,11 +295,13 @@ trait ErgoHistory
       modifier match {
         case fb: ErgoFullBlock =>
           val bestHeader = bestHeaderOpt.get
-          val ids = Seq(fb.id, fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id)
-            .map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte)))
+          val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
+            .filter(id => historyStorage.db.get(validityKey(id)).isEmpty)
 
-          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
-            ByteArrayWrapper(Array(1.toByte))))
+          if (nonMarkedIds.nonEmpty) {
+            historyStorage.db.update(validityKey(nonMarkedIds.head), Seq(),
+              nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))))
+          }
 
           val bestFull = bestFullBlockOpt.get
           if (fb == bestFull) {

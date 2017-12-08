@@ -6,11 +6,10 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.settings.Algos.hash
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
-import scorex.crypto.encode.{Base16, Base58}
+import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -37,18 +36,20 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Val
     AnyoneCanSpendNoncedBox(nonce, value)
   }
 
-  override lazy val serializer = AnyoneCanSpendTransactionSerializer
+  override lazy val serializer: Serializer[AnyoneCanSpendTransaction] = AnyoneCanSpendTransactionSerializer
 
   override lazy val json: Json = Map(
     "id" -> Base58.encode(id).asJson,
-    "from" -> (from zip boxIdsToOpen).map {case (nonce, id) =>
+    "inputs" -> (from zip boxIdsToOpen).map { case (nonce, id) =>
       Map(
+        "id" -> Algos.encode(id).asJson,
         "nonce" -> nonce.asJson,
-        "id" -> Base16.encode(id).asJson
+        "signature" -> "".asJson
       ).asJson
     }.asJson,
-    "to" -> to.map { s =>
+    "outputs" -> to.map { s =>
       Map(
+        "script" -> "".asJson,
         "value" -> s.asJson
       ).asJson
     }.asJson

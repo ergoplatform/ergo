@@ -44,12 +44,12 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Val
       Map(
         "id" -> Algos.encode(id).asJson,
         "nonce" -> nonce.asJson,
-        "signature" -> ""
+        "signature" -> "".asJson
       ).asJson
     }.asJson,
     "outputs" -> to.map { s =>
       Map(
-        "script" -> "",
+        "script" -> "".asJson,
         "value" -> s.asJson
       ).asJson
     }.asJson

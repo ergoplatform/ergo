@@ -22,6 +22,8 @@ import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessf
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
+import scala.concurrent.duration._
+
 class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   with ImplicitSender
   with PropSpecLike
@@ -223,11 +225,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   })
 
   val t6 = new TestCase("add transaction to memory pool", (c, a) => {
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
-    val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
+    val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
     a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
     a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
@@ -417,6 +415,8 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
+        import akka.testkit._
+        5.seconds.dilated
         val a = actorRef(c)
         t.test(c, a)
         system.stop(a)

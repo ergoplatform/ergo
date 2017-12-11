@@ -29,7 +29,7 @@ components:
         id:
           $ref: '#/components/schemas/TransactionId'
         index:
-          description: _Index_ | Index of a output in transaction
+          description: Index of a output in transaction
           type: integer
           # int32
           format: int64
@@ -42,7 +42,7 @@ components:
         - amount
       properties:
         amount:
-          description: _Amount_ | Amount of Ergo token
+          description: Amount of Ergo token
           type: number
           minimum: 0
           example: 14.7
@@ -52,32 +52,31 @@ components:
       description: Transaction without any lockers and unlockers
       required:
         - id
-        - from
-        - to
+        - inputs
+        - outputs
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
-        from:
+        inputs:
           description: Many transaction inputs
           type: array
           items:
             $ref: '#/components/schemas/AnyoneCanSpendTransactionInput'
-        to:
+        outputs:
           description: Many transaction outputs
           type: array
           items:
             $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
 
     TransactionId:
-      description: _TransactionId_ | Base16-encoded transaction id bytes
+      description: Base16-encoded transaction id bytes
       type: object
       required:
         - transactionId
       properties:
         transactionId:
           type: string
-          # todo example
-          example: 123
+          example: 141cef0ed1e1cbd3bdf2da2d39fb9a0e697b8777012b169609eb76313506ef66
 
     FullBlock:
       description: Block with header and transactions
@@ -130,7 +129,7 @@ components:
           description: Interlinks
           type: array
           items:
-            $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
+            $ref: '#/components/schemas/Digest32'
         adProofsRoot:
           $ref: '#/components/schemas/Digest32'
         stateRoot:
@@ -141,6 +140,7 @@ components:
           # todo actually it is unsigned int?
           type: integer
           format: int64
+          example: 19857408
         votes:
           $ref: '#/components/schemas/Votes'
         nonce:
@@ -151,8 +151,7 @@ components:
         equihashSolutions:
           description: Base58-encoded equihash solutions
           type: string
-          # todo example
-          example: 123
+          example: 11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh
         height:
           type: integer
           # int32
@@ -175,15 +174,14 @@ components:
             $ref: '#/components/schemas/AnyoneCanSpendTransaction'
 
     ModifierId:
-      description: _ModifierId_ | Base58-encoded modifier id
+      description: Base58-encoded 32 byte modifier id
       type: object
       required:
         - modifierId
       properties:
         modifierId:
           type: string
-          # todo example
-          example: 123
+          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
 
     BlockADProofs:
       type: object
@@ -200,51 +198,47 @@ components:
           $ref: '#/components/schemas/Digest32'
 
     Digest32:
-      description: _Digest32_ | Base58-encoded 32 byte digest
+      description: Base58-encoded 32 byte digest
       type: object
       required:
         - digest
       properties:
         digest:
           type: string
-          # todo example
-          example: 123
+          example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
 
     ADDigest:
-      description: _ADDigest_ | Base58-encoded 33 byte digest - digest with extra byte with tree height
+      description: Base58-encoded 33 byte digest - digest with extra byte with tree height
       type: object
       required:
         - digest
       properties:
         digest:
           type: string
-          # todo example
-          example: 123
+          example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
 
     SerializedAdProof:
-      description: _SerializedAdProof_ | Base58-encoded ad proofs
+      description: Base58-encoded ad proofs
       type: object
       required:
         - proof
       properties:
         proof:
           type: string
-          # todo example
-          example: 123
+          example: DpvhNdDszrCDm1qmwFXmxaiz4bgEG19dGVhBaYsofV93BwmFofbnFQ7kNwnDSvptb1NGBmi6GtrFyacj8hBWNueRHVCyctAJE2sSoNxVQiSJEqRaa5NFp3DACG16RPvDDgbG8qZ1kNdfZhK9S6q77LwYhPbzYL2s2x7uzScQdccw4HR68mogEgBXomAXuisJyy4indYfCdEZmFHPELn9Md9F4SGu9BpAKYMUjEwkRKt7Ype8M6MHKFuxiVCTTq2fLC8FVUeSJLDM7BVaZtLctaeuZ3LR3sx1tog7daXTAjsXWYZXvqUVs1qynXvJZnFuAN5wLoynnN7YVahHRGQk9sUQaxtPbt7L5qzBzooXedE9LFssvU9zV3KNM2PkbpaHdAu7tJHWoTNyCzZuR2JqSfnpSDkXhZCQhRB7m7vbGzokZ7DcGwtNUxBr7HdEdEUQLRmpHbLqjL82zZuYvykUyPZwCnphaKku7RW3f3BDk3DReCeFBPZkYkoEJFHe9mCAAM5WD44vtTeNokuMrtUbvUgnUFpBnyJsQf7WHAiFsBbRjZwjgoyUYKJCSLSqp3QwoGW5sSXmGvwG9peFFB3yb6gGdDLJqTx2zTqh3znPpK9S5ePGPdCcmbnNKh1pxqnARhDB8xC7eG6Edvhwh7Nx1sSDHXo8xp3hWUdFT4APK16Wr8KNa4xEKuh9mkb31AQhCuD8GsyRaW9oGdJKtZnwrYeBWGrDQ9c99PG2yyA7JzDcvdALdH7Z7T4pd57KFn4VTdJrT6tqwJPh3wERgQFUUEQ2grpxBg8ZMZy1YEzLu1MnJJVvvx66efK1GPytK4n1hKs3pogMW2Fxi5zbLean7k9Fj6VGcbFKGbJPqzhTr3TW6ywNsBmh7ntSmrV3k45RxWb4KWJByiy25xkQg57qyij71F2vzZgTs3kRVVMS4asE8r3qLiA4w8QKfay7JWC9XVuRJQwMPPeVNRfJP7kK1giZhZahzbCFKLcuP6ShzxBzZmTzhRGuF3HtsbtWawv21czEANc6cV6ymyrics3jtMizGwwAcUcasToNuBih34HhspF65HnR5gKZqqHwkbugeDCpDYieAQzwTLzd52ocdJp98dvHU1SWAGdKaeqhF75FiijZebKb3mQiPMTFj2PMwSTjttarPwpEdEwRLxGPezvCUdq7rJAoZJbszaCBnTDjHjqsv5UiyLXr7gM9uyzMX9GMwTnrWYrEwYAD2Yih4b9mvtMdDeZ1mfJsT9r47xLPqgyxbd232U8pu28JbUrrfpZ2mZARTsXzYsuFQusnbzCo72PWNUvceTXh5f5TFhMbmCydcrfCyM3JFV2FrxwNKFKdFvdppAGXGKwhk5cB4
 
     Votes:
-      description: _Votes_ | Base58-encoded votes array
+      description: Base58-encoded votes array
       type: object
       required:
         - votes
       properties:
         votes:
           type: string
-          # todo example?
-          example: 667
+          example: AcRpicD
 
     BlockSignature:
-      description: _BlockSignature_ | Base58-encoded block signature
+      description: Base58-encoded block signature
       type: object
       required:
         - signature
@@ -254,7 +248,7 @@ components:
           example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
 
     TransactionStatus:
-      description: _TransactionStatus_ | Status of a transaction
+      description: Status of a transaction
       type: object
       required:
         - status
@@ -270,32 +264,6 @@ components:
           # int32
           format: int64
           minimum: -1
-          example: 327
-
-    TransactionsCount:
-      description: _TransactionsCount_ | Number of transactions in the unconfirmed transactions pool
-      type: object
-      required:
-        - count
-      properties:
-        count:
-          type: integer
-          # int32
-          format: int64
-          minimum: 0
-          maximum: 10000
-          example: 327
-
-    PeersCount:
-      description: _PeersCount_ | Number of connected peers
-      type: object
-      required:
-        - count
-      properties:
-        count:
-          type: integer
-          format: int64
-          minimum: 0
           example: 327
 
     Peer:
@@ -325,9 +293,17 @@ components:
       required:
         - name
         - version
-        - height
-        - blockId
-        - previousBlockId
+        - fullHeight
+        - headersHeight
+        - headerId
+        - bestFullHeaderId
+        - bestHeaderId
+        - stateRoot
+        - stateType
+        - stateVersion
+        - previousHeaderId
+        - isMining
+        - votes
         - peerCount
         - unconfirmedCount
       properties:
@@ -343,20 +319,31 @@ components:
           format: int64
           minimum: 0
           example: 667
-        blockId:
+        headerId:
           $ref: '#/components/schemas/ModifierId'
-        previousBlockId:
+        previousHeaderId:
           $ref: '#/components/schemas/ModifierId'
         peerCount:
-          $ref: '#/components/schemas/PeersCount'
+          type: integer
+          description: Number of connected peers
+          # int32
+          format: int64
+          minimum: 0
+          example: 327
         unconfirmedCount:
-          $ref: '#/components/schemas/TransactionsCount'
+          description: Current unconfirmed transactions count
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          maximum: 10000
+          example: 327
 
 paths:
   /blocks:
     get:
-      summary: Get the list of block ids
-      operationId: getBlockIds
+      summary: Get the list of header ids
+      operationId: getHeaderIds
       tags:
         - blocks
       parameters:
@@ -399,7 +386,7 @@ paths:
       responses:
         200:
           # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
-          description: List of block ids
+          description: List of header ids
           content:
             application/json:
               schema:
@@ -407,6 +394,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/ModifierId'
         default:
+          description: Error
           content:
             application/json:
               schema:
@@ -417,7 +405,7 @@ paths:
 
   /blocks/at/{blockHeight}:
     get:
-      summary: Get the block ids at a given height
+      summary: Get the header ids at a given height
       operationId: getFullBlockAt
       tags:
         - blocks
@@ -432,7 +420,7 @@ paths:
             format: int64
       responses:
         200:
-          description: Array of block ids
+          description: Array of header ids
           content:
             application/json:
               schema:
@@ -442,6 +430,7 @@ paths:
         404:
           description: Blocks at this height doesn't exist
         default:
+          description: Error
           content:
             application/json:
               schema:
@@ -450,7 +439,7 @@ paths:
                   # Provided height is invalid
                   - invalid.block.height
 
-  /blocks/{blockId}:
+  /blocks/{headerId}:
     get:
       summary: Get the full block info by a given signature
       operationId: getFullBlockById
@@ -459,7 +448,7 @@ paths:
       parameters:
         # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
-          name: blockId
+          name: headerId
           required: true
           description: ID of a wanted block
           schema:
@@ -474,15 +463,16 @@ paths:
         404:
           description: Block with this id doesn't exist
         default:
+          description: Error
           content:
             application/json:
               schema:
                 type: string
                 enum:
-                  # Provided block id is invalid
+                  # Provided header id is invalid
                   - invalid.block.id
 
-  /blocks/{blockId}/header:
+  /blocks/{headerId}/header:
     get:
       summary: Get the block header info by a given signature
       operationId: getBlockHeaderById
@@ -491,9 +481,9 @@ paths:
       parameters:
         # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
-          name: blockId
+          name: headerId
           required: true
-          description: ID of a wanted block
+          description: ID of a wanted block header
           schema:
             type: string
       responses:
@@ -506,15 +496,16 @@ paths:
         404:
           description: Block with this id doesn't exist
         default:
+          description: Error
           content:
             application/json:
               schema:
                 type: string
                 enum:
-                  # Provided block id is invalid
+                  # Provided header id is invalid
                   - invalid.block.id
 
-  /blocks/{blockId}/transactions:
+  /blocks/{headerId}/transactions:
     get:
       summary: Get the block transactions info by a given signature
       operationId: getBlockTransactionsById
@@ -523,9 +514,9 @@ paths:
       parameters:
         # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
-          name: blockId
+          name: headerId
           required: true
-          description: ID of a wanted block
+          description: ID of a wanted block transactions
           schema:
             type: string
       responses:
@@ -538,45 +529,52 @@ paths:
         404:
           description: Block with this id doesn't exist
         default:
+          description: Error
           content:
             application/json:
               schema:
                 type: string
                 enum:
-                  # Provided block id is invalid
+                  # Provided header id is invalid
                   - invalid.block.id
 
-  /blocks/{blockId}/ADProofs:
+  /blocks/candidateBlock:
     get:
-      summary: Get the block transactions info by a given signature
-      operationId: getBlockADProofsById
+      summary: Get the candidate block for mining
+      operationId: getCandidateBlock
+      tags:
+        - blocks
+      responses:
+        200:
+          description: Candidate Full Block object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullBlock'
+
+  /block/lastHeaders/{count}:
+    get:
+      summary: Get the candidate block for mining
+      operationId: getCandidateBlock
       tags:
         - blocks
       parameters:
         # todo move out after full support aos3.0 was added to swagger-codegen
         - in: path
-          name: blockId
+          name: count
           required: true
-          description: ID of a wanted block
+          description: count of a wanted block headers
           schema:
-            type: string
+            type: number
       responses:
         200:
-          description: Block ADProofs object
+          description: Array of block headers
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BlockADProofs'
-        404:
-          description: Block with this id doesn't exist
-        default:
-          content:
-            application/json:
-              schema:
-                type: string
-                enum:
-                  # Provided block id is invalid
-                  - invalid.block.id
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
 
   /info:
     get:
@@ -606,6 +604,7 @@ paths:
               $ref: '#/components/schemas/AnyoneCanSpendTransaction'
       responses:
         200:
+          description: JSON with ID of the new transaction
           content:
             application/json:
               schema:
@@ -615,6 +614,7 @@ paths:
                     schema:
                       $ref: '#/components/schemas/TransactionId'
         default:
+          description: Error
           content:
             application/json:
               type: string
@@ -627,6 +627,7 @@ paths:
                 - invalid.transaction.amount
                 # Provided box nonce in invalid
                 - invalid.box.nonce
+                - invalid.json
 
   /transactions/{transactionId}:
     get:
@@ -650,6 +651,7 @@ paths:
         404:
           description: Transaction with this id doesn't exist
         default:
+          description: Error
           content:
             application/json:
               schema:
@@ -659,6 +661,29 @@ paths:
                   - invalid.transaction.id
 
   /transactions/unconfirmed:
+    parameters:
+      # useless, varies dynamically
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          # int32
+          format: int64
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          # int32
+          format: int64
+          default: 0
+      # todo from timestamp?
     get:
       summary: Get current of the unconfirmed transactions pool
       operationId: getUnconfirmedTransactions
@@ -673,20 +698,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-
-  /transactions/unconfirmed/size:
-    get:
-      summary: Get current size of the unconfirmed transactions pool
-      operationId: getUnconfirmedTransactionsSize
-      tags:
-        - transactions
-      responses:
-        200:
-          description: Object with UTX size
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionsCount'
 
   /peers/all:
     get:
@@ -737,13 +748,14 @@ paths:
         200:
           description: Attempt to connect to the peer
         default:
-          description: unexpected error
+          description: Error
           content:
             application/json:
               schema:
                 type: string
                 enum:
                   - invalid.peer.address
+                  - invalid.json
 
   /peers/blacklisted:
     get:
@@ -760,3 +772,62 @@ paths:
                 type: array
                 items:
                     $ref: '#/components/schemas/Peer'
+
+  /utils/seed:
+    get:
+      summary: Get random seed with 32 bytes size
+      operationId: getRandomSeed
+      tags:
+        - utils
+      responses:
+        200:
+          description: Base58-encoded 32 byte seed
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+
+  /utils/seed/{length}:
+    get:
+      summary: Generate random seed of specified length in bytes
+      operationId: getRandomSeedWithLength
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: length
+          required: true
+          description: seed length in bytes
+          schema:
+            type: string
+      responses:
+        200:
+          description: Base58-encoded N byte seed
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+
+  /utils/hash/blake2b:
+    post:
+      summary: Return Blake2b hash of specified message
+      operationId: hashBlake2b
+      tags:
+        - utils
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+      responses:
+        200:
+          description: Base58-encoded 32 byte hash
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ

@@ -9,11 +9,12 @@ RUN apt-get update && \
 COPY . /ergo
 WORKDIR /ergo
 RUN sbt assembly
-CMD ["/usr/bin/java", "-jar", "/target/scala-2.12/ergo-assembly-0.1.0.jar"]
+RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
+CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 
 FROM openjdk:jre-alpine
 MAINTAINER Andrey Andreev <andyceo@yandex.ru> (@andyceo)
-COPY --from=builder /ergo/target/scala-2.12/ergo-assembly-0.1.0.jar /ergo.jar
+COPY --from=builder /ergo.jar /ergo.jar
 EXPOSE 9001 9051
 WORKDIR /root
 VOLUME ["/root/ergo/data"]

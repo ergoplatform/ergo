@@ -342,7 +342,7 @@ components:
 paths:
   /blocks:
     get:
-      summary: Get the list of header ids
+      summary: Get the Array of header ids
       operationId: getHeaderIds
       tags:
         - blocks
@@ -386,13 +386,16 @@ paths:
       responses:
         200:
           # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
-          description: List of header ids
+          description: Array of header ids
+          example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
           content:
             application/json:
               schema:
                 type: array
+                description: Array of header ids
                 items:
-                  $ref: '#/components/schemas/ModifierId'
+                  type: string
+                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         default:
           description: Error
           content:
@@ -425,8 +428,11 @@ paths:
             application/json:
               schema:
                 type: array
+                description: Array of header ids
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
                 items:
-                  $ref: '#/components/schemas/ModifierId'
+                  type: string
+                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         404:
           description: Blocks at this height doesn't exist
         default:
@@ -554,8 +560,8 @@ paths:
 
   /block/lastHeaders/{count}:
     get:
-      summary: Get the candidate block for mining
-      operationId: getCandidateBlock
+      summary: Get the last headers objects
+      operationId: getLastHeaders
       tags:
         - blocks
       parameters:

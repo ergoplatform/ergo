@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
+import akka.pattern.{ask, pipe}
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
@@ -16,11 +17,13 @@ import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor with ScorexLogging {
+  import ErgoMiner._
 
   private var isMining = false
   private var startingNonce = Long.MinValue
@@ -39,49 +42,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
       }
 
     case ProduceCandidate =>
-      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
-        val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
-        if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
-          val coinbase: AnyoneCanSpendTransaction = {
-            val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
-            AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
-          }
-
-          Try {
-            //only transactions valid from against the current utxo state we take from the mem pool
-            //todo: move magic number to testnet settings
-            val txs = coinbase +: v.state.filterValid(v.pool.take(1000).toSeq)
-
-            //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
-            //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
-            //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
-            // the pool
-            val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
-              val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
-              if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-                (s :+ tx) -> (keys ++ bxsBaw)
-              } else {
-                (s, keys)
-              }
-            }._1
-
-            val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
-
-            val timestamp = NetworkTime.time()
-            val votes = 0.toByte +: Ints.toByteArray(ergoSettings.scorexSettings.network.
-              nodeNonce.map(x => (x % Int.MaxValue).toInt).getOrElse(0))
-            CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
-              adProof, txsNoConflict, timestamp, votes)
-
-          }.recoverWith { case thr =>
-            log.warn("Error when trying to generate a block: ", thr)
-            Failure(thr)
-          }.toOption
-        } else {
-          //Do not try to mine genesis block when offlineGeneration = false
-          None
-        }
-      }
+      produceCandidate(viewHolder, ergoSettings).pipeTo(self)
 
     case candidateOpt: Option[CandidateBlock] =>
       candidateOpt match {
@@ -121,7 +82,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef) extends Actor 
 }
 
 
-object ErgoMiner {
+object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
@@ -130,5 +91,50 @@ object ErgoMiner {
   case object StopMining
 
   case class MineBlock(candidate: CandidateBlock)
+
+  def produceCandidate(viewHolder: ActorRef, ergoSettings: ErgoSettings): Future[Option[CandidateBlock]] = {
+    (viewHolder ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+      val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
+      if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
+        val coinbase: AnyoneCanSpendTransaction = {
+          val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
+          AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+        }
+
+        Try {
+          //only transactions valid from against the current utxo state we take from the mem pool
+          //todo: move magic number to testnet settings
+          val txs = coinbase +: v.state.filterValid(v.pool.take(1000).toSeq)
+
+          //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
+          //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
+          //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
+          // the pool
+          val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
+            val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+            if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+              (s :+ tx) -> (keys ++ bxsBaw)
+            } else {
+              (s, keys)
+            }
+          }._1
+
+          val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
+
+          val timestamp = NetworkTime.time()
+          val votes = 0.toByte +: Ints.toByteArray(ergoSettings.scorexSettings.network.
+            nodeNonce.map(x => (x % Int.MaxValue).toInt).getOrElse(0))
+          CandidateBlock(bestHeaderOpt, Constants.InitialNBits, adDigest,
+            adProof, txsNoConflict, timestamp, votes)
+        }.recoverWith { case thr =>
+          log.warn("Error when trying to generate a block: ", thr)
+          Failure(thr)
+        }.toOption
+      } else {
+        //Do not try to mine genesis block when offlineGeneration = false
+        None
+      }
+    }).mapTo[Option[CandidateBlock]]
+  }
 
 }

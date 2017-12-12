@@ -73,6 +73,10 @@ trait ErgoHistory
   def bestFullBlockOpt: Option[ErgoFullBlock] =
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
+  def getFullBlockByHeaderId(headerId: ModifierId): Option[ErgoFullBlock] = {
+    typedModifierById[Header](headerId).flatMap(getFullBlock)
+  }
+
   /**
     * Get ErgoPersistentModifier by it's id if it is in history
     */
@@ -235,8 +239,8 @@ trait ErgoHistory
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, b => false)).getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
+    .map(bestHeader => headerChainBack(count + offset, bestHeader, b => false).drop(offset)).getOrElse(HeaderChain.empty)
 
   private def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {

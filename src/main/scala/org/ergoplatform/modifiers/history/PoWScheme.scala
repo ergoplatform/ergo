@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Chars, Ints}
+import io.circe.Json
+import io.circe.syntax._
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -10,15 +12,15 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
+import scorex.core.serialization.JsonSerializable
 import scorex.core.utils.ScorexLogging
-
-import scala.annotation.tailrec
-import scala.math.BigInt
-import scala.util.{Random, Try}
-import scala.util.control.NonFatal
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
+import scala.annotation.tailrec
+import scala.math.BigInt
+import scala.util.control.NonFatal
+import scala.util.{Random, Try}
 
 case class CandidateBlock(parentOpt: Option[Header],
                           nBits: Long,
@@ -26,7 +28,12 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[AnyoneCanSpendTransaction],
                           timestamp: Timestamp,
-                          votes: Array[Byte])
+                          votes: Array[Byte]) extends JsonSerializable {
+  // todo change block candidate object?
+  override lazy val json: Json = Map(
+    "id" -> "i'm candidate, yes"
+  ).asJson
+}
 
 trait PoWScheme {
 

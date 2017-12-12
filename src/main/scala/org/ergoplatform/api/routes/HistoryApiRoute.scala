@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.RESTApiSettings
@@ -61,9 +62,9 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
     SuccessApiResponse(Map("headers" -> v.headers.map(_.json)).asJson)
   }
 
-  private def getModifierById(id: String): Future[Option[ScorexApiResponse]] = getHistory.map{ _.modifierById(id) }.map {
-    _.map { modifier => SuccessApiResponse(modifier.json)}
-  }
+  private def getModifierById(idS: String): Future[Option[ScorexApiResponse]] = getHistory
+    .map(h => Base58.decode(idS).toOption.flatMap(id => h.modifierById(ModifierId @@ id)))
+    .map (_.map { modifier => SuccessApiResponse(modifier.json)})
 
   private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map{ _.requiredDifficulty }.map { v =>
     SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)

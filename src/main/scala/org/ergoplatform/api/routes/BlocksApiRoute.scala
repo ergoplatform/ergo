@@ -24,6 +24,12 @@ import scala.util.{Failure, Success, Try}
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, digest: Boolean)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
+  override val route: Route = pathPrefix("blocks") {
+    concat(blocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
+  }
+
+  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
   private val request = if (digest) {
     GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
   } else {
@@ -32,24 +38,6 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
 
   private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
 
-  private def getHeight: Future[ScorexApiResponse] = getHistory.map {
-    _.height
-  }.map { v =>
-    SuccessApiResponse(Map("height" -> v).asJson)
-  }
-
-  private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map {
-    _.bestHeaderOpt
-  }.map {
-    _.map { header => SuccessApiResponse(header.json) }
-  }
-
-  private def getBestFullBlock: Future[Option[ScorexApiResponse]] = getHistory.map {
-    _.bestFullBlockOpt
-  }.map {
-    _.map { block => SuccessApiResponse(block.json) }
-  }
-
   private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map {
     _.headerIdsAtHeight(h)
   }.map {
@@ -57,10 +45,10 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
       headerIds.map(Base58.encode).asJson
   }
 
-  private def getLastHeaders(n: Int): Future[ScorexApiResponse] = getHistory.map {
+  private def getLastHeaders(n: Int): Future[Json] = getHistory.map {
     _.lastHeaders(n)
   }.map { v =>
-    SuccessApiResponse(Map("headers" -> v.headers.map(_.json)).asJson)
+    v.headers.asJson
   }
 
   private def getModifierById(id: String): Future[Option[ScorexApiResponse]] = getHistory.map {
@@ -89,11 +77,6 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     }
   }
 
-
-  override val route = pathPrefix("blocks") {
-    concat(blocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
-  }
-
   def blocksR: Route = get {
     parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0, 'heightFrom.as[Int].?, 'heightTo.as[Int].?) {
       case (limit, offset, heightFrom, heightTo) =>
@@ -107,7 +90,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0, 'heightFrom.as[Int].?, 'heightTo.as[Int].?) {
       case (limit, offset, heightFrom, heightTo) =>
         // todo heightFrom, heightTo
-        toJsonResponse(getHeaderIds(limit, offset))
+        toJsonResponse(getLastHeaders(limit, offset))
     }
   }
 
@@ -165,6 +148,4 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
       }
     }
   }
-
-  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 }

@@ -8,12 +8,9 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.swagger.annotations._
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import scorex.core.ModifierId
-import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.encode.Base58
@@ -22,7 +19,7 @@ import scala.concurrent.Future
 
 @Path("/history")
 @Api(value = "/history", produces = "application/json")
-case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings, digest: Boolean)
+case class HistoryApiRoute(readersHolder: ActorRef, settings: RESTApiSettings, digest: Boolean)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   override val route = pathPrefix("history") {
@@ -30,13 +27,7 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
       headersAt, fullBlocksAt)
   }
 
-  private val request = if (digest) {
-    GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
-  } else {
-    GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
-  }
-
-  private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
+  private def getHistory = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
   private def getHeight: Future[ScorexApiResponse] = getHistory.map { h =>
     SuccessApiResponse(Map(
@@ -45,28 +36,39 @@ case class HistoryApiRoute(nodeViewActorRef: ActorRef, settings: RESTApiSettings
     ).asJson)
   }
 
-  private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestHeaderOpt }.map {
+  private def getBestHeader: Future[Option[ScorexApiResponse]] = getHistory.map {
+    _.bestHeaderOpt
+  }.map {
     _.map { header => SuccessApiResponse(header.json) }
   }
 
-  private def getBestFullBlock: Future[Option[ScorexApiResponse]] = getHistory.map{ _.bestFullBlockOpt }.map {
-    _.map { block => SuccessApiResponse(block.json)}
+  private def getBestFullBlock: Future[Option[ScorexApiResponse]] = getHistory.map {
+    _.bestFullBlockOpt
+  }.map {
+    _.map { block => SuccessApiResponse(block.json) }
   }
 
-  private def getHeaderIdsAtHeight(h: Int): Future[Option[ScorexApiResponse]] = getHistory.map{ _.headerIdsAtHeight(h) }.map {
-    headerIds => headerIds.headOption
-      .map(_ => SuccessApiResponse(headerIds.map(h => Base58.encode(h)).asJson))
+  private def getHeaderIdsAtHeight(h: Int): Future[Option[ScorexApiResponse]] = getHistory.map {
+    _.headerIdsAtHeight(h)
+  }.map {
+    headerIds =>
+      headerIds.headOption
+        .map(_ => SuccessApiResponse(headerIds.map(h => Base58.encode(h)).asJson))
   }
 
-  private def getLastHeaders(n: Int): Future[ScorexApiResponse] = getHistory.map{ _.lastHeaders(n) }.map { v =>
+  private def getLastHeaders(n: Int): Future[ScorexApiResponse] = getHistory.map {
+    _.lastHeaders(n)
+  }.map { v =>
     SuccessApiResponse(Map("headers" -> v.headers.map(_.json)).asJson)
   }
 
   private def getModifierById(idS: String): Future[Option[ScorexApiResponse]] = getHistory
     .map(h => Base58.decode(idS).toOption.flatMap(id => h.modifierById(ModifierId @@ id)))
-    .map (_.map { modifier => SuccessApiResponse(modifier.json)})
+    .map(_.map { modifier => SuccessApiResponse(modifier.json) })
 
-  private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map{ _.requiredDifficulty }.map { v =>
+  private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map {
+    _.requiredDifficulty
+  }.map { v =>
     SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)
   }
 

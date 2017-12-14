@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder._
 import scorex.core.utils.ScorexLogging
@@ -21,11 +23,18 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   }
 
   var historyReaderOpt: Option[ErgoHistoryReader] = None
+  var stateReaderOpt: Option[ErgoStateReader] = None
+  var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
 
   override def receive = {
     case ChangedHistory(reader: ErgoHistoryReader@unchecked) if reader.isInstanceOf[ErgoHistoryReader] =>
-      //TODO isInstanceOf && type erasure
       historyReaderOpt = Some(reader)
+
+    case ChangedState(reader: ErgoStateReader@unchecked) if reader.isInstanceOf[ErgoStateReader] =>
+      stateReaderOpt = Some(reader)
+
+    case ChangedMempool(reader: ErgoMemPoolReader@unchecked) if reader.isInstanceOf[ErgoMemPoolReader] =>
+      mempoolReaderOpt = Some(reader)
 
     case GetDataFromHistory(f) =>
       historyReaderOpt match {

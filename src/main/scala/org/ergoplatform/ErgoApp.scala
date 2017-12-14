@@ -45,7 +45,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     HistoryApiRoute(readersHolder, settings.restApi, ergoSettings.nodeSettings.ADState),
     StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     MiningApiRoute(minerRef, settings.restApi),
-    DebugApiRoute(nodeViewHolderRef, settings.restApi, nodeId))
+    DebugApiRoute(readersHolder, settings.restApi, nodeId))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],

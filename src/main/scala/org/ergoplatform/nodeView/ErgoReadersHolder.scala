@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef}
-import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -36,6 +36,9 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case ChangedMempool(reader: ErgoMemPoolReader@unchecked) if reader.isInstanceOf[ErgoMemPoolReader] =>
       mempoolReaderOpt = Some(reader)
 
+    case GetReaders =>
+      sender ! Readers(historyReaderOpt, stateReaderOpt, mempoolReaderOpt)
+
     case GetDataFromHistory(f) =>
       historyReaderOpt match {
         case Some(historyReader) =>
@@ -53,5 +56,9 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 object ErgoReadersHolder {
 
   case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
+
+  case object GetReaders
+
+  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
 
 }

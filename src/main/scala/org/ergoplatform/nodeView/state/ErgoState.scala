@@ -28,8 +28,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  def rootHash(): ADDigest
-
   //TODO implement correctly
   def stateHeight: Int = 0
 

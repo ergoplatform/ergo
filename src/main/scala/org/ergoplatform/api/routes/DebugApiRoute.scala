@@ -8,6 +8,7 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import io.swagger.annotations.{Api, ApiOperation, ApiResponse, ApiResponses}
+import org.ergoplatform.Version
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoState
@@ -39,6 +40,7 @@ case class DebugApiRoute(nodeViewActorRef: ActorRef, override val settings: REST
           val bestFullBlock = nvs.history.bestFullBlockOpt
           Map(
             "nodeId" -> Algos.encode(nodeId).asJson,
+            "nodeVersion" -> Version.VersionString.asJson,
             "headers-height" -> bestHeader.map(_.height).getOrElse(-1).asJson,
             "full-height" -> bestFullBlock.map(_.header.height).getOrElse(-1).asJson,
             "best-header-id" -> bestHeader.map(_.encodedId).getOrElse("None").asJson,

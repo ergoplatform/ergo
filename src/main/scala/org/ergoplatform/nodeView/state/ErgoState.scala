@@ -11,7 +11,6 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base16
 
 import scala.util.Try
 
@@ -25,7 +24,7 @@ import scala.util.Try
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging {
+  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging with ErgoStateReader {
 
   self: IState =>
 
@@ -38,10 +37,10 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
   def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-  })
+    BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
+      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
+        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
+    })
 
   override def version: VersionTag
 

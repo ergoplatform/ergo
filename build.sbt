@@ -5,7 +5,7 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "0.1.1"
+version := "0.1.2"
 
 scalaVersion := "2.12.3"
 
@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "2.0.0-RC3-284-g1054a3d-SNAPSHOT"
+val scorexVersion = "2.0.0-RC3-309-ge39d606-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",

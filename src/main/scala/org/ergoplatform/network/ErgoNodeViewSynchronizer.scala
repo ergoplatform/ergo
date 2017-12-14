@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.ActorRef
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, MissedModifiers}
@@ -26,7 +26,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings)
   extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
-    ErgoSyncInfo, ErgoSyncInfoMessageSpec.type](networkControllerRef, viewHolderRef, localInterfaceRef,
+    ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
+    ErgoMemPool](networkControllerRef, viewHolderRef, localInterfaceRef,
     syncInfoSpec, networkSettings) {
   override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self)
 
@@ -47,7 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def onMissedModifiers(): Receive = {
     case MissedModifiers(ids) =>
-      log.info(s"Initialize toDownload with ${ids.length} ids: ${History.idsToString(ids)}")
+      log.info(s"Initialize toDownload with ${ids.length} ids: ${scorex.core.idsToString(ids)}")
       ids.foreach(id => requestDownload(id._1, id._2))
   }
 

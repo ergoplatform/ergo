@@ -32,7 +32,5 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
 
   override protected def onNewSurface(newSurface: Seq[ModifierId]): Unit = {}
 
-  override protected def onChangedState(newVersion: VersionTag): Unit = {}
-
   override protected def onRollbackFailed(): Unit = {}
 }

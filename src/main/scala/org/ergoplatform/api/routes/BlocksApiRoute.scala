@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
-import scorex.core.api.http.{ScorexApiResponse, SuccessApiResponse}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.encode.Base58
 

@@ -75,7 +75,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain) = ErgoSyncInfo(answer = true, c.headers.map(_.id))
+    def getInfo(c: HeaderChain) = ErgoSyncInfo(c.headers.map(_.id))
 
     val common = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, common)
@@ -112,7 +112,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
     history1.bestHeaderOpt.get shouldBe fork1.last
 
-    val si = history2.syncInfo(false)
+    val si = history2.syncInfo
     val continuation = history1.continuationIds(si, BlocksInChain * 100).get
 
     fork1.headers.foreach(h => continuation.exists(_._2 sameElements h.id) shouldBe true)
@@ -125,14 +125,14 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, chain)
 
     val smallerLimit = 2
-    val ci0 = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), smallerLimit).get
+    val ci0 = history.continuationIds(ErgoSyncInfo(Seq()), smallerLimit).get
     chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Base58.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
-    val ci1 = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), biggerLimit).get
+    val ci1 = history.continuationIds(ErgoSyncInfo(Seq()), biggerLimit).get
     chain.headers.map(_.encodedId) should contain theSameElementsAs ci1.map(c => Base58.encode(c._2))
 
-    val ci = history.continuationIds(ErgoSyncInfo(answer = false, Seq()), BlocksInChain).get
+    val ci = history.continuationIds(ErgoSyncInfo(Seq()), BlocksInChain).get
     ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
     chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Base58.encode(c._2))
   }
@@ -145,7 +145,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
-        val si = ErgoSyncInfo(answer = true, Seq(chain.headers(chain.size - forkLength - 1).id))
+        val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
         val continuation = history.continuationIds(si, forkLength).get
         continuation.length shouldBe forkLength
         continuation.last._2 shouldEqual chain.last.id

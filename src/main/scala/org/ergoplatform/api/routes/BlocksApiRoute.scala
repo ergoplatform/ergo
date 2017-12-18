@@ -51,18 +51,6 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     v.headers.asJson
   }
 
-  private def getModifierById(id: String): Future[Option[ScorexApiResponse]] = getHistory.map {
-    _.modifierById(id)
-  }.map {
-    _.map { modifier => SuccessApiResponse(modifier.json) }
-  }
-
-  private def getCurrentDifficulty: Future[ScorexApiResponse] = getHistory.map {
-    _.requiredDifficulty
-  }.map { v =>
-    SuccessApiResponse(Map("difficulty" -> v.toLong).asJson)
-  }
-
   private def getHeaderIds(limit: Int, offset: Int): Future[Json] = {
     getHistory.map {
       _.lastHeaders(limit, offset).headers.map(_.id)

@@ -1,10 +1,9 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.{BlocksApiRoute, DebugApiRoute, HistoryApiRoute, StateApiRoute}
+import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
+import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -15,7 +14,6 @@ import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
-import org.ergoplatform.Version.VersionString
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
@@ -42,7 +40,9 @@ class ErgoApp(args: Seq[String]) extends Application {
     HistoryApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     DebugApiRoute(settings.restApi),
-    BlocksApiRoute(nodeViewHolderRef, ergoSettings, ergoSettings.nodeSettings.ADState))
+    BlocksApiRoute(nodeViewHolderRef, ergoSettings, ergoSettings.nodeSettings.ADState),
+    TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
+  )
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
@@ -50,7 +50,8 @@ class ErgoApp(args: Seq[String]) extends Application {
     classOf[HistoryApiRoute],
     classOf[StateApiRoute],
     classOf[DebugApiRoute],
-    classOf[BlocksApiRoute]
+    classOf[BlocksApiRoute],
+    classOf[TransactionsApiRoute]
   )
 
   val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))

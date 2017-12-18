@@ -340,6 +340,7 @@ components:
           example: 327
 
 paths:
+  # todo post mined block
   /blocks:
     get:
       summary: Get the Array of header ids

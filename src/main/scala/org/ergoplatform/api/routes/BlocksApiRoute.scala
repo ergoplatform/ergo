@@ -22,7 +22,7 @@ import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, digest: Boolean)
-                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   override val route: Route = pathPrefix("blocks") {
     concat(blocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
@@ -85,14 +85,21 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     }
   }
 
-  def getLastHeadersR: Route = get {
-    ???
-    parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0, 'heightFrom.as[Int].?, 'heightTo.as[Int].?) {
-      case (limit, offset, heightFrom, heightTo) =>
-        // todo heightFrom, heightTo
-        toJsonResponse(getLastHeaders(limit, offset))
+  def getLastHeadersR: Route =
+    path("lastHeaders" / Segment) { countString =>
+      get {
+        toJsonResponse {
+          Try {
+            countString.toInt
+          } match {
+            case Success(count) =>
+              getLastHeaders(count)
+            case Failure(e) =>
+              Future.failed(e)
+          }
+        }
+      }
     }
-  }
 
   // todo: heightString validation
   def getBlockIdsAtHeightR: Route = path("at" / Segment) { heightString =>

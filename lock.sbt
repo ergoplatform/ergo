@@ -22,12 +22,13 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.typesafe" % "config" % "1.3.2",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.1",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.4.20",
-  "com.typesafe.akka" % "akka-http-core_2.12" % "10.0.10",
-  "com.typesafe.akka" % "akka-http_2.12" % "10.0.10",
-  "com.typesafe.akka" % "akka-parsing_2.12" % "10.0.10",
-  "com.typesafe.akka" % "akka-stream_2.12" % "2.4.19",
+  "com.typesafe.akka" % "akka-http-core_2.12" % "10.0.11",
+  "com.typesafe.akka" % "akka-http_2.12" % "10.0.11",
+  "com.typesafe.akka" % "akka-parsing_2.12" % "10.0.11",
+  "com.typesafe.akka" % "akka-stream_2.12" % "2.4.20",
   "commons-io" % "commons-io" % "2.4",
   "commons-net" % "commons-net" % "3.6",
+  "de.heikoseeberger" % "akka-http-circe_2.12" % "1.18.0",
   "io.circe" % "circe-core_2.12" % "0.8.0",
   "io.circe" % "circe-generic_2.12" % "0.8.0",
   "io.circe" % "circe-jawn_2.12" % "0.8.0",
@@ -64,7 +65,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scala-tools.testing" % "test-interface" % "0.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.11",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-212-g88c4ff4-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "2.0.0-RC3-325-g3637fdb-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.0.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
@@ -76,4 +77,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.whispersystems" % "curve25519-java" % "0.4.1",
   "org.yaml" % "snakeyaml" % "1.17"
 )
-// LIBRARY_DEPENDENCIES_HASH 1aa3cf9e431440a3b4bfc0d485262226671f86f2
+// LIBRARY_DEPENDENCIES_HASH 32a673623532fee592db3ef3dd967e203fa71c50

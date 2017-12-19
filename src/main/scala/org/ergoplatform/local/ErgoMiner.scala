@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
 import akka.pattern.{ask, pipe}
+import akka.util.Timeout
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner.{MineBlock, ProduceCandidate, StartMining, StopMining}
@@ -93,6 +94,7 @@ object ErgoMiner extends ScorexLogging {
   case class MineBlock(candidate: CandidateBlock)
 
   def produceCandidate(viewHolder: ActorRef, ergoSettings: ErgoSettings): Future[Option[CandidateBlock]] = {
+    implicit val timeout: Timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolder ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
       if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {

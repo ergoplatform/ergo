@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
+import io.circe.generic.auto._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -15,11 +16,12 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 
 import scala.concurrent.Future
 
 case class TransactionsApiRoute(nodeViewActorRef: ActorRef, restApiSettings: RESTApiSettings, digest: Boolean)
-                               (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                               (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {
     concat(sendTransactionR, getTransactionByIdR, getUnconfirmedTransactionsR)
@@ -52,7 +54,7 @@ case class TransactionsApiRoute(nodeViewActorRef: ActorRef, restApiSettings: RES
 
   private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map {
     _.take(limit).toSeq
-  }.map(_.asJson)
+  }.map(_.map(_.json).asJson)
 
   def sendTransactionR: Route =
     post {

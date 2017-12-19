@@ -47,7 +47,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   private def getLastHeaders(n: Int): Future[Json] = getHistory.map {
     _.lastHeaders(n)
   }.map { v =>
-    v.headers.asJson
+    v.headers.map(_.json).asJson
   }
 
   private def getHeaderIds(limit: Int, offset: Int): Future[Json] = {
@@ -119,7 +119,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     get {
       toJsonOptionalResponse {
         getFullBlockByHeaderId(ModifierId @@ Base58.decode(headerId).get)
-          .map(_.map(_.transactions.asJson))
+          .map(_.map(_.transactions.map(_.json).asJson))
       }
     }
   }

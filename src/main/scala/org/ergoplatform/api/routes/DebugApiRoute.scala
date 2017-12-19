@@ -3,10 +3,9 @@ package org.ergoplatform.api.routes
 import javax.ws.rs.Path
 
 import akka.actor.ActorRefFactory
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import io.circe.Json
 import io.swagger.annotations.{Api, ApiOperation, ApiResponse, ApiResponses}
-import scorex.core.api.http.SuccessApiResponse
 import scorex.core.settings.RESTApiSettings
 
 @Path("/debug")
@@ -23,7 +22,7 @@ case class DebugApiRoute(override val settings: RESTApiSettings)
   def status: Route = path("status") {
     get {
       // todo different statuses?
-      toJsonResponse(SuccessApiResponse(Json.obj("status" -> Json.fromString("ok"))))
+      complete(StatusCodes.OK)
     }
   }
 }

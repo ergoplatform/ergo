@@ -5,7 +5,6 @@ import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.local.ErgoMiner._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.CandidateBlock
@@ -27,6 +26,8 @@ import scala.util.{Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[Byte]) extends Actor
   with ScorexLogging {
+
+  import ErgoMiner._
 
   private var isMining = false
   private var nonce = 0
@@ -154,7 +155,7 @@ object ErgoMiner extends ScorexLogging {
             val timestamp = NetworkTime.time()
             val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
               .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
-            val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, votes)
+            val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
             log.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
             //TODO takes a lot of time
             candidate

@@ -20,7 +20,7 @@ import scorex.crypto.encode.Base58
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
-case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, digest: Boolean)
+case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   override val route: Route = pathPrefix("blocks") {
@@ -127,7 +127,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   def candidateBlockR: Route = path("candidateBlock") {
     get {
       toJsonOptionalResponse {
-        ErgoMiner.produceCandidate(nodeViewActorRef, ergoSettings)
+        ErgoMiner.produceCandidate(nodeViewActorRef, ergoSettings, nodeId)
           .map(_.map(_.json))
       }
     }

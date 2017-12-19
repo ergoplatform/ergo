@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
 import akka.util.Timeout
+import akka.pattern._
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -122,53 +123,53 @@ object ErgoMiner extends ScorexLogging {
 
   def produceCandidate(viewHolder: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
-      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
-        val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
-        if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
+    (viewHolder ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+      val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
+      if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
 
-          Try {
-            val coinbase: AnyoneCanSpendTransaction = {
-              val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
-              AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+        Try {
+          val coinbase: AnyoneCanSpendTransaction = {
+            val txBoxes = v.state.anyoneCanSpendBoxesAtHeight(bestHeaderOpt.map(_.height + 1).getOrElse(0))
+            AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+          }
+
+          //only transactions valid from against the current utxo state we take from the mem pool
+          //todo: move magic number to testnet settings
+          val txs = coinbase +: v.state.filterValid(v.pool.take(10).toSeq)
+
+          //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
+          //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
+          //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
+          // the pool
+          val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
+            val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+            if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+              (s :+ tx) -> (keys ++ bxsBaw)
+            } else {
+              (s, keys)
             }
-
-            //only transactions valid from against the current utxo state we take from the mem pool
-            //todo: move magic number to testnet settings
-            val txs = coinbase +: v.state.filterValid(v.pool.take(10).toSeq)
-
-            //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
-            //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
-            //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
-            // the pool
-            val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
-              val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
-              if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-                (s :+ tx) -> (keys ++ bxsBaw)
-              } else {
-                (s, keys)
-              }
-            }._1
+          }._1
 
 
-            val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
+          val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
-            val timestamp = NetworkTime.time()
-            val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
-              .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
-            val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
-            log.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
-            //TODO takes a lot of time
-            candidate
+          val timestamp = NetworkTime.time()
+          val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
+            .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
+          val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
+          log.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
+          //TODO takes a lot of time
+          candidate
 
-          }.recoverWith { case thr =>
-            log.warn("Error when trying to generate a block: ", thr)
-            Failure(thr)
-          }.toOption
-        } else {
-          //Do not try to mine genesis block when offlineGeneration = false
-          None
-        }
+        }.recoverWith { case thr =>
+          log.warn("Error when trying to generate a block: ", thr)
+          Failure(thr)
+        }.toOption
+      } else {
+        //Do not try to mine genesis block when offlineGeneration = false
+        None
       }
-    }
+    }).mapTo[Option[CandidateBlock]]
+  }
 
 }

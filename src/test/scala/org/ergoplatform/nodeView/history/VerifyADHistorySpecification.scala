@@ -104,10 +104,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
     var history = genHistory()
 
     val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-    val answer = Random.nextBoolean()
     history = applyChain(history, chain)
-    val si = history.syncInfo(answer)
-    si.answer shouldBe answer
+    val si = history.syncInfo
     si.lastHeaderIds.last shouldEqual chain.last.header.id
   }
 

@@ -2,12 +2,14 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
@@ -21,8 +23,13 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store)
+class UtxoState(override val version: VersionTag, val store: Store, nodeViewHolderRef: Option[ActorRef])
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
+
+  private def onAdProofGenerated(proof: ADProofs): Unit = {
+    if(nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
+    nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
+  }
 
   import UtxoState.metadata
 
@@ -89,11 +96,13 @@ class UtxoState(override val version: VersionTag, val store: Store)
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
-        p.rollback(ADDigest @@ hash.data).map { _ =>
-          new UtxoState(version, store) {
+        val rollbackResult = p.rollback(ADDigest @@ hash.data).map { _ =>
+          new UtxoState(version, store, nodeViewHolderRef) {
             override protected lazy val persistentProver = p
           }
         }
+        store.clean(ErgoState.KeepVersions)
+        rollbackResult
       case None =>
         Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
     }
@@ -111,7 +120,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
       })
     }.get
 
-    if(!expectedDigest.sameElements(persistentProver.digest)) {
+    if (!expectedDigest.sameElements(persistentProver.digest)) {
       throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
         s"${Algos.encode(persistentProver.digest)} given")
     }
@@ -131,12 +140,14 @@ class UtxoState(override val version: VersionTag, val store: Store)
             val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)
+            if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
             log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
               s"root hash ${Algos.encode(rootHash)}")
             assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
             assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
             assert(fb.header.ADProofsRoot.sameElements(proofHash))
-            new UtxoState(VersionTag @@ fb.id, store)
+            assert(fb.header.stateRoot sameElements persistentProver.digest)
+            new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
           }
         case Failure(e) =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -145,8 +156,7 @@ class UtxoState(override val version: VersionTag, val store: Store)
       }
 
     case h: Header =>
-      Success(new UtxoState(VersionTag @@ h.id, this.store))
-
+      Success(new UtxoState(VersionTag @@ h.id, this.store, nodeViewHolderRef))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -183,19 +193,19 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
   }
 
-  def create(dir: File): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = 20) // todo: magic number, move to settings
+  def create(dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
-    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store)
+    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
   }
 
-  def fromBoxHolder(bh: BoxHolder, dir: File): UtxoState = {
+  def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = 200) // todo: magic number, move to settings
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
 
-    new UtxoState(ErgoState.genesisStateVersion, store) {
+    new UtxoState(ErgoState.genesisStateVersion, store, nodeViewHolderRef) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,

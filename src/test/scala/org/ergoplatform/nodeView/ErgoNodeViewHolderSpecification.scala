@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -21,6 +21,8 @@ import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
+
+import scala.concurrent.duration._
 
 class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   with ImplicitSender
@@ -64,8 +66,8 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
-  def actorRef(c: NodeViewHolderConfig): ActorRef = {
-    val dir: File = createTempDir
+  def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
+    val dir: File = dirOpt.getOrElse(createTempDir)
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
     val settings = defaultSettings.copy(
       nodeSettings = defaultSettings.nodeSettings.copy(
@@ -88,7 +90,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
 
-  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.height)
+  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.headersHeight)
 
   def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
 
@@ -102,6 +104,10 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
     v.history.bestFullBlockOpt
+  }
+
+  def modifierById(id: ModifierId) = GetDataFromCurrentView[H, S, W, P, Option[ErgoPersistentModifier]] { v =>
+    v.history.modifierById(id)
   }
 
   def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
@@ -127,7 +133,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t3 = new TestCase("apply valid block header", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val block = validFullBlock(None, us, bh)
 
     a ! bestHeaderOpt(c)
@@ -160,7 +166,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t4 = new TestCase("apply valid block as genesis", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
     a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
@@ -188,9 +194,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t5 = new TestCase("apply full blocks after genesis", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -219,11 +225,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   })
 
   val t6 = new TestCase("add transaction to memory pool", (c, a) => {
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
-    val tx = validTransactionsFromUtxoState(wusAfterGenesis).head
+    val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
     a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
     a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
@@ -234,9 +236,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   val t7 = new TestCase("apply invalid full block", (c, a) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -277,9 +279,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def switch: (NodeViewHolderConfig, ActorRef) => Unit = (c: NodeViewHolderConfig, a: ActorRef) => {
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir)
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
     if (c.verifyTransactions) {
@@ -341,6 +343,71 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   }
 
+  property("UTXO state should generate ADProofs and put them in history") {
+    val c = NodeViewHolderConfig(false, true, false)
+    val nodeViewDir = Some(createTempDir)
+    val a = actorRef(c, nodeViewDir)
+
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+
+    a ! LocallyGeneratedModifier(genesis.header)
+    a ! LocallyGeneratedModifier(genesis.blockTransactions)
+
+    a ! bestFullBlock(c)
+    expectMsg(Some(genesis))
+
+    a ! modifierById(genesis.aDProofs.get.id)
+    expectMsg(genesis.aDProofs)
+  }
+
+
+  property("NodeViewHolder start from inconsistent state") {
+    val c = NodeViewHolderConfig(false, true, false)
+    val nodeViewDir = Some(createTempDir)
+    val a = actorRef(c, nodeViewDir)
+
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+
+    a ! LocallyGeneratedModifier(genesis.header)
+    if (c.verifyTransactions) {
+      a ! LocallyGeneratedModifier(genesis.blockTransactions)
+      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    }
+
+    val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    a ! LocallyGeneratedModifier(block1.header)
+    a ! LocallyGeneratedModifier(block1.aDProofs.get)
+    a ! GetDataFromCurrentView[H, S, W, P, Boolean](v => v.history.append(block1.blockTransactions).isSuccess)
+    expectMsg(true)
+
+    a ! bestFullBlock(c)
+    expectMsg(Some(block1))
+
+    a ! rootHash(c)
+    expectMsg(Algos.encode(genesis.header.stateRoot))
+
+    system.stop(a)
+
+    val a2 = actorRef(c, nodeViewDir)
+    //retry modifiers, as they may not be applied yet
+    a2 ! LocallyGeneratedModifier(block1.header)
+    if (c.verifyTransactions) {
+      a2 ! LocallyGeneratedModifier(block1.blockTransactions)
+      a2 ! LocallyGeneratedModifier(block1.aDProofs.get)
+    }
+
+    a2 ! rootHash(c)
+    expectMsg(Algos.encode(block1.header.stateRoot))
+  }
+
+
   val t8 = new TestCase("switching for a better chain", switch)
 
   val cases = List(t1, t2, t3, t4, t5, t6, t7, t8)
@@ -348,6 +415,8 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
+        import akka.testkit._
+        5.seconds.dilated
         val a = actorRef(c)
         t.test(c, a)
         system.stop(a)

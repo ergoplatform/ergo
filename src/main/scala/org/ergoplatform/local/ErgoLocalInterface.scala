@@ -18,9 +18,7 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
 
   override protected def onSuccessfulTransaction(tx: AnyoneCanSpendTransaction): Unit = {}
 
-  override protected def onNoBetterNeighbour(): Unit = {
-    miner ! StartMining
-  }
+  override protected def onNoBetterNeighbour(): Unit = {}
 
   override protected def onBetterNeighbourAppeared(): Unit = {}
 
@@ -33,8 +31,6 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
   override protected def onSemanticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 
   override protected def onNewSurface(newSurface: Seq[ModifierId]): Unit = {}
-
-  override protected def onChangedState(isRollback: Boolean, newVersion: VersionTag): Unit = {}
 
   override protected def onRollbackFailed(): Unit = {}
 }

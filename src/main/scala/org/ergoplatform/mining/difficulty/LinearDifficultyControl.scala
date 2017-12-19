@@ -2,40 +2,42 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
+import org.ergoplatform.settings.Constants
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.duration.FiniteDuration
 
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
+                              val useLastEpochs: Int,
                               epochLength: Int) extends ScorexLogging {
 
   import LinearDifficultyControl._
 
-  assert(epochLength > 0 && epochLength < Int.MaxValue / UseLastEpochs)
+  assert(epochLength > 0 && epochLength < Int.MaxValue / useLastEpochs)
+  assert(useLastEpochs > 1, "Will only work correct when useLastEpochs > 1")
 
   /**
     * @return heights of previous headers required for block recalculation
     */
   def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
-    if ((height - 1) % epochLength == 0 && height > epochLength * UseLastEpochs) {
-      (0 to UseLastEpochs).map(i => (height - 1) - i * epochLength).reverse
+    if ((height - 1) % epochLength == 0 && height > epochLength * useLastEpochs) {
+      (0 to useLastEpochs).map(i => (height - 1) - i * epochLength).reverse
     } else {
       Seq(height - 1)
     }
   }
 
   def calculate(previousHeaders: Seq[(Int, Header)]): Difficulty = {
-    if (previousHeaders.size == UseLastEpochs + 1) {
+    if (previousHeaders.size == useLastEpochs + 1) {
       val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
         val start = d.head
         val end = d.last
         require(end._1 - start._1 == epochLength, s"Incorrect heights interval for $d")
-        val diff = end._2.requiredDifficulty * desiredInterval.toMillis / (end._2.timestamp - start._2.timestamp)
-        (end._1 + start._1 / 2, diff)
+        val diff = end._2.requiredDifficulty * desiredInterval.toMillis * epochLength / (end._2.timestamp - start._2.timestamp)
+        (end._1, diff)
       }
-      val newDiff = interpolate(data)
-      log.info(s"New difficulty $newDiff calculated from data $data")
-      newDiff
+      val diff = interpolate(data)
+      if (diff >= 1) diff else Constants.InitialDifficulty
     } else previousHeaders.maxBy(_._1)._2.requiredDifficulty
   }
 
@@ -61,7 +63,6 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 }
 
 object LinearDifficultyControl {
-  val UseLastEpochs: Int = 4
   val PrecisionConstant: Int = 1000000000
 
 }

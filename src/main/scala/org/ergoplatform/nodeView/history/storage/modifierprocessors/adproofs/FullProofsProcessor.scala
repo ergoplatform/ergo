@@ -35,9 +35,13 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
   override protected def validate(m: ADProofs): Try[Unit] = Try {
     require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
     historyStorage.modifierById(m.headerId) match {
-      case Some(h: Header) =>
-        require(h.ADProofsRoot sameElements m.digest,
-          s"Header ADProofs root ${Base58.encode(h.ADProofsRoot)} differs from $m digest")
+      case Some(header: Header) =>
+        require(header.ADProofsRoot sameElements m.digest,
+          s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest")
+        if(!header.isGenesis && adState) {
+          require(typedModifierById[Header](header.parentId).exists(h => contains(h.ADProofsId)),
+            s"Trying to apply proofs ${m.encodedId} for header ${header.encodedId}, which parent proofs are empty")
+        }
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }

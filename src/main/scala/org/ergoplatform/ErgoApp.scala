@@ -3,16 +3,17 @@ package org.ergoplatform
 import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner}
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
+import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
-import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
@@ -33,25 +34,25 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
+  val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
+
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId))
+  val readersHolder = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
-    DebugApiRoute(settings.restApi),
     BlocksApiRoute(nodeViewHolderRef, ergoSettings, ergoSettings.nodeSettings.ADState),
     TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
-  )
+    DebugApiRoute(readersHolder, settings.restApi, nodeId))
 
   override val apiTypes: Set[Class[_]] = Set(
     classOf[UtilsApiRoute],
     classOf[PeersApiRoute],
-    classOf[StateApiRoute],
     classOf[DebugApiRoute],
     classOf[BlocksApiRoute],
     classOf[TransactionsApiRoute]
   )
-
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef))
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -62,17 +63,19 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(new NodeViewSynchronizer[P, TX, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type]
-    (networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec, settings.network)))
+    Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
+      settings.network)))
 
-  //only a miner is generating tx load
-  //    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef))
-  //    txGen ! StartGeneration
+  if (ergoSettings.testingSettings.transactionGeneration) {
+    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef, ergoSettings.testingSettings))
+    txGen ! StartGeneration
+  }
 
 }
 
 object ErgoApp extends App {
   new ErgoApp(args).run()
 
-  def forceStopApplication(): Unit = new Thread(() => System.exit(1), "ergo-platform-shutdown-thread").start()
+  def forceStopApplication(code: Int = 1): Unit =
+    new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
 }

@@ -53,7 +53,8 @@ class DigestState protected(override val version: VersionTag,
 
     case h: Header => Success()
 
-    case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
+    case a: Any =>
+      Failure(new Error(s"Modifier not validated: $a"))
   }
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
@@ -66,7 +67,7 @@ class DigestState protected(override val version: VersionTag,
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
       log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
       //TODO should not get this messages from node view holders
@@ -90,6 +91,7 @@ class DigestState protected(override val version: VersionTag,
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
+      store.clean(ErgoState.KeepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store, settings)
@@ -97,6 +99,9 @@ class DigestState protected(override val version: VersionTag,
   }
 
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
+
+  def close(): Unit = store.close()
+
 }
 
 object DigestState {
@@ -105,7 +110,7 @@ object DigestState {
              rootHashOpt: Option[ADDigest],
              dir: File,
              settings: NodeConfigurationSettings): Try[DigestState] = Try {
-    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
 
@@ -118,10 +123,10 @@ object DigestState {
         }.ensuring(store.lastVersionID.get.data.sameElements(version))
 
       case (None, None) =>
-        val version = ADDigest @@ store.get(store.lastVersionID.get).get.data
+        val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
 
-        new DigestState(VersionTag @@ version, ADDigest @@ rootHash, store, settings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings)
 
       case _ => ???
     }

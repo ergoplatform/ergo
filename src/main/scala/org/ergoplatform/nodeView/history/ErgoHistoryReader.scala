@@ -173,14 +173,12 @@ trait ErgoHistoryReader
 
 
   /**
-    *
-    * @param answer - whether it is answer to other node request or not
     * @return Node ErgoSyncInfo
     */
-  override def syncInfo(answer: Boolean): ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfo(answer, Seq())
+  override def syncInfo: ErgoSyncInfo = if (isEmpty) {
+    ErgoSyncInfo(Seq())
   } else {
-    ErgoSyncInfo(answer, lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
+    ErgoSyncInfo(lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
   }
 
   /**

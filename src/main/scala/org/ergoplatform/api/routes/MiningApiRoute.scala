@@ -23,6 +23,6 @@ case class MiningApiRoute(miner: ActorRef, override val settings: RESTApiSetting
   @ApiResponses(Array(new ApiResponse(code = 200, message = "Json with current state")))
   def status: Route = path("status") {
     get(toJsonResponse((miner ? MiningStatusRequest).mapTo[MiningStatusResponse].map(r =>
-      SuccessApiResponse(r.json))))
+      r.json)))
   }
 }

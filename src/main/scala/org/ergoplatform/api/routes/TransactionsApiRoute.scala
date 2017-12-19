@@ -17,6 +17,8 @@ import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import scorex.core.ModifierId
+import scorex.crypto.encode.{Base16, Base64}
 
 import scala.concurrent.Future
 
@@ -45,7 +47,7 @@ case class TransactionsApiRoute(nodeViewActorRef: ActorRef, restApiSettings: RES
 
   private def getMemPool = (nodeViewActorRef ? poolRequest).mapTo[ErgoMemPool]
 
-  private def getTransactionById(id: String): Future[Option[Json]] = getHistory.map {
+  private def getTransactionById(id: ModifierId): Future[Option[Json]] = getHistory.map {
     _.modifierById(id)
   }.map {
     // todo how to get tx by id?
@@ -71,7 +73,7 @@ case class TransactionsApiRoute(nodeViewActorRef: ActorRef, restApiSettings: RES
   def getTransactionByIdR: Route = path(Segment) { id =>
     get {
       toJsonOptionalResponse {
-        getTransactionById(id)
+        getTransactionById(ModifierId @@ Base16.decode(id))
       }
     }
   }

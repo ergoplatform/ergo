@@ -42,7 +42,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
-    BlocksApiRoute(nodeViewHolderRef, ergoSettings, ergoSettings.nodeSettings.ADState),
+    BlocksApiRoute(nodeViewHolderRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
     TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
     DebugApiRoute(readersHolder, settings.restApi, nodeId))
 

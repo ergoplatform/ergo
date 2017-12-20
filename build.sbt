@@ -14,15 +14,15 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "2.0.0-RC3-375-gdf9f3db-SNAPSHOT"
+val scorexVersion = "2.0.0-RC3-349-g4ffcf6f-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   "org.scorexfoundation" %% "scorex-core" % scorexVersion,
   "org.scorexfoundation" %% "avl-iodb" % "0.2.11",
-  "com.storm-enroute" %% "scalameter" % "0.8.+",
   "com.iheart" %% "ficus" % "1.4.+",
 
+  "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.+" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",

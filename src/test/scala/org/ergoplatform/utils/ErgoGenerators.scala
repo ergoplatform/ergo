@@ -40,9 +40,8 @@ trait ErgoGenerators extends CoreGenerators {
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
-    answer <- Arbitrary.arbitrary[Boolean]
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
-  } yield ErgoSyncInfo(answer, ids)
+  } yield ErgoSyncInfo(ids)
 
   lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
     idGenerator <- genBytesList(Constants.ModifierIdSize)

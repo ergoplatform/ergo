@@ -68,7 +68,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedToDownload()
+      deliveryTracker.removeOutdatedToDownload(historyReaderOpt)
       deliveryTracker.downloadRetry().foreach(i => requestDownload(i._2.tp, i._1))
 
   }

@@ -295,17 +295,17 @@ components:
         - version
         - fullHeight
         - headersHeight
-        - headerId
         - bestFullHeaderId
         - bestHeaderId
         - stateRoot
         - stateType
         - stateVersion
-        - previousHeaderId
+        - previousFullHeaderId
         - isMining
         - votes
-        - peerCount
+        - peersCount
         - unconfirmedCount
+        - difficulty
       properties:
         name:
           type: string
@@ -313,17 +313,46 @@ components:
         version:
           type: string
           example: 0.0.1
-        height:
+        fullHeight:
           type: integer
           # int32
           format: int64
           minimum: 0
           example: 667
-        headerId:
+        headersHeight:
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
+        bestFullHeaderId:
           $ref: '#/components/schemas/ModifierId'
-        previousHeaderId:
+        bestHeaderId:
           $ref: '#/components/schemas/ModifierId'
-        peerCount:
+        stateRoot:
+          type: string
+          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+        difficulty:
+          type: integer
+          # int32
+          format: int64
+          minimum: 0
+          example: 667
+        stateType:
+          type: string
+          enum:
+            - digest
+            - utxo
+        stateVersion:
+          type: string
+          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+        isMining:
+          type: boolean
+          example: true
+        votes:
+          type: string
+          example: AcRpicD
+        peersCount:
           type: integer
           description: Number of connected peers
           # int32

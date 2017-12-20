@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorContext, ActorRef}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.utils.NetworkTime
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -15,8 +16,9 @@ class ErgoDeliveryTracker(context: ActorContext,
   extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
   val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
-  private val toDownloadRetryInterval = 5.seconds
-  private val toDownloadLifetime = 5.minutes
+  //TODO move to config?
+  private val toDownloadRetryInterval = 30.seconds
+  private val toDownloadLifetime = 1.hour
 
   def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
     val time = NetworkTime.time()
@@ -36,9 +38,10 @@ class ErgoDeliveryTracker(context: ActorContext,
     }
   }
 
-  def removeOutdatedToDownload(): Unit = {
+  def removeOutdatedToDownload(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
     val currentTime = NetworkTime.time()
-    toDownload.filter(_._2.firstViewed < currentTime - toDownloadLifetime.toMillis)
+    toDownload.filter(td => (td._2.firstViewed < currentTime - toDownloadLifetime.toMillis)
+      || historyReaderOpt.exists(hr => hr.contains(ModifierId @@ td._1.array)))
       .foreach(i => toDownload.remove(i._1))
   }
 

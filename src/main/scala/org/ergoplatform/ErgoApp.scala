@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -45,7 +45,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
     InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings.nodeSettings.ADState, settings.restApi, nodeId),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
-    TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 

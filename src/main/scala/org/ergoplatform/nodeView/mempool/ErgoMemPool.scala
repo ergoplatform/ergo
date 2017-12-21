@@ -33,9 +33,6 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
     this
   }
 
-  override def take(limit: Int): Iterable[AnyoneCanSpendTransaction] =
-    unconfirmed.values.toSeq.take(limit)
-
   override def filter(condition: (AnyoneCanSpendTransaction) => Boolean): ErgoMemPool = {
     unconfirmed.retain { (k, v) =>
       condition(v)

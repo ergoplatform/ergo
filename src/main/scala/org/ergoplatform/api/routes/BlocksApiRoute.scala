@@ -87,7 +87,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
           }
           StatusCodes.OK
         } else {
-            StatusCodes.BadRequest -> "invalid.block"
+          StatusCodes.BadRequest -> "invalid.block"
         }
       }
     }

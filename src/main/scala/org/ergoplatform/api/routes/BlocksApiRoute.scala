@@ -1,20 +1,19 @@
 package org.ergoplatform.api.routes
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
@@ -24,10 +23,8 @@ import scorex.crypto.encode.Base58
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
-case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
+case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
-
-  import BlocksApiRoute._
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
 
@@ -43,7 +40,7 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
   }
 
-  private def getHistory = (nodeViewActorRef ? request).mapTo[ErgoHistory]
+  private def getHistory = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
   private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map {
     _.headerIdsAtHeight(h)
@@ -75,22 +72,25 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   }
 
   def postBlocksR: Route = post {
-    entity(as[ErgoFullBlock]) { block =>
-      complete {
-        if (powScheme.verify(block.header)) {
-          log.info("Received a new valid block through the API: " + block)
+    ???
+    /*
+        entity(as[ErgoFullBlock]) { block =>
+          complete {
+            if (powScheme.verify(block.header)) {
+              log.info("Received a new valid block through the API: " + block)
 
-          nodeViewActorRef ! LocallyGeneratedModifier(block.header)
-          nodeViewActorRef ! LocallyGeneratedModifier(block.blockTransactions)
-          block.aDProofs.foreach { adp =>
-            nodeViewActorRef ! LocallyGeneratedModifier(adp)
+              nodeViewActorRef ! LocallyGeneratedModifier(block.header)
+              nodeViewActorRef ! LocallyGeneratedModifier(block.blockTransactions)
+              block.aDProofs.foreach { adp =>
+                nodeViewActorRef ! LocallyGeneratedModifier(adp)
+              }
+              StatusCodes.OK
+            } else {
+                StatusCodes.BadRequest -> "invalid.block"
+            }
           }
-          StatusCodes.OK
-        } else {
-            StatusCodes.BadRequest -> "invalid.block"
         }
-      }
-    }
+    */
   }
 
   def getLastHeadersR: Route =
@@ -146,12 +146,8 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   }
 
   def candidateBlockR: Route = path("candidateBlock") {
-    get {
-      toJsonOptionalResponse {
-        ErgoMiner.produceCandidate(nodeViewActorRef, ergoSettings, nodeId)
-          .map(_.map(_.json))
-      }
-    }
+    get(toJsonResponse((miner ? MiningStatusRequest).mapTo[MiningStatusResponse].map(r =>
+      r.json)))
   }
 
   // todo: headerId validation

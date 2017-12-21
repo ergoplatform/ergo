@@ -5,8 +5,9 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.{ErgoApp, Version}
 import scorex.core.settings.ScorexSettings
+import scorex.core.settings._
 import scorex.core.utils.ScorexLogging
 
 case class ErgoSettings(directory: String,

@@ -12,11 +12,6 @@ info:
     name: CC0 1.0 Universal
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
-servers:
-  # todo make it real
-  - url: https://nodes.ergoplatform.com/api/
-    description: Testnet1
-
 components:
   schemas:
     # Objects

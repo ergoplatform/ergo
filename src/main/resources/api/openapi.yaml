@@ -372,22 +372,6 @@ paths:
         - blocks
       parameters:
         - in: query
-          name: heightFrom
-          required: false
-          description: Height in the blockchain to start getting blocks at
-          schema:
-            type: integer
-            # int32
-            format: int64
-        - in: query
-          name: heightTo
-          required: false
-          description: Height in the blockchain to end getting blocks at
-          schema:
-            type: integer
-            # int32
-            format: int64
-        - in: query
           name: limit
           required: false
           description: The number of items in list to return

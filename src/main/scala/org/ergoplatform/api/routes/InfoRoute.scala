@@ -21,7 +21,6 @@ import scorex.crypto.encode.Base58
 import scala.concurrent.Future
 
 case class InfoRoute(readersHolder: ActorRef,
-                     nodeViewActorRef: ActorRef,
                      miner: ActorRef,
                      peerManager: ActorRef,
                      digest: Boolean,
@@ -35,16 +34,6 @@ case class InfoRoute(readersHolder: ActorRef,
     GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, UtxoState](_.state)
   }
 
-  private def getState = if (digest) {
-    (nodeViewActorRef ? request).mapTo[DigestState]
-  } else {
-    (nodeViewActorRef ? request).mapTo[UtxoState]
-  }
-
-  private def getVersion: Future[String] = getState.map{ _.version }.map { v =>
-    Base58.encode(v)
-  }
-
   private def getConnectedPeers: Future[Int] = (peerManager ? PeerManager.GetConnectedPeers).mapTo[Seq[Handshake]].map(_.size)
 
   private def getStateType: String = if (digest) "digest" else "utxo"
@@ -55,15 +44,14 @@ case class InfoRoute(readersHolder: ActorRef,
     get {
       toJsonResponse {
         val minerInfoF = getMinerInfo
-        val stateVersionF = getVersion
         val connectedPeersF = getConnectedPeers
         val readersF = (readersHolder ? GetReaders).mapTo[Readers]
           for {
-            stateVersion <- stateVersionF
             minerInfo <- minerInfoF
             connectedPeers <- connectedPeersF
             readers <- readersF
           } yield {
+          val stateVersion = readers.s.map(_.version).map(Algos.encode)
           val bestHeader = readers.h.flatMap(_.bestHeaderOpt)
           val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
           val poolSize = readers.m.map(_.size).getOrElse(-1)

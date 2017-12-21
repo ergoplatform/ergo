@@ -7,6 +7,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -59,8 +60,8 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = {
-    getHistory.map {
-      _.getFullBlockByHeaderId(headerId)
+    getHistory.map { h =>
+      h.typedModifierById[Header](headerId).flatMap(h.getFullBlock)
     }
   }
 

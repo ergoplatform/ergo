@@ -89,7 +89,6 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
                 StatusCodes.BadRequest -> "invalid.block"
             }
           }
-        }
     */
   }
 

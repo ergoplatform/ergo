@@ -1,31 +1,44 @@
 package org.ergoplatform.api.routes
 
 import akka.actor.{ActorRef, ActorRefFactory}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
+import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
+object BlocksApiRoute {
+
+  case class MinedBlock(candidate: CandidateBlock, nonce: Long)
+
+}
+
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
+
+  import BlocksApiRoute._
+
+  private val powScheme = ergoSettings.chainSettings.poWScheme
 
   override val route: Route = pathPrefix("blocks") {
-    concat(blocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
+    concat(getBlocksR, postBlocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
   }
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -65,11 +78,31 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     }
   }
 
-  def blocksR: Route = get {
+  def getBlocksR: Route = get {
     parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0, 'heightFrom.as[Int].?, 'heightTo.as[Int].?) {
       case (limit, offset, heightFrom, heightTo) =>
         // todo heightFrom, heightTo
         toJsonResponse(getHeaderIds(limit, offset))
+    }
+  }
+
+  def postBlocksR: Route = post {
+    entity(as[MinedBlock]) { block =>
+      complete {
+        powScheme.proveBlock(block.candidate, block.nonce) match {
+          case Some(newBlock) =>
+            log.info("New block found: " + newBlock)
+
+            nodeViewActorRef ! LocallyGeneratedModifier(newBlock.header)
+            nodeViewActorRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
+            newBlock.aDProofs.foreach { adp =>
+              nodeViewActorRef ! LocallyGeneratedModifier(adp)
+            }
+            StatusCodes.OK
+          case None =>
+            StatusCodes.BadRequest
+        }
+      }
     }
   }
 

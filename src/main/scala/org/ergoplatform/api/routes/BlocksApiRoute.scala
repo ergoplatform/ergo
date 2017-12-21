@@ -1,31 +1,38 @@
 package org.ergoplatform.api.routes
 
 import akka.actor.{ActorRef, ActorRefFactory}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
+import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
+
+  import BlocksApiRoute._
+
+  private val powScheme = ergoSettings.chainSettings.poWScheme
 
   override val route: Route = pathPrefix("blocks") {
-    concat(blocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
+    concat(getBlocksR, postBlocksR, getLastHeadersR, getBlockIdsAtHeightR, getBlockHeaderByHeaderIdR, getBlockTransactionsByHeaderIdR, candidateBlockR, getFullBlockByHeaderIdR)
   }
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -60,10 +67,29 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
     }
   }
 
-  def blocksR: Route = get {
+  def getBlocksR: Route = get {
     parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0) {
       case (limit, offset) =>
         toJsonResponse(getHeaderIds(limit, offset))
+    }
+  }
+
+  def postBlocksR: Route = post {
+    entity(as[ErgoFullBlock]) { block =>
+      complete {
+        if (powScheme.verify(block.header)) {
+          log.info("Received a new valid block through the API: " + block)
+
+          nodeViewActorRef ! LocallyGeneratedModifier(block.header)
+          nodeViewActorRef ! LocallyGeneratedModifier(block.blockTransactions)
+          block.aDProofs.foreach { adp =>
+            nodeViewActorRef ! LocallyGeneratedModifier(adp)
+          }
+          StatusCodes.OK
+        } else {
+            StatusCodes.BadRequest -> "invalid.block"
+        }
+      }
     }
   }
 

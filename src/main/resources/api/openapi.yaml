@@ -364,7 +364,6 @@ components:
           example: 327
 
 paths:
-  # todo post mined block
   /blocks:
     get:
       summary: Get the Array of header ids
@@ -414,6 +413,27 @@ paths:
                 enum:
                   # Parameter `offset` is out of range
                   - invalid.offset.out.of.range
+    post:
+      summary: Send a mined block
+      operationId: sendMinedBlock
+      tags:
+        - blocks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FullBlock'
+      responses:
+        200:
+          description: Block is valid
+        default:
+          description: Error
+          content:
+            application/json:
+              type: string
+              enum:
+                - invalid.block
 
   /blocks/at/{blockHeight}:
     get:

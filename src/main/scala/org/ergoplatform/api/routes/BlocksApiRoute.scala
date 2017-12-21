@@ -66,9 +66,8 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   }
 
   def blocksR: Route = get {
-    parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0, 'heightFrom.as[Int].?, 'heightTo.as[Int].?) {
-      case (limit, offset, heightFrom, heightTo) =>
-        // todo heightFrom, heightTo
+    parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0) {
+      case (limit, offset) =>
         toJsonResponse(getHeaderIds(limit, offset))
     }
   }

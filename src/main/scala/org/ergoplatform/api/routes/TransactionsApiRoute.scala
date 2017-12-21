@@ -27,7 +27,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {
-    concat(sendTransactionR, getTransactionByIdR, getUnconfirmedTransactionsR)
+    concat(getUnconfirmedTransactionsR, sendTransactionR, getTransactionByIdR)
   }
 
   override val settings: RESTApiSettings = restApiSettings
@@ -79,11 +79,13 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     }
   }
 
-  def getUnconfirmedTransactionsR: Route = get {
-    parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0) {
-      case (limit, offset) =>
-        // todo offset
-        toJsonResponse(getUnconfirmedTransactions(limit))
+  def getUnconfirmedTransactionsR: Route = path("unconfirmed") {
+      get {
+        parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0) {
+          case (limit, offset) =>
+            // todo offset
+            toJsonResponse(getUnconfirmedTransactions(limit))
+        }
+      }
     }
-  }
 }

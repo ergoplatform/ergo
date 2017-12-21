@@ -18,6 +18,7 @@ import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
@@ -46,13 +47,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     BlocksApiRoute(nodeViewHolderRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
     TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
-  override val apiTypes: Set[Class[_]] = Set(
-    classOf[UtilsApiRoute],
-    classOf[PeersApiRoute],
-    classOf[InfoRoute],
-    classOf[BlocksApiRoute],
-    classOf[TransactionsApiRoute]
-  )
+  override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining

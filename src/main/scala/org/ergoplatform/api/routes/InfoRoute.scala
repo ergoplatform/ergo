@@ -1,12 +1,9 @@
 package org.ergoplatform.api.routes
 
-import javax.ws.rs.Path
-
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
-import io.swagger.annotations.{Api, ApiOperation, ApiResponse, ApiResponses}
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -78,7 +75,7 @@ case class InfoRoute(readersHolder: ActorRef,
             "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(-1).asJson,
             "bestHeaderId" -> bestHeader.map(_.encodedId).getOrElse("None").asJson,
             "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("None").asJson,
-            "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).getOrElse("None").asJson,
+            "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("None").asJson,
             "stateRoot" -> stateRoot.asJson,
             "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty.toString).getOrElse("None").asJson,
             "unconfirmedCount" -> poolSize.asJson,

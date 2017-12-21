@@ -24,12 +24,6 @@ import scorex.crypto.encode.Base58
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
-object BlocksApiRoute {
-
-  case class MinedBlock(candidate: CandidateBlock, nonce: Long)
-
-}
-
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
 
@@ -87,20 +81,19 @@ case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings
   }
 
   def postBlocksR: Route = post {
-    entity(as[MinedBlock]) { block =>
+    entity(as[ErgoFullBlock]) { block =>
       complete {
-        powScheme.proveBlock(block.candidate, block.nonce) match {
-          case Some(newBlock) =>
-            log.info("New block found: " + newBlock)
+        if (powScheme.verify(block.header)) {
+          log.info("Received a new valid block through the API: " + block)
 
-            nodeViewActorRef ! LocallyGeneratedModifier(newBlock.header)
-            nodeViewActorRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-            newBlock.aDProofs.foreach { adp =>
-              nodeViewActorRef ! LocallyGeneratedModifier(adp)
-            }
-            StatusCodes.OK
-          case None =>
-            StatusCodes.BadRequest
+          nodeViewActorRef ! LocallyGeneratedModifier(block.header)
+          nodeViewActorRef ! LocallyGeneratedModifier(block.blockTransactions)
+          block.aDProofs.foreach { adp =>
+            nodeViewActorRef ! LocallyGeneratedModifier(adp)
+          }
+          StatusCodes.OK
+        } else {
+            StatusCodes.BadRequest -> "invalid.block"
         }
       }
     }

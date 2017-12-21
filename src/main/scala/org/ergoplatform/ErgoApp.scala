@@ -38,13 +38,13 @@ class ErgoApp(args: Seq[String]) extends Application {
   val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
   val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId))
-  val readersHolder = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
+  val readersHolderRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
-    InfoRoute(readersHolder, nodeViewHolderRef, minerRef, peerManagerRef, ergoSettings.nodeSettings.ADState, settings.restApi, nodeId),
-    BlocksApiRoute(nodeViewHolderRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
+    InfoRoute(readersHolderRef, nodeViewHolderRef, minerRef, peerManagerRef, ergoSettings.nodeSettings.ADState, settings.restApi, nodeId),
+    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
     TransactionsApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

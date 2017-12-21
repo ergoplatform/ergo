@@ -6,9 +6,10 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
+import io.circe.generic.auto._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{CandidateBlock, Header}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -20,14 +21,13 @@ import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 case class BlocksApiRoute(nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
-
-  import BlocksApiRoute._
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport with ScorexLogging {
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
 

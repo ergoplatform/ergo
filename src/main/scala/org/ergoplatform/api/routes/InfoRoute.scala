@@ -54,25 +54,25 @@ case class InfoRoute(readersHolder: ActorRef,
           val stateVersion = readers.s.map(_.version).map(Algos.encode)
           val bestHeader = readers.h.flatMap(_.bestHeaderOpt)
           val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
-          val poolSize = readers.m.map(_.size).getOrElse(-1)
-          val stateRoot = readers.s.map(s => Algos.encode(s.rootHash)).getOrElse("Undefined")
+          val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
+          val stateRoot = readers.s.map(s => Algos.encode(s.rootHash)).getOrElse("null")
           Map(
             "name" -> Algos.encode(nodeId).asJson,
             "stateVersion" -> Version.VersionString.asJson,
-            "headersHeight" -> bestHeader.map(_.height).getOrElse(-1).asJson,
-            "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(-1).asJson,
-            "bestHeaderId" -> bestHeader.map(_.encodedId).getOrElse("None").asJson,
-            "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("None").asJson,
-            "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("None").asJson,
+            "headersHeight" -> bestHeader.map(_.height).getOrElse(0).asJson,
+            "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(0).asJson,
+            "bestHeaderId" -> bestHeader.map(_.encodedId).getOrElse("null").asJson,
+            "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("null").asJson,
+            "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("null").asJson,
             "stateRoot" -> stateRoot.asJson,
-            "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty.toString).getOrElse("None").asJson,
-            "unconfirmedCount" -> poolSize.asJson,
+            "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).asJson,
+            "unconfirmedCount" -> unconfirmedCount.asJson,
             "stateType" -> getStateType.asJson,
             "stateVersion" -> stateVersion.asJson,
             "isMining" -> minerInfo.isMining.asJson,
             "votes" -> Algos.encode(minerInfo.votes).asJson,
             "peersCount" -> connectedPeers.asJson
-          ).asJson
+          ) .asJson
         }
       }
     }

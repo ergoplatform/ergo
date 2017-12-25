@@ -3,7 +3,7 @@ openapi: "3.0.0"
 info:
   version: "0.1"
   title: Ergo Node API
-  description: API docs for Ergo Node. Models are shared between all Ergo products.
+  description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
     name: Ergo Platform Team
     email: ergoplatform@protonmail.com
@@ -32,10 +32,7 @@ components:
           example: 667
         signature:
           description: The parameter that should be successfully executed the script of the output of the transaction
-          type: integer
-          format: int32
-          minimum: 0
-          example: 667
+          type: string
 
     AnyoneCanSpendTransactionOutput:
       type: object
@@ -50,9 +47,7 @@ components:
           example: 14.7
         script:
           description: The script which should be successfully executed for the waste of this output
-          type: number
-          minimum: 0
-          example: 14.7
+          type: string
 
     AnyoneCanSpendTransaction:
       type: object
@@ -227,13 +222,13 @@ components:
         fullHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty.
+          description: Can be 0 if state is empty
           minimum: 0
           example: 667
         headersHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty.
+          description: Can be 0 if state is empty
           minimum: 0
           example: 667
         bestFullHeaderId:
@@ -244,7 +239,7 @@ components:
           $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
-          description: Can be 'null' if state is empty.
+          description: Can be 'null' if state is empty
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         difficulty:
           type: integer

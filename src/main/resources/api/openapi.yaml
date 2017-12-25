@@ -19,25 +19,37 @@ components:
       type: object
       required:
         - id
-        - index
+        - nonce
+        - signature
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
-        index:
+        nonce:
           description: Index of a output in transaction
           type: integer
-          # int32
-          format: int64
+          format: int32
+          minimum: 0
+          example: 667
+        signature:
+          description: The parameter that should be successfully executed the script of the output of the transaction
+          type: integer
+          format: int32
           minimum: 0
           example: 667
 
     AnyoneCanSpendTransactionOutput:
       type: object
       required:
-        - amount
+        - value
+        - script
       properties:
-        amount:
+        value:
           description: Amount of Ergo token
+          type: number
+          minimum: 0
+          example: 14.7
+        script:
+          description: The script which should be successfully executed for the waste of this output
           type: number
           minimum: 0
           example: 14.7
@@ -63,16 +75,6 @@ components:
           items:
             $ref: '#/components/schemas/AnyoneCanSpendTransactionOutput'
 
-    TransactionId:
-      description: Base16-encoded transaction id bytes
-      type: object
-      required:
-        - transactionId
-      properties:
-        transactionId:
-          type: string
-          example: 141cef0ed1e1cbd3bdf2da2d39fb9a0e697b8777012b169609eb76313506ef66
-
     FullBlock:
       description: Block with header and transactions
       type: object
@@ -83,7 +85,7 @@ components:
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
-        transactions:
+        blockTransactions:
           $ref: '#/components/schemas/BlockTransactions'
         adProofs:
           $ref: '#/components/schemas/BlockADProofs'
@@ -109,15 +111,13 @@ components:
           $ref: '#/components/schemas/ModifierId'
         timestamp:
           type: integer
-          # int32
-          format: int64
+          format: int32
           example: 1501505945003
         reference:
           $ref: '#/components/schemas/ModifierId'
         version:
            type: integer
-           # int32
-           format: int64
+           format: int32
            example: 2
         interlinks:
           # todo better description
@@ -140,8 +140,7 @@ components:
           $ref: '#/components/schemas/Votes'
         nonce:
           type: integer
-          # int32
-          format: int64
+          format: int32
           example: 324573
         equihashSolutions:
           description: Base58-encoded equihash solutions
@@ -149,8 +148,7 @@ components:
           example: 11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh
         height:
           type: integer
-          # int32
-          format: int64
+          format: int32
           minimum: 0
           example: 667
 
@@ -168,16 +166,6 @@ components:
           items:
             $ref: '#/components/schemas/AnyoneCanSpendTransaction'
 
-    ModifierId:
-      description: Base58-encoded 32 byte modifier id
-      type: object
-      required:
-        - modifierId
-      properties:
-        modifierId:
-          type: string
-          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
-
     BlockADProofs:
       type: object
       required:
@@ -192,75 +180,6 @@ components:
         digest:
           $ref: '#/components/schemas/Digest32'
 
-    Digest32:
-      description: Base58-encoded 32 byte digest
-      type: object
-      required:
-        - digest
-      properties:
-        digest:
-          type: string
-          example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
-
-    ADDigest:
-      description: Base58-encoded 33 byte digest - digest with extra byte with tree height
-      type: object
-      required:
-        - digest
-      properties:
-        digest:
-          type: string
-          example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
-
-    SerializedAdProof:
-      description: Base58-encoded ad proofs
-      type: object
-      required:
-        - proof
-      properties:
-        proof:
-          type: string
-          example: DpvhNdDszrCDm1qmwFXmxaiz4bgEG19dGVhBaYsofV93BwmFofbnFQ7kNwnDSvptb1NGBmi6GtrFyacj8hBWNueRHVCyctAJE2sSoNxVQiSJEqRaa5NFp3DACG16RPvDDgbG8qZ1kNdfZhK9S6q77LwYhPbzYL2s2x7uzScQdccw4HR68mogEgBXomAXuisJyy4indYfCdEZmFHPELn9Md9F4SGu9BpAKYMUjEwkRKt7Ype8M6MHKFuxiVCTTq2fLC8FVUeSJLDM7BVaZtLctaeuZ3LR3sx1tog7daXTAjsXWYZXvqUVs1qynXvJZnFuAN5wLoynnN7YVahHRGQk9sUQaxtPbt7L5qzBzooXedE9LFssvU9zV3KNM2PkbpaHdAu7tJHWoTNyCzZuR2JqSfnpSDkXhZCQhRB7m7vbGzokZ7DcGwtNUxBr7HdEdEUQLRmpHbLqjL82zZuYvykUyPZwCnphaKku7RW3f3BDk3DReCeFBPZkYkoEJFHe9mCAAM5WD44vtTeNokuMrtUbvUgnUFpBnyJsQf7WHAiFsBbRjZwjgoyUYKJCSLSqp3QwoGW5sSXmGvwG9peFFB3yb6gGdDLJqTx2zTqh3znPpK9S5ePGPdCcmbnNKh1pxqnARhDB8xC7eG6Edvhwh7Nx1sSDHXo8xp3hWUdFT4APK16Wr8KNa4xEKuh9mkb31AQhCuD8GsyRaW9oGdJKtZnwrYeBWGrDQ9c99PG2yyA7JzDcvdALdH7Z7T4pd57KFn4VTdJrT6tqwJPh3wERgQFUUEQ2grpxBg8ZMZy1YEzLu1MnJJVvvx66efK1GPytK4n1hKs3pogMW2Fxi5zbLean7k9Fj6VGcbFKGbJPqzhTr3TW6ywNsBmh7ntSmrV3k45RxWb4KWJByiy25xkQg57qyij71F2vzZgTs3kRVVMS4asE8r3qLiA4w8QKfay7JWC9XVuRJQwMPPeVNRfJP7kK1giZhZahzbCFKLcuP6ShzxBzZmTzhRGuF3HtsbtWawv21czEANc6cV6ymyrics3jtMizGwwAcUcasToNuBih34HhspF65HnR5gKZqqHwkbugeDCpDYieAQzwTLzd52ocdJp98dvHU1SWAGdKaeqhF75FiijZebKb3mQiPMTFj2PMwSTjttarPwpEdEwRLxGPezvCUdq7rJAoZJbszaCBnTDjHjqsv5UiyLXr7gM9uyzMX9GMwTnrWYrEwYAD2Yih4b9mvtMdDeZ1mfJsT9r47xLPqgyxbd232U8pu28JbUrrfpZ2mZARTsXzYsuFQusnbzCo72PWNUvceTXh5f5TFhMbmCydcrfCyM3JFV2FrxwNKFKdFvdppAGXGKwhk5cB4
-
-    Votes:
-      description: Base58-encoded votes array
-      type: object
-      required:
-        - votes
-      properties:
-        votes:
-          type: string
-          example: AcRpicD
-
-    BlockSignature:
-      description: Base58-encoded block signature
-      type: object
-      required:
-        - signature
-      properties:
-        signature:
-          type: string
-          example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
-
-    TransactionStatus:
-      description: Status of a transaction
-      type: object
-      required:
-        - status
-        - confirmations
-      properties:
-        status:
-          type: string
-          enum:
-            - "confirmed"
-            - "unconfirmed"
-        confirmations:
-          type: integer
-          # int32
-          format: int64
-          minimum: -1
-          example: 327
-
     Peer:
       type: object
       required:
@@ -274,14 +193,12 @@ components:
           example: mynode
         nonce:
           type: integer
-          # int32
-          format: int64
+          format: int32
           example: 123456
         lastSeen:
           type: integer
-          # int32
           format: int64
-          example: 123456
+          example: 1514194867
 
     NodeInfo:
       type: object
@@ -291,7 +208,6 @@ components:
         - fullHeight
         - headersHeight
         - bestFullHeaderId
-        - bestHeaderId
         - stateRoot
         - stateType
         - stateVersion
@@ -310,27 +226,29 @@ components:
           example: 0.0.1
         fullHeight:
           type: integer
-          # int32
-          format: int64
+          format: int32
+          description: Can be 0 if state is empty.
           minimum: 0
           example: 667
         headersHeight:
           type: integer
-          # int32
-          format: int64
+          format: int32
+          description: Can be 0 if state is empty.
           minimum: 0
           example: 667
         bestFullHeaderId:
+          $ref: '#/components/schemas/ModifierId'
+        previousFullHeaderId:
           $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
           $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
+          description: Can be 'null' if state is empty.
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         difficulty:
           type: integer
-          # int32
-          format: int64
+          format: int32
           minimum: 0
           example: 667
         stateType:
@@ -346,22 +264,55 @@ components:
           example: true
         votes:
           type: string
-          example: AcRpicD
+          $ref: '#/components/schemas/Votes'
         peersCount:
           type: integer
           description: Number of connected peers
-          # int32
-          format: int64
+          format: int32
           minimum: 0
           example: 327
         unconfirmedCount:
           description: Current unconfirmed transactions count
           type: integer
-          # int32
-          format: int64
+          format: int32
           minimum: 0
           maximum: 10000
           example: 327
+
+    TransactionId:
+      description: Base16-encoded transaction id bytes
+      type: string
+      example: 141cef0ed1e1cbd3bdf2da2d39fb9a0e697b8777012b169609eb76313506ef66
+
+    ModifierId:
+      description: Base58-encoded 32 byte modifier id
+      type: string
+      example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+
+    Digest32:
+      description: Base58-encoded 32 byte digest
+      type: string
+      example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
+
+    ADDigest:
+      description: Base58-encoded 33 byte digest - digest with extra byte with tree height
+      type: string
+      example: FjX5cPuwMc2ocDLPWzt6jq29BXjvU6d5w5XURDJ6dmoM
+
+    SerializedAdProof:
+      description: Base58-encoded ad proofs
+      type: string
+      example: DpvhNdDszrCDm1qmwFXmxaiz4bgEG19dGVhBaYsofV93BwmFofbnFQ7kNwnDSvptb1NGBmi6GtrFyacj8hBWNueRHVCyctAJE2sSoNxVQiSJEqRaa5NFp3DACG16RPvDDgbG8qZ1kNdfZhK9S6q77LwYhPbzYL2s2x7uzScQdccw4HR68mogEgBXomAXuisJyy4indYfCdEZmFHPELn9Md9F4SGu9BpAKYMUjEwkRKt7Ype8M6MHKFuxiVCTTq2fLC8FVUeSJLDM7BVaZtLctaeuZ3LR3sx1tog7daXTAjsXWYZXvqUVs1qynXvJZnFuAN5wLoynnN7YVahHRGQk9sUQaxtPbt7L5qzBzooXedE9LFssvU9zV3KNM2PkbpaHdAu7tJHWoTNyCzZuR2JqSfnpSDkXhZCQhRB7m7vbGzokZ7DcGwtNUxBr7HdEdEUQLRmpHbLqjL82zZuYvykUyPZwCnphaKku7RW3f3BDk3DReCeFBPZkYkoEJFHe9mCAAM5WD44vtTeNokuMrtUbvUgnUFpBnyJsQf7WHAiFsBbRjZwjgoyUYKJCSLSqp3QwoGW5sSXmGvwG9peFFB3yb6gGdDLJqTx2zTqh3znPpK9S5ePGPdCcmbnNKh1pxqnARhDB8xC7eG6Edvhwh7Nx1sSDHXo8xp3hWUdFT4APK16Wr8KNa4xEKuh9mkb31AQhCuD8GsyRaW9oGdJKtZnwrYeBWGrDQ9c99PG2yyA7JzDcvdALdH7Z7T4pd57KFn4VTdJrT6tqwJPh3wERgQFUUEQ2grpxBg8ZMZy1YEzLu1MnJJVvvx66efK1GPytK4n1hKs3pogMW2Fxi5zbLean7k9Fj6VGcbFKGbJPqzhTr3TW6ywNsBmh7ntSmrV3k45RxWb4KWJByiy25xkQg57qyij71F2vzZgTs3kRVVMS4asE8r3qLiA4w8QKfay7JWC9XVuRJQwMPPeVNRfJP7kK1giZhZahzbCFKLcuP6ShzxBzZmTzhRGuF3HtsbtWawv21czEANc6cV6ymyrics3jtMizGwwAcUcasToNuBih34HhspF65HnR5gKZqqHwkbugeDCpDYieAQzwTLzd52ocdJp98dvHU1SWAGdKaeqhF75FiijZebKb3mQiPMTFj2PMwSTjttarPwpEdEwRLxGPezvCUdq7rJAoZJbszaCBnTDjHjqsv5UiyLXr7gM9uyzMX9GMwTnrWYrEwYAD2Yih4b9mvtMdDeZ1mfJsT9r47xLPqgyxbd232U8pu28JbUrrfpZ2mZARTsXzYsuFQusnbzCo72PWNUvceTXh5f5TFhMbmCydcrfCyM3JFV2FrxwNKFKdFvdppAGXGKwhk5cB4
+
+    Votes:
+      description: Base58-encoded votes array
+      type: string
+      example: AcRpicD
+
+    BlockSignature:
+      description: Base58-encoded block signature
+      type: string
+      example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
 
 paths:
   /blocks:
@@ -377,8 +328,7 @@ paths:
           description: The number of items in list to return
           schema:
             type: integer
-            # int32
-            format: int64
+            format: int32
             minimum: 10
             maximum: 100
             default: 50
@@ -388,8 +338,7 @@ paths:
           description: The number of items in list to skip
           schema:
             type: integer
-            # int32
-            format: int64
+            format: int32
             default: 0
       responses:
         200:
@@ -448,8 +397,7 @@ paths:
           description: Height of a wanted block
           schema:
             type: integer
-            # int32
-            format: int64
+            format: int32
       responses:
         200:
           description: Array of header ids
@@ -659,7 +607,7 @@ paths:
                 # Provided timestamp is invalid
                 - invalid.transaction.timestamp
                 # Provided amount in invalid
-                - invalid.transaction.amount
+                - invalid.transaction.value
                 # Provided box nonce in invalid
                 - invalid.box.nonce
                 - invalid.json
@@ -704,8 +652,7 @@ paths:
         description: The number of items in list to return
         schema:
           type: integer
-          # int32
-          format: int64
+          format: int32
           minimum: 10
           maximum: 100
           default: 50
@@ -715,8 +662,7 @@ paths:
         description: The number of items in list to skip
         schema:
           type: integer
-          # int32
-          format: int64
+          format: int32
           default: 0
       # todo from timestamp?
     get:

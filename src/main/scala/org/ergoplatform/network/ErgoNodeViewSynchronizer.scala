@@ -1,16 +1,15 @@
 package org.ergoplatform.network
 
 import akka.actor.ActorRef
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, MissedModifiers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.NodeViewHolder._
-import scorex.core.consensus.History
 import scorex.core.network.NetworkController.SendToNetwork
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
@@ -69,7 +68,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedToDownload()
+      deliveryTracker.removeOutdatedToDownload(historyReaderOpt)
       deliveryTracker.downloadRetry().foreach(i => requestDownload(i._2.tp, i._1))
 
   }

@@ -38,26 +38,31 @@ coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
 
 fork := true
 
-javaOptions in run ++= Seq(
-  // -J prefix is required by the bash script
-  "-J-server",
+val opts = Seq(
+  "-server",
   // JVM memory tuning for 2g ram
-  "-J-Xms128m",
-  "-J-Xmx2G",
-  "-J-XX:+ExitOnOutOfMemoryError",
+  "-Xms128m",
+  "-Xmx2G",
+  "-XX:+ExitOnOutOfMemoryError",
   // Java 9 support
-  "-J-XX:+IgnoreUnrecognizedVMOptions",
-  "-J--add-modules=java.xml.bind",
+  "-XX:+IgnoreUnrecognizedVMOptions",
+  "--add-modules=java.xml.bind",
 
   // from https://groups.google.com/d/msg/akka-user/9s4Yl7aEz3E/zfxmdc0cGQAJ
-  "-J-XX:+UseG1GC",
-  "-J-XX:+UseNUMA",
-  "-J-XX:+AlwaysPreTouch",
+  "-XX:+UseG1GC",
+  "-XX:+UseNUMA",
+  "-XX:+AlwaysPreTouch",
 
   // probably can't use these with jstack and others tools
-  "-J-XX:+PerfDisableSharedMem",
-  "-J-XX:+ParallelRefProcEnabled",
-  "-J-XX:+UseStringDeduplication")
+  "-XX:+PerfDisableSharedMem",
+  "-XX:+ParallelRefProcEnabled",
+  "-XX:+UseStringDeduplication")
+
+// todo after adding sbt-native-packager
+//javaOptions in Universal ++= opts.map(opt => "-J" + opt)
+
+// -J prefix is required by the bash script
+javaOptions in run ++= opts
 
 homepage := Some(url("http://ergoplatform.org/"))
 

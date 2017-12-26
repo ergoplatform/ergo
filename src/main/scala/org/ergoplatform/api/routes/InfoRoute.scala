@@ -3,6 +3,7 @@ package org.ergoplatform.api.routes
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
+import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
@@ -38,28 +39,38 @@ case class InfoRoute(readersHolder: ActorRef,
       connectedPeers <- connectedPeersF
       readers <- readersF
     } yield {
-      val stateVersion = readers.s.map(_.version).map(Algos.encode)
-      val bestHeader = readers.h.flatMap(_.bestHeaderOpt)
-      val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
-      val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
-      val stateRoot = readers.s.map(s => Algos.encode(s.rootHash)).getOrElse("null")
-      Map(
-        "name" -> Algos.encode(nodeId).asJson,
-        "stateVersion" -> Version.VersionString.asJson,
-        "headersHeight" -> bestHeader.map(_.height).getOrElse(0).asJson,
-        "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(0).asJson,
-        "bestHeaderId" -> bestHeader.map(_.encodedId).getOrElse("null").asJson,
-        "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("null").asJson,
-        "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("null").asJson,
-        "stateRoot" -> stateRoot.asJson,
-        "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).asJson,
-        "unconfirmedCount" -> unconfirmedCount.asJson,
-        "stateType" -> getStateType.asJson,
-        "stateVersion" -> stateVersion.asJson,
-        "isMining" -> minerInfo.isMining.asJson,
-        "votes" -> Algos.encode(minerInfo.votes).asJson,
-        "peersCount" -> connectedPeers.asJson
-      ) .asJson
+      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers, readers, getStateType)
     }).okJson()
+  }
+}
+
+object InfoRoute {
+  def makeInfoJson(nodeId: Array[Byte],
+                   minerInfo: MiningStatusResponse,
+                   connectedPeersLength: Int,
+                   readers: Readers,
+                   stateType: String): Json = {
+    val stateVersion = readers.s.map(_.version).map(Algos.encode)
+    val bestHeader = readers.h.flatMap(_.bestHeaderOpt)
+    val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
+    val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
+    val stateRoot = readers.s.map(s => Algos.encode(s.rootHash)).getOrElse("null")
+    Map(
+      "name" -> Algos.encode(nodeId).asJson,
+      "stateVersion" -> Version.VersionString.asJson,
+      "headersHeight" -> bestHeader.map(_.height).getOrElse(0).asJson,
+      "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(0).asJson,
+      "bestHeaderId" -> bestHeader.map(_.encodedId).getOrElse("null").asJson,
+      "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("null").asJson,
+      "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("null").asJson,
+      "stateRoot" -> stateRoot.asJson,
+      "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).asJson,
+      "unconfirmedCount" -> unconfirmedCount.asJson,
+      "stateType" -> stateType.asJson,
+      "stateVersion" -> stateVersion.asJson,
+      "isMining" -> minerInfo.isMining.asJson,
+      "votes" -> Algos.encode(minerInfo.votes).asJson,
+      "peersCount" -> connectedPeersLength.asJson
+    ).asJson
   }
 }

@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Chars, Ints}
 import io.circe.Json
+import io.circe.syntax._
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -11,6 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
+import scorex.core.serialization.JsonSerializable
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -18,6 +20,8 @@ import scorex.crypto.hash.Digest32
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 import scala.util.{Random, Try}
 import io.circe.syntax._
 
@@ -28,8 +32,8 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[AnyoneCanSpendTransaction],
                           timestamp: Timestamp,
-                          votes: Array[Byte]) {
-  lazy val json: Json = Map(
+                          votes: Array[Byte]) extends JsonSerializable {
+  override lazy val json: Json = Map(
     "parentId" -> parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
     "nBits" -> nBits.asJson,
     "stateRoot" -> Algos.encode(stateRoot).asJson,

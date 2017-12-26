@@ -19,7 +19,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
   def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier]
 
-  def lastHeaders(count: Int): HeaderChain
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain
 
   /**
     * Constructs SPV Proof from KLS16 paper

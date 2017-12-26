@@ -11,13 +11,10 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.ModifierId
-import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.encode.Base16
 
@@ -27,22 +24,10 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {
-    concat(getUnconfirmedTransactionsR, sendTransactionR, getTransactionByIdR)
+    getUnconfirmedTransactionsR ~ sendTransactionR ~getTransactionByIdR
   }
 
   override val settings: RESTApiSettings = restApiSettings
-
-  private val historyRequest = if (digest) {
-    GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
-  } else {
-    GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, ErgoHistory](_.history)
-  }
-
-  private val poolRequest = if (digest) {
-    GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, ErgoMemPool](_.pool)
-  } else {
-    GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, ErgoMemPool](_.pool)
-  }
 
   private def getHistory: Future[ErgoHistoryReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.h.get)
 
@@ -59,33 +44,20 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     _.take(limit).toSeq
   }.map(_.map(_.json).asJson)
 
-  def sendTransactionR: Route =
-    post {
-      entity(as[AnyoneCanSpendTransaction]) { tx =>
-        complete {
-          // todo validation?
-          nodeViewActorRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
-          StatusCodes.OK
-        }
-      }
-    }
-
-  // todo tx id validation
-  def getTransactionByIdR: Route = path(Segment) { id =>
-    get {
-      toJsonOptionalResponse {
-        getTransactionById(ModifierId @@ Base16.decode(id))
-      }
-    }
+  //todo There in no codec for "AnyoneCanSpendTransaction" need to make one.
+  def sendTransactionR: Route = (post & entity(as[AnyoneCanSpendTransaction])) { tx =>
+    // todo validation?
+    nodeViewActorRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    complete(StatusCodes.OK)
   }
 
-  def getUnconfirmedTransactionsR: Route = path("unconfirmed") {
-      get {
-        parameters('limit.as[Int] ? 50, 'offset.as[Int] ? 0) {
-          case (limit, offset) =>
-            // todo offset
-            toJsonResponse(getUnconfirmedTransactions(limit))
-        }
-      }
-    }
+  // todo tx id validation
+  def getTransactionByIdR: Route = (path(Segment) & get) { id =>
+    getTransactionById(ModifierId @@ Base16.decode(id)).okJson()
+  }
+
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
+    // todo offset
+    getUnconfirmedTransactions(limit).okJson()
+  }
 }

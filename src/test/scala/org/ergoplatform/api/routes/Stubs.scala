@@ -37,7 +37,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings.nodeSettings).get
   }
   }.sample.get
-  lazy val memPool = ErgoMemPool.empty
+
+  val txs = chain.head.transactions
+
+  lazy val memPool = ErgoMemPool.empty.put(txs).get
   lazy val readers = Readers(Some(history), Some(state), Some(memPool))
 
   class PeersManagerStub extends Actor {
@@ -60,6 +63,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props() = Props(new MinerStub)
   }
 
+  class NodeViewStub extends Actor {
+    def receive = { case _ => println("hey") }
+  }
+
+  object NodeViewStub {
+    def props() = Props(new NodeViewStub)
+  }
+
   class ReadersStub extends Actor {
     def receive = {
       case GetReaders =>
@@ -75,6 +86,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val readersRef = system.actorOf(ReadersStub.props())
   lazy val minerRef = system.actorOf(MinerStub.props())
   lazy val pmRef = system.actorOf(PeersManagerStub.props())
+  lazy val nodeViewRef = system.actorOf(NodeViewStub.props())
 
   def generateHistory(verifyTransactions: Boolean = true,
                       ADState: Boolean = true,

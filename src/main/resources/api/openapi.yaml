@@ -661,7 +661,7 @@ paths:
           default: 0
       # todo from timestamp?
     get:
-      summary: Get current of the unconfirmed transactions pool
+      summary: Get current pool of the unconfirmed transactions pool
       operationId: getUnconfirmedTransactions
       tags:
         - transactions
@@ -709,7 +709,7 @@ paths:
 
   /peers/connect:
     post:
-      summary: Get current size of the unconfirmed transactions pool
+      summary: Add address to peers list
       operationId: connectToPeer
       tags:
         - peers

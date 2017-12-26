@@ -20,7 +20,7 @@ class InfoRoutesSpec extends FlatSpec
   it should "return info" in {
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      InfoRoute.makeInfoJson(nodeId, minerInfo, 0, readers, "digest").toString shouldEqual responseAs[String]
+      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers.length, readers, "digest").toString shouldEqual responseAs[String]
     }
   }
 }

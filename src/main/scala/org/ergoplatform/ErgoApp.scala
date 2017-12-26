@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.{DebugApiRoute, HistoryApiRoute, MiningApiRoute, StateApiRoute}
+import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -18,6 +18,7 @@ import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
   override type P = AnyoneCanSpendProposition.type
@@ -37,24 +38,16 @@ class ErgoApp(args: Seq[String]) extends Application {
   val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
   val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId))
-  val readersHolder = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
+  val readersHolderRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkController, settings.restApi),
-    HistoryApiRoute(readersHolder, settings.restApi, ergoSettings.nodeSettings.ADState),
-    StateApiRoute(nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState),
-    MiningApiRoute(minerRef, settings.restApi),
-    DebugApiRoute(readersHolder, settings.restApi, nodeId))
+    InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings.nodeSettings.ADState, settings.restApi, nodeId),
+    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
 
-  override val apiTypes: Set[Class[_]] = Set(
-    classOf[UtilsApiRoute],
-    classOf[PeersApiRoute],
-    classOf[HistoryApiRoute],
-    classOf[StateApiRoute],
-    classOf[MiningApiRoute],
-    classOf[DebugApiRoute]
-  )
+  override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining

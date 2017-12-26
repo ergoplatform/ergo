@@ -184,8 +184,15 @@ trait ErgoHistoryReader
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, b => false)).getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, b => false).drop(offset)).getOrElse(HeaderChain.empty)
+
+
+  /**
+    * @return ids of count headers starting from offset
+    */
+  def headerIdsAt(count: Int, offset: Int = 0): Seq[ModifierId] = (offset until (count + offset))
+    .flatMap(h => headerIdsAtHeight(h).headOption)
 
   protected def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {

@@ -1,10 +1,11 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
+import akka.util.Timeout
+import akka.pattern._
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.local.ErgoMiner._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.CandidateBlock
@@ -20,11 +21,14 @@ import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfu
 import scorex.core.utils.{NetworkTime, ScorexLogging}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[Byte]) extends Actor
   with ScorexLogging {
+
+  import ErgoMiner._
 
   private var isMining = false
   private var nonce = 0
@@ -44,7 +48,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
       if (isMining) {
         mod match {
           case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-            produceCandidate()
+            produceCandidate(viewHolder, ergoSettings, nodeId)
 
           case _ =>
         }
@@ -61,7 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
       if (!isMining && ergoSettings.nodeSettings.mining) {
         log.info("Starting Mining")
         isMining = true
-        produceCandidate()
+        produceCandidate(viewHolder, ergoSettings, nodeId)
         self ! MineBlock
       }
 
@@ -98,9 +102,28 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
   }
+}
 
-  private def produceCandidate(): Unit = {
-    viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+
+object ErgoMiner extends ScorexLogging {
+
+  case object StartMining
+
+  case object MineBlock
+
+  case object MiningStatusRequest
+
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
+    lazy val json: Json = Map(
+      "isMining" -> isMining.asJson,
+      "votes" -> Algos.encode(votes).asJson,
+      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+    ).asJson
+  }
+
+  def produceCandidate(viewHolder: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
+    implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
+    (viewHolder ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       val bestHeaderOpt = v.history.bestFullBlockOpt.map(_.header)
       if (bestHeaderOpt.isDefined || ergoSettings.nodeSettings.offlineGeneration) {
 
@@ -133,7 +156,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
           val timestamp = NetworkTime.time()
           val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
             .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
-          val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, votes)
+          val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
           log.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
           //TODO takes a lot of time
           candidate
@@ -146,25 +169,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
         //Do not try to mine genesis block when offlineGeneration = false
         None
       }
-    }
-  }
-}
-
-
-object ErgoMiner {
-
-  case object StartMining
-
-  case object MineBlock
-
-  case object MiningStatusRequest
-
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
-    lazy val json: Json = Map(
-      "isMining" -> isMining.asJson,
-      "votes" -> Algos.encode(votes).asJson,
-      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
-    ).asJson
+    }).mapTo[Option[CandidateBlock]]
   }
 
 }

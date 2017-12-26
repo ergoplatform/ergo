@@ -31,6 +31,9 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
 
   override def size: Int = unconfirmed.size
 
+  def take(limit: Int): Iterable[AnyoneCanSpendTransaction] =
+    unconfirmed.values.toSeq.take(limit)
+
   protected def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = synchronized {
     val txsIds = txs.map(tx => key(tx.id))
     val newMap = waitedForAssembly.flatMap(p => {
@@ -53,4 +56,5 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
     waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
     promise.future
   }
+
 }

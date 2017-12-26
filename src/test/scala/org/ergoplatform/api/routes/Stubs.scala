@@ -1,5 +1,7 @@
 package org.ergoplatform.api.routes
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorSystem, Props}
 import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
@@ -12,8 +14,9 @@ import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import scorex.core.app.Version
 import scorex.core.network.Handshake
-import scorex.core.network.peer.PeerManager
+import scorex.core.network.peer.{PeerInfo, PeerManager}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTime
 import scorex.crypto.authds.ADDigest
@@ -43,9 +46,31 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val memPool = ErgoMemPool.empty.put(txs).get
   lazy val readers = Readers(Some(history), Some(state), Some(memPool))
 
+
+  val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)
+  val inetAddr2 = new InetSocketAddress("93.93.93.93",27017)
+  val ts1 = System.currentTimeMillis() - 100
+  val ts2 = System.currentTimeMillis() + 100
+
+  val peers = Map(
+    inetAddr1 -> PeerInfo(ts1, Some(1L), Some("first")),
+    inetAddr2 -> PeerInfo(ts2, Some(2L), Some("second"))
+  )
+
+  val protocolVersion = Version("1.1.1")
+
+  val connectedPeers = Seq(
+    Handshake("node_pop", protocolVersion, "first", 1L, Some(inetAddr1), ts1),
+    Handshake("node_pop", protocolVersion, "second", 1L, Some(inetAddr2), ts2)
+  )
+
+  val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")
+
   class PeersManagerStub extends Actor {
     def receive = {
-      case PeerManager.GetConnectedPeers => sender() ! Seq.empty[Handshake]
+      case PeerManager.GetConnectedPeers => sender() ! connectedPeers
+      case PeerManager.GetAllPeers => sender() ! peers
+      case PeerManager.GetBlacklistedPeers => sender() ! blacklistedPeers
     }
   }
 
@@ -71,6 +96,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props() = Props(new NodeViewStub)
   }
 
+  class NetworkControllerStub extends Actor {
+    def receive = { case _ => println("hey") }
+  }
+
+  object NetworkControllerStub {
+    def props() = Props(new NetworkControllerStub)
+  }
+
+
   class ReadersStub extends Actor {
     def receive = {
       case GetReaders =>
@@ -87,6 +121,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val minerRef = system.actorOf(MinerStub.props())
   lazy val pmRef = system.actorOf(PeersManagerStub.props())
   lazy val nodeViewRef = system.actorOf(NodeViewStub.props())
+  lazy val networkControllerRef = system.actorOf(NetworkControllerStub.props())
 
   def generateHistory(verifyTransactions: Boolean = true,
                       ADState: Boolean = true,

@@ -30,6 +30,13 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
+  ignore should "post block correclty" in {
+    //TODO wait until method will be implemented on api
+    Post(prefix) ~> route ~> check {
+      ???
+    }
+  }
+
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK

@@ -741,13 +741,14 @@ paths:
         - peers
       responses:
         200:
-          description: Array of peer objects
+          description: Array of the addresses
           content:
             application/json:
               schema:
                 type: array
                 items:
-                    $ref: '#/components/schemas/Peer'
+                  type: string
+                  descriptiom: Blacklisted node address
 
   /utils/seed:
     get:

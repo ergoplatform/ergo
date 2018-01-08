@@ -146,10 +146,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {
     var history = genHistory(1)
 
-    assert(history.bestFullBlockOpt.isDefined)
+    history.bestFullBlockOpt.isDefined shouldBe true
 
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
-    assert(!(chain.head.header.parentId sameElements Header.GenesisParentId))
+    chain.head.header.parentId should not equal Header.GenesisParentId
 
     history = applyChain(history, chain)
 

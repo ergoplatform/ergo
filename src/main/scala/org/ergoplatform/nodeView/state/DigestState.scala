@@ -33,7 +33,8 @@ class DigestState protected(override val version: VersionTag,
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        assert(ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
+        if(!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
+          throw new Error("Incorrect proofs digest")
 
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot

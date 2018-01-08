@@ -129,7 +129,7 @@ trait ErgoHistory
           def isStillValid(id: ModifierId): Boolean = !invalidatedHeaders.exists(_.id sameElements id)
 
           def loopHeightDown(height: Int): Header = {
-            assert(height >= 0, s"Mark genesis invalid is not true")
+            assert(height >= 0, s"Mark genesis invalid is not allowed.")
             headerIdsAtHeight(height).find(id => isStillValid(id)).flatMap(id => typedModifierById[Header](id)) match {
               case Some(header) => header
               case None => loopHeightDown(height - 1)
@@ -146,15 +146,14 @@ trait ErgoHistory
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
-            val (validChain, invalidatedChain) = (bestValidFullOpt, bestFullBlockOpt) match {
+            val (validChain, invalidatedChain) = ((bestValidFullOpt, bestFullBlockOpt) match {
               case (Some(bestValid), Some(bestFull)) =>
                 val headersChain = commonBlockThenSuffixes(bestValid, bestFull.header)
                 (headersChain._1.headers.flatMap(h => getFullBlock(h)), headersChain._2.headers.flatMap(h => getFullBlock(h)))
               case _ =>
                 val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
                 (headersChain._1.headers, headersChain._2.headers)
-            }
-            assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
+            }).ensuring(a => a._1.head == a._2.head, s"Head of valid and invalid chains should always be the same")
             val branchPoint: Some[ModifierId] = invalidatedChain.head match {
               case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
               case header: Header => Some(header.id)

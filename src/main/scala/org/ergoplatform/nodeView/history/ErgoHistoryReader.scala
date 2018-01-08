@@ -75,9 +75,7 @@ trait ErgoHistoryReader
     * Get ErgoPersistentModifier by it's id if it is in history
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    val modifier = historyStorage.modifierById(id)
-    assert(modifier.forall(_.id sameElements id), s"Modifier $modifier id is incorrect, ${Algos.encode(id)} expected")
-    modifier
+    historyStorage.modifierById(id).ensuring(_.forall(_.id sameElements id))
   }
 
   /**
@@ -230,8 +228,7 @@ trait ErgoHistoryReader
   }
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
-    assert(contains(header1))
-    assert(contains(header2))
+    assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack)

@@ -15,7 +15,7 @@ object Algos {
 
   def blockIdDifficulty(id: Array[Byte]): BigInt = {
     val blockTarget = BigInt(1, id)
-    assert(blockTarget <= Constants.MaxTarget, s"Block $blockTarget target is bigger than max ${Constants.MaxTarget}")
+      .ensuring(_ <= Constants.MaxTarget, s"Block $blockTarget target is bigger than max ${Constants.MaxTarget}")
     Constants.MaxTarget / blockTarget
   }
 

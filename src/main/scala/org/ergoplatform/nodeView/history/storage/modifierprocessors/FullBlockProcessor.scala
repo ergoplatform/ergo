@@ -38,7 +38,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val txs: BlockTransactions = fullBlock.blockTransactions
     val adProofsOpt: Option[ADProofs] = fullBlock.aDProofs
 
-    assert(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
+    require(adProofsOpt.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
       (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))
     } else {
@@ -59,9 +59,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
         //todo: is flatMap in next two lines safe?
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
+          .ensuring(_.nonEmpty, s"Should always have blocks to remove. Current = $header, prevBest = $prevBest")
         val toApply: Seq[ErgoFullBlock] = newChain.tail.headers.flatMap(getFullBlock)
-        assert(toRemove.nonEmpty, s"Should always have blocks to remove. Current = $header, prevBest = $prevBest")
-        assert(toApply.nonEmpty, s"Should always have blocks to apply. Current = $header, prevBest = $prevBest")
+          .ensuring(_.nonEmpty, s"Should always have blocks to apply. Current = $header, prevBest = $prevBest")
         if (config.blocksToKeep >= 0) {
           val bestHeight: Int = heightOf(toApply.last.header.id).get
           lazy val toClean = (bestHeight - config.blocksToKeep - toApply.length) until (bestHeight - config.blocksToKeep)

@@ -142,10 +142,13 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
             if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
             log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
               s"root hash ${Algos.encode(rootHash)}")
-            assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
-            assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
-            assert(fb.header.ADProofsRoot.sameElements(proofHash))
-            assert(fb.header.stateRoot sameElements persistentProver.digest)
+            if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
+              throw new Error("Storage kept roothash is not equal to the declared one")
+            } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
+              throw new Error("Calculated proofHash is not equal to the declared one")
+            } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
+              throw new Error("Calculated stateRoot is not equal to the declared one")
+            }
             new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
           }
         case Failure(e) =>

@@ -14,8 +14,7 @@ object Algos {
   def decode(str: String): Try[Array[Byte]] = encoder.decode(str)
 
   def blockIdDifficulty(id: Array[Byte]): BigInt = {
-    val blockTarget = BigInt(1, id)
-    assert(blockTarget <= Constants.MaxTarget, s"Block $blockTarget target is bigger than max ${Constants.MaxTarget}")
+    val blockTarget = BigInt(1, id).ensuring(_ <= Constants.MaxTarget)
     Constants.MaxTarget / blockTarget
   }
 

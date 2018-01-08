@@ -103,7 +103,7 @@ trait ErgoHistory
             val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
             val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
-            assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
+              .ensuring(_.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>

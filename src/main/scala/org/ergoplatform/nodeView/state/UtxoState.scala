@@ -217,9 +217,7 @@ object UtxoState {
           storage,
           metadata(ErgoState.genesisStateVersion, p.digest),
           paranoidChecks = true
-        ).get
-
-      assert(persistentProver.digest.sameElements(storage.version.get))
+        ).get.ensuring(_.digest sameElements storage.version.get)
     }
   }
 }

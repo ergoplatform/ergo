@@ -138,7 +138,7 @@ trait ErgoHistoryReader
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
-      assert(headers.headers.exists(_.height == 0), "Should always contain genesis header")
+        .ensuring(_.headers.exists(_.height == 0), "Should always contain genesis header")
       headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds

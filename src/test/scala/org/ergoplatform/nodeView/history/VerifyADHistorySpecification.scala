@@ -146,10 +146,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {
     var history = genHistory(1)
 
-    assert(history.bestFullBlockOpt.isDefined)
+    history.bestFullBlockOpt.isDefined shouldBe true
 
     val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
-    assert(!(chain.head.header.parentId sameElements Header.GenesisParentId))
+    chain.head.header.parentId should not equal Header.GenesisParentId
 
     history = applyChain(history, chain)
 
@@ -298,9 +298,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from existing chain") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
-
-    assert(history.bestFullBlockOpt.isDefined)
+    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq())).ensuring(_.bestFullBlockOpt.isDefined)
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val branchPoint = history.bestFullBlockOpt.get

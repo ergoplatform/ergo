@@ -13,7 +13,7 @@ class AlgosTests extends PropSpec
 
   property("blockIdDifficulty should be > 0") {
     forAll(genBytesList(32)) { id: Array[Byte] =>
-      Algos.blockIdDifficulty(Algos.hash(id)) should be > 0
+      Algos.blockIdDifficulty(Algos.hash(id)) should be > BigInt(0)
     }
   }
 }

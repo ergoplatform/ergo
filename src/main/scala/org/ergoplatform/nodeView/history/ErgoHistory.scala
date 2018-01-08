@@ -103,7 +103,7 @@ trait ErgoHistory
             val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
             val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
-            assert(toApply.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
+              .ensuring(_.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>
@@ -146,15 +146,14 @@ trait ErgoHistory
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
-            val (validChain, invalidatedChain) = (bestValidFullOpt, bestFullBlockOpt) match {
+            val (validChain, invalidatedChain) = ((bestValidFullOpt, bestFullBlockOpt) match {
               case (Some(bestValid), Some(bestFull)) =>
                 val headersChain = commonBlockThenSuffixes(bestValid, bestFull.header)
                 (headersChain._1.headers.flatMap(h => getFullBlock(h)), headersChain._2.headers.flatMap(h => getFullBlock(h)))
               case _ =>
                 val headersChain = commonBlockThenSuffixes(branchValidHeader, bestHeaderOpt.get)
                 (headersChain._1.headers, headersChain._2.headers)
-            }
-            assert(invalidatedChain.head == validChain.head, s"${invalidatedChain.head} == ${validChain.head}")
+            }).ensuring(c => c._1.head == c._2.head)
             val branchPoint: Some[ModifierId] = invalidatedChain.head match {
               case fullBlock: ErgoFullBlock => Some(fullBlock.header.id)
               case header: Header => Some(header.id)

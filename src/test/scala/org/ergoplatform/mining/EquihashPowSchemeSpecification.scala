@@ -45,7 +45,7 @@ class EquihashPowSchemeSpecification extends PropSpec
 
   property("Valid block should be invalid by pow after height modification") {
     val b = createValidBlock()
-    assert(!powScheme.verify(b.copy(header = b.header.copy(height = 3)).header))
+    powScheme.verify(b.copy(header = b.header.copy(height = 3)).header) shouldBe false
   }
 
   property("Valid block should be invalid by pow after AD proofs root modification") {

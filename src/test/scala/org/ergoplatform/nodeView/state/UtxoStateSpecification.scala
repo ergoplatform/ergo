@@ -55,11 +55,11 @@ class UtxoStateSpecification extends PropSpec
       val txs = validTransactionsFromBoxHolder(bh)._1
 
       val boxIds = txs.flatMap(_.boxIdsToOpen)
-      boxIds.foreach(id => assert(bh.get(ByteArrayWrapper(id)).isDefined))
-      assert(boxIds.distinct.size == boxIds.size)
+      boxIds.foreach(id => bh.get(ByteArrayWrapper(id)) should not be None)
+      boxIds.distinct.size shouldBe boxIds.size
 
       val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+      bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
       us.checkTransactions(txs, digest).isSuccess shouldBe true
     }
@@ -68,7 +68,7 @@ class UtxoStateSpecification extends PropSpec
   property("applyModifier() - valid full block") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+      bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val block = validFullBlock(parentOpt = None, us, bh)
       us.applyModifier(block).isSuccess shouldBe true
@@ -115,7 +115,7 @@ class UtxoStateSpecification extends PropSpec
     forAll(boxesHolderGen, smallPositiveInt) { (bh, depth) =>
       whenever(depth > 0 && depth <= 5) {
         val us = createUtxoState(bh)
-        bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
+        bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
         val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot

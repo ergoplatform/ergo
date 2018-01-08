@@ -55,9 +55,8 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    def rollback(): Try[Unit] = Try(
-      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
-    ).flatten
+    def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
+      .ensuring(persistentProver.digest.sameElements(rootHash))
 
     Try {
       require(txs.nonEmpty)

@@ -63,7 +63,7 @@ class UtxoStateSpecification extends PropSpec
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => assert(us.boxById(box.id).isDefined))
       val digest = us.proofsForTransactions(txs).get._2
-      us.checkTransactions(txs, digest).isSuccess shouldBe true
+      us.applyTransactions(txs, digest).isSuccess shouldBe true
     }
   }
 

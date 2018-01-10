@@ -17,11 +17,14 @@ class ErgoDeliveryTracker(context: ActorContext,
 
   val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
   //TODO move to config?
-  private val toDownloadRetryInterval = 30.seconds
-  private val toDownloadLifetime = 1.hour
+  private val ToDownloadRetryInterval = 30.seconds
+  private val ToDownloadLifetime = 1.hour
+  private val MaxModifiersToDownload = 100
+  private var lastTime = NetworkTime.time()
 
   def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    val time = NetworkTime.time()
+    val time = Math.max(NetworkTime.time(), lastTime + 1)
+    lastTime = time
     val prevValue = toDownload.get(key(modifierId))
     val newValue = prevValue.map(p => p.copy(lastTry = time)).getOrElse(ToDownloadStatus(modifierTypeId, time, time))
     toDownload.put(key(modifierId), newValue)
@@ -40,15 +43,17 @@ class ErgoDeliveryTracker(context: ActorContext,
 
   def removeOutdatedToDownload(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
     val currentTime = NetworkTime.time()
-    toDownload.filter(td => (td._2.firstViewed < currentTime - toDownloadLifetime.toMillis)
+    toDownload.filter(td => (td._2.firstViewed < currentTime - ToDownloadLifetime.toMillis)
       || historyReaderOpt.exists(hr => hr.contains(ModifierId @@ td._1.array)))
       .foreach(i => toDownload.remove(i._1))
   }
 
   def downloadRetry(): Seq[(ModifierId, ToDownloadStatus)] = {
     val currentTime = NetworkTime.time()
-    toDownload.filter(_._2.lastTry < currentTime - toDownloadRetryInterval.toMillis)
-      .map(i => (ModifierId @@ i._1.array, i._2)).toSeq
+    toDownload.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
+      .sortBy(_._2.lastTry)
+      .take(MaxModifiersToDownload)
+      .map(i => (ModifierId @@ i._1.array, i._2))
   }
 
 

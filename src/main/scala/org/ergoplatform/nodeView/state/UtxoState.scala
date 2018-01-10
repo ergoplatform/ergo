@@ -108,7 +108,6 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     }
   }
 
-  //todo: don't use assert
   private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => tx.semanticValidity.get)

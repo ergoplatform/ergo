@@ -1,15 +1,17 @@
 package org.ergoplatform.nodeView.state
 
+import java.io.File
+
+import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.VersionTag
 
 
@@ -80,6 +82,29 @@ class UtxoStateSpecification extends PropSpec
       val state = createUtxoState
       state.applyModifier(b).isFailure shouldBe true
     }
+  }
+
+  property("applyModifier() - valid full block after invalid one") {
+    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us2, bh2) = generateGenesisUtxoState(createTempDir, None)
+
+    val validBlock = validFullBlock(parentOpt = None, us, bh)
+    val invalidBlock = validFullBlock(parentOpt = None, us2, bh2)
+
+    us.applyModifier(invalidBlock).isSuccess shouldBe false
+    us.applyModifier(validBlock).isSuccess shouldBe true
+  }
+
+  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+    lazy val genesisSeed = Long.MaxValue
+    lazy val rndGen = new scala.util.Random(genesisSeed)
+
+    lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
+      (1 to 1).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
+
+    val bh = BoxHolder(initialBoxes)
+
+    UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef) -> bh
   }
 
   property("2 forks switching") {

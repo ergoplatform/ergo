@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -15,11 +14,11 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.core.transaction.state.MinimalState
-import scorex.core.utils.NetworkTime
+import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
-import scorex.testkit.properties.mempool.{MempoolFilterPerformanceTest, MempoolRemovalTest, MempoolTransactionsTest}
+import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
@@ -38,6 +37,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
   with HistorySpecification {
 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
+  override val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
 
   //Node view components
   //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false,
@@ -49,7 +49,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
   override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
 
   override def syntacticallyValidModifier(history: HT): Header = {
-    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
 
     DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
@@ -57,7 +57,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
       ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
-      Math.max(NetworkTime.time(), bestTimestamp),
+      Math.max(timeProvider.time(), bestTimestamp),
       Array.fill(5)(0.toByte)
     )
   }

@@ -13,12 +13,14 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
+import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierTypeId, NodeViewHolder, NodeViewModifier}
 
 import scala.util.{Failure, Success}
 
 
-abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings)
+abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings,
+                                                                     timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
@@ -55,7 +57,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       ).asInstanceOf[MS]
 
     //todo: ensure that history is in certain mode
-    val history = ErgoHistory.readOrGenerate(settings)
+    val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
     val wallet = ErgoWallet.readOrGenerate(settings)
 
@@ -71,7 +73,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   override def restoreState: Option[NodeView] = {
     ErgoState.readOrGenerate(settings, Some(self)).map { stateIn =>
       //todo: ensure that history is in certain mode
-      val history = ErgoHistory.readOrGenerate(settings)
+      val history = ErgoHistory.readOrGenerate(settings, timeProvider)
       val wallet = ErgoWallet.readOrGenerate(settings)
       val memPool = ErgoMemPool.empty
       val state = restoreConsistentState(stateIn.asInstanceOf[MS], history)
@@ -100,11 +102,11 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   }
 }
 
-private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings)
-  extends ErgoNodeViewHolder[DigestState](settings)
+private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  extends ErgoNodeViewHolder[DigestState](settings, timeProvider)
 
-private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings)
-  extends ErgoNodeViewHolder[UtxoState](settings)
+private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 object ErgoNodeViewHolder {
   def createActor(system: ActorSystem, settings: ErgoSettings): ActorRef = {

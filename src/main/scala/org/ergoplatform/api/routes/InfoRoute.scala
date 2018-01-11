@@ -33,7 +33,7 @@ case class InfoRoute(readersHolder: ActorRef,
   def info: Route = (path("info") & get) {
     val minerInfoF = getMinerInfo
     val connectedPeersF = getConnectedPeers
-    val readersF = (readersHolder ? GetReaders).mapTo[Readers]
+    val readersF: Future[Readers] = (readersHolder ? GetReaders).mapTo[Readers]
     (for {
       minerInfo <- minerInfoF
       connectedPeers <- connectedPeersF

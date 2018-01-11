@@ -48,7 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def onMissedModifiers(): Receive = {
     case MissedModifiers(ids) =>
       log.info(s"Initialize toDownload with ${ids.length} ids: ${scorex.core.idsToString(ids)}")
-      ids.foreach(id => requestDownload(id._1, id._2))
+      ids.foreach { id => deliveryTracker.downloadRequested(id._1, id._2) }
   }
 
   protected val onSemanticallySuccessfulModifier: Receive = {
@@ -68,8 +68,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
+
       deliveryTracker.removeOutdatedToDownload(historyReaderOpt)
-      deliveryTracker.downloadRetry().foreach(i => requestDownload(i._2.tp, i._1))
+      val modifiersToDownloadNow = deliveryTracker.downloadRetry()
+      if (modifiersToDownloadNow.nonEmpty) log.debug(s"Going to request ${modifiersToDownloadNow.size} of " +
+        s"${deliveryTracker.toDownload.size} missed modifiers")
+      modifiersToDownloadNow.foreach(i => requestDownload(i._2.tp, i._1))
 
   }
 

@@ -6,19 +6,18 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
-import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
-import scorex.core.consensus.{History, ModifierSemanticValidity}
+import scorex.core.consensus.History
+import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.encode.Base58
 
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
   * History implementation. It is processing persistent modifiers generated locally or coming from network.
@@ -203,7 +202,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (true, true, false) =>
@@ -213,7 +212,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (false, true, true) =>
@@ -223,7 +222,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (false, true, false) =>
@@ -233,7 +232,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (true, false, true) =>
@@ -243,7 +242,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (true, false, false) =>
@@ -253,7 +252,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val storage: Store = db
-          override val powScheme = chainSettings.poWScheme
+          override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case m =>

@@ -5,4 +5,5 @@ package org.ergoplatform.settings
   * @see src/main/resources/application.conf for parameters description
   */
 case class TestingSettings(transactionGeneration: Boolean,
-                           keepPoolSize: Int)
+                           keepPoolSize: Int,
+                           transactionsInBlock: Int)

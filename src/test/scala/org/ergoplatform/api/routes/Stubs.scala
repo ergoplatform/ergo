@@ -60,8 +60,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val protocolVersion = Version("1.1.1")
 
   val connectedPeers = Seq(
-    Handshake("node_pop", protocolVersion, "first", 1L, Some(inetAddr1), ts1),
-    Handshake("node_pop", protocolVersion, "second", 1L, Some(inetAddr2), ts2)
+    Handshake("node_pop", protocolVersion, "first", Some(inetAddr1), ts1),
+    Handshake("node_pop", protocolVersion, "second", Some(inetAddr2), ts2)
   )
 
   val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")

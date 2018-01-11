@@ -1,5 +1,7 @@
 package org.ergoplatform.api.routes
 
+import java.net.InetSocketAddress
+
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
@@ -18,7 +20,7 @@ class PeersApiRouteSpec extends FlatSpec
 
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 
-  val restApiSettings = RESTApiSettings("localhost", 8080, None, false, 10 seconds)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, false, 10 seconds)
   val prefix = "/peers"
   val routes = PeersApiRoute(pmRef, networkControllerRef, restApiSettings).route
 
@@ -34,7 +36,6 @@ class PeersApiRouteSpec extends FlatSpec
     Map(
       "address" -> handshake.declaredAddress.toString.asJson,
       "name" -> handshake.nodeName.asJson,
-      "nonce" -> handshake.nodeNonce.asJson,
       "lastSeen" -> handshake.time.asJson
     ).asJson
   }.asJson

@@ -1,5 +1,7 @@
 package org.ergoplatform.api.routes
 
+import java.net.InetSocketAddress
+
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
@@ -13,7 +15,7 @@ class InfoRoutesSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  val restApiSettings = RESTApiSettings("localhost", 8080, None, false, 10 seconds)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, false, 10.seconds)
   val route = InfoRoute(readersRef, minerRef, pmRef, digest = true, restApiSettings, nodeId).route
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 

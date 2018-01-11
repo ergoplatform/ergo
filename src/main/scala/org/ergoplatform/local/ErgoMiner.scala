@@ -101,6 +101,9 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
 
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
+
+    case m =>
+      log.warn(s"Unexpected message $m")
   }
 }
 

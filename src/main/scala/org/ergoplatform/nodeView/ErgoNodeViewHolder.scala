@@ -109,8 +109,8 @@ private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvi
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 object ErgoNodeViewHolder {
-  def createActor(system: ActorSystem, settings: ErgoSettings): ActorRef = {
-    if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings))
-    else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings))
+  def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
+    if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
+    else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
   }
 }

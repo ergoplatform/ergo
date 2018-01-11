@@ -27,7 +27,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if(nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
+    if (nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
     nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
 
@@ -107,8 +107,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     }
   }
 
-  //todo: don't use assert
-  private[state] def checkTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
+  private[state] def applyTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => tx.semanticValidity.get)
 
@@ -132,29 +131,27 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} to UtxoState with " +
         s"root hash ${Algos.encode(rootHash)}")
 
-      //todo: rollback if failure on the way
-      checkTransactions(fb.blockTransactions.txs, fb.header.stateRoot) match {
-        case Success(_) =>
-          Try {
-            val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
-            val proofHash = ADProofs.proofDigest(proofBytes)
-            if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
-            log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
-              s"root hash ${Algos.encode(rootHash)}")
-            if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
-              throw new Error("Storage kept roothash is not equal to the declared one")
-            } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
-              throw new Error("Calculated proofHash is not equal to the declared one")
-            } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
-              throw new Error("Calculated stateRoot is not equal to the declared one")
-            }
-            new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
-          }
-        case Failure(e) =>
-          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(rootHash)}: ", e)
-          Failure(e)
+      val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
+        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+        val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+        val proofHash = ADProofs.proofDigest(proofBytes)
+        if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+        log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
+          s"root hash ${Algos.encode(rootHash)}")
+        if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
+          throw new Error("Storage kept roothash is not equal to the declared one")
+        } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
+          throw new Error("Calculated proofHash is not equal to the declared one")
+        } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
+          throw new Error("Calculated stateRoot is not equal to the declared one")
+        }
+        new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
+      }
+      stateTry.recoverWith[UtxoState] { case e =>
+        log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+          s" ${Algos.encode(rootHash)}: ", e)
+        persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+        Failure(e)
       }
 
     case h: Header =>

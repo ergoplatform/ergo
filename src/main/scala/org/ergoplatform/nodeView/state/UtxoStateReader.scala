@@ -4,6 +4,7 @@ import io.iohk.iodb.Store
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
+import org.ergoplatform.settings.Algos
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
@@ -54,10 +55,11 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
       .ensuring(persistentProver.digest.sameElements(rootHash))
 
     Try {
-      require(txs.nonEmpty)
-      require(persistentProver.digest.sameElements(rootHash))
-      require(storage.version.get.sameElements(rootHash))
-      require(store.lastVersionID.get.data.sameElements(rootHash))
+      require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
+      require(persistentProver.digest.sameElements(rootHash), s"Incorrect persistent proover: " +
+        s"${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
+      require(storage.version.get.sameElements(rootHash), s"Incorrect storage: " +
+        s"${Algos.encode(storage.version.get)} != ${Algos.encode(rootHash)}")
 
       //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
       //persistentProver.checkTree(true)

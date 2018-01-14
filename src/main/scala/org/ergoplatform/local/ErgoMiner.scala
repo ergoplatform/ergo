@@ -74,8 +74,10 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, readersHolderR
       }
 
     case c: CandidateBlock =>
-      log.debug(s"New candidate $c")
-      if (c.parentOpt.map(_.height).getOrElse(0) > candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)) {
+      val oldHeight = candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)
+      val newHeight = c.parentOpt.map(_.height).getOrElse(0)
+      log.debug(s"New candidate $c. Height change $oldHeight -> $newHeight")
+      if (newHeight > oldHeight) {
         nonce = 0
       }
       candidateOpt = Some(c)

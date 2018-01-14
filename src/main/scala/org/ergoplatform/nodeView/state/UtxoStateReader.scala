@@ -50,6 +50,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
 
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+    val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
       .ensuring(persistentProver.digest.sameElements(rootHash))

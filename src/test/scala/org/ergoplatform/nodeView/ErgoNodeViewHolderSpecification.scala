@@ -19,6 +19,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
+import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
@@ -77,10 +78,11 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       ),
       chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
     )
+    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
     if (c.adState) {
-      system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings))
+      system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
     } else {
-      system.actorOf(Props(classOf[UtxoErgoNodeViewHolder], settings))
+      system.actorOf(Props(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
     }
   }
 

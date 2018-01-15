@@ -34,11 +34,13 @@ class ErgoApp(args: Seq[String]) extends Application {
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings)
-  val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings, timeProvider)
+  val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId))
-  val readersHolderRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId,
+    timeProvider))
+
+  val readersHolderRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
@@ -59,7 +61,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
     Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
-      settings.network)))
+      settings.network, timeProvider)))
 
   if (ergoSettings.testingSettings.transactionGeneration) {
     val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef, ergoSettings.testingSettings))

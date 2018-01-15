@@ -14,6 +14,7 @@ import scorex.core.network.NetworkController.SendToNetwork
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
+import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId, NodeViewHolder}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -23,12 +24,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                localInterfaceRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                               networkSettings: NetworkSettings)
+                               networkSettings: NetworkSettings,
+                               timeProvider: NetworkTimeProvider)
   extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, localInterfaceRef,
-    syncInfoSpec, networkSettings) {
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self)
+    syncInfoSpec, networkSettings, timeProvider) {
+  override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self,
+    timeProvider)
 
   private val toDownloadCheckInterval = 3.seconds
 

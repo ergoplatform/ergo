@@ -12,7 +12,7 @@ import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.{NetworkTime, ScorexLogging}
+import scorex.core.utils.{NetworkTime, NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -22,6 +22,8 @@ import scala.util.{Failure, Success, Try}
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ScorexLogging {
+
+  protected val timeProvider: NetworkTimeProvider
 
   protected val historyStorage: HistoryStorage
 
@@ -158,8 +160,8 @@ trait HeadersProcessor extends ScorexLogging {
       }
     } else if (parentOpt.isEmpty) {
       Failure(new Error(s"Parent header with id ${Algos.encode(header.parentId)} not defined"))
-    } else if (header.timestamp - NetworkTime.time() > MaxTimeDrift) {
-      Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${NetworkTime.time()}"))
+    } else if (header.timestamp - timeProvider.time() > MaxTimeDrift) {
+      Failure(new Error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}"))
     } else if (header.timestamp <= parentOpt.get.timestamp) {
       Failure(new Error(s"Header timestamp ${header.timestamp} is not greater than parents ${parentOpt.get.timestamp}"))
     } else if (header.height != parentOpt.get.height + 1) {
@@ -288,14 +290,14 @@ trait HeadersProcessor extends ScorexLogging {
     val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-    assert(heights.last == parentHeight, s"${heights.last} == $parentHeight")
+      .ensuring(_.last == parentHeight)
     if (heights.length == 1) {
       difficultyCalculator.calculate(Seq((parentHeight, parent)))
     } else {
       val chain = headerChainBack(heights.max - heights.min + 1, parent, (h: Header) => false)
-      assert(chain.length == (heights.min to heights.max).length, s"${chain.length} == ${(heights.min to heights.max).length}")
+        .ensuring(_.length == (heights.min to heights.max).length)
       val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
-      assert(heights.length == previousHeaders.length, s"Missed headers: $heights != ${previousHeaders.map(_._1)}")
+        .ensuring(_.length == heights.length)
       difficultyCalculator.calculate(previousHeaders)
     }
   }

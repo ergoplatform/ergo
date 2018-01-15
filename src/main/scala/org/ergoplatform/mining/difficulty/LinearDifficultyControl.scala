@@ -13,8 +13,9 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
 
   import LinearDifficultyControl._
 
-  assert(epochLength > 0 && epochLength < Int.MaxValue / useLastEpochs)
-  assert(useLastEpochs > 1, "Will only work correct when useLastEpochs > 1")
+  assert(useLastEpochs > 1, "useLastEpochs should always be > 1")
+  assert(epochLength > 0, "epochLength should always be > 0")
+  assert(epochLength < Int.MaxValue / useLastEpochs, s"epochLength $epochLength is too high for $useLastEpochs epochs")
 
   /**
     * @return heights of previous headers required for block recalculation

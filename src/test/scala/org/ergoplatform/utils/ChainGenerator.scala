@@ -4,9 +4,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.settings.Constants.hashLength
-import scorex.core.utils.NetworkTime
+import scorex.core.utils.{NetworkTime, NetworkTimeProvider}
 import scorex.crypto.authds._
 import scorex.crypto.hash._
 
@@ -18,6 +18,7 @@ trait ChainGenerator {
   val powScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
+  val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
@@ -37,7 +38,7 @@ trait ChainGenerator {
       EmptyStateRoot,
       EmptyDigest32,
       EmptyDigest32,
-      Math.max(NetworkTime.time(), acc.headOption.map(_.timestamp + 1).getOrElse(NetworkTime.time())),
+      Math.max(timeProvider.time(), acc.headOption.map(_.timestamp + 1).getOrElse(timeProvider.time())),
       Array.fill(5)(0.toByte)
     ): Header
     genHeaderChain(until, header +: acc)
@@ -55,7 +56,7 @@ trait ChainGenerator {
       EmptyStateRoot,
       emptyProofs,
       txs,
-      Math.max(NetworkTime.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(NetworkTime.time())),
+      Math.max(timeProvider.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
       votes)
 
     genChain(height - 1, block +: acc)
@@ -72,7 +73,7 @@ trait ChainGenerator {
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
     blocks.foldLeft(historyIn) { (history, block) =>
       val historyWithTxs = history.append(block.header).get._1.append(block.blockTransactions).get._1
-      assert(historyWithTxs.contains(block.blockTransactions.id))
+        .ensuring(_.contains(block.blockTransactions.id))
       block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
     }
   }

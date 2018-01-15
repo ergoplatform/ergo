@@ -19,4 +19,5 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override def semanticallyValidModifier(state: DIGEST_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
 
   override def semanticallyInvalidModifier(state: DIGEST_ST): PM = invalidErgoFullBlockGen.sample.get
+
 }

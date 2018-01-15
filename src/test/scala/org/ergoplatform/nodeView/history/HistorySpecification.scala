@@ -9,6 +9,7 @@ import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.settings.ScorexSettings
+import scorex.core.utils.NetworkTimeProvider
 import scorex.testkit.TestkitHelpers
 
 import scala.concurrent.duration._
@@ -64,6 +65,8 @@ trait HistorySpecification extends PropSpec
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
       nodeSettings, scorexSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings)
+    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
+
+    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
 }

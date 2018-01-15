@@ -5,7 +5,7 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "0.1.3"
+version := "0.2.0"
 
 scalaVersion := "2.12.3"
 

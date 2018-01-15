@@ -31,17 +31,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
   //TODO implement correctly
   def stateHeight: Int = 0
 
-  /**
-    * Extract ordered sequence of operations on UTXO set from set of transactions
-    */
-  def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-    BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-      tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-        tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-    })
-
-  override def version: VersionTag
-
   override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
   override def rollbackTo(version: VersionTag): Try[IState]

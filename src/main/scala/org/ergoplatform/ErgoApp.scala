@@ -37,10 +37,10 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings, timeProvider)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef, nodeId,
-    timeProvider))
-
   val readersHolderRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
+
+  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef,
+    readersHolderRef, nodeId, timeProvider))
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),

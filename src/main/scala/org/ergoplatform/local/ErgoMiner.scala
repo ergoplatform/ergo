@@ -1,8 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef}
-import akka.util.Timeout
 import akka.pattern._
+import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -18,14 +18,15 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
-import scorex.core.utils.{NetworkTime, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
-class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[Byte]) extends Actor
+class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[Byte],
+                timeProvider: NetworkTimeProvider) extends Actor
   with ScorexLogging {
 
   import ErgoMiner._
@@ -35,7 +36,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
   private var candidateOpt: Option[CandidateBlock] = None
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
-  private val startTime = NetworkTime.time()
+  private val startTime = timeProvider.time()
   private val votes: Array[Byte] = nodeId
 
   override def preStart(): Unit = {
@@ -101,24 +102,9 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, nodeId: Array[
 
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
-  }
-}
 
-
-object ErgoMiner extends ScorexLogging {
-
-  case object StartMining
-
-  case object MineBlock
-
-  case object MiningStatusRequest
-
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
-    lazy val json: Json = Map(
-      "isMining" -> isMining.asJson,
-      "votes" -> Algos.encode(votes).asJson,
-      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
-    ).asJson
+    case m =>
+      log.warn(s"Unexpected message $m")
   }
 
   def produceCandidate(viewHolder: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
@@ -153,7 +139,7 @@ object ErgoMiner extends ScorexLogging {
 
           val (adProof, adDigest) = v.state.proofsForTransactions(txsNoConflict).get
 
-          val timestamp = NetworkTime.time()
+          val timestamp = timeProvider.time()
           val nBits = bestHeaderOpt.map(parent => v.history.requiredDifficultyAfter(parent))
             .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
           val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
@@ -170,6 +156,25 @@ object ErgoMiner extends ScorexLogging {
         None
       }
     }).mapTo[Option[CandidateBlock]]
+  }
+
+}
+
+
+object ErgoMiner extends ScorexLogging {
+
+  case object StartMining
+
+  case object MineBlock
+
+  case object MiningStatusRequest
+
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
+    lazy val json: Json = Map(
+      "isMining" -> isMining.asJson,
+      "votes" -> Algos.encode(votes).asJson,
+      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+    ).asJson
   }
 
 }

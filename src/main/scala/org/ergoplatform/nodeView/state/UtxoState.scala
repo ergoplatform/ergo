@@ -27,7 +27,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if(nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
+    if (nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
     nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
 
@@ -55,9 +55,8 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   //TODO not efficient at all
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
 
-    def rollback(): Try[Unit] = Try(
-      persistentProver.rollback(rootHash).ensuring(_.isSuccess && persistentProver.digest.sameElements(rootHash))
-    ).flatten
+    def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
+      .ensuring(persistentProver.digest.sameElements(rootHash))
 
     Try {
       require(txs.nonEmpty)
@@ -133,17 +132,20 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
         s"root hash ${Algos.encode(rootHash)}")
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
-          val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
-          val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
-          val proofHash = ADProofs.proofDigest(proofBytes)
-          if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
-          log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
-            s"root hash ${Algos.encode(rootHash)}")
-          assert(store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot))
-          assert(store.rollbackVersions().exists(_.data sameElements fb.header.stateRoot))
-          assert(fb.header.ADProofsRoot.sameElements(proofHash))
-          assert(fb.header.stateRoot sameElements persistentProver.digest)
-          new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
+        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+        val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+        val proofHash = ADProofs.proofDigest(proofBytes)
+        if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+        log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
+          s"root hash ${Algos.encode(rootHash)}")
+        if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
+          throw new Error("Storage kept roothash is not equal to the declared one")
+        } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
+          throw new Error("Calculated proofHash is not equal to the declared one")
+        } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
+          throw new Error("Calculated stateRoot is not equal to the declared one")
+        }
+        new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
       }
       stateTry.recoverWith[UtxoState] { case e =>
         log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +

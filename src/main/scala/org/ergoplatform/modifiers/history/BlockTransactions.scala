@@ -22,7 +22,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
     with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
   with ModifierWithDigest {
 
-  assert(txs.nonEmpty, "Block should contain at least 1 coinbase-like transaction")
+  assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 

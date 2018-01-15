@@ -18,7 +18,7 @@ import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.peer.{PeerInfo, PeerManager}
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTime
+import scorex.core.utils.{NetworkTime, NetworkTimeProvider}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
@@ -143,11 +143,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
       nodeSettings, scorexSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings)
+    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
 
   def syntacticallyValidModifier(history: HT): Header = {
-    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(NetworkTime.time())
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
 
     DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
@@ -155,7 +155,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
-      Math.max(NetworkTime.time(), bestTimestamp),
+      Math.max(timeProvider.time(), bestTimestamp),
       Array.fill(5)(0.toByte)
     )
   }

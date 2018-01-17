@@ -43,7 +43,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
 
     history.append(block0.aDProofs.get) shouldBe 'success
-    history.append(block0.blockTransactions) shouldBe 'success
+    history.append(block0.blockTransactions).get
     history.bestFullBlockOpt shouldBe Some(block0)
 
     history.append(block1.aDProofs.get) shouldBe 'success

@@ -28,21 +28,26 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val chain = genChain(3, Seq())
 
     val block0 = chain.head
-    history.append(block0.header)
-    history.append(block0.blockTransactions)
-    history.append(block0.aDProofs.get)
+    val block1 = chain(1)
+    val block2 = chain(2)
+
+    history.append(block0.header) shouldBe 'success
+    history.append(block1.header) shouldBe 'success
+    history.append(block2.header) shouldBe 'success
+
+    history.bestFullBlockOpt shouldBe None
+    history.bestHeaderOpt shouldBe Some(block2.header)
+
+    history.append(block2.aDProofs.get) shouldBe 'success
+    history.append(block2.blockTransactions) shouldBe 'success
+    history.bestFullBlockOpt shouldBe None
+
+    history.append(block0.aDProofs.get) shouldBe 'success
+    history.append(block0.blockTransactions) shouldBe 'success
     history.bestFullBlockOpt shouldBe Some(block0)
 
-    val block1 = chain(1)
-    history.append(block1.header)
-    history.append(block1.aDProofs.get)
-    history.append(block1.blockTransactions)
-    history.bestFullBlockOpt shouldBe Some(block1)
-
-    val block2 = chain(2)
-    history.append(block2.header)
-    history.append(block2.aDProofs.get)
-    history.append(block2.blockTransactions)
+    history.append(block1.aDProofs.get) shouldBe 'success
+    history.append(block1.blockTransactions) shouldBe 'success
     history.bestFullBlockOpt shouldBe Some(block2)
   }
 

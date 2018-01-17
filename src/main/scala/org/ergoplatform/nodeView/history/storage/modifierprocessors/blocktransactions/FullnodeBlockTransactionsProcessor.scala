@@ -22,18 +22,25 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
+          case _ if !header.isGenesis && bestFullBlockIdOpt.isEmpty =>
+            //TODO light mode when start from different block ?
+            justPutToHistory(txs)
           case Some(adProof: ADProofs) =>
             processFullBlock(ErgoFullBlock(header, txs, Some(adProof)), txsAreNew = true)
           case None if !adState =>
             processFullBlock(ErgoFullBlock(header, txs, None), txsAreNew = true)
           case _ =>
-            val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
-            historyStorage.insert(txs.id, modifierRow)
-            ProgressInfo(None, Seq(), None, Seq())
+            justPutToHistory(txs)
         }
       case _ =>
         throw new Error(s"Header for modifier $txs is no defined")
     }
+  }
+
+  private def justPutToHistory(txs: BlockTransactions):ProgressInfo[ErgoPersistentModifier] = {
+    val modifierRow = Seq((ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs))))
+    historyStorage.insert(txs.id, modifierRow)
+    ProgressInfo(None, Seq(), None, Seq())
   }
 
   override protected def validate(m: BlockTransactions): Try[Unit] = {

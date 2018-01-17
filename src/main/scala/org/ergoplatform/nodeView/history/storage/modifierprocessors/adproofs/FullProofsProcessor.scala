@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockPro
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * ADProof processor for node regime with DigestState
@@ -32,18 +32,18 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
     }
   }
 
-  override protected def validate(m: ADProofs): Try[Unit] = Try {
-    require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
-    historyStorage.modifierById(m.headerId) match {
-      case Some(header: Header) =>
-        require(header.ADProofsRoot sameElements m.digest,
-          s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest")
-        if(!header.isGenesis && adState) {
-          require(typedModifierById[Header](header.parentId).exists(h => contains(h.ADProofsId)),
-            s"Trying to apply proofs ${m.encodedId} for header ${header.encodedId}, which parent proofs are empty")
-        }
-      case _ =>
-        throw new Error(s"Header for modifier $m is no defined")
+  override protected def validate(m: ADProofs): Try[Unit] = {
+    if (historyStorage.contains(m.id)) {
+      Failure(new Error("Modifier $m is already in history"))
+    } else {
+      historyStorage.modifierById(m.headerId) match {
+        case None =>
+          Failure(new Error(s"Header for modifier $m is no defined"))
+        case Some(header: Header) if !(header.ADProofsRoot sameElements m.digest) =>
+          Failure(new Error(s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
+        case Some(header: Header) =>
+          Success()
+      }
     }
   }
 }

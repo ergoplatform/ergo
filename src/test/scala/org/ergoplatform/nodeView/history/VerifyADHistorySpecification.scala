@@ -43,7 +43,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
 
     history.append(block0.aDProofs.get) shouldBe 'success
-    history.append(block0.blockTransactions).get
+    history.append(block0.blockTransactions) shouldBe 'success
     history.bestFullBlockOpt shouldBe Some(block0)
 
     history.append(block1.aDProofs.get) shouldBe 'success
@@ -51,37 +51,34 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe Some(block2)
   }
 
-  property("should ignore proofs and transactions in incorrect order") {
+  property("apply proofs that link incomplete chain") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    val chain = genChain(3, Seq())
+    val chain = genChain(4, Seq())
 
     val block0 = chain.head
-    history.append(block0.header)
-    history.append(block0.blockTransactions)
-    history.append(block0.aDProofs.get)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    //should not apply block 2
-    val block2 = chain(2)
-    history.append(block2.header)
-    history.append(block2.aDProofs.get)
-    history.append(block2.blockTransactions)
-    history.append(block2.aDProofs.get)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    //should apply block 1
     val block1 = chain(1)
-    history.append(block1.header)
-    history.append(block1.aDProofs.get)
-    history.append(block1.blockTransactions)
-    history.bestFullBlockOpt shouldBe Some(block1)
+    val block2 = chain(2)
+    val block3 = chain(3)
 
-    //now should apply block 2
-    history.append(block2.header)
-    history.append(block2.aDProofs.get)
-    history.append(block2.blockTransactions)
-    history.bestFullBlockOpt shouldBe Some(block2)
+    chain.foreach(f => history.append(f.header))
+    history.bestFullBlockOpt shouldBe None
+    history.bestHeaderOpt shouldBe Some(block3.header)
 
+    history.append(block0.blockTransactions) shouldBe 'success
+    history.append(block0.aDProofs.get) shouldBe 'success
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    history.append(block2.blockTransactions) shouldBe 'success
+    history.append(block2.aDProofs.get) shouldBe 'success
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    history.append(block3.blockTransactions) shouldBe 'success
+    history.append(block3.aDProofs.get) shouldBe 'success
+    history.bestFullBlockOpt shouldBe Some(block0)
+
+    history.append(block1.blockTransactions) shouldBe 'success
+    history.append(block1.aDProofs.get) shouldBe 'success
+    history.bestFullBlockOpt shouldBe Some(block3)
   }
 
 

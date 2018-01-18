@@ -235,7 +235,7 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (true, false, true) =>
+      case (_, false, true) =>
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
@@ -245,7 +245,7 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (true, false, false) =>
+      case (_, false, false) =>
         new ErgoHistory with EmptyADProofsProcessor
           with EmptyBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {

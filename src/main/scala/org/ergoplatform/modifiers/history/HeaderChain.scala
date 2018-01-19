@@ -26,6 +26,8 @@ case class HeaderChain(headers: Seq[Header]) {
     HeaderChain(commonBlockThenSuffixes)
   }
 
+  def apply(idx: Int): Header = headers(idx)
+
   lazy val size: Int = length
 
   lazy val length: Int = headers.size

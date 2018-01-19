@@ -189,7 +189,7 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val db = new LSMStore(iFile, keepVersions = 100)
+    val db = new LSMStore(iFile, keepVersions = 0)
 
     val nodeSettings = settings.nodeSettings
 

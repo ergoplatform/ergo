@@ -23,8 +23,8 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
           case Some(txs: BlockTransactions) if adState =>
             processFullBlock(ErgoFullBlock(header, txs, Some(m)), txsAreNew = false)
           case _ =>
-            val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
-            historyStorage.insert(ByteArrayWrapper(m.id), modifierRow)
+            val modifierRow = Seq((m.id, HistoryModifierSerializer.toBytes(m)))
+            historyStorage.insert(ByteArrayWrapper(m.id), Seq(), modifierRow)
             ProgressInfo(None, Seq(), None, Seq())
         }
       case _ =>

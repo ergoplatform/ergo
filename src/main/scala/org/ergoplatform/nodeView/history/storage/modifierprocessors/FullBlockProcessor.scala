@@ -19,7 +19,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.get(BestFullBlockKey).map(ModifierId @@ _.data)
+  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey).map(ModifierId @@ _.data)
 
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
@@ -41,9 +41,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val adProofsOpt: Option[ADProofs] = fullBlock.aDProofs
       .ensuring(_.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) {
-      (ByteArrayWrapper(txs.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(txs)))
+      (txs.id, HistoryModifierSerializer.toBytes(txs))
     } else {
-      (ByteArrayWrapper(adProofsOpt.get.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofsOpt.get)))
+      (adProofsOpt.get.id, HistoryModifierSerializer.toBytes(adProofsOpt.get))
     }
     val storageVersion = ByteArrayWrapper(if (txsAreNew) txs.id else adProofsOpt.get.id)
     val continuations = continuationHeaderChains(header).map(_.headers.tail)
@@ -84,12 +84,12 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
           ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq())
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
-          historyStorage.insert(storageVersion, Seq(newModRow))
+          historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
           ProgressInfo(None, Seq(), None, Seq())
         }
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
-        historyStorage.insert(storageVersion, Seq(newModRow))
+        historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
         ProgressInfo(None, Seq(), None, Seq())
     }
   }
@@ -98,20 +98,19 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     .foreach(h => pruneBlockDataAt(Seq(h - config.blocksToKeep)))
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
-    val id: ModifierId = ModifierId @@ Algos.hash(heights.flatMap(_.toString.getBytes).toArray)
-    val toRemove: Seq[ByteArrayWrapper] = heights.flatMap(h => headerIdsAtHeight(h))
+    val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap { id => typedModifierById[Header](id) }
       .flatMap { h =>
-        Seq(ByteArrayWrapper(h.ADProofsId), ByteArrayWrapper(h.transactionsId))
+        Seq(h.ADProofsId, h.transactionsId)
       }
-    historyStorage.remove(id, toRemove)
+    historyStorage.remove(toRemove)
   }
 
-  private def updateStorage(newModRow: (ByteArrayWrapper, ByteArrayWrapper),
+  private def updateStorage(newModRow: (ModifierId, Array[Byte]),
                             storageVersion: ByteArrayWrapper,
                             toApply: ErgoFullBlock,
                             bestFullHeaderId: ModifierId): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))))
+    historyStorage.insert(storageVersion, Seq((BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))), Seq(newModRow))
     ProgressInfo(None, Seq(), Some(toApply), Seq())
   }
 

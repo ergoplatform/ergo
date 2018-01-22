@@ -34,6 +34,9 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
   }
 
   def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = {
+    //TODO
+    ???
+/*
     val headers = m.innerchain ++ m.suffix
     val bestHeader = m.suffix.last
     val headersRows: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = headers.zipWithIndex.flatMap { case (h, i) =>
@@ -48,6 +51,7 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
     historyStorage.insert(ByteArrayWrapper(bestHeader.id), bestHeaderRow +: headersRows)
 
     ProgressInfo(None, toRemove = Seq(), toApply = Some(m.suffix.last), toDownload = Seq())
+*/
   }
 }
 

@@ -6,6 +6,7 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage, ObjectsStore}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
@@ -85,11 +86,12 @@ trait ErgoHistory
         case fb: ErgoFullBlock =>
           val bestHeader = bestHeaderOpt.get
           val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
-            .filter(id => historyStorage.get(validityKey(id)).isEmpty)
+            .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
           if (nonMarkedIds.nonEmpty) {
             historyStorage.insert(validityKey(nonMarkedIds.head),
-              nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))))
+              nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))),
+              Seq())
           }
 
           val bestFull = bestFullBlockOpt.get
@@ -107,7 +109,8 @@ trait ErgoHistory
           }
         case _ =>
           historyStorage.insert(validityKey(modifier.id),
-            Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))))
+            Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
+            Seq())
           this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }
 
@@ -140,7 +143,7 @@ trait ErgoHistory
             .map(loopHeightDown)
 
           if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
-            historyStorage.insert(validityKey(modifier.id), validityRow)
+            historyStorage.insert(validityKey(modifier.id), validityRow, Seq())
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
@@ -159,7 +162,7 @@ trait ErgoHistory
             }
 
             val toInsert = validityRow ++ changedLinks
-            historyStorage.insert(validityKey(modifier.id), toInsert)
+            historyStorage.insert(validityKey(modifier.id), toInsert, Seq())
 
             //TODO ???
             this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail,
@@ -167,7 +170,8 @@ trait ErgoHistory
           }
         case None =>
           historyStorage.insert(validityKey(modifier.id),
-            Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))))
+            Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))),
+            Seq())
           this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }
     }
@@ -189,7 +193,9 @@ object ErgoHistory extends ScorexLogging {
     val dataDir = settings.directory
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
-    val db = new LSMStore(iFile, keepVersions = 0)
+    val indexStore = new LSMStore(iFile, keepVersions = 0)
+    val objectsStore= new FilesObjectsStore(s"$dataDir/history")
+    val db = new HistoryStorage(indexStore, objectsStore)
 
     val nodeSettings = settings.nodeSettings
 
@@ -201,7 +207,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -211,7 +217,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -221,7 +227,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -231,7 +237,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -241,7 +247,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -251,7 +257,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val storage: Store = db
+          override protected val historyStorage: HistoryStorage = db
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }

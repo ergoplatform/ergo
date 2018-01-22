@@ -94,7 +94,7 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(header)
-    historyStorage.insert(header.id, dataToInsert)
+    historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert)
     val score = scoreOf(header.id).getOrElse(-1)
 
     if (bestHeaderIdOpt.isEmpty) {

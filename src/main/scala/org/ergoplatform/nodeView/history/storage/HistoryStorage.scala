@@ -24,24 +24,19 @@ class HistoryStorage(db: Store) extends ScorexLogging with AutoCloseable {
 
   def contains(id: ModifierId): Boolean = db.get(ByteArrayWrapper(id)).isDefined
 
-  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = update(id, Seq(), toInsert)
-
-  def update(id: ByteArrayWrapper,
-             idsToRemove: Seq[ByteArrayWrapper],
-             toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
+  def insert(id: ByteArrayWrapper, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
     db.update(
       id,
-      idsToRemove,
+      Seq(),
       toInsert)
   }
 
-  def update(id: ModifierId,
-             idsToRemove: Seq[ByteArrayWrapper],
-             toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
+  def remove(id: ModifierId,
+             idsToRemove: Seq[ByteArrayWrapper]): Unit = {
     db.update(
       ByteArrayWrapper(id),
       idsToRemove,
-      toInsert)
+      Seq())
   }
 
   override def close(): Unit = {

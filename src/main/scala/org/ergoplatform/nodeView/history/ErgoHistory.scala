@@ -85,10 +85,10 @@ trait ErgoHistory
         case fb: ErgoFullBlock =>
           val bestHeader = bestHeaderOpt.get
           val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
-            .filter(id => historyStorage.db.get(validityKey(id)).isEmpty)
+            .filter(id => historyStorage.get(validityKey(id)).isEmpty)
 
           if (nonMarkedIds.nonEmpty) {
-            historyStorage.db.update(validityKey(nonMarkedIds.head), Seq(),
+            historyStorage.update(validityKey(nonMarkedIds.head), Seq(),
               nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))))
           }
 
@@ -106,7 +106,7 @@ trait ErgoHistory
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
           }
         case _ =>
-          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+          historyStorage.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(1.toByte))))
           this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }
@@ -140,7 +140,7 @@ trait ErgoHistory
             .map(loopHeightDown)
 
           if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
-            historyStorage.db.update(validityKey(modifier.id), Seq(), validityRow)
+            historyStorage.update(validityKey(modifier.id), Seq(), validityRow)
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
             val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
@@ -159,14 +159,14 @@ trait ErgoHistory
             }
 
             val toInsert = validityRow ++ changedLinks
-            historyStorage.db.update(validityKey(modifier.id), Seq(), toInsert)
+            historyStorage.update(validityKey(modifier.id), Seq(), toInsert)
 
             //TODO ???
             this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail,
               validChain.tail.headOption, Seq())
           }
         case None =>
-          historyStorage.db.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
+          historyStorage.update(validityKey(modifier.id), Seq(), Seq(validityKey(modifier.id) ->
             ByteArrayWrapper(Array(0.toByte))))
           this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
       }

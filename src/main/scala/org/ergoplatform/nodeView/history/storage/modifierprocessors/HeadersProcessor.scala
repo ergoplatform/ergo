@@ -12,7 +12,7 @@ import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.{NetworkTime, NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -57,7 +57,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected def validityKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(ModifierId @@ _.data)
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.get(BestHeaderKey).map(ModifierId @@ _.data)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -78,10 +78,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] =
-    historyStorage.db
-      .get(headerHeightKey(id))
-      .map(b => Ints.fromByteArray(b.data))
+  def heightOf(id: ModifierId): Option[Int] = historyStorage.get(headerHeightKey(id))
+    .map(b => Ints.fromByteArray(b.data))
 
   def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h))
     .exists(_ sameElements id)
@@ -194,10 +192,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] =
-    historyStorage.db
-      .get(headerScoreKey(id))
-      .map(b => BigInt(b.data))
+  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.get(headerScoreKey(id))
+    .map(b => BigInt(b.data))
 
   /**
     * @param height - block height
@@ -208,7 +204,7 @@ trait HeadersProcessor extends ScorexLogging {
     *         First id is always from the best headers chain.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
+    ModifierId @@ historyStorage.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

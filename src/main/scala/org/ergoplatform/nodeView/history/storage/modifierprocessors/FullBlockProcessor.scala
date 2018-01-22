@@ -45,7 +45,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     } else {
       (ByteArrayWrapper(adProofsOpt.get.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(adProofsOpt.get)))
     }
-    val storageVersion = if (txsAreNew) txs.id else adProofsOpt.get.id
+    val storageVersion = ByteArrayWrapper(if (txsAreNew) txs.id else adProofsOpt.get.id)
     val continuations = continuationHeaderChains(header).map(_.headers.tail)
     val bestFullChain = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
       .map(c => header +: c)
@@ -104,11 +104,11 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       .flatMap { h =>
         Seq(ByteArrayWrapper(h.ADProofsId), ByteArrayWrapper(h.transactionsId))
       }
-    historyStorage.update(id, toRemove, Seq())
+    historyStorage.remove(id, toRemove)
   }
 
   private def updateStorage(newModRow: (ByteArrayWrapper, ByteArrayWrapper),
-                            storageVersion: ModifierId,
+                            storageVersion: ByteArrayWrapper,
                             toApply: ErgoFullBlock,
                             bestFullHeaderId: ModifierId): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq(newModRow, (BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))))

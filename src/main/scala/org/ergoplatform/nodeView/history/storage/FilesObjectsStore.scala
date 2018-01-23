@@ -14,10 +14,12 @@ class FilesObjectsStore(dir: String) extends ObjectsStore {
   }.toOption
 
   def put(id: ModifierId, data: Array[Byte]): Try[Unit] = Try {
-    Files.write(path(id), data, StandardOpenOption.WRITE)
+    val p = path(id)
+    p.toFile.createNewFile()
+    Files.write(p, data, StandardOpenOption.WRITE)
   }
 
-  def delete(id: ModifierId): Try[Unit] =  Try {
+  def delete(id: ModifierId): Try[Unit] = Try {
     Files.delete(path(id))
   }
 

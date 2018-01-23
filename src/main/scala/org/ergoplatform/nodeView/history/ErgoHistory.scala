@@ -2,15 +2,15 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage, ObjectsStore}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
+import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History
@@ -177,6 +177,17 @@ trait ErgoHistory
     }
   }
 
+  def fullBlocksAfter(fb: ErgoFullBlock): Try[Seq[ErgoFullBlock]] = Try {
+    bestFullBlockOpt match {
+      case Some(bestFull) =>
+        headerChainBack(bestFull.header.height, bestFull.header, (h: Header) => h == bestFull.header).headers
+          .map(h => getFullBlock(h).get)
+      case None =>
+        Seq()
+    }
+  }
+
+
 }
 
 object ErgoHistory extends ScorexLogging {
@@ -194,7 +205,7 @@ object ErgoHistory extends ScorexLogging {
     val iFile = new File(s"$dataDir/history")
     iFile.mkdirs()
     val indexStore = new LSMStore(iFile, keepVersions = 0)
-    val objectsStore= new FilesObjectsStore(s"$dataDir/history")
+    val objectsStore = new FilesObjectsStore(s"$dataDir/history")
     val db = new HistoryStorage(indexStore, objectsStore)
 
     val nodeSettings = settings.nodeSettings

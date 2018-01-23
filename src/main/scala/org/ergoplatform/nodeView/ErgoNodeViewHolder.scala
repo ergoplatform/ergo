@@ -81,20 +81,24 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     }
   }
 
-  private def restoreConsistentState(state: StateType, history: ErgoHistory) = {
-    //TODO do we need more than 1 block here?
+  private def restoreConsistentState(state: StateType, history: ErgoHistory): StateType = {
     history.bestFullBlockOpt.map { fb =>
       if (!(state.version sameElements fb.id)) {
-        state.applyModifier(fb) match {
-          case Success(s) =>
-            log.info(s"State and History are inconsistent on startup. Applied missed modifier ${fb.encodedId}")
-            s
-          case Failure(e) =>
-            //TODO catch errors here
-            log.error(s"Failed to apply missed modifier ${fb.encodedId}. Try to resync from genesis", e)
-            ErgoApp.forceStopApplication(500)
-            state
-        }
+        history.fullBlocksAfter(fb).map { toApply =>
+          log.info(s"State and History are inconsistent on startup. Going to apply ${toApply.length} modifiers")
+          toApply.foldLeft(state) { (s, m) =>
+            s.applyModifier(m) match {
+              case Success(newState) =>
+                newState
+              case Failure(e) =>
+                throw new Error(s"Failed to apply missed modifier ${fb.encodedId}")
+            }
+          }
+        }.recoverWith { case e =>
+          log.error("Failed to recover state, try to resync from genesis manually", e)
+          ErgoApp.forceStopApplication(500)
+          Failure(e)
+        }.get
       } else {
         state
       }

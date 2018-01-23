@@ -22,7 +22,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history.missedModifiersForFullChain().isEmpty shouldBe true
   }
 
-  property("Should apply UTXOSnapshotChunks") {
+  ignore("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       popowHistory.applicable(snapshot) shouldBe true
       val processInfo = popowHistory.append(snapshot).get._2

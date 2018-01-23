@@ -18,7 +18,7 @@ trait UTXOSnapshotChunkProcessor {
 
   def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     //TODO
-    val toInsert = Seq((m.id, Array(1.toByte)))
+    val toInsert = ???
     historyStorage.insert(ByteArrayWrapper(m.id), Seq(), toInsert)
     ProgressInfo(None, Seq(), Some(m), Seq())
   }

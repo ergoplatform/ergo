@@ -9,10 +9,8 @@ trait ObjectsStore {
 
   def get(id: ModifierId): Option[Array[Byte]]
 
-  def put(id: ModifierId, data: Array[Byte]): Try[Unit]
-
   def delete(id: ModifierId): Try[Unit]
 
-  def put(m: ErgoPersistentModifier): Try[Unit] = put(m.id, m.bytes)
+  def put(m: ErgoPersistentModifier): Try[Unit]
 
 }

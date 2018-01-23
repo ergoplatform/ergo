@@ -29,8 +29,8 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
-             objectsToInsert: Seq[(ModifierId, Array[Byte])]): Unit = {
-    objectsToInsert.foreach(o => objectsStore.put(o._1, o._2))
+             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
+    objectsToInsert.foreach(o => objectsStore.put(o))
     indexStore.update(
       id,
       Seq(),

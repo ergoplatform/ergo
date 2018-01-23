@@ -2,6 +2,8 @@ package org.ergoplatform.nodeView.history.storage
 
 import java.nio.file.{Files, Paths, StandardOpenOption}
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 
@@ -9,17 +11,17 @@ import scala.util.Try
 
 class FilesObjectsStore(dir: String) extends ObjectsStore {
 
-  def get(id: ModifierId): Option[Array[Byte]] = Try {
+  override def get(id: ModifierId): Option[Array[Byte]] = Try {
     Files.readAllBytes(path(id))
   }.toOption
 
-  def put(id: ModifierId, data: Array[Byte]): Try[Unit] = Try {
-    val p = path(id)
+  override def put(m: ErgoPersistentModifier): Try[Unit] = Try {
+    val p = path(m.id)
     p.toFile.createNewFile()
-    Files.write(p, data, StandardOpenOption.WRITE)
+    Files.write(p, HistoryModifierSerializer.toBytes(m), StandardOpenOption.WRITE)
   }
 
-  def delete(id: ModifierId): Try[Unit] = Try {
+  override def delete(id: ModifierId): Try[Unit] = Try {
     Files.delete(path(id))
   }
 

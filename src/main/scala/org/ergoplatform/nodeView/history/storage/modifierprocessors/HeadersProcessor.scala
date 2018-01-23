@@ -236,7 +236,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], (ModifierId, Array[Byte])) = {
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
       (Seq(
@@ -244,7 +244,7 @@ trait HeadersProcessor extends ScorexLogging {
         heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
         headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
         headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        h.id -> HistoryModifierSerializer.toBytes(h))
+        h)
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
@@ -269,8 +269,7 @@ trait HeadersProcessor extends ScorexLogging {
         // Orphaned block. Put id to the end
         Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
       }
-      val modifierRow = h.id -> HistoryModifierSerializer.toBytes(h)
-      (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifierRow)
+      (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
     }
   }
 

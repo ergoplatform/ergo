@@ -38,8 +38,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
   }
 
   private def justPutToHistory(txs: BlockTransactions):ProgressInfo[ErgoPersistentModifier] = {
-    val modifierRow = Seq((txs.id, HistoryModifierSerializer.toBytes(txs)))
-    historyStorage.insert(ByteArrayWrapper(txs.id), Seq(), modifierRow)
+    historyStorage.insert(ByteArrayWrapper(txs.id), Seq(), Seq(txs))
     ProgressInfo(None, Seq(), None, Seq())
   }
 

@@ -200,17 +200,15 @@ object ErgoHistory extends ScorexLogging {
 
   val GenesisHeight = 0
 
-  //todo: move pow to settings
+  def historyDir(settings: ErgoSettings):File = new File(s"${settings.directory}/history")
+
   def readOrGenerate(settings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val dataDir = settings.directory
-    val iFile = new File(s"$dataDir/history")
-    iFile.mkdirs()
-    val indexStore = new LSMStore(iFile, keepVersions = 0)
-    val objectsStore = new FilesObjectsStore(s"$dataDir/history")
+    val historyFolder = historyDir(settings)
+    historyFolder.mkdirs()
+    val indexStore = new LSMStore(historyFolder, keepVersions = 0)
+    val objectsStore = new FilesObjectsStore(historyFolder.getAbsolutePath)
     val db = new HistoryStorage(indexStore, objectsStore)
-
     val nodeSettings = settings.nodeSettings
-
 
     val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (true, true, true) =>

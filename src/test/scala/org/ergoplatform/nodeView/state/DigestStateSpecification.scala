@@ -23,11 +23,11 @@ class DigestStateSpecification extends PropSpec
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, ErgoSettings.read(None).nodeSettings).get
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, ErgoSettings.read(None).nodeSettings)
       ds.applyModifier(fb).isSuccess shouldBe true
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, ErgoSettings.read(None).nodeSettings).get
+      val state = DigestState.create(None, None, dir2, ErgoSettings.read(None).nodeSettings)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }

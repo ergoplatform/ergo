@@ -14,7 +14,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{ModifierTypeId, NodeViewHolder, NodeViewModifier}
+import scorex.core.{ModifierId, ModifierTypeId, NodeViewHolder, NodeViewModifier}
 
 import scala.util.{Failure, Success}
 
@@ -51,10 +51,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     dir.mkdir()
     assert(dir.listFiles().isEmpty, s"Genesis directory $dir should always be empty")
 
-    val state = (
-      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir, settings.nodeSettings)
-      else ErgoState.generateGenesisUtxoState(dir, Some(self))._1
-      ).asInstanceOf[MS]
+    val state = ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
 
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
@@ -70,39 +67,44 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
-  override def restoreState: Option[NodeView] = {
-    ErgoState.readOrGenerate(settings, Some(self)).map { stateIn =>
-      //todo: ensure that history is in certain mode
-      val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-      val wallet = ErgoWallet.readOrGenerate(settings)
-      val memPool = ErgoMemPool.empty
-      val state = restoreConsistentState(stateIn.asInstanceOf[MS], history)
-      (history, state, wallet, memPool)
-    }
+  override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
+    None
+  } else {
+    val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    val wallet = ErgoWallet.readOrGenerate(settings)
+    val memPool = ErgoMemPool.empty
+    val state = restoreConsistentState(ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS], history)
+    Some((history, state, wallet, memPool))
   }
 
   private def restoreConsistentState(state: StateType, history: ErgoHistory): StateType = {
-    history.bestFullBlockOpt.map { fb =>
-      if (!(state.version sameElements fb.id)) {
-        history.fullBlocksAfter(fb).map { toApply =>
+    if (history.bestFullBlockIdOpt.isEmpty) {
+      state
+    } else {
+      val stateBestBlockId = if (state.version sameElements ErgoState.genesisStateVersion) None else Some(state.version)
+      val hFrom = stateBestBlockId.flatMap(id => history.typedModifierById[Header](ModifierId @@ id))
+      val fbFrom = hFrom.flatMap(h => history.getFullBlock(h))
+      history.fullBlocksAfter(fbFrom).map { toApply =>
+        if (toApply.nonEmpty) {
           log.info(s"State and History are inconsistent on startup. Going to apply ${toApply.length} modifiers")
-          toApply.foldLeft(state) { (s, m) =>
-            s.applyModifier(m) match {
-              case Success(newState) =>
-                newState
-              case Failure(e) =>
-                throw new Error(s"Failed to apply missed modifier ${fb.encodedId}")
-            }
+        } else {
+          assert(stateBestBlockId.get sameElements history.bestFullBlockIdOpt.get,
+            "State version should always equal to best full block id.")
+          log.info(s"State and History are consistent on startup.")
+        }
+        toApply.foldLeft(state) { (s, m) =>
+          s.applyModifier(m) match {
+            case Success(newState) =>
+              newState
+            case Failure(e) =>
+              throw new Error(s"Failed to apply missed modifier ${m.encodedId}")
           }
-        }.recoverWith { case e =>
-          log.error("Failed to recover state, try to resync from genesis manually", e)
-          ErgoApp.forceStopApplication(500)
-          Failure(e)
-        }.get
-      } else {
-        state
-      }
-    }.getOrElse(state)
+        }
+      }.recoverWith { case e =>
+        log.error("Failed to recover state, try to resync from genesis manually", e)
+        ErgoApp.forceStopApplication(500)
+      }.get
+    }
   }
 }
 

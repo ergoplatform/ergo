@@ -177,11 +177,11 @@ trait ErgoHistory
     }
   }
 
-  def fullBlocksAfter(fb: ErgoFullBlock): Try[Seq[ErgoFullBlock]] = Try {
+  def fullBlocksAfter(blockFromOpt: Option[ErgoFullBlock]): Try[Seq[ErgoFullBlock]] = Try {
     bestFullBlockOpt match {
-      case Some(bestFull) if bestFull != fb =>
-        val stopCondition = (h: Header) => h.parentId sameElements fb.header.id
-        headerChainBack(bestFull.header.height, bestFull.header, stopCondition).headers
+      case Some(bestFull) if !blockFromOpt.contains(bestFull) =>
+        val until = (h: Header) => blockFromOpt.exists(fb => h.parentId sameElements fb.header.id)
+        headerChainBack(bestFull.header.height + 1, bestFull.header, until).headers
           .map(h => getFullBlock(h).get)
       case _ =>
         Seq()

@@ -67,7 +67,7 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File, settings: NodeConfigurationSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings).get //todo: .get
+    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -77,16 +77,11 @@ object ErgoState extends ScorexLogging {
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
-  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): Option[ErgoState[_]] = {
+  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
-    if (dir.listFiles().isEmpty) {
-      None
-    } else {
-      //todo: considering db state
-      if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings).toOption
-      else Some(UtxoState.create(dir, nodeViewHolderRef))
-    }
+    if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings)
+    else UtxoState.create(dir, nodeViewHolderRef)
   }
 }

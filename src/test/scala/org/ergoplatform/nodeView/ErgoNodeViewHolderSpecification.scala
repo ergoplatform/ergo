@@ -353,9 +353,9 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
     a ! LocallyGeneratedModifier(genesis.header)
+
     a ! LocallyGeneratedModifier(genesis.blockTransactions)
 
     a ! bestFullBlock(c)

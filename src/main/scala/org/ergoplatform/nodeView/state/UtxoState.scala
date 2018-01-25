@@ -75,7 +75,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   //todo: utxo snapshot could go here
   //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
-    case fb: ErgoFullBlock =>
+    case fb: ErgoFullBlock if (fb.header.parentId sameElements version) || fb.header.isGenesis =>
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} to UtxoState with " +
         s"root hash ${Algos.encode(rootHash)}")
 

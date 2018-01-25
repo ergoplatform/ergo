@@ -82,6 +82,7 @@ object ErgoState extends ScorexLogging {
     dir.mkdirs()
 
     if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings)
+    else if(dir.listFiles().isEmpty) ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
     else UtxoState.create(dir, nodeViewHolderRef)
   }
 }

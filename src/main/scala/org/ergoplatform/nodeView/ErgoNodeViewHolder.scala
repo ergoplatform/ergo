@@ -48,7 +48,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
     val dir = ErgoState.stateDir(settings)
-    dir.mkdir()
+    dir.mkdirs()
     assert(dir.listFiles().isEmpty, s"Genesis directory $dir should always be empty")
 
     val state = ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
@@ -68,7 +68,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
-  override def restoreState: Option[NodeView] = if (Option(ErgoHistory.historyDir(settings).listFiles()).isEmpty) {
+  override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)

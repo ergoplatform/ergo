@@ -200,7 +200,11 @@ object ErgoHistory extends ScorexLogging {
 
   val GenesisHeight = 0
 
-  def historyDir(settings: ErgoSettings):File = new File(s"${settings.directory}/history")
+  def historyDir(settings: ErgoSettings):File = {
+    val dir = new File(s"${settings.directory}/history")
+    dir.mkdirs()
+    dir
+  }
 
   def readOrGenerate(settings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
     val historyFolder = historyDir(settings)

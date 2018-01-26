@@ -58,14 +58,16 @@ trait NodeApi {
     post(s"http://$restAddress", nodeRestPort, path,
       (rb: RequestBuilder) => rb.setHeader("Content-type", "application/json").setBody(body))
 
-  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body).flatMap(_.as[A]).right.get
+  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body).flatMap(_.as[A]) match {
+    case Right(r) => r
+    case Left(e) => throw e
+  }
 
   def blacklist(networkIpAddress: String, hostNetworkPort: Int): Future[Unit] =
     post("/debug/blacklist", s"$networkIpAddress:$hostNetworkPort").map(_ => ())
 
   def connectedPeers: Future[Seq[Peer]] = get("/peers/connected").map { r =>
-    ergoJsonAnswerAs[Json](r.getResponseBody)
-      .hcursor.downField("peers").as[Seq[Peer]].right.get
+    ergoJsonAnswerAs[Seq[Peer]](r.getResponseBody)
   }
 
   def blacklistedPeers: Future[Seq[BlacklistedPeer]] = get("/peers/blacklisted").map { r =>
@@ -123,7 +125,7 @@ object NodeApi extends ScorexLogging {
   case class UnexpectedStatusCodeException(request: Request, response: Response) extends Exception(s"Request: ${request.getUrl}\n" +
     s"Unexpected status code (${response.getStatusCode}): ${response.getResponseBody}")
 
-  case class Peer(declaredAddress: String, nodeName: String, nodeNonce: String)
+  case class Peer(address: String, name: String)
 
   case class BlacklistedPeer(hostname: String, timestamp: Long, reason: String)
 

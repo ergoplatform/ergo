@@ -53,8 +53,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val ts2 = System.currentTimeMillis() + 100
 
   val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some(1L), Some("first")),
-    inetAddr2 -> PeerInfo(ts2, Some(2L), Some("second"))
+    inetAddr1 -> PeerInfo(ts1, Some("first")),
+    inetAddr2 -> PeerInfo(ts2, Some("second"))
   )
 
   val protocolVersion = Version("1.1.1")

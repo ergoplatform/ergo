@@ -14,11 +14,12 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "cf146d15-SNAPSHOT"
+val scorexVersion = "3b7480ed-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  "org.scorexfoundation" %% "scorex-core" % scorexVersion,
+  ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.11",
   "com.iheart" %% "ficus" % "1.4.+",
 

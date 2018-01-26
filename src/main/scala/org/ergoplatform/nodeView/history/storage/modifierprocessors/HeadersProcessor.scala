@@ -12,7 +12,7 @@ import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.{NetworkTime, NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -57,7 +57,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected def validityKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.db.get(BestHeaderKey).map(ModifierId @@ _.data)
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(ModifierId @@ _.data)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -78,10 +78,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] =
-    historyStorage.db
-      .get(headerHeightKey(id))
-      .map(b => Ints.fromByteArray(b.data))
+  def heightOf(id: ModifierId): Option[Int] = historyStorage.getIndex(headerHeightKey(id))
+    .map(b => Ints.fromByteArray(b.data))
 
   def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h))
     .exists(_ sameElements id)
@@ -96,7 +94,7 @@ trait HeadersProcessor extends ScorexLogging {
     */
   protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(header)
-    historyStorage.insert(header.id, dataToInsert)
+    historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
     val score = scoreOf(header.id).getOrElse(-1)
 
     if (bestHeaderIdOpt.isEmpty) {
@@ -194,10 +192,8 @@ trait HeadersProcessor extends ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] =
-    historyStorage.db
-      .get(headerScoreKey(id))
-      .map(b => BigInt(b.data))
+  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
+    .map(b => BigInt(b.data))
 
   /**
     * @param height - block height
@@ -208,14 +204,14 @@ trait HeadersProcessor extends ScorexLogging {
     *         First id is always from the best headers chain.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    ModifierId @@ historyStorage.db.get(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
+    ModifierId @@ historyStorage.getIndex(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain
     * @param startHeader - header to start
     * @param until       - stop condition
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
-    *         Note now it includes one header satisfying until condition!
+    *         Note now it includes one header satisfying until condition! (TODO fix)
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
@@ -240,15 +236,15 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
-  private def toInsert(h: Header): Seq[(ByteArrayWrapper, ByteArrayWrapper)] = {
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
-      Seq(
-        ByteArrayWrapper(h.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(h)),
+      (Seq(
         BestHeaderKey -> ByteArrayWrapper(h.id),
         heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
         headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
-        headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray))
+        headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
+        h)
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
@@ -273,8 +269,7 @@ trait HeadersProcessor extends ScorexLogging {
         // Orphaned block. Put id to the end
         Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
       }
-      val modifierRow = ByteArrayWrapper(h.id) -> ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))
-      Seq(scoreRow, heightRow, modifierRow) ++ bestRow ++ headerIdsRow
+      (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
     }
   }
 

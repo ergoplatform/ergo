@@ -14,7 +14,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{ModifierTypeId, NodeViewHolder, NodeViewModifier}
+import scorex.core.{ModifierId, ModifierTypeId, NodeViewHolder, NodeViewModifier}
 
 import scala.util.{Failure, Success}
 
@@ -48,13 +48,11 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
     val dir = ErgoState.stateDir(settings)
-    dir.mkdir()
+    dir.mkdirs()
     assert(dir.listFiles().isEmpty, s"Genesis directory $dir should always be empty")
 
-    val state = (
-      if (settings.nodeSettings.ADState) ErgoState.generateGenesisDigestState(dir, settings.nodeSettings)
-      else ErgoState.generateGenesisUtxoState(dir, Some(self))._1
-      ).asInstanceOf[MS]
+    val state = ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
+      .ensuring(_.rootHash sameElements ErgoState.afterGenesisStateDigest, "State root is incorrect")
 
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
@@ -70,35 +68,44 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
-  override def restoreState: Option[NodeView] = {
-    ErgoState.readOrGenerate(settings, Some(self)).map { stateIn =>
-      //todo: ensure that history is in certain mode
-      val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-      val wallet = ErgoWallet.readOrGenerate(settings)
-      val memPool = ErgoMemPool.empty
-      val state = restoreConsistentState(stateIn.asInstanceOf[MS], history)
-      (history, state, wallet, memPool)
-    }
+  override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
+    None
+  } else {
+    val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    val wallet = ErgoWallet.readOrGenerate(settings)
+    val memPool = ErgoMemPool.empty
+    val state = restoreConsistentState(ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS], history)
+    Some((history, state, wallet, memPool))
   }
 
-  private def restoreConsistentState(state: StateType, history: ErgoHistory) = {
-    //TODO do we need more than 1 block here?
-    history.bestFullBlockOpt.map { fb =>
-      if (!(state.version sameElements fb.id)) {
-        state.applyModifier(fb) match {
-          case Success(s) =>
-            log.info(s"State and History are inconsistent on startup. Applied missed modifier ${fb.encodedId}")
-            s
-          case Failure(e) =>
-            //TODO catch errors here
-            log.error(s"Failed to apply missed modifier ${fb.encodedId}. Try to resync from genesis", e)
-            ErgoApp.forceStopApplication(500)
-            state
+  private def restoreConsistentState(state: StateType, history: ErgoHistory): StateType = {
+    if (history.bestFullBlockIdOpt.isEmpty) {
+      state
+    } else {
+      val stateBestBlockId = if (state.version sameElements ErgoState.genesisStateVersion) None else Some(state.version)
+      val hFrom = stateBestBlockId.flatMap(id => history.typedModifierById[Header](ModifierId @@ id))
+      val fbFrom = hFrom.flatMap(h => history.getFullBlock(h))
+      history.fullBlocksAfter(fbFrom).map { toApply =>
+        if (toApply.nonEmpty) {
+          log.info(s"State and History are inconsistent on startup. Going to apply ${toApply.length} modifiers")
+        } else {
+          assert(stateBestBlockId.get sameElements history.bestFullBlockIdOpt.get,
+            "State version should always equal to best full block id.")
+          log.info(s"State and History are consistent on startup.")
         }
-      } else {
-        state
-      }
-    }.getOrElse(state)
+        toApply.foldLeft(state) { (s, m) =>
+          s.applyModifier(m) match {
+            case Success(newState) =>
+              newState
+            case Failure(e) =>
+              throw new Error(s"Failed to apply missed modifier ${m.encodedId}")
+          }
+        }
+      }.recoverWith { case e =>
+        log.error("Failed to recover state, try to resync from genesis manually", e)
+        ErgoApp.forceStopApplication(500)
+      }.get
+    }
   }
 }
 

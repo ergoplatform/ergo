@@ -3,18 +3,18 @@
 // https://github.com/tkawachi/sbt-lock/
 dependencyOverrides in ThisBuild ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "ch.qos.logback" % "logback-core" % "1.2.3",
+  "ch.qos.logback" % "logback-core" % "1.3.0-alpha0",
   "com.chuusai" % "shapeless_2.12" % "2.3.2",
   "com.github.mpilquist" % "simulacrum_2.12" % "0.10.0",
   "com.google.guava" % "guava" % "19.0",
   "com.iheart" % "ficus_2.12" % "1.4.3",
   "com.typesafe" % "config" % "1.3.2",
-  "com.typesafe" % "ssl-config-core_2.12" % "0.2.1",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.4.20",
+  "com.typesafe" % "ssl-config-core_2.12" % "0.2.2",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.9",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.0-RC1",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.0-RC1",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.0-RC1",
-  "com.typesafe.akka" % "akka-stream_2.12" % "2.4.20",
+  "com.typesafe.akka" % "akka-stream_2.12" % "2.5.9",
   "commons-net" % "commons-net" % "3.6",
   "de.heikoseeberger" % "akka-http-circe_2.12" % "1.18.0",
   "io.circe" % "circe-core_2.12" % "0.8.0",
@@ -25,7 +25,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "net.jpountz.lz4" % "lz4" % "1.3.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.58",
-  "org.reactivestreams" % "reactive-streams" % "1.0.0",
+  "org.reactivestreams" % "reactive-streams" % "1.0.2",
   "org.rudogma" % "supertagged_2.12" % "1.3",
   "org.scala-lang.modules" % "scala-java8-compat_2.12" % "0.8.0",
   "org.scala-lang.modules" % "scala-parser-combinators_2.12" % "1.0.4",
@@ -33,7 +33,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.11",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "cf146d15-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "3b7480ed-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.0.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.10.4",
@@ -44,4 +44,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 233b911ba98141a790c0080a19e558e9ac9474ef
+// LIBRARY_DEPENDENCIES_HASH 7dbc252aae9aa29fbdeb0301f35004729b4f72a7

@@ -227,6 +227,23 @@ trait ErgoHistoryReader
     }
   }
 
+  /**
+    * Return headers, required to apply to reach header2 if you are at header1 position.
+    *
+    * @param startHeaderOpt - initial position
+    * @param finalHeader - header you should reach
+    * @return (Modifier it required to rollback first, header chain to apply)
+    */
+  def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], HeaderChain) = {
+    startHeaderOpt match {
+      case Some(h1) =>
+        val (prevChain, newChain) = commonBlockThenSuffixes(h1, finalHeader)
+        (prevChain.headOption.map(_.id), newChain)
+      case None =>
+        (None, headerChainBack(finalHeader.height + 1, finalHeader, _ => false))
+    }
+  }
+
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
 

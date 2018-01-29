@@ -10,13 +10,13 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
+import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{ModifierId, ModifierTypeId, NodeViewHolder, NodeViewModifier}
 
-import scala.util.{Failure, Success}
+import scala.util.Try
 
 
 abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings,
@@ -47,12 +47,8 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
-    val dir = ErgoState.stateDir(settings)
-    dir.mkdirs()
-    assert(dir.listFiles().isEmpty, s"Genesis directory $dir should always be empty")
 
-    val state = ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
-      .ensuring(_.rootHash sameElements ErgoState.afterGenesisStateDigest, "State root is incorrect")
+    val state = stateRollbackedToGenesis
 
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
@@ -78,35 +74,43 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     Some((history, state, wallet, memPool))
   }
 
-  private def restoreConsistentState(state: StateType, history: ErgoHistory): StateType = {
-    if (history.bestFullBlockIdOpt.isEmpty) {
-      state
-    } else {
-      val stateBestBlockId = if (state.version sameElements ErgoState.genesisStateVersion) None else Some(state.version)
-      val hFrom = stateBestBlockId.flatMap(id => history.typedModifierById[Header](ModifierId @@ id))
-      val fbFrom = hFrom.flatMap(h => history.getFullBlock(h))
-      history.fullBlocksAfter(fbFrom).map { toApply =>
-        if (toApply.nonEmpty) {
-          log.info(s"State and History are inconsistent on startup. Going to apply ${toApply.length} modifiers")
-        } else {
-          assert(stateBestBlockId.get sameElements history.bestFullBlockIdOpt.get,
-            "State version should always equal to best full block id.")
-          log.info(s"State and History are consistent on startup.")
-        }
-        toApply.foldLeft(state) { (s, m) =>
-          s.applyModifier(m) match {
-            case Success(newState) =>
-              newState
-            case Failure(e) =>
-              throw new Error(s"Failed to apply missed modifier ${m.encodedId}")
-          }
-        }
-      }.recoverWith { case e =>
-        log.error("Failed to recover state, try to resync from genesis manually", e)
-        ErgoApp.forceStopApplication(500)
-      }.get
-    }
+  private def stateRollbackedToGenesis: StateType = {
+    val dir = ErgoState.stateDir(settings)
+    dir.mkdirs()
+    for (file <- dir.listFiles) file.delete
+
+    ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
+      .ensuring(_.rootHash sameElements ErgoState.afterGenesisStateDigest, "State root is incorrect")
   }
+
+  private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
+    (stateIn.version, history.bestFullBlockOpt, stateIn) match {
+      case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
+        log.debug("State and history are both empty on startup")
+        stateIn
+      case (stateId, Some(block), _) if stateId sameElements block.id =>
+        log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
+        stateIn
+      case (_, None, state) =>
+        stateRollbackedToGenesis
+      case (_, Some(bestFullBlock), state: DigestState) =>
+        // Just update state root hash
+        ???
+      case (stateId, Some(historyBestBlock), state: StateType) =>
+        val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
+        val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
+        val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
+          .getOrElse(stateRollbackedToGenesis)
+        val toApply = newChain.headers.map(h => history.getFullBlock(h).get)
+        toApply.foldLeft(startState) { (s, m) =>
+          s.applyModifier(m).get
+        }
+    }
+  }.recoverWith { case e =>
+    log.error("Failed to recover state, try to resync from genesis manually", e)
+    ErgoApp.forceStopApplication(500)
+  }.get
+
 }
 
 private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)

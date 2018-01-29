@@ -177,18 +177,6 @@ trait ErgoHistory
     }
   }
 
-  def fullBlocksAfter(blockFromOpt: Option[ErgoFullBlock]): Try[Seq[ErgoFullBlock]] = Try {
-    bestFullBlockOpt match {
-      case Some(bestFull) if !blockFromOpt.contains(bestFull) =>
-        val until = (h: Header) => blockFromOpt.exists(fb => h.parentId sameElements fb.header.id)
-        headerChainBack(bestFull.header.height + 1, bestFull.header, until).headers
-          .map(h => getFullBlock(h).get)
-      case _ =>
-        Seq()
-    }
-  }
-
-
 }
 
 object ErgoHistory extends ScorexLogging {

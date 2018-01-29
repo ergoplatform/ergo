@@ -12,19 +12,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
 
-  property("fullBlocksAfter") {
-    val chainLength = 10
-    var history = genHistory()
-    val chain = genChain(chainLength, Seq())
-    history = applyChain(history, chain)
-    history.fullBlocksAfter(None).get.map(_.header.height) shouldBe chain.map(_.header.height)
-    history.fullBlocksAfter(chain.headOption).get shouldBe chain.tail
-    history.fullBlocksAfter(chain.lastOption).get shouldBe Seq()
-    val lastHalf = chain.drop(chainLength / 2)
-    history.fullBlocksAfter(lastHalf.headOption).get shouldBe lastHalf.tail
-  }
-
-
   property("missedModifiersForFullChain") {
     var history = genHistory()
     val chain = genChain(BlocksToKeep, Seq())

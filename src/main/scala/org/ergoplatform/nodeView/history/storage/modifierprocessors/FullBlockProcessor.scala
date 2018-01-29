@@ -77,7 +77,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(getFullBlock(prevChain.head).get.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq())
+          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq())
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
           historyStorage.insert(storageVersion, Seq(), Seq(newModRow))

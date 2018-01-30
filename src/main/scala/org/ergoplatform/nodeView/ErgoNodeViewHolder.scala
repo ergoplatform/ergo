@@ -15,6 +15,7 @@ import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
+import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
 
@@ -48,7 +49,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     */
   override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
 
-    val state = stateRollbackedToGenesis
+    val state = recreatedState()
 
     //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
@@ -74,13 +75,20 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     Some((history, state, wallet, memPool))
   }
 
-  private def stateRollbackedToGenesis: StateType = {
+  private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): StateType = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
     for (file <- dir.listFiles) file.delete
 
-    ErgoState.readOrGenerate(settings, Some(self)).asInstanceOf[MS]
-      .ensuring(_.rootHash sameElements ErgoState.afterGenesisStateDigest, "State root is incorrect")
+    {
+      (version, digest) match {
+        case (Some(v), Some(d)) if settings.nodeSettings.ADState =>
+          DigestState.create(version, digest, dir, settings.nodeSettings)
+        case _ =>
+          ErgoState.readOrGenerate(settings, Some(self))
+      }
+    }.asInstanceOf[StateType]
+      .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
   }
 
   private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
@@ -92,18 +100,19 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
         log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
-        log.debug(s"History is empty on startup, rollback state to genesis.")
-        stateRollbackedToGenesis
+        log.debug(s"State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        recreatedState()
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash
-        ???
+        log.debug(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
+        recreatedState(Some(VersionTag @@ bestFullBlock.id), Some(bestFullBlock.header.stateRoot))
       case (stateId, Some(historyBestBlock), state: StateType) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.debug(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
           s"apply ${newChain.length} modifiers")
         val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
-          .getOrElse(stateRollbackedToGenesis)
+          .getOrElse(recreatedState())
         val toApply = newChain.headers.map(h => history.getFullBlock(h).get)
         toApply.foldLeft(startState) { (s, m) =>
           s.applyModifier(m).get

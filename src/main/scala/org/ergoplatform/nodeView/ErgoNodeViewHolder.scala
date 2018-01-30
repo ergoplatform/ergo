@@ -92,6 +92,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
         log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
+        log.debug(s"History is empty on startup, rollback state to genesis.")
         stateRollbackedToGenesis
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash
@@ -99,6 +100,8 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       case (stateId, Some(historyBestBlock), state: StateType) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
+        log.debug(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
+          s"apply ${newChain.length} modifiers")
         val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
           .getOrElse(stateRollbackedToGenesis)
         val toApply = newChain.headers.map(h => history.getFullBlock(h).get)

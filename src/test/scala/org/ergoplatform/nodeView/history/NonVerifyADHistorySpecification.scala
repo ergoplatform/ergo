@@ -188,6 +188,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     val from1to2Chain = history.chainToHeader(Some(fork1.last), fork2.last)
     from1to2Chain._1.get shouldEqual inChain.last.id
+    from1to2Chain._2.headers.map(_.height) shouldEqual fork2.headers.map(_.height)
     from1to2Chain._2.headers shouldEqual fork2.headers
 
   }

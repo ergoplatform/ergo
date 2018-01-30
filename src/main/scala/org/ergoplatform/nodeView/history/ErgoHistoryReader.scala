@@ -238,7 +238,7 @@ trait ErgoHistoryReader
     startHeaderOpt match {
       case Some(h1) =>
         val (prevChain, newChain) = commonBlockThenSuffixes(h1, finalHeader)
-        (prevChain.headOption.map(_.id), newChain)
+        (prevChain.headOption.map(_.id), newChain.tail)
       case None =>
         (None, headerChainBack(finalHeader.height + 1, finalHeader, _ => false))
     }

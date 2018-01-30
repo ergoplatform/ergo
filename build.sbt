@@ -31,7 +31,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "it",
-  "com.spotify" % "docker-client" % "8.8.2" % "it" classifier "shaded",
+  "com.spotify" % "docker-client" % "8.11.0" % "it" classifier "shaded",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "it"
 )
 

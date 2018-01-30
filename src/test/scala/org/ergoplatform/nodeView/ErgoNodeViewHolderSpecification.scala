@@ -5,10 +5,10 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
@@ -345,74 +345,66 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   }
 
-  property("UTXO state should generate ADProofs and put them in history") {
-    val c = NodeViewHolderConfig(false, true, false)
-    val nodeViewDir = Some(createTempDir)
-    val a = actorRef(c, nodeViewDir)
+  val t9 = new TestCase("UTXO state should generate ADProofs and put them in history", (c, a) => {
+    if (c.adState == false) {
+      val nodeViewDir = Some(createTempDir)
 
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
+      val dir = createTempDir
+      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+      val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    a ! LocallyGeneratedModifier(genesis.header)
+      a ! LocallyGeneratedModifier(genesis.header)
 
-    a ! LocallyGeneratedModifier(genesis.blockTransactions)
+      a ! LocallyGeneratedModifier(genesis.blockTransactions)
 
-    a ! bestFullBlock(c)
-    expectMsg(Some(genesis))
+      a ! bestFullBlock(c)
+      expectMsg(Some(genesis))
 
-    a ! modifierById(genesis.aDProofs.get.id)
-    expectMsg(genesis.aDProofs)
-  }
+      a ! modifierById(genesis.aDProofs.get.id)
+      expectMsg(genesis.aDProofs)
+    }
+  })
 
-
-  property("NodeViewHolder start from inconsistent state") {
-    val c = NodeViewHolderConfig(false, true, false)
-    val nodeViewDir = Some(createTempDir)
-    val a = actorRef(c, nodeViewDir)
-
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
-
-    a ! LocallyGeneratedModifier(genesis.header)
+  val t10 = new TestCase("NodeViewHolder start from inconsistent state", (c, _) => {
     if (c.verifyTransactions) {
+
+      val nodeViewDir = Some(createTempDir)
+      val a = actorRef(c, nodeViewDir)
+
+      val dir = createTempDir
+      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+
+      a ! LocallyGeneratedModifier(genesis.header)
       a ! LocallyGeneratedModifier(genesis.blockTransactions)
       a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+
+      val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+      a ! LocallyGeneratedModifier(block1.header)
+      a ! LocallyGeneratedModifier(block1.aDProofs.get)
+      a ! LocallyGeneratedModifier(block1.blockTransactions)
+      a ! bestFullBlock(c)
+      expectMsg(Some(block1))
+
+      a ! rootHash(c)
+      expectMsg(Algos.encode(block1.header.stateRoot))
+
+      system.stop(a)
+      val stateDir = new File(s"${nodeViewDir.get.getAbsolutePath}/state")
+      for (file <- stateDir.listFiles) file.delete
+
+      val a2 = actorRef(c, nodeViewDir)
+      a2 ! rootHash(c)
+      expectMsg(Algos.encode(block1.header.stateRoot))
     }
-
-    val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-
-    a ! LocallyGeneratedModifier(block1.header)
-    a ! LocallyGeneratedModifier(block1.aDProofs.get)
-    a ! GetDataFromCurrentView[H, S, W, P, Boolean](v => v.history.append(block1.blockTransactions).isSuccess)
-    expectMsg(true)
-
-    a ! bestFullBlock(c)
-    expectMsg(Some(block1))
-
-    a ! rootHash(c)
-    expectMsg(Algos.encode(genesis.header.stateRoot))
-
-    system.stop(a)
-
-    val a2 = actorRef(c, nodeViewDir)
-    //retry modifiers, as they may not be applied yet
-    a2 ! LocallyGeneratedModifier(block1.header)
-    if (c.verifyTransactions) {
-      a2 ! LocallyGeneratedModifier(block1.blockTransactions)
-      a2 ! LocallyGeneratedModifier(block1.aDProofs.get)
-    }
-
-    a2 ! rootHash(c)
-    expectMsg(Algos.encode(block1.header.stateRoot))
-  }
+  })
 
 
   val t8 = new TestCase("switching for a better chain", switch)
 
-  val cases = List(t1, t2, t3, t4, t5, t6, t7, t8)
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>

@@ -113,7 +113,12 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
           s"apply ${newChain.length} modifiers")
         val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
           .getOrElse(recreatedState())
-        val toApply = newChain.headers.map(h => history.getFullBlock(h).get)
+        val toApply = newChain.headers.map{h =>
+          history.getFullBlock(h) match {
+            case Some(fb) => fb
+            case None => throw new Error(s"Failed to get full block for header $h")
+          }
+        }
         toApply.foldLeft(startState) { (s, m) =>
           s.applyModifier(m).get
         }

@@ -279,7 +279,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     expectMsg(Some(brokenBlock.header))
   })
 
-  def switch: (NodeViewHolderConfig, ActorRef) => Unit = (c: NodeViewHolderConfig, a: ActorRef) => {
+  val t8 = new TestCase("switching for a better chain", (c: NodeViewHolderConfig, a: ActorRef) => {
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -343,7 +343,7 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
     a ! rootHash(c)
     expectMsg(Algos.encode(chain2block2.header.stateRoot))
 
-  }
+  })
 
   val t9 = new TestCase("UTXO state should generate ADProofs and put them in history", (c, a) => {
     if (c.adState == false) {
@@ -400,9 +400,6 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
       expectMsg(Algos.encode(block1.header.stateRoot))
     }
   })
-
-
-  val t8 = new TestCase("switching for a better chain", switch)
 
   val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
 

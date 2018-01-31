@@ -1,22 +1,18 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
-
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
-import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.ADProofsProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.BlockTransactionsProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
+import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core._
-import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds, ProgressInfo}
-import scorex.core.consensus.{History, HistoryReader, ModifierSemanticValidity}
+import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds}
+import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base58
 
 import scala.util.{Failure, Try}
 
@@ -105,23 +101,29 @@ trait ErgoHistoryReader
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
+        //Our best header is the same as other node best header
         HistoryComparisonResult.Equal
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
+        //Our best header is in other node best chain, but not at the last position
         HistoryComparisonResult.Older
       case Some(_) if info.lastHeaderIds.isEmpty =>
+        //Other history is empty, our contain some headers
         HistoryComparisonResult.Younger
       case Some(_) =>
-        //Compare headers chain
-        val ids = info.lastHeaderIds
-        ids.view.reverse.find(m => contains(m)) match {
-          case Some(lastId) =>
-            //TODO We anyway have our fork to send. is it ok?
-            HistoryComparisonResult.Younger
-          case None =>
-            HistoryComparisonResult.Unknown
+        //We are on different forks now.
+        if(info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
+          //Return Younger, because we can send blocks from our fork that other node can download.
+          HistoryComparisonResult.Younger
+        } else {
+          //We don't have any of id's from other's node sync info in history.
+          //We don't know whether we can sync with it and what blocks to send in Inv message.
+          HistoryComparisonResult.Unknown
         }
+      case None if info.lastHeaderIds.isEmpty =>
+        //Both nodes do not keep any blocks
+        HistoryComparisonResult.Equal
       case None =>
-        log.warn("Trying to compare with other node while our history is empty")
+        //Our history is empty, other contain some headers
         HistoryComparisonResult.Older
     }
   }

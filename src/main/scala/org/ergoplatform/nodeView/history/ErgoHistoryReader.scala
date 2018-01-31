@@ -117,7 +117,8 @@ trait ErgoHistoryReader
           case Some(lastId) =>
             //TODO We anyway have our fork to send. is it ok?
             HistoryComparisonResult.Younger
-          case None => HistoryComparisonResult.Nonsense
+          case None =>
+            HistoryComparisonResult.Unknown
         }
       case None =>
         log.warn("Trying to compare with other node while our history is empty")

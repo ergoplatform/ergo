@@ -109,7 +109,7 @@ object DigestState {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             settings: NodeConfigurationSettings): Try[DigestState] = Try {
+             settings: NodeConfigurationSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
@@ -130,5 +130,5 @@ object DigestState {
 
       case _ => ???
     }
-  }
+  }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))
 }

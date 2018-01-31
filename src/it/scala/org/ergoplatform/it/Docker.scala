@@ -8,16 +8,14 @@ import java.util.{Collections, Properties, List => JList, Map => JMap}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
-import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.spotify.docker.client.DockerClient.RemoveContainerParam
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, NetworkConfig, PortBinding}
+import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import org.asynchttpclient.Dsl._
 import scorex.core.utils.ScorexLogging
 
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 case class NodeInfo(
                      hostRestApiPort: Int,
@@ -63,8 +61,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
 
-    val restApiPort = actualConfig.getString("scorex.restApi.port")
-    val networkPort = actualConfig.getString("scorex.network.port")
+    val restApiPort = actualConfig.getString("scorex.restApi.bindAddress").split(":")(1)
+    val networkPort = actualConfig.getString("scorex.network.bindAddress").split(":")(1)
 
     val portBindings = new ImmutableMap.Builder[String, java.util.List[PortBinding]]()
       .put(restApiPort, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
@@ -150,10 +148,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def disconnectFromNetwork(containerId: String): Unit =  client.disconnectFromNetwork(containerId, innerNetwork.id())
+  def disconnectFromNetwork(containerId: String): Unit = client.disconnectFromNetwork(containerId, innerNetwork.id())
+
   def disconnectFromNetwork(node: Node): Unit = disconnectFromNetwork(node.nodeInfo.containerId)
 
   def connectToNetwork(containerId: String): Unit = client.connectToNetwork(containerId, innerNetwork.id())
+
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId)
 }
 

@@ -22,7 +22,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history.missedModifiersForFullChain().isEmpty shouldBe true
   }
 
-  property("Should apply UTXOSnapshotChunks") {
+  ignore("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       popowHistory.applicable(snapshot) shouldBe true
       val processInfo = popowHistory.append(snapshot).get._2
@@ -170,6 +170,29 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     continuations.flatMap(_.headers.tail).map(_.encodedId).toSet should contain theSameElementsAs
       (fork1.headers ++ fork2.headers).map(_.encodedId).toSet
   }
+
+  property("chainToHeader()") {
+    var history = genHistory()
+    //put 2 blocks
+    val inChain = genHeaderChain(2, history)
+    history = applyHeaderChain(history, inChain)
+    //apply 2 different forks
+    val fork1 = genHeaderChain(2, history).tail
+    val fork2 = genHeaderChain(3, history).tail
+    history = applyHeaderChain(history, fork1)
+    history = applyHeaderChain(history, fork2)
+
+    val fork1Chain = history.chainToHeader(None, fork1.last)
+    fork1Chain._1 shouldBe None
+    fork1Chain._2 shouldEqual HeaderChain(inChain.headers ++ fork1.headers)
+
+    val from1to2Chain = history.chainToHeader(Some(fork1.last), fork2.last)
+    from1to2Chain._1.get shouldEqual inChain.last.id
+    from1to2Chain._2.headers.map(_.height) shouldEqual fork2.headers.map(_.height)
+    from1to2Chain._2.headers shouldEqual fork2.headers
+
+  }
+
 
   property("commonBlockThenSuffixes()") {
     var history = genHistory()

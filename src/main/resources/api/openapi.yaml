@@ -530,7 +530,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FullBlock'
 
-  /block/lastHeaders/{count}:
+  /blocks/lastHeaders/{count}:
     get:
       summary: Get the last headers objects
       operationId: getLastHeaders

@@ -8,33 +8,39 @@ import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success}
 
-class HistoryStorage(val db: Store) extends ScorexLogging with AutoCloseable {
+class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends ScorexLogging with AutoCloseable {
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = db.get(ByteArrayWrapper(id)).flatMap { bBytes =>
-    HistoryModifierSerializer.parseBytes(bBytes.data) match {
-      case Success(b) =>
-        Some(b)
-      case Failure(e) =>
-        log.warn(s"Failed to parse block from db (bytes are: ${bBytes.data.mkString("-")}): ", e)
-        None
+  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = objectsStore.get(id)
+    .flatMap { bBytes =>
+      HistoryModifierSerializer.parseBytes(bBytes) match {
+        case Success(b) =>
+          Some(b)
+        case Failure(e) =>
+          log.warn(s"Failed to parse block from db (bytes are: ${bBytes.mkString("-")}): ", e)
+          None
+      }
     }
+
+  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = indexStore.get(id)
+
+  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
+
+  def contains(id: ModifierId): Boolean = get(id).isDefined
+
+  def insert(id: ByteArrayWrapper,
+             indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
+             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
+    objectsToInsert.foreach(o => objectsStore.put(o))
+    indexStore.update(
+      id,
+      Seq(),
+      indexesToInsert)
   }
 
-  def contains(id: ModifierId): Boolean = db.get(ByteArrayWrapper(id)).isDefined
-
-  def insert(id: ModifierId, toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = update(id, Seq(), toInsert)
-
-  def update(id: ModifierId,
-             idsToRemove: Seq[ByteArrayWrapper],
-             toInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Unit = {
-    db.update(
-      ByteArrayWrapper(id),
-      idsToRemove,
-      toInsert)
-  }
+  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach(id => objectsStore.delete(id))
 
   override def close(): Unit = {
     log.info("Closing history storage...")
-    db.close()
+    indexStore.close()
   }
 }

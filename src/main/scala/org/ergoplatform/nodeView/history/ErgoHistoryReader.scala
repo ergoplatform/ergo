@@ -48,9 +48,8 @@ trait ErgoHistoryReader
 
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
-  protected val storage: Store
 
-  protected lazy val historyStorage: HistoryStorage = new HistoryStorage(storage)
+  protected val historyStorage: HistoryStorage
 
   /**
     * Is there's no history, even genesis block
@@ -228,6 +227,23 @@ trait ErgoHistoryReader
     }
   }
 
+  /**
+    * Return headers, required to apply to reach header2 if you are at header1 position.
+    *
+    * @param startHeaderOpt - initial position
+    * @param finalHeader - header you should reach
+    * @return (Modifier it required to rollback first, header chain to apply)
+    */
+  def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], HeaderChain) = {
+    startHeaderOpt match {
+      case Some(h1) =>
+        val (prevChain, newChain) = commonBlockThenSuffixes(h1, finalHeader)
+        (prevChain.headOption.map(_.id), newChain.tail)
+      case None =>
+        (None, headerChainBack(finalHeader.height + 1, finalHeader, _ => false))
+    }
+  }
+
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
 
@@ -261,7 +277,7 @@ trait ErgoHistoryReader
 
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = {
-    historyStorage.db.get(validityKey(modifierId)) match {
+    historyStorage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
       case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown

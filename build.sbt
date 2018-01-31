@@ -5,7 +5,7 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "0.2.0"
+version := "0.2.1-SNAPSHOT"
 
 scalaVersion := "2.12.3"
 
@@ -14,11 +14,12 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "cf146d15-SNAPSHOT"
+val scorexVersion = "04b0b5be-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  "org.scorexfoundation" %% "scorex-core" % scorexVersion,
+  ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.11",
   "com.iheart" %% "ficus" % "1.4.+",
 
@@ -28,9 +29,9 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.0.9" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "it",
-  "com.spotify" % "docker-client" % "8.8.2" % "it" classifier "shaded",
+  "com.spotify" % "docker-client" % "8.11.0" % "it" classifier "shaded",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "it"
 )
 

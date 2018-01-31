@@ -76,8 +76,8 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} to UtxoState with " +
-        s"root hash ${Algos.encode(rootHash)}")
+      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
+        s"to UtxoState with root hash ${Algos.encode(rootHash)}")
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
         val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)

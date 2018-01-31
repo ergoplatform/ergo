@@ -44,7 +44,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
-    PeersApiRoute(peerManagerRef, networkController, settings.restApi),
+    PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings.nodeSettings.ADState, settings.restApi, nodeId),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
@@ -60,7 +60,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(new ErgoNodeViewSynchronizer(networkController, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
       settings.network, timeProvider)))
 
   if (ergoSettings.testingSettings.transactionGeneration) {

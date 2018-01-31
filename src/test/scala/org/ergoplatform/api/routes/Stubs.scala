@@ -37,7 +37,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val history = applyChain(generateHistory(), chain)
 
   lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None)).map { wus =>
-    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings.nodeSettings).get
+    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings.nodeSettings)
   }
   }.sample.get
 
@@ -53,8 +53,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val ts2 = System.currentTimeMillis() + 100
 
   val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some(1L), Some("first")),
-    inetAddr2 -> PeerInfo(ts2, Some(2L), Some("second"))
+    inetAddr1 -> PeerInfo(ts1, Some("first")),
+    inetAddr2 -> PeerInfo(ts2, Some("second"))
   )
 
   val protocolVersion = Version("1.1.1")

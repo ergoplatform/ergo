@@ -17,7 +17,6 @@ import scala.concurrent.duration._
 trait HistorySpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
-  with Matchers
   with ErgoGenerators
   with ErgoTestHelpers
   with TestkitHelpers

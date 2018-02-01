@@ -58,12 +58,12 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
   type C = NodeViewHolderConfig
 
   val allConfigs: List[NodeViewHolderConfig] = List(
-    NodeViewHolderConfig(true, true, true),
-    NodeViewHolderConfig(true, false, true),
-    NodeViewHolderConfig(true, false, false),
-    NodeViewHolderConfig(true, true, false),
-    NodeViewHolderConfig(false, true, true),
-    NodeViewHolderConfig(false, true, false),
+    NodeViewHolderConfig(adState = true, verifyTransactions = true, popowBootstrap = true),
+    NodeViewHolderConfig(adState = true, verifyTransactions = false, popowBootstrap = true),
+    NodeViewHolderConfig(adState = true, verifyTransactions = false, popowBootstrap = false),
+    NodeViewHolderConfig(adState = true, verifyTransactions = true, popowBootstrap = false),
+    NodeViewHolderConfig(adState = false, verifyTransactions = true, popowBootstrap = true),
+    NodeViewHolderConfig(adState = false, verifyTransactions = true, popowBootstrap = false),
     //TODO     NodeViewHolderConfig(false, false, ???),
   )
 

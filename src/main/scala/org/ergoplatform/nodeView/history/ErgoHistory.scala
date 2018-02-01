@@ -137,16 +137,16 @@ trait ErgoHistory
           }
 
           val branchValidHeader: Header = loopHeightDown(headersHeight)
-          val bestValidFullOpt: Option[Header] = bestFullBlockOpt.flatMap(h => heightOf(h.header.id))
+          val bestValidHeaderOpt: Option[Header] = bestFullBlockOpt.flatMap(h => heightOf(h.header.id))
             .map(loopHeightDown)
 
-          if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidFullOpt.contains(b))) {
+          if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidHeaderOpt.contains(b.header))) {
             historyStorage.insert(validityKey(modifier.id), validityRow, Seq())
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
           } else {
-            val changedLinks = bestValidFullOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
+            val changedLinks = bestValidHeaderOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
-            val (validChain, invalidatedChain) = ((bestValidFullOpt, bestFullBlockOpt) match {
+            val (validChain, invalidatedChain) = ((bestValidHeaderOpt, bestFullBlockOpt) match {
               case (Some(bestValid), Some(bestFull)) =>
                 val headersChain = commonBlockThenSuffixes(bestValid, bestFull.header)
                 (headersChain._1.headers.flatMap(h => getFullBlock(h)), headersChain._2.headers.flatMap(h => getFullBlock(h)))

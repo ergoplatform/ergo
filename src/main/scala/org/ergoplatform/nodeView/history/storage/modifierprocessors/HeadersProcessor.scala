@@ -27,7 +27,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val historyStorage: HistoryStorage
 
-  val charsetName = "UTF-8"
+  private val charsetName = "UTF-8"
 
   val powScheme: PoWScheme
 

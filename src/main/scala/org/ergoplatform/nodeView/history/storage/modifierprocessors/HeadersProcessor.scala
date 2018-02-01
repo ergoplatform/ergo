@@ -280,12 +280,6 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficulty: Difficulty =
-    bestHeaderIdOpt
-      .flatMap(id => typedModifierById[Header](id))
-      .map(h => requiredDifficultyAfter(h))
-      .getOrElse(Constants.InitialDifficulty)
-
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get

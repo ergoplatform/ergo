@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import scorex.core.consensus.ModifierSemanticValidity
 
-import scala.util.Random
 
 class VerifyADHistorySpecification extends HistorySpecification {
 

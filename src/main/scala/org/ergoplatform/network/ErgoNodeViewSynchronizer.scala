@@ -30,14 +30,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, localInterfaceRef,
     syncInfoSpec, networkSettings, timeProvider) {
+
   override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self,
     timeProvider)
 
+  //todo: move to config
   private val toDownloadCheckInterval = 3.seconds
 
   override def preStart(): Unit = {
-    viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.DownloadNeeded))
     super.preStart()
+    viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.DownloadNeeded))
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
     initializeToDownload()
   }
@@ -46,6 +48,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     viewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, MissedModifiers] { v =>
       MissedModifiers(v.history.missedModifiersForFullChain())
     }
+  }
+
+  def requestDownload(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
+    val msg = Message(requestModifierSpec, Right(modifierTypeId -> Seq(modifierId)), None)
+    //todo: Full nodes should be here, not a random peer
+    networkControllerRef ! SendToNetwork(msg, SendToRandom)
+    deliveryTracker.downloadRequested(modifierTypeId, modifierId)
   }
 
   protected def onMissedModifiers(): Receive = {
@@ -61,38 +70,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(mod)
   }
 
-  override protected def viewHolderEvents: Receive = onSemanticallySuccessfulModifier orElse onDownloadRequest orElse
-    onCheckModifiersToDownload orElse onMissedModifiers orElse super.viewHolderEvents
+  protected val onCheckModifiersToDownload: Receive = {
+    case CheckModifiersToDownload =>
+      val modifiersToDownloadNow = deliveryTracker.downloadRetry(historyReaderOpt)
+      if (modifiersToDownloadNow.nonEmpty) log.debug(s"Going to request ${modifiersToDownloadNow.size} of " +
+        s"${deliveryTracker.toDownload.size} missed modifiers")
+      modifiersToDownloadNow.foreach(i => requestDownload(i._2.tp, i._1))
+  }
 
   def onDownloadRequest: Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
       requestDownload(modifierTypeId, modifierId)
   }
 
-  protected val onCheckModifiersToDownload: Receive = {
-    case CheckModifiersToDownload =>
-
-      deliveryTracker.removeOutdatedToDownload(historyReaderOpt)
-      val modifiersToDownloadNow = deliveryTracker.downloadRetry()
-      if (modifiersToDownloadNow.nonEmpty) log.debug(s"Going to request ${modifiersToDownloadNow.size} of " +
-        s"${deliveryTracker.toDownload.size} missed modifiers")
-      modifiersToDownloadNow.foreach(i => requestDownload(i._2.tp, i._1))
-
-  }
-
-
-  def requestDownload(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    val msg = Message(requestModifierSpec, Right(modifierTypeId -> Seq(modifierId)), None)
-    //Full nodes should be here, not a random peer
-    networkControllerRef ! SendToNetwork(msg, SendToRandom)
-    deliveryTracker.downloadRequested(modifierTypeId, modifierId)
-  }
+  override protected def viewHolderEvents: Receive =
+    onSemanticallySuccessfulModifier orElse
+      onDownloadRequest orElse
+      onCheckModifiersToDownload orElse
+      onMissedModifiers orElse
+      super.viewHolderEvents
 }
 
 object ErgoNodeViewSynchronizer {
-
   case object CheckModifiersToDownload
-
   case class MissedModifiers(m: Seq[(ModifierTypeId, ModifierId)])
-
 }

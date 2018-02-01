@@ -119,3 +119,8 @@ dockerfile in docker := {
 buildOptions in docker := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
+
+
+//FindBugs settings
+
+findbugsReportType := Some(FindbugsReport.FancyHtml)

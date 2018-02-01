@@ -90,7 +90,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
     history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
     history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Nonsense
+    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Unknown
   }
 
   property("continuationIds() on forks") {

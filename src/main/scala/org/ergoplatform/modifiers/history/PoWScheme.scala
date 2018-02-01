@@ -164,10 +164,7 @@ object PoWScheme {
 
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
-
-  val charsetName = "UTF-8"
-
-  lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes(charsetName) ++
+  lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
     Chars.toByteArray(n) ++
     Chars.toByteArray(k)
 

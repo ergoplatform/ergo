@@ -65,7 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, readersHolderR
       if (!isMining && ergoSettings.nodeSettings.mining) {
         log.info("Starting Mining")
         isMining = true
-        context.system.scheduler.scheduleOnce(5.second){
+        context.system.scheduler.scheduleOnce(5.second) {
           produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
             self ! c
             self ! MineBlock

@@ -164,7 +164,9 @@ object PoWScheme {
 
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
-  lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes ++ Chars.toByteArray(n) ++ Chars.toByteArray(k)
+  lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
+    Chars.toByteArray(n) ++
+    Chars.toByteArray(k)
 
   override def prove(parentOpt: Option[Header],
                      nBits: Long,

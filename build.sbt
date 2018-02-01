@@ -123,4 +123,6 @@ buildOptions in docker := BuildOptions(
 
 //FindBugs settings
 
-findbugsReportType := Some(FindbugsReport.Xml)
+findbugsReportType := Some(FindbugsReport.FancyHtml)
+findbugsReportPath := Some(crossTarget.value / "findbugs" / "report.html")
+findbugsExcludeFilters := Some(baseDirectory.value / "findbugs-exclude.xml")

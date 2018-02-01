@@ -123,4 +123,4 @@ buildOptions in docker := BuildOptions(
 
 //FindBugs settings
 
-findbugsReportType := Some(FindbugsReport.FancyHtml)
+findbugsReportType := Some(FindbugsReport.Xml)

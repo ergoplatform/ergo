@@ -51,8 +51,8 @@ class ErgoDeliveryTracker(context: ActorContext,
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
     if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
       toDownload.remove(key(mid))
-      val eo = expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3)
-      for (e <- eo) expecting -= e
+      expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3)
+                .foreach(e => expecting-= e)
       delivered(key(mid)) = cp
     } else {
       deliveredSpam(key(mid)) = cp

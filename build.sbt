@@ -124,3 +124,5 @@ buildOptions in docker := BuildOptions(
 //FindBugs settings
 
 findbugsReportType := Some(FindbugsReport.FancyHtml)
+
+findbugsReportPath := Some(crossTarget.value / "findbugs" / "report.html")

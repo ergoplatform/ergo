@@ -27,6 +27,8 @@ trait HeadersProcessor extends ScorexLogging {
 
   protected val historyStorage: HistoryStorage
 
+  val charsetName = "UTF-8"
+
   val powScheme: PoWScheme
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
@@ -51,11 +53,14 @@ trait HeadersProcessor extends ScorexLogging {
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
-  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
 
-  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ id))
 
-  protected def validityKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
+  protected def validityKey(id: Array[Byte]): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ id))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(ModifierId @@ _.data)
 

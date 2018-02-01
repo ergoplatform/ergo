@@ -60,7 +60,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def onMissedModifiers(): Receive = {
     case MissedModifiers(ids) =>
       log.info(s"Initialize toDownload with ${ids.length} ids: ${scorex.core.idsToString(ids)}")
-      ids.foreach { id => deliveryTracker.downloadRequested(id._1, id._2) }
+      ids.foreach { id => requestDownload(id._1, id._2) }
   }
 
   protected val onSemanticallySuccessfulModifier: Receive = {

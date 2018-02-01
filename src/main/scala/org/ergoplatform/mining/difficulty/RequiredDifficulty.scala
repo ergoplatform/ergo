@@ -34,7 +34,7 @@ object RequiredDifficulty extends Serializer[NBits] {
     if (size >= 1) bytes(4) = ((compact >> 16) & 0xFF).toByte
     if (size >= 2) bytes(5) = ((compact >> 8) & 0xFF).toByte
     if (size >= 3) bytes(6) = (compact & 0xFF).toByte
-    decodeMPI(bytes, true)
+    decodeMPI(bytes, hasLength = true)
   }
 
   /**

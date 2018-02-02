@@ -88,14 +88,7 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   private def markModifierInvalid(modifier: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
-    val correspondingHeaderOpt: Option[Header] = modifier match {
-      case h: Header => Some(h)
-      case full: ErgoFullBlock => Some(full.header)
-      case proof: ADProofs => typedModifierById[Header](proof.headerId)
-      case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
-      case _ => None
-    }
-    correspondingHeaderOpt match {
+    correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
@@ -193,6 +186,19 @@ trait ErgoHistory
         ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
     }
   }
+
+  /**
+    * @param modifier
+    * @return header, that corresponds to modifier
+    */
+  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {
+    case h: Header => Some(h)
+    case full: ErgoFullBlock => Some(full.header)
+    case proof: ADProofs => typedModifierById[Header](proof.headerId)
+    case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
+    case _ => None
+  }
+
 }
 
 object ErgoHistory extends ScorexLogging {

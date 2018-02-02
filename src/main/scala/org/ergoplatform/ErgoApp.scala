@@ -56,7 +56,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   }
 
   override val localInterface: ActorRef = actorSystem.actorOf(
-    Props(classOf[ErgoLocalInterface], nodeViewHolderRef, minerRef, ergoSettings)
+    Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
   )
 
   override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(

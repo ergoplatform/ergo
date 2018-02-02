@@ -223,7 +223,7 @@ class EquihashSpecification extends PropSpec
   property("Equihash should validate prepared solutions") {
     forAll(tasksAndSolutionValidationResult) { (n: Int, k: Int, I: Array[Byte], nonce: BigInt, solution: Seq[Int], valid: Boolean) =>
       val header = I ++ leIntToByteArray(nonce.toInt) ++ Array.fill(28)(0.toByte)
-      Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution) shouldBe valid
+      Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution.toIndexedSeq) shouldBe valid
     }
   }
 
@@ -231,7 +231,7 @@ class EquihashSpecification extends PropSpec
     forAll(tasksAndSolutions) { (n: Int, k: Int, I: Array[Byte], nonce: BigInt, solutions: Seq[Seq[Int]]) =>
       val header = I ++ leIntToByteArray(nonce.toInt) ++ Array.fill(28)(0.toByte)
       solutions.foreach(solution => {
-        Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution) shouldBe true
+        Equihash.validateSolution(n.toChar, k.toChar, zcashPerson(n, k), header, solution.toIndexedSeq) shouldBe true
       })
     }
   }

@@ -9,7 +9,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{LocalInterface, ModifierId, VersionTag}
 
 
-class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
+class ErgoLocalInterface (override val viewHolderRef: ActorRef)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}

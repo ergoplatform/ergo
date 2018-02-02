@@ -185,7 +185,7 @@ trait ErgoHistoryReader
     * @return Node ErgoSyncInfo
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfo(Seq())
+    ErgoSyncInfo(Seq.empty)
   } else {
     ErgoSyncInfo(lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
   }
@@ -234,7 +234,7 @@ trait ErgoHistoryReader
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
         .filter(id => !contains(id._2))
     } else {
-      Seq()
+      Seq.empty
     }
   }
 

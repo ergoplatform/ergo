@@ -11,12 +11,9 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import scorex.core.LocalInterface.LocallyGeneratedTransaction
-import scorex.core.ModifierId
 import scorex.core.settings.RESTApiSettings
-import scorex.crypto.encode.Base16
 
 import scala.concurrent.Future
 
@@ -24,25 +21,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {
-    getUnconfirmedTransactionsR ~ sendTransactionR ~getTransactionByIdR
+    getUnconfirmedTransactionsR ~ sendTransactionR ~ getTransactionByIdR
   }
 
   override val settings: RESTApiSettings = restApiSettings
 
-  private def getHistory: Future[ErgoHistoryReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.h.get)
-
-  private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m.get)
-
-  private def getTransactionById(id: ModifierId): Future[Option[Json]] = getHistory.map {
-    _.modifierById(id)
-  }.map {
-    // todo how to get tx by id?
-    _.map { modifier => ??? }
-  }
+  private def getMemPool: Future[Option[ErgoMemPoolReader]] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map {
-    _.take(limit).toSeq
-  }.map(_.map(_.json).asJson)
+    _.map {_.take(limit).toSeq }.map(_.map(_.json).asJson).getOrElse(Json.Null)
+  }
 
   //todo There in no codec for "AnyoneCanSpendTransaction" need to make one.
   def sendTransactionR: Route = (post & entity(as[AnyoneCanSpendTransaction])) { tx =>
@@ -52,11 +40,10 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   }
 
   // todo tx id validation
-  def getTransactionByIdR: Route = (path(Segment) & get) { id =>
-    getTransactionById(ModifierId @@ Base16.decode(id)).okJson()
-  }
+  // todo how to get tx by id?
+  def getTransactionByIdR: Route = (path(Segment) & get) { id => ??? }
 
-  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_ , limit) =>
     // todo offset
     getUnconfirmedTransactions(limit).okJson()
   }

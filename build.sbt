@@ -125,6 +125,5 @@ buildOptions in docker := BuildOptions(
 
 //FindBugs settings
 
-findbugsReportType := Some(FindbugsReport.FancyHtml)
-findbugsReportPath := Some(crossTarget.value / "findbugs" / "report.html")
+findbugsReportType := Some(FindbugsReport.Xml)
 findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))

@@ -24,18 +24,16 @@ import scala.util.{Failure, Success, Try}
   */
 trait HeadersProcessor extends ScorexLogging {
 
+  private val charsetName = "UTF-8"
+
   protected val timeProvider: NetworkTimeProvider
 
   protected val historyStorage: HistoryStorage
 
-  private val charsetName = "UTF-8"
-
-  val powScheme: PoWScheme
-
-  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
-
   protected val config: NodeConfigurationSettings
   protected val chainSettings: ChainSettings
+
+  val powScheme: PoWScheme
 
   //TODO alternative DDoS protection
   protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
@@ -45,6 +43,9 @@ trait HeadersProcessor extends ScorexLogging {
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.useLastEpochs, chainSettings.epochLength)
+
+
+  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
 
@@ -131,8 +132,6 @@ trait HeadersProcessor extends ScorexLogging {
     * @return ids to remove, new data to apply
     */
   protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
-
-
     val modifierId = header.id
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))

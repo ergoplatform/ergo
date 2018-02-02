@@ -53,7 +53,8 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
-      .ensuring(persistentProver.digest.sameElements(rootHash))
+      .ensuring(persistentProver.digest.sameElements(rootHash), s"Incorrect digest after rollback:" +
+        s" ${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
 
     Try {
       require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")

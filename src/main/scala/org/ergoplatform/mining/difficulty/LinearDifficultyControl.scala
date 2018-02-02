@@ -28,8 +28,9 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
     }
   }
 
+  @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[(Int, Header)]): Difficulty = {
-    if (previousHeaders.size == useLastEpochs + 1) {
+    if (previousHeaders.lengthCompare(useLastEpochs + 1) == 0) {
       val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
         val start = d.head
         val end = d.last

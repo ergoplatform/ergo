@@ -23,7 +23,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, readersHolderRef: ActorRef, nodeId: Array[Byte],
                 timeProvider: NetworkTimeProvider) extends Actor
@@ -132,7 +132,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, readersHolderR
             //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
             //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
             // the pool
-            val txsNoConflict = txs.foldLeft((Seq[AnyoneCanSpendTransaction](), Set[ByteArrayWrapper]())) { case ((s, keys), tx) =>
+            val txsNoConflict = txs.foldLeft((Seq.empty[AnyoneCanSpendTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
               val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
               if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
                 (s :+ tx) -> (keys ++ bxsBaw)
@@ -142,7 +142,10 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolder: ActorRef, readersHolderR
             }._1
 
 
-            val (adProof, adDigest) = state.proofsForTransactions(txsNoConflict).get
+            val (adProof, adDigest) = state.proofsForTransactions(txsNoConflict) match {
+              case Success((proof, digest)) => (proof, digest)
+              case Failure(f) => throw f
+            }
 
             val timestamp = timeProvider.time()
             val nBits = bestHeaderOpt.map(parent => history.requiredDifficultyAfter(parent))

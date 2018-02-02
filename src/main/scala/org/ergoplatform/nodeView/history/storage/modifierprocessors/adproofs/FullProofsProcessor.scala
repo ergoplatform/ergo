@@ -23,8 +23,8 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
           case Some(txs: BlockTransactions) if adState =>
             processFullBlock(ErgoFullBlock(header, txs, Some(m)), txsAreNew = false)
           case _ =>
-            historyStorage.insert(ByteArrayWrapper(m.id), Seq(), Seq(m))
-            ProgressInfo(None, Seq(), None, Seq())
+            historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, Seq(m))
+            ProgressInfo(None, Seq.empty, None, Seq.empty)
         }
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
@@ -33,7 +33,7 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
 
   override protected def validate(m: ADProofs): Try[Unit] = {
     if (historyStorage.contains(m.id)) {
-      Failure(new Error("Modifier $m is already in history"))
+      Failure(new Error(s"Modifier $m is already in history"))
     } else {
       historyStorage.modifierById(m.headerId) match {
         case None =>

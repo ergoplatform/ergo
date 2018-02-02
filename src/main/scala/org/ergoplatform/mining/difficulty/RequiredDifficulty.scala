@@ -72,6 +72,7 @@ object RequiredDifficulty extends Serializer[NBits] {
     *
     * @param hasLength can be set to false if the given array is missing the 4 byte length field
     */
+  @SuppressWarnings(Array("NullAssignment"))
   private def decodeMPI(mpi: Array[Byte], hasLength: Boolean): BigInteger = {
     var buf: Array[Byte] = null
     if (hasLength) {

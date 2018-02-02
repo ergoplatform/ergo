@@ -91,25 +91,25 @@ trait ErgoHistory
           if (nonMarkedIds.nonEmpty) {
             historyStorage.insert(validityKey(nonMarkedIds.head),
               nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))),
-              Seq())
+              Seq.empty)
           }
           if (bestFullBlockOpt.contains(fb)) {
             //applied best header to history
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
           } else {
             //in fork processing
             val modHeight = heightOf(fb.header.id).get
             val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
             //block in the best chain that link to this header
             val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
-              .ensuring(_.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), toApply, Seq())
+              .ensuring(_.exists(_.header.parentId sameElements fb.header.id), "Should never be here, State is inconsistent")
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, toApply, Seq.empty)
           }
         case _ =>
           historyStorage.insert(validityKey(modifier.id),
             Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
-            Seq())
-          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+            Seq.empty)
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
       }
 
     } else {
@@ -129,7 +129,7 @@ trait ErgoHistory
           def isStillValid(id: ModifierId): Boolean = !invalidatedHeaders.exists(_.id sameElements id)
 
           def loopHeightDown(height: Int): Header = {
-            assert(height >= 0, s"Mark genesis invalid is not true")
+            assert(height >= 0, "Mark genesis invalid is not true")
             headerIdsAtHeight(height).find(id => isStillValid(id)).flatMap(id => typedModifierById[Header](id)) match {
               case Some(header) => header
               case None => loopHeightDown(height - 1)
@@ -141,8 +141,8 @@ trait ErgoHistory
             .map(loopHeightDown)
 
           if (bestHeaderOpt.contains(branchValidHeader) && bestFullBlockOpt.forall(b => bestValidHeaderOpt.contains(b.header))) {
-            historyStorage.insert(validityKey(modifier.id), validityRow, Seq())
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+            historyStorage.insert(validityKey(modifier.id), validityRow, Seq.empty)
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
           } else {
             val changedLinks = bestValidHeaderOpt.toSeq.map(h => BestFullBlockKey -> ByteArrayWrapper(h.id)) :+
               (BestHeaderKey, ByteArrayWrapper(branchValidHeader.id))
@@ -160,17 +160,17 @@ trait ErgoHistory
             }
 
             val toInsert = validityRow ++ changedLinks
-            historyStorage.insert(validityKey(modifier.id), toInsert, Seq())
+            historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
 
             //TODO ???
             this -> ProgressInfo[ErgoPersistentModifier](branchPoint, invalidatedChain.tail,
-              validChain.tail.headOption, Seq())
+              validChain.tail.headOption, Seq.empty)
           }
         case None =>
           historyStorage.insert(validityKey(modifier.id),
             Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))),
-            Seq())
-          this -> ProgressInfo[ErgoPersistentModifier](None, Seq(), None, Seq())
+            Seq.empty)
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
       }
     }
   }

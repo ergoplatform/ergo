@@ -100,7 +100,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
         log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
-        log.debug(s"State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        log.debug("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash

@@ -8,6 +8,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.github.mpilquist" % "simulacrum_2.12" % "0.10.0",
   "com.google.guava" % "guava" % "19.0",
   "com.iheart" % "ficus_2.12" % "1.4.3",
+  "com.sksamuel.scapegoat" % "scalac-scapegoat-plugin_2.12" % "1.3.3",
   "com.typesafe" % "config" % "1.3.2",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.2",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.5.9",
@@ -29,6 +30,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.rudogma" % "supertagged_2.12" % "1.3",
   "org.scala-lang.modules" % "scala-java8-compat_2.12" % "0.8.0",
   "org.scala-lang.modules" % "scala-parser-combinators_2.12" % "1.0.4",
+  "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.5",
   "org.scala-sbt" % "test-interface" % "1.0",
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.11",
@@ -44,4 +46,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 90beb1427c979ace6a5c55f4874315bd755beadf
+// LIBRARY_DEPENDENCIES_HASH 2618b7e3d88fc7887c6108d28aa587b0c729b2d8

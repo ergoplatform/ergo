@@ -15,6 +15,6 @@ trait EmptyBlockTransactionsProcessor extends BlockTransactionsProcessor {
     Failure(new Error("Regime that do not process BlockTransactions"))
 
   override protected def process(m: BlockTransactions): ProgressInfo[ErgoPersistentModifier] =
-    ProgressInfo(None, Seq(), None, Seq())
+    ProgressInfo(None, Seq.empty, None, Seq.empty)
 }
 

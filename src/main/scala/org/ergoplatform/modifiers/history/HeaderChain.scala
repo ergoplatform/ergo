@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-case class HeaderChain(headers: Seq[Header]) {
+case class HeaderChain(headers: IndexedSeq[Header]) {
   headers.indices.foreach { i =>
     if (i > 0) require(headers(i).parentId sameElements headers(i - 1).id,
       s"Incorrect chain: ${headers(i - 1)},${headers(i)}")
@@ -8,6 +8,7 @@ case class HeaderChain(headers: Seq[Header]) {
 
   def exists(f: Header => Boolean): Boolean = headers.exists(f)
 
+  @SuppressWarnings(Array("TraversableHead"))
   def head: Header = headers.head
 
   def headOption: Option[Header] = headers.headOption
@@ -36,6 +37,8 @@ case class HeaderChain(headers: Seq[Header]) {
 }
 
 object HeaderChain {
-  lazy val empty = HeaderChain(Seq())
+  lazy val empty = HeaderChain(IndexedSeq.empty[Header])
+
+  def apply(seq: Seq[Header]): HeaderChain = HeaderChain(seq.toIndexedSeq)
 }
 

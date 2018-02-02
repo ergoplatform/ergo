@@ -158,14 +158,19 @@ trait ErgoHistoryReader
   }.toOption
 
   /**
-    * @return all possible forks, that contains specified header
+    *
+    * @param header - header to start
+    * @param withFilter - condition to satisfy
+    * @return all possible forks, starting from specified header and satisfying withFilter condition
     */
-  protected[history] def continuationHeaderChains(header: Header): Seq[HeaderChain] = {
+  protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]] = {
     @tailrec
-    def loop(acc: Seq[Seq[Header]]): Seq[HeaderChain] = {
-      val currentHeight = heightOf(acc.head.head.id).get
-      val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
-      if (nextLevelHeaders.isEmpty) acc.map(chain => HeaderChain(chain.reverse))
+    def loop(acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
+      val nextLevelHeaders: Seq[Header] = heightOf(acc.head.head.id).toSeq
+        .flatMap(currentHeight => headerIdsAtHeight(currentHeight + 1))
+        .flatMap(id => typedModifierById[Header](id))
+        .filter(h => withFilter(h))
+      if (nextLevelHeaders.isEmpty) acc.map(chain => chain.reverse)
       else {
         val updatedChains = nextLevelHeaders
           .flatMap(h => acc.find(chain => h.parentId sameElements chain.head.id).map(c => h +: c))

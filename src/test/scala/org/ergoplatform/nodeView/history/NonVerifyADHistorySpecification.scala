@@ -165,9 +165,9 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, fork1)
     history = applyHeaderChain(history, fork2)
     //get continuationHeaderChains
-    val continuations = history.continuationHeaderChains(inChain.last)
+    val continuations = history.continuationHeaderChains(inChain.last, _ => true)
     continuations.length shouldBe 2
-    continuations.flatMap(_.headers.tail).map(_.encodedId).toSet should contain theSameElementsAs
+    continuations.flatMap(_.tail).map(_.encodedId).toSet should contain theSameElementsAs
       (fork1.headers ++ fork2.headers).map(_.encodedId).toSet
   }
 

@@ -8,10 +8,10 @@ import scala.util.{Failure, Success, Try}
 object AnyoneCanSpendProposition extends ProofOfKnowledgeProposition[Nothing] {
   override type M = AnyoneCanSpendProposition.type
 
-  override lazy val serializer: Serializer[AnyoneCanSpendProposition.type] = AnyoneCanSpendPropositionSerializer
+  override lazy val serializer: Serializer[M] = AnyoneCanSpendPropositionSerializer
 }
 
-object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition.type] {
+object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProposition.type] with Serializable {
   val Length = 1
   val ByteValue: Array[Byte] = Array.fill(Length)(-127: Byte)
 

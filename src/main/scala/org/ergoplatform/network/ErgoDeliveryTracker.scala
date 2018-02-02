@@ -17,29 +17,19 @@ class ErgoDeliveryTracker(context: ActorContext,
   extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
   val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
-  //TODO move to config?
+
+  //TODO move to config
   private val ToDownloadRetryInterval = 30.seconds
-  private val ToDownloadLifetime = 1.hour
+  private val ToDownloadLifetime = 24.hours
   private val MaxModifiersToDownload = 100
   private var lastTime = timeProvider.time()
 
   def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    val time = Math.max(timeProvider.time(), lastTime + 1)
-    lastTime = time
-    val prevValue = toDownload.get(key(modifierId))
-    val newValue = prevValue.map(p => p.copy(lastTry = time)).getOrElse(ToDownloadStatus(modifierTypeId, time, time))
+    lastTime = Math.max(timeProvider.time(), lastTime + 1)
+    val newValue = toDownload.get(key(modifierId))
+      .map(_.copy(lastTry = lastTime))
+      .getOrElse(ToDownloadStatus(modifierTypeId, lastTime, lastTime))
     toDownload.put(key(modifierId), newValue)
-  }
-
-  override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
-    if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
-      toDownload.remove(key(mid))
-      val eo = expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3)
-      for (e <- eo) expecting -= e
-      delivered(key(mid)) = cp
-    } else {
-      deliveredSpam(key(mid)) = cp
-    }
   }
 
   def removeOutdatedToDownload(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
@@ -49,7 +39,8 @@ class ErgoDeliveryTracker(context: ActorContext,
       .foreach(i => toDownload.remove(i._1))
   }
 
-  def downloadRetry(): Seq[(ModifierId, ToDownloadStatus)] = {
+  def downloadRetry(historyReaderOpt: Option[ErgoHistoryReader]): Seq[(ModifierId, ToDownloadStatus)] = {
+    removeOutdatedToDownload(historyReaderOpt)
     val currentTime = timeProvider.time()
     toDownload.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
       .sortBy(_._2.lastTry)
@@ -57,5 +48,14 @@ class ErgoDeliveryTracker(context: ActorContext,
       .map(i => (ModifierId @@ i._1.array, i._2))
   }
 
-
+  override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
+    if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
+      toDownload.remove(key(mid))
+      expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3)
+                .foreach(e => expecting-= e)
+      delivered(key(mid)) = cp
+    } else {
+      deliveredSpam(key(mid)) = cp
+    }
+  }
 }

@@ -44,6 +44,8 @@ val opts = Seq(
   // JVM memory tuning for 2g ram
   "-Xms128m",
   "-Xmx2G",
+  //64M for stack, reduce after optimizations
+  "-Xss64m",
   "-XX:+ExitOnOutOfMemoryError",
   // Java 9 support
   "-XX:+IgnoreUnrecognizedVMOptions",
@@ -119,3 +121,9 @@ dockerfile in docker := {
 buildOptions in docker := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
+
+
+//FindBugs settings
+
+findbugsReportType := Some(FindbugsReport.Xml)
+findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))

@@ -23,16 +23,16 @@ import scala.util.{Failure, Success, Try}
   */
 trait HeadersProcessor extends ScorexLogging {
 
+  private val charsetName = "UTF-8"
+
   protected val timeProvider: NetworkTimeProvider
 
   protected val historyStorage: HistoryStorage
 
-  val powScheme: PoWScheme
-
-  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
-
   protected val config: NodeConfigurationSettings
   protected val chainSettings: ChainSettings
+
+  val powScheme: PoWScheme
 
   //TODO alternative DDoS protection
   protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
@@ -43,6 +43,9 @@ trait HeadersProcessor extends ScorexLogging {
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.useLastEpochs, chainSettings.epochLength)
 
+
+  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
+
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
@@ -51,11 +54,14 @@ trait HeadersProcessor extends ScorexLogging {
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
-  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("score".getBytes ++ id))
+  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
 
-  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("height".getBytes ++ id))
+  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ id))
 
-  protected def validityKey(id: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(Algos.hash("validity".getBytes ++ id))
+  protected def validityKey(id: Array[Byte]): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ id))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(ModifierId @@ _.data)
 
@@ -125,8 +131,6 @@ trait HeadersProcessor extends ScorexLogging {
     * @return ids to remove, new data to apply
     */
   protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
-
-
     val modifierId = header.id
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
       .map(id => ByteArrayWrapper(id))

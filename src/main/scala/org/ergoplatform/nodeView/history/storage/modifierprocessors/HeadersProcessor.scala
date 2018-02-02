@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
@@ -221,7 +221,7 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
     def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
-      if (acc.length == limit || until(header)) {
+      if (acc.lengthCompare(limit) == 0 || until(header)) {
         acc
       } else {
         typedModifierById[Header](header.parentId) match {
@@ -237,6 +237,21 @@ trait HeadersProcessor extends ScorexLogging {
 
     if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+  }
+
+  /**
+    * Find first header with the best height <= $height which id satisfies condition $p
+    * @param height - start height
+    * @param p - condition to satisfy
+    * @return found header
+    */
+  @tailrec
+  protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] = {
+    headerIdsAtHeight(height).find(id => p(id)).flatMap(id => typedModifierById[Header](id)) match {
+      case Some(header) => Some(header)
+      case None if height > 0 => loopHeightDown(height - 1, p)
+      case None => None
+    }
   }
 
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get

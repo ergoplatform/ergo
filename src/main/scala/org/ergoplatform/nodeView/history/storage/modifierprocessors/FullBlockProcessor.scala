@@ -25,7 +25,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
-  protected[history] def continuationHeaderChains(header: Header): Seq[HeaderChain]
+  protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
 
   /**
     * Process full block when we have one.
@@ -42,7 +42,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       .ensuring(_.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) txs else adProofsOpt.get
     val storageVersion = ByteArrayWrapper(if (txsAreNew) txs.id else adProofsOpt.get.id)
-    val continuations = continuationHeaderChains(header).map(_.headers.tail)
+    val continuations = continuationHeaderChains(header, _ => true).map(_.tail)
     val bestFullChain = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
       .map(c => header +: c)
       .maxBy(c => scoreOf(c.last.id))

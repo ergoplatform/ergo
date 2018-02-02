@@ -128,3 +128,9 @@ buildOptions in docker := BuildOptions(
 findbugsReportType := Some(FindbugsReport.FancyHtml)
 findbugsReportPath := Some(crossTarget.value / "findbugs" / "report.html")
 findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))
+
+//Scapegoat settings
+
+scapegoatVersion in ThisBuild := "1.3.3"
+
+scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")

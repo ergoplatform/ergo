@@ -77,16 +77,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq())
+          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq.empty)
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
-          historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
-          ProgressInfo(None, Seq(), None, Seq())
+          historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
+          ProgressInfo(None, Seq.empty, None, Seq.empty)
         }
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
-        historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
-        ProgressInfo(None, Seq(), None, Seq())
+        historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
+        ProgressInfo(None, Seq.empty, None, Seq.empty)
     }
   }
 
@@ -107,7 +107,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                             toApply: ErgoFullBlock,
                             bestFullHeaderId: ModifierId): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq((BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))), Seq(newModRow))
-    ProgressInfo(None, Seq(), Some(toApply), Seq())
+    ProgressInfo(None, Seq.empty, Some(toApply), Seq.empty)
   }
 
 }

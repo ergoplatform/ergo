@@ -104,13 +104,13 @@ trait HeadersProcessor extends ScorexLogging {
 
     if (bestHeaderIdOpt.isEmpty) {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
-      ProgressInfo(None, Seq(), Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
       log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq(), Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq(), None, toDownload(header))
+      ProgressInfo(None, Seq.empty, None, toDownload(header))
     }
   }
 
@@ -120,7 +120,7 @@ trait HeadersProcessor extends ScorexLogging {
         Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
       case (true, false) =>
         Seq((BlockTransactions.modifierTypeId, h.transactionsId))
-      case (false, _) => Seq()
+      case (false, _) => Seq.empty
     }
   }
 
@@ -139,10 +139,10 @@ trait HeadersProcessor extends ScorexLogging {
     val toRemove = Seq(headerScoreKey(modifierId), ByteArrayWrapper(modifierId)) ++ payloadModifiers
     val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestHeaderKey -> ByteArrayWrapper(header.parentId))
-    } else Seq()
+    } else Seq.empty
     val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
-    } else Seq()
+    } else Seq.empty
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
 
   }
@@ -235,7 +235,7 @@ trait HeadersProcessor extends ScorexLogging {
       }
     }
 
-    if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
+    if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq.empty)
     else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
   }
 
@@ -253,7 +253,7 @@ trait HeadersProcessor extends ScorexLogging {
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
-        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq()
+        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
 
       val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(blockScore.toByteArray)
       val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))

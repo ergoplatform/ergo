@@ -38,8 +38,8 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
   }
 
   private def justPutToHistory(txs: BlockTransactions):ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(ByteArrayWrapper(txs.id), Seq(), Seq(txs))
-    ProgressInfo(None, Seq(), None, Seq())
+    historyStorage.insert(ByteArrayWrapper(txs.id), Seq.empty, Seq(txs))
+    ProgressInfo(None, Seq.empty, None, Seq.empty)
   }
 
   override protected def validate(m: BlockTransactions): Try[Unit] = {

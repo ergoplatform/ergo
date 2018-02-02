@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.serialization.Serializer
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
   override def toBytes(obj: ErgoPersistentModifier): Array[Byte] = obj match {
@@ -17,16 +17,14 @@ object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
       throw new Error(s"Serialization for unknown modifier: ${m.json.noSpaces}")
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = Try {
-    bytes.head match {
-      case Header.`modifierTypeId` =>
-        HeaderSerializer.parseBytes(bytes.tail).get
-      case ADProofs.`modifierTypeId` =>
-        ADProofSerializer.parseBytes(bytes.tail).get
-      case BlockTransactions.`modifierTypeId` =>
-        BlockTransactionsSerializer.parseBytes(bytes.tail).get
-      case m =>
-        throw new Error(s"Deserialization for unknown type byte: $m")
-    }
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = bytes.head match {
+    case Header.`modifierTypeId` =>
+      HeaderSerializer.parseBytes(bytes.tail)
+    case ADProofs.`modifierTypeId` =>
+      ADProofSerializer.parseBytes(bytes.tail)
+    case BlockTransactions.`modifierTypeId` =>
+      BlockTransactionsSerializer.parseBytes(bytes.tail)
+    case m =>
+      Failure(new Error(s"Deserialization for unknown type byte: $m"))
   }
 }

@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Chars, Ints}
 import io.circe.Json
-import io.circe.syntax._
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -14,8 +13,6 @@ import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.core.serialization.JsonSerializable
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
@@ -136,7 +133,7 @@ trait PoWScheme {
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
@@ -168,6 +165,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     Chars.toByteArray(n) ++
     Chars.toByteArray(k)
 
+  @SuppressWarnings(Array("NullParameter"))
   override def prove(parentOpt: Option[Header],
                      nBits: Long,
                      stateRoot: ADDigest,
@@ -220,7 +218,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     Try {
       Equihash.validateSolution(n, k, ergoPerson,
         HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
-        EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).get)
+        EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).get.toIndexedSeq)
     }.recover {
       case NonFatal(e) =>
         log.debug(s"Block ${header.id} is invalid due pow", e)

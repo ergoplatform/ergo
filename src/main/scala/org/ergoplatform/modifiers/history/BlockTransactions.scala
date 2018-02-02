@@ -15,7 +15,7 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction])
   extends ErgoPersistentModifier
@@ -64,10 +64,13 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
         BlockTransactions(headerId, acc)
       } else {
         val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2)).ensuring(_ % 8 == 0)
-        val tx = AnyoneCanSpendTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)).get
+        val tx = AnyoneCanSpendTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
+          case Success(parsedTx) => parsedTx
+          case Failure(f) => throw f
+        }
         parseTransactions(index + 2 + txLength, acc :+ tx)
       }
     }
-    parseTransactions(Constants.ModifierIdSize, Seq())
+    parseTransactions(Constants.ModifierIdSize, Seq.empty)
   }
 }

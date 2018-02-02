@@ -33,7 +33,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
     objectsToInsert.foreach(o => objectsStore.put(o))
     indexStore.update(
       id,
-      Seq(),
+      Seq.empty,
       indexesToInsert)
   }
 

@@ -59,7 +59,7 @@ class DigestState protected(override val version: VersionTag,
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
     val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
+    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
     new DigestState(newVersion, newRootHash, store, settings)
   }
 

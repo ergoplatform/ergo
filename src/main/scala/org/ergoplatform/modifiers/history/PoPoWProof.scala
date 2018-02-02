@@ -35,13 +35,14 @@ object PoPoWProof {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (105: Byte)
 }
 
+@SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
 class PoPoWProofUtils(poWScheme: PoWScheme) {
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
     //todo: why initial difficulty here?
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
-    if (proof.suffix.length != proof.k) {
+    if (proof.suffix.lengthCompare(proof.k) != 0) {
       Failure(new Error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}"))
     } else if (proof.k < 1) {
       Failure(new Error(s"k should positive, ${proof.k} given"))
@@ -87,15 +88,16 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
 
       val pLevel = maxLevel(parent)
 
-      val pLevels = if (pLevel > 0) Seq.fill(pLevel)(parent.id) else Seq()
+      val pLevels = if (pLevel > 0) Seq.fill(pLevel)(parent.id) else Seq.empty
 
-      val priorLevels = if(tail.length > pLevel) tail.drop(pLevel) else Seq()
+      val priorLevels = if(tail.length > pLevel) tail.drop(pLevel) else Seq.empty
 
       (genesisId +: pLevels) ++ priorLevels
     }
   }
 }
 
+@SuppressWarnings(Array("TraversableHead"))
 class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
@@ -119,13 +121,15 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
     val k = bytes(1)
     val i = bytes(2)
     val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
-    val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
+    val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength))
+      .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
 
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
-      if (acc.length == k) (index, acc.reverse)
+      if (acc.lengthCompare(k.toInt) == 0) (index, acc.reverse)
       else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
+        val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l))
+          .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
         val interlinks = new PoPoWProofUtils(poWScheme).constructInterlinkVector(acc.head)
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
@@ -136,7 +140,8 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
     index = index + 2
     val innerchain = (0 until innerchainLength) map { _ =>
       val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-      val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
+      val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l))
+        .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
       index = index + 2 + l
       header
     }

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

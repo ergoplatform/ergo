@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}

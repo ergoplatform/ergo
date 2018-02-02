@@ -1,48 +1,24 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.mining
 
 import com.google.common.primitives.{Chars, Ints}
-import io.circe.Json
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
-import scorex.core.serialization.JsonSerializable
 import scorex.core.utils.ScorexLogging
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
 import scala.util.{Random, Try}
-import io.circe.syntax._
-
-
-case class CandidateBlock(parentOpt: Option[Header],
-                          nBits: Long,
-                          stateRoot: ADDigest,
-                          adProofBytes: SerializedAdProof,
-                          transactions: Seq[AnyoneCanSpendTransaction],
-                          timestamp: Timestamp,
-                          votes: Array[Byte]) extends JsonSerializable {
-  override lazy val json: Json = Map(
-    "parentId" -> parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
-    "nBits" -> nBits.asJson,
-    "stateRoot" -> Algos.encode(stateRoot).asJson,
-    "adProofBytes" -> Algos.encode(adProofBytes).asJson,
-    "timestamp" -> timestamp.asJson,
-    "transactions" -> transactions.map(_.json).asJson,
-    "transactionsNumber" -> transactions.length.asJson,
-    "votes" -> Algos.encode(votes).asJson
-  ).asJson
-
-  override def toString = s"CandidateBlock(${json.noSpaces})"
-}
 
 trait PoWScheme {
 
@@ -254,7 +230,8 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
   override def verify(header: Header): Boolean = true
 
-  override def realDifficulty(header: Header): Difficulty = header.requiredDifficulty + 1
+  override def realDifficulty(header: Header): Difficulty =
+    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
 }
 
 object DefaultFakePowScheme extends FakePowScheme(None)

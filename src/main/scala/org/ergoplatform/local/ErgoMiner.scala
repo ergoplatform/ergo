@@ -6,9 +6,9 @@ import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader

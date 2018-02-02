@@ -20,7 +20,7 @@ class ErgoDeliveryTracker(context: ActorContext,
 
   //TODO move to config
   private val ToDownloadRetryInterval = 30.seconds
-  private val ToDownloadLifetime = 8.hours
+  private val ToDownloadLifetime = 24.hours
   private val MaxModifiersToDownload = 100
   private var lastTime = timeProvider.time()
 

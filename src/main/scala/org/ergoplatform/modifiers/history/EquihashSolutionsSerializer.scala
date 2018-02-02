@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Ints
+import org.ergoplatform.mining.PoWScheme
 import scorex.core.serialization.Serializer
 
 import scala.util.Try

@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
+import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.{ModifierId, ModifierTypeId}

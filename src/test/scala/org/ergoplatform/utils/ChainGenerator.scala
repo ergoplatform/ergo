@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction

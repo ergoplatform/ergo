@@ -5,7 +5,8 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
+import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

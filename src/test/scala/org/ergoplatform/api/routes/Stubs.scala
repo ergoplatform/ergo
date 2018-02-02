@@ -5,7 +5,8 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorSystem, Props}
 import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
+import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory

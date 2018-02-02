@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

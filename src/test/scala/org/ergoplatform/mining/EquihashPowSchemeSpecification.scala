@@ -2,7 +2,6 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.EquihashPowScheme
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoGenerators

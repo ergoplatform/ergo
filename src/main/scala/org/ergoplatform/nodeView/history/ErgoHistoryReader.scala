@@ -165,21 +165,19 @@ trait ErgoHistoryReader
     */
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]] = {
     @tailrec
-    def loop(acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
-      val nextLevelHeaders: Seq[Header] = heightOf(acc.head.head.id).toSeq
-        .flatMap(currentHeight => headerIdsAtHeight(currentHeight + 1))
-        .flatMap(id => typedModifierById[Header](id))
+    def loop(currentHeight: Int, acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
+      val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
         .filter(h => withFilter(h))
       if (nextLevelHeaders.isEmpty) acc.map(chain => chain.reverse)
       else {
         val updatedChains = nextLevelHeaders
           .flatMap(h => acc.find(chain => h.parentId sameElements chain.head.id).map(c => h +: c))
         val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId sameElements chain.head.id))
-        loop(updatedChains ++ nonUpdatedChains)
+        loop(currentHeight + 1, updatedChains ++ nonUpdatedChains)
       }
     }
 
-    loop(Seq(Seq(header)))
+    loop(heightOf(header.id).get, Seq(Seq(header)))
   }
 
 

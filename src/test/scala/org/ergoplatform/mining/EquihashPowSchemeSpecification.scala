@@ -21,14 +21,19 @@ class EquihashPowSchemeSpecification extends PropSpec
 
   val powScheme = new EquihashPowScheme(nDefault, kDefault)
 
-  private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = {
-    powScheme.proveBlock(
+  @SuppressWarnings(Array("TryGet"))
+  private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = powScheme
+    .proveBlock(
       None,
       RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
       ADDigest @@ Array.fill(33)(0: Byte),
       SerializedAdProof @@ Array.emptyByteArray,
-      Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))), 1L, Array.emptyByteArray)
-  }
+      Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))),
+      1L,
+      Array.emptyByteArray,
+      Long.MinValue,
+      Long.MaxValue
+    ).get
 
   property("Miner should generate valid block") {
     val b = createValidBlock()

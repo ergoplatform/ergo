@@ -16,6 +16,7 @@ import ErgoHistory.GenesisHeight
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
+  @SuppressWarnings(Array("TraversableHead"))
   def validate(m: PoPoWProof): Try[Unit] = new PoPoWProofUtils(powScheme).validate(m).map { _ =>
     bestHeaderIdOpt match {
       case Some(genesisId) =>

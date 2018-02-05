@@ -34,6 +34,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     * @param txsAreNew - flag, that transactions where added last
     * @return ProgressInfo required for State to process to be consistent with History
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val header: Header = fullBlock.header

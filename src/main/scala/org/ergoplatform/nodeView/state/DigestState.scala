@@ -30,6 +30,7 @@ class DigestState protected(override val version: VersionTag,
 
   override val maxRollbackDepth = 10
 
+  @SuppressWarnings(Array("OptionGet"))
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
@@ -87,6 +88,7 @@ class DigestState protected(override val version: VersionTag,
       Try(this)
   }
 
+  @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)

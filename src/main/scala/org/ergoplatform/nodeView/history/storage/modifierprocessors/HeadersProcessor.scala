@@ -99,6 +99,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @param header - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(header)
     historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
@@ -151,6 +152,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @param header - header to validate
     * @return Success() if header is valid, Failure(error) otherwise
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def validate(header: Header): Try[Unit] = {
     lazy val parentOpt = typedModifierById[Header](header.parentId)
     if (header.parentId sameElements Header.GenesisParentId) {
@@ -180,7 +182,7 @@ trait HeadersProcessor extends ScorexLogging {
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
     } else if (isSemanticallyValid(header.parentId) == ModifierSemanticValidity.Invalid) {
-      Failure(new Error(s"Parent header is marked as semantically invalid"))
+      Failure(new Error("Parent header is marked as semantically invalid"))
     } else {
       Success()
     }.recoverWith { case thr =>
@@ -254,8 +256,10 @@ trait HeadersProcessor extends ScorexLogging {
     }
   }
 
+  //TODO rework option.get
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
+  @SuppressWarnings(Array("OptionGet"))
   private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
@@ -295,6 +299,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
+  //TODO rework option.get
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get

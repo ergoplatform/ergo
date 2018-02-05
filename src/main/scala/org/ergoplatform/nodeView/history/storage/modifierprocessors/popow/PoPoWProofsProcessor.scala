@@ -36,7 +36,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     val suffix: HeaderChain = lastHeaders(k)
     val suffixFirstHeader = suffix.head
 
-
+    //TODO rework option.get
     def headerById(id: ModifierId): Header = typedModifierById[Header](id).get
 
     @tailrec
@@ -46,7 +46,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
       @tailrec
       def loop(acc: Seq[Header]): Seq[Header] = {
         val interHeader = acc.head
-        if (interHeader.interlinks.length > depth) {
+        if (interHeader.interlinks.lengthCompare(depth) > 0) {
           val header = headerById(interHeader.interlinks(depth))
           loop(header +: acc)
         } else {

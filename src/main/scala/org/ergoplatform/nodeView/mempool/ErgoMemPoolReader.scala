@@ -34,6 +34,7 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
   def take(limit: Int): Iterable[AnyoneCanSpendTransaction] =
     unconfirmed.values.toSeq.take(limit)
 
+  //TODO rework option.get
   protected def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = synchronized {
     val txsIds = txs.map(tx => key(tx.id))
     val newMap = waitedForAssembly.flatMap(p => {

@@ -40,7 +40,9 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
       }
       val diff = interpolate(data)
       if (diff >= 1) diff else Constants.InitialDifficulty
-    } else previousHeaders.maxBy(_._1)._2.requiredDifficulty
+    } else {
+      previousHeaders.maxBy(_._1)._2.requiredDifficulty
+    }
   }
 
   //y = a + bx

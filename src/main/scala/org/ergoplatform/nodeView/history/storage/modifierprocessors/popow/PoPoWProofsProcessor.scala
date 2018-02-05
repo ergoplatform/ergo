@@ -57,7 +57,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
       val innerchain = loop(Seq(suffixFirstHeader))
 
       //todo: this code below could reach depth = -1, then ArrayIndexOutOfBoundException
-      if (innerchain.length >= m) (depth, innerchain) else constructProof(depth - 1)
+      if (innerchain.lengthCompare(m) >= 0) (depth, innerchain) else constructProof(depth - 1)
     }
 
     val (depth, innerchain) = constructProof(suffixFirstHeader.interlinks.length)

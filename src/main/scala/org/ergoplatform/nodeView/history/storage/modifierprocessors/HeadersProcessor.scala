@@ -140,12 +140,15 @@ trait HeadersProcessor extends ScorexLogging {
     val toRemove = Seq(headerScoreKey(modifierId), ByteArrayWrapper(modifierId)) ++ payloadModifiers
     val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestHeaderKey -> ByteArrayWrapper(header.parentId))
-    } else Seq.empty
+    } else {
+      Seq.empty
+    }
     val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
-    } else Seq.empty
+    } else {
+      Seq.empty
+    }
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
-
   }
 
   /**
@@ -237,8 +240,11 @@ trait HeadersProcessor extends ScorexLogging {
       }
     }
 
-    if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq.empty)
-    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+    if (bestHeaderIdOpt.isEmpty || (limit == 0)) {
+      HeaderChain(Seq.empty)
+    } else {
+      HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+    }
   }
 
   /**
@@ -305,10 +311,10 @@ trait HeadersProcessor extends ScorexLogging {
     val parentHeight = heightOf(parentId).get
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
-    if (heights.length == 1) {
+    if (heights.lengthCompare(1) == 0) {
       difficultyCalculator.calculate(Seq((parentHeight, parent)))
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (h: Header) => false)
+      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
         .ensuring(_.length == (heights.min to heights.max).length)
       val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
         .ensuring(_.length == heights.length)

@@ -62,5 +62,4 @@ object TransactionGenerator {
   case object FetchBoxes
 
   case object StopGeneration
-
 }

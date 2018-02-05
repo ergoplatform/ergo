@@ -126,9 +126,9 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
 
-    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson)
+    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce = 0L, null)
+      nBits, height, votes, nonce = 0L, null) // scalastyle:ignore
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)

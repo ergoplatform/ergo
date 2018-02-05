@@ -57,5 +57,4 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
     waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
     promise.future
   }
-
 }

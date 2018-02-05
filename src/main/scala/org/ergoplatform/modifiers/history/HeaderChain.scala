@@ -17,9 +17,9 @@ case class HeaderChain(headers: IndexedSeq[Header]) {
 
   def tail: HeaderChain = HeaderChain(headers.tail)
 
-  def take(i: Int) = HeaderChain(headers.take(i))
+  def take(i: Int): HeaderChain = HeaderChain(headers.take(i))
 
-  def drop(i: Int) = HeaderChain(headers.drop(i))
+  def drop(i: Int): HeaderChain = HeaderChain(headers.drop(i))
 
   def takeAfter(h: Header): HeaderChain = {
     val commonIndex = headers.indexWhere(_.id sameElements h.id)
@@ -33,7 +33,7 @@ case class HeaderChain(headers: IndexedSeq[Header]) {
 
   lazy val length: Int = headers.size
 
-  def ++(c: HeaderChain) = HeaderChain(headers ++ c.headers)
+  def ++(c: HeaderChain): HeaderChain = HeaderChain(headers ++ c.headers)
 }
 
 object HeaderChain {

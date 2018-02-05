@@ -65,7 +65,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
     }
   }
 
-  def isLevel(header: Header, level: Int) = {
+  def isLevel(header: Header, level: Int): Boolean = {
     val headerDiff = poWScheme.realDifficulty(header)
     val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
     headerDiff >= levelDiff
@@ -126,8 +126,9 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
     val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
 
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
-      if (acc.lengthCompare(k.toInt) == 0) (index, acc.reverse)
-      else {
+      if (acc.lengthCompare(k.toInt) == 0)  {
+        (index, acc.reverse)
+      } else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l))
           .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))

@@ -44,8 +44,11 @@ object RequiredDifficulty extends Serializer[NBits] {
     val value = requiredDifficulty.bigInteger
     var result: Long = 0L
     var size: Int = value.toByteArray.length
-    if (size <= 3) result = value.longValue << 8 * (3 - size)
-    else result = value.shiftRight(8 * (size - 3)).longValue
+    if (size <= 3) {
+      result = value.longValue << 8 * (3 - size)
+    } else {
+      result = value.shiftRight(8 * (size - 3)).longValue
+    }
     // The 0x00800000 bit denotes the sign.
     // Thus, if it is already set, divide the mantissa by 256 and increase the exponent.
     if ((result & 0x00800000L) != 0) {
@@ -74,18 +77,22 @@ object RequiredDifficulty extends Serializer[NBits] {
     */
   @SuppressWarnings(Array("NullAssignment"))
   private def decodeMPI(mpi: Array[Byte], hasLength: Boolean): BigInteger = {
-    var buf: Array[Byte] = null
+    var buf: Array[Byte] = null // scalastyle:ignore
     if (hasLength) {
       val length: Int = readUint32BE(mpi).toInt
       buf = new Array[Byte](length)
       System.arraycopy(mpi, 4, buf, 0, length)
+    } else {
+      buf = mpi
     }
-    else buf = mpi
-    if (buf.length == 0) return BigInteger.ZERO
+    if (buf.length == 0) { return BigInteger.ZERO }
     val isNegative: Boolean = (buf(0) & 0x80) == 0x80
     if (isNegative) buf(0) = (buf(0) & 0x7f).toByte
     val result: BigInteger = new BigInteger(buf)
-    if (isNegative) result.negate
-    else result
+    if (isNegative) {
+      result.negate
+    } else {
+      result
+    }
   }
 }

@@ -93,6 +93,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
   }
 
+  // scalastyle:off cyclomatic.complexity
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
@@ -130,6 +131,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     log.error("Failed to recover state, try to resync from genesis manually", e)
     ErgoApp.forceStopApplication(500)
   }.get
+  // scalastyle:on
 
 }
 
@@ -141,7 +143,10 @@ private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvi
 
 object ErgoNodeViewHolder {
   def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
-    if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
-    else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
+    if (settings.nodeSettings.ADState) {
+      system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
+    } else {
+      system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
+    }
   }
 }

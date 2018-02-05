@@ -9,13 +9,9 @@ import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusRespon
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.ModifierId
-import scorex.core.NodeViewHolder.GetDataFromCurrentView
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base58
@@ -29,13 +25,13 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
 
   override val route: Route = pathPrefix("blocks") {
     getBlocksR ~
-    postBlocksR ~
-    getLastHeadersR ~
-    getBlockIdsAtHeightR ~
-    getBlockHeaderByHeaderIdR ~
-    getBlockTransactionsByHeaderIdR ~
-    getFullBlockByHeaderIdR ~
-    candidateBlockR
+      postBlocksR ~
+      getLastHeadersR ~
+      getBlockIdsAtHeightR ~
+      getBlockHeaderByHeaderIdR ~
+      getBlockTransactionsByHeaderIdR ~
+      getFullBlockByHeaderIdR ~
+      candidateBlockR
   }
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -90,11 +86,11 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
   }
 
   def getBlockHeaderByHeaderIdR: Route = (headerId & pathPrefix("header") & get) { id =>
-      getFullBlockByHeaderId(id).map(_.map(_.header.json)).okJson()
+    getFullBlockByHeaderId(id).map(_.map(_.header.json)).okJson()
   }
 
   def getBlockTransactionsByHeaderIdR: Route = (headerId & pathPrefix("transactions") & get) { id =>
-        getFullBlockByHeaderId(id).map(_.map(_.transactions.map(_.json).asJson)).okJson()
+    getFullBlockByHeaderId(id).map(_.map(_.transactions.map(_.json).asJson)).okJson()
   }
 
   def candidateBlockR: Route = (path("candidateBlock") & pathEndOrSingleSlash & get) {

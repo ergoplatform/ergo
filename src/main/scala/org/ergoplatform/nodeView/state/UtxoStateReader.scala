@@ -53,14 +53,14 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
-      .ensuring(persistentProver.digest.sameElements(rootHash), s"Incorrect digest after rollback:" +
+      .ensuring(persistentProver.digest.sameElements(rootHash), "Incorrect digest after rollback:" +
         s" ${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
 
     Try {
       require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
-      require(persistentProver.digest.sameElements(rootHash), s"Incorrect persistent proover: " +
+      require(persistentProver.digest.sameElements(rootHash), "Incorrect persistent proover: " +
         s"${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
-      require(storage.version.get.sameElements(rootHash), s"Incorrect storage: " +
+      require(storage.version.get.sameElements(rootHash), "Incorrect storage: " +
         s"${Algos.encode(storage.version.get)} != ${Algos.encode(rootHash)}")
 
       //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below

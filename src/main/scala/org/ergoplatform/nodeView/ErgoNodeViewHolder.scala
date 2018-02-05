@@ -65,6 +65,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
+  @SuppressWarnings(Array("AsInstanceOf"))
   override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
@@ -75,6 +76,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     Some((history, state, wallet, memPool))
   }
 
+  @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): StateType = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
@@ -82,7 +84,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
 
     {
       (version, digest) match {
-        case (Some(v), Some(d)) if settings.nodeSettings.ADState =>
+        case (Some(_), Some(_)) if settings.nodeSettings.ADState =>
           DigestState.create(version, digest, dir, settings.nodeSettings)
         case _ =>
           ErgoState.readOrGenerate(settings, Some(self))
@@ -91,6 +93,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
   }
 
+  @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>

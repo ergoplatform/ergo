@@ -147,6 +147,7 @@ object HeaderSerializer extends Serializer[Header] {
   override def toBytes(h: Header): Array[Version] =
     Bytes.concat(bytesWithoutPow(h), nonceAndSolutionBytes(h))
 
+  @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
     val parentId = ModifierId @@ bytes.slice(1, 33)
@@ -155,7 +156,7 @@ object HeaderSerializer extends Serializer[Header] {
     val stateRoot = ADDigest @@ bytes.slice(97, 130)
     val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
     val votes = bytes.slice(138, 143)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(143, 147)).getOrElse(throw new IllegalArgumentException("cannot parse NBITS"))
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(143, 147)).get
     val height = Ints.fromByteArray(bytes.slice(147, 151))
 
     @tailrec

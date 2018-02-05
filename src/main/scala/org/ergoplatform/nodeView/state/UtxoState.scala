@@ -55,6 +55,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     }
   }
 
+  @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => tx.semanticValidity.get)
@@ -110,8 +111,10 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
       Failure(new Exception("unknown modifier"))
   }
 
-  override def rollbackVersions: Iterable[VersionTag] =
-    persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+  @SuppressWarnings(Array("OptionGet"))
+  override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions.map{v =>
+    VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data
+  }
 
 }
 
@@ -132,6 +135,7 @@ object UtxoState {
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
   }
 
+  @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))

@@ -117,13 +117,13 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
       innerchainBytes)
   }
 
+  @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Byte]): Try[PoPoWProof] = Try {
     val m = bytes.head
     val k = bytes(1)
     val i = bytes(2)
     val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
-    val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength))
-      .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
+    val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
 
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
       if (acc.lengthCompare(k.toInt) == 0) (index, acc.reverse)

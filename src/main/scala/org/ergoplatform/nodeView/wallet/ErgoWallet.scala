@@ -43,5 +43,6 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTr
 }
 
 object ErgoWallet {
+  @SuppressWarnings(Array("UnusedMethodParameter"))
   def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
 }

@@ -78,6 +78,7 @@ trait ErgoHistoryReader
   /**
     * Get ErgoPersistentModifier of type T by it's id if it is in history
     */
+  @SuppressWarnings(Array("IsInstanceOf"))
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T@unchecked) if m.isInstanceOf[T] => Some(m)
     case _ => None
@@ -134,6 +135,7 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headerss, that node with info should download and apply to synchronize
     */
+  @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     if (isEmpty) {
       info.startingPoints
@@ -163,6 +165,7 @@ trait ErgoHistoryReader
     * @param withFilter - condition to satisfy
     * @return all possible forks, starting from specified header and satisfying withFilter condition
     */
+  //TODO rework option.get and traversable.head
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]] = {
     @tailrec
     def loop(currentHeight: Int, acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {

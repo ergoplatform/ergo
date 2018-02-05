@@ -26,6 +26,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   var stateReaderOpt: Option[ErgoStateReader] = None
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
 
+  @SuppressWarnings(Array("IsInstanceOf"))
   override def receive = {
     case ChangedHistory(reader: ErgoHistoryReader@unchecked) if reader.isInstanceOf[ErgoHistoryReader] =>
       historyReaderOpt = Some(reader)

@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import com.google.common.primitives.{Chars, Ints}
+import com.google.common.primitives.Chars
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -18,7 +18,7 @@ import scorex.crypto.hash.Digest32
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scala.util.{Random, Try}
+import scala.util.Try
 
 trait PoWScheme {
 
@@ -32,20 +32,6 @@ trait PoWScheme {
             startingNonce: Long,
             finishingNonce: Long
            ): Option[Header]
-
-
-  def prove(parentOpt: Option[Header],
-            nBits: Long,
-            stateRoot: ADDigest,
-            adProofsRoot: Digest32,
-            transactionsRoot: Digest32,
-            timestamp: Timestamp,
-            votes: Array[Byte]): Header = {
-    val start = Long.MinValue
-    val finish = Long.MaxValue
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, start, finish).get
-  }
-
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
@@ -63,7 +49,6 @@ trait PoWScheme {
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
       timestamp, votes, startingNonce, finishingNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }
   }
@@ -84,23 +69,8 @@ trait PoWScheme {
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, nonce, nonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }
-  }
-
-  def proveBlock(parentOpt: Option[Header],
-                 nBits: Long,
-                 stateRoot: ADDigest,
-                 adProofBytes: SerializedAdProof,
-                 transactions: Seq[AnyoneCanSpendTransaction],
-                 timestamp: Timestamp,
-                 votes: Array[Byte]): ErgoFullBlock = {
-
-    val start = Long.MinValue
-    val finish = Long.MaxValue
-
-    proveBlock(parentOpt, nBits, stateRoot, adProofBytes, transactions, timestamp, votes, start, finish).get
   }
 
   def verify(header: Header): Boolean
@@ -128,13 +98,8 @@ trait PoWScheme {
 object PoWScheme {
   type Solution = Seq[Int]
 
-  //todo: do n & k as Option[Char]
-  def apply(powType: String, n: Int, k: Int): PoWScheme = {
-    if (powType == "fake") DefaultFakePowScheme else
-      new EquihashPowScheme(n.toChar, k.toChar)
-  }
+  def apply(n: Int, k: Int): PoWScheme = new EquihashPowScheme(n.toChar, k.toChar)
 }
-
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
@@ -191,10 +156,14 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   }
 
   override def verify(header: Header): Boolean =
-    Try {
-      Equihash.validateSolution(n, k, ergoPerson,
+    EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).map { solutionIndices =>
+      Equihash.validateSolution(
+        n,
+        k,
+        ergoPerson,
         HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
-        EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).get.toIndexedSeq)
+        solutionIndices.toIndexedSeq
+      )
     }.recover {
       case NonFatal(e) =>
         log.debug(s"Block ${header.id} is invalid due pow", e)
@@ -205,33 +174,3 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
   override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
 }
-
-
-class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
-
-  override def prove(parentOpt: Option[Header],
-                     nBits: Long,
-                     stateRoot: ADDigest,
-                     adProofsRoot: Digest32,
-                     transactionsRoot: Digest32,
-                     timestamp: Timestamp,
-                     votes: Array[Byte],
-                     startingNonce: Long,
-                     finishingNonce: Long): Option[Header] = {
-
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
-
-    val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
-
-    Some(new Header(version, parentId, interlinks,
-      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
-      nonce = 0L, Ints.toByteArray(level)))
-  }
-
-  override def verify(header: Header): Boolean = true
-
-  override def realDifficulty(header: Header): Difficulty =
-    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
-}
-
-object DefaultFakePowScheme extends FakePowScheme(None)

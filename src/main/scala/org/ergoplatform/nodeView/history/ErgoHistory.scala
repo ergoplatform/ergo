@@ -8,8 +8,8 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.{ADProofsProcessor, ADStateProofsProcessor, EmptyADProofsProcessor, FullStateProofsProcessor}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.{BlockTransactionsProcessor, EmptyBlockTransactionsProcessor, FullnodeBlockTransactionsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
@@ -77,10 +77,12 @@ trait ErgoHistory
     */
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    if (valid) this -> markModifierValid(modifier)
-    else this -> markModifierInvalid(modifier)
-  }
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) =
+    if (valid)  {
+      this -> markModifierValid(modifier)
+    } else {
+      this -> markModifierInvalid(modifier)
+    }
 
   /**
     * Mark modifier and all modifiers in child chains as invalid
@@ -96,7 +98,6 @@ trait ErgoHistory
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
           .map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte))))
         log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId)}")
-
         val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedHeaders.exists(_.id sameElements id))
         val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedHeaders.exists(_.id sameElements id))
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
@@ -123,7 +124,6 @@ trait ErgoHistory
                 .ensuring(_.lengthCompare(1) > 0, "invalidatedChain should contain at least bestFullBlock and parent")
 
               val branchPoint = invalidatedChain.head
-
               val validChain: Seq[ErgoFullBlock] = {
                 continuationHeaderChains(branchPoint.header,
                   h => getFullBlock(h).isDefined && !invalidatedHeaders.contains(h))
@@ -133,15 +133,12 @@ trait ErgoHistory
 
               val changedLinks = Seq(BestFullBlockKey -> ByteArrayWrapper(validChain.last.id),
                 BestHeaderKey -> ByteArrayWrapper(newBestHeader.id))
-
               val toInsert = validityRow ++ changedLinks
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
-
               ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
                 validChain.tail.headOption, Seq.empty)
             }
         }
-
       case None =>
         //No headers become invalid. Just valid this modifier as invalid
         historyStorage.insert(validityKey(modifier.id),

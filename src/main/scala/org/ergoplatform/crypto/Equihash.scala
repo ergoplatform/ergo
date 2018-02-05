@@ -28,11 +28,9 @@ object Equihash {
 
   private val byteSize = 8
 
-  def countLeadingZeroes(bytes: Array[Byte]): Int = {
-    (0 until byteSize * bytes.length).foldLeft(0.toByte) {
-      case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => (res + 1).toByte
-      case (res, _) => return res
-    }
+  def countLeadingZeroes(bytes: Array[Byte]): Int = (0 until byteSize * bytes.length).foldLeft(0.toByte) {
+    case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => (res + 1).toByte
+    case (res, _) => res
   }
 
   def hasCollision(ha: Array[Byte], hb: Array[Byte], i: Int, lenght: Int): Boolean = {
@@ -108,7 +106,9 @@ object Equihash {
         accValue = accValue.shiftLeft(bitLen).and(wordMask).or(BigInteger.valueOf(inp(j).toLong))
         for (x <- bytePad until inWidth) {
           // Apply bit_len_mask across byte boundaries
-          val b = BigInteger.valueOf(inp(j + x)).and(bitLenMask.shiftRight(8 * (inWidth - x - 1)).and(BigInteger.valueOf(0xFF))).shiftLeft(8 * (inWidth - x - 1))
+          val b = BigInteger.valueOf(inp(j + x)).and(bitLenMask.shiftRight(8 * (inWidth - x - 1))
+            .and(BigInteger.valueOf(0xFF)))
+            .shiftLeft(8 * (inWidth - x - 1))
           accValue = accValue.or(b) //Big - endian
         }
         j += inWidth
@@ -290,8 +290,9 @@ object Equihash {
       for (s <- 0 until k) {
         val d = 1 << s
         for (i <- 0 until solutionLen by 2 * d) {
-          if (solutionIndices(i) >= solutionIndices(i + d))
+          if (solutionIndices(i) >= solutionIndices(i + d)) {
             return false
+          }
         }
       }
 
@@ -306,8 +307,9 @@ object Equihash {
         val d = 1 << s
         for (i <- 0 until solutionLen by 2 * d) {
           val w = words(i).xor(words(i + d))
-          if (w.shiftRight(n - (s + 1) * bitsPerStage) != BigInteger.ZERO)
+          if (w.shiftRight(n - (s + 1) * bitsPerStage) != BigInteger.ZERO) {
             return false
+          }
           words(i) = w
         }
       }

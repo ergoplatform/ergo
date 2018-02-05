@@ -171,8 +171,9 @@ trait ErgoHistoryReader
     def loop(currentHeight: Int, acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
       val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
         .filter(h => withFilter(h))
-      if (nextLevelHeaders.isEmpty) acc.map(chain => chain.reverse)
-      else {
+      if (nextLevelHeaders.isEmpty) {
+        acc.map(chain => chain.reverse)
+      } else {
         val updatedChains = nextLevelHeaders
           .flatMap(h => acc.find(chain => h.parentId sameElements chain.head.id).map(c => h +: c))
         val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId sameElements chain.head.id))

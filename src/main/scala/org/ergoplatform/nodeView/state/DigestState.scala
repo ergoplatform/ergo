@@ -34,8 +34,10 @@ class DigestState protected(override val version: VersionTag,
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        if (!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
+        //TODO: Code smells
+        if (!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot)) {
           throw new Error("Incorrect proofs digest")
+        }
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot
 
@@ -115,21 +117,18 @@ object DigestState {
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
-
       case (Some(version), Some(rootHash)) =>
-        if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
+        val state = if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
           new DigestState(version, rootHash, store, settings)
         } else {
           val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
           new DigestState(inVersion, rootHash, store, settings).update(version, rootHash).get //sync store
-        }.ensuring(store.lastVersionID.get.data.sameElements(version))
-
+        }
+        state.ensuring(store.lastVersionID.get.data.sameElements(version))
       case (None, None) =>
         val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-
         new DigestState(version, ADDigest @@ rootHash, store, settings)
-
       case _ => ???
     }
   }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))

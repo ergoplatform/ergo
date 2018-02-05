@@ -47,7 +47,7 @@ object ErgoState extends ScorexLogging {
   //TODO move to settings?
   val KeepVersions = 200
 
-  def stateDir(settings: ErgoSettings) = new File(s"${settings.directory}/state")
+  def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
@@ -82,8 +82,12 @@ object ErgoState extends ScorexLogging {
     val dir = stateDir(settings)
     dir.mkdirs()
 
-    if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings)
-    else if(dir.listFiles().isEmpty) ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
-    else UtxoState.create(dir, nodeViewHolderRef)
+    if (settings.nodeSettings.ADState) {
+      DigestState.create(None, None, dir, settings.nodeSettings)
+    } else if (dir.listFiles().isEmpty) {
+      ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
+    } else {
+      UtxoState.create(dir, nodeViewHolderRef)
+    }
   }
 }

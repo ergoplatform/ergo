@@ -27,6 +27,6 @@ case class CandidateBlock(parentOpt: Option[Header],
     "votes" -> Algos.encode(votes).asJson
   ).asJson
 
-  override def toString = s"CandidateBlock(${json.noSpaces})"
+  override def toString: String = s"CandidateBlock(${json.noSpaces})"
 }
 

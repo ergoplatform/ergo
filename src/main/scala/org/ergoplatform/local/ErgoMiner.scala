@@ -185,5 +185,4 @@ object ErgoMiner extends ScorexLogging {
       "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
     ).asJson
   }
-
 }

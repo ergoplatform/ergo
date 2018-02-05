@@ -26,8 +26,11 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
 
   override def validate(tx: AnyoneCanSpendTransaction): Try[Unit] = if (tx.boxIdsToOpen.forall { k =>
     persistentProver.unauthenticatedLookup(k).isDefined
-  }) Success()
-  else Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
+  }) {
+    Success()
+  } else {
+    Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
+  }
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block

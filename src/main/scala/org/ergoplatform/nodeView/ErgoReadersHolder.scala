@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder._

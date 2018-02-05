@@ -14,7 +14,7 @@ import scala.collection.immutable.SortedMap
   */
 class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox]) {
 
-  def size = boxes.size
+  def size: Int = boxes.size
 
   def get(id: ByteArrayWrapper): Option[AnyoneCanSpendNoncedBox] = boxes.get(id)
 
@@ -29,7 +29,7 @@ class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, AnyoneCanSpendNoncedBox])
 
   def sortedBoxes: Set[AnyoneCanSpendNoncedBox] = boxes.keySet.map(k => boxes(k))
 
-  override def toString = s"BoxHolder(${boxes.size} boxes inside)"
+  override def toString: String = s"BoxHolder(${boxes.size} boxes inside)"
 }
 
 /**

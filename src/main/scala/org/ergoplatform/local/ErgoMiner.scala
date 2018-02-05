@@ -10,10 +10,9 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.CandidateBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.nodeView.state.{UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
@@ -24,7 +23,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Success, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHolderRef: ActorRef, nodeId: Array[Byte],
                 timeProvider: NetworkTimeProvider) extends Actor
@@ -87,8 +86,10 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
       nonce = nonce + 1
       candidateOpt match {
         case Some(candidate) =>
-          powScheme.proveBlock(candidate, nonce) match {
-            case Some(newBlock) =>
+          log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
+          //Mine in separate thread for faster responses to API requests and new candidate block application
+          Future(powScheme.proveBlock(candidate, nonce)).onComplete {
+            case Success(Some(newBlock)) =>
               log.info("New block found: " + newBlock)
 
               viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
@@ -97,10 +98,11 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
                 viewHolderRef ! LocallyGeneratedModifier(adp)
               }
               context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay)(self ! MineBlock)
-            case None =>
+            case _ =>
               self ! MineBlock
           }
         case None =>
+          //Waiting until we'll create our first candidate block
           context.system.scheduler.scheduleOnce(1.second)(self ! MineBlock)
       }
 

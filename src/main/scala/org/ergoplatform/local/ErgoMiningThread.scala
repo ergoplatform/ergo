@@ -34,8 +34,10 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-          newBlock.aDProofs.foreach { adp =>
-            viewHolderRef ! LocallyGeneratedModifier(adp)
+          if (ergoSettings.nodeSettings.ADState) {
+            newBlock.aDProofs.foreach { adp =>
+              viewHolderRef ! LocallyGeneratedModifier(adp)
+            }
           }
           context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
             self ! MineBlock(Random.nextLong())

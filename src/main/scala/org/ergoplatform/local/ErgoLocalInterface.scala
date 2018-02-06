@@ -9,7 +9,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{LocalInterface, ModifierId, VersionTag}
 
 
-class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
+class ErgoLocalInterface (override val viewHolderRef: ActorRef)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
@@ -18,9 +18,7 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
 
   override protected def onSuccessfulTransaction(tx: AnyoneCanSpendTransaction): Unit = {}
 
-  override protected def onNoBetterNeighbour(): Unit = {
-    miner ! StartMining
-  }
+  override protected def onNoBetterNeighbour(): Unit = {}
 
   override protected def onBetterNeighbourAppeared(): Unit = {}
 
@@ -33,8 +31,6 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef, miner: ActorRef,
   override protected def onSemanticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 
   override protected def onNewSurface(newSurface: Seq[ModifierId]): Unit = {}
-
-  override protected def onChangedState(isRollback: Boolean, newVersion: VersionTag): Unit = {}
 
   override protected def onRollbackFailed(): Unit = {}
 }

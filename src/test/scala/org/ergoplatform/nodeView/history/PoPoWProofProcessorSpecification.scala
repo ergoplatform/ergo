@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.NoShrink
@@ -16,15 +17,19 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
+  println("1")
   val history = genHistory()
+  println("2")
   val chain = genHeaderChain(acc =>
     acc
       .dropRight(MaxK)
       .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM, history.bestHeaderOpt.toSeq
   ).ensuring(_.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
 
+  println("3")
   private lazy val popowHistory = applyHeaderChain(history, chain)
 
+  println("4")
   val emptyADDigest: ADDigest = ADDigest @@ Array.fill(33)(0: Byte)
   val emptyDigest32: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
 

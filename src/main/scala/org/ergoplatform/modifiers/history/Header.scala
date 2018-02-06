@@ -17,7 +17,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -45,7 +45,10 @@ case class Header(version: Version,
     val bytes = HeaderSerializer.bytesWithoutPow(this)
     digest.update(bytes, 0, bytes.length)
     Equihash.hashNonce(digest, nonce)
-    EquihashSolutionsSerializer.parseBytes(equihashSolutions).get.foreach(s => Equihash.hashXi(digest, s))
+    EquihashSolutionsSerializer.parseBytes(equihashSolutions) match {
+      case Success(solutions) => solutions.foreach(s => Equihash.hashXi(digest, s))
+      case Failure(f) => throw f
+    }
     val h = new Array[Byte](32)
     digest.doFinal(h, 0)
 
@@ -68,7 +71,7 @@ case class Header(version: Version,
     "id" -> Algos.encode(id).asJson,
     "transactionsRoot" -> Algos.encode(transactionsRoot).asJson,
     "interlinks" -> interlinks.map(i => Algos.encode(i).asJson).asJson,
-    "ADProofsRoot" -> Algos.encode(ADProofsRoot).asJson,
+    "adProofsRoot" -> Algos.encode(ADProofsRoot).asJson,
     "stateRoot" -> Algos.encode(stateRoot).asJson,
     "parentId" -> Algos.encode(parentId).asJson,
     "timestamp" -> timestamp.asJson,
@@ -76,10 +79,11 @@ case class Header(version: Version,
     "equihashSolutions" -> Algos.encode(equihashSolutions).asJson,
     "nBits" -> nBits.asJson,
     "height" -> height.asJson,
+    "difficulty" -> requiredDifficulty.toString.asJson,
     "votes" -> Algos.encode(votes).asJson
   ).asJson
 
-  override lazy val toString: String = s"Header(${json.noSpaces}) Binary: ${Algos.encode(this.bytes)}"
+  override lazy val toString: String = s"Header(${json.noSpaces})"
 
   override type M = Header
 
@@ -110,6 +114,7 @@ object HeaderSerializer extends Serializer[Header] {
       Ints.toByteArray(h.height))
 
   def bytesWithoutPow(h: Header): Array[Byte] = {
+    @SuppressWarnings(Array("TraversableHead"))
     def buildInterlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
         acc
@@ -142,6 +147,7 @@ object HeaderSerializer extends Serializer[Header] {
   override def toBytes(h: Header): Array[Version] =
     Bytes.concat(bytesWithoutPow(h), nonceAndSolutionBytes(h))
 
+  @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
     val parentId = ModifierId @@ bytes.slice(1, 33)
@@ -164,7 +170,7 @@ object HeaderSerializer extends Serializer[Header] {
     }
 
     val interlinksSize = Chars.fromByteArray(bytes.slice(151, 153))
-    val interlinks = parseInterlinks(153, 153 + interlinksSize, Seq())
+    val interlinks = parseInterlinks(153, 153 + interlinksSize, Seq.empty)
 
     val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
 

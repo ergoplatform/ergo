@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockPro
 import scorex.core.consensus.History.ProgressInfo
 import scorex.crypto.encode.Base58
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * ADProof processor for node regime with DigestState
@@ -23,23 +23,26 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
           case Some(txs: BlockTransactions) if adState =>
             processFullBlock(ErgoFullBlock(header, txs, Some(m)), txsAreNew = false)
           case _ =>
-            val modifierRow = Seq((ByteArrayWrapper(m.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(m))))
-            historyStorage.insert(m.id, modifierRow)
-            ProgressInfo(None, Seq(), Seq(), Seq())
+            historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, Seq(m))
+            ProgressInfo(None, Seq.empty, None, Seq.empty)
         }
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")
     }
   }
 
-  override protected def validate(m: ADProofs): Try[Unit] = Try {
-    require(!historyStorage.contains(m.id), s"Modifier $m is already in history")
-    historyStorage.modifierById(m.headerId) match {
-      case Some(h: Header) =>
-        require(h.ADProofsRoot sameElements m.digest,
-          s"Header ADProofs root ${Base58.encode(h.ADProofsRoot)} differs from $m digest")
-      case _ =>
-        throw new Error(s"Header for modifier $m is no defined")
+  override protected def validate(m: ADProofs): Try[Unit] = {
+    if (historyStorage.contains(m.id)) {
+      Failure(new Error(s"Modifier $m is already in history"))
+    } else {
+      historyStorage.modifierById(m.headerId) match {
+        case None =>
+          Failure(new Error(s"Header for modifier $m is no defined"))
+        case Some(header: Header) if !(header.ADProofsRoot sameElements m.digest) =>
+          Failure(new Error(s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
+        case Some(header: Header) =>
+          Success()
+      }
     }
   }
 }

@@ -16,12 +16,13 @@ case class ErgoFullBlock(header: Header,
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
+  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
+
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
   override val parentId: ModifierId = header.parentId
 
-  //TODO is it ok to exclude ADProofs here? Otherwise we have problems in UTXOState when we can't rollback to block with proofs if we applied block withour proofs
-  override lazy val id: ModifierId = ModifierId @@ Algos.hash(header.id ++ blockTransactions.id)
+  override lazy val id: ModifierId = header.id
 
   override lazy val json: Json = Map(
     "header" -> header.json,

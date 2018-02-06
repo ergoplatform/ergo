@@ -1,23 +1,27 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, DefaultFakePowScheme, Header}
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, TransactionIdsForHeader}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, TransactionIdsForHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Matchers
 import scorex.core.ModifierId
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 
-trait ErgoGenerators extends CoreGenerators {
+trait ErgoGenerators extends CoreGenerators with Matchers {
 
+  lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
   lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
@@ -38,10 +42,8 @@ trait ErgoGenerators extends CoreGenerators {
     .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
-    answer <- Arbitrary.arbitrary[Boolean]
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
-    fullBlockOpt <- Gen.option(modifierIdGen)
-  } yield ErgoSyncInfo(answer, ids, fullBlockOpt)
+  } yield ErgoSyncInfo(ids)
 
   lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
     idGenerator <- genBytesList(Constants.ModifierIdSize)
@@ -72,15 +74,15 @@ trait ErgoGenerators extends CoreGenerators {
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
     nonce <- Arbitrary.arbitrary[Int]
-    requiredDifficulty <- Arbitrary.arbitrary[Int]
+    requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     equihashSolutions <- genBytesList(Constants.ModifierIdSize)
     height <- Gen.choose(1, Int.MaxValue)
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     votes <- genBytesList(5)
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp, requiredDifficulty, height, votes, nonce,
-    equihashSolutions)
+  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, equihashSolutions)
 
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
@@ -107,10 +109,7 @@ trait ErgoGenerators extends CoreGenerators {
 
     val boxes = wus.takeBoxes(spentBoxesCounts.sum)
 
-      boxes.foreach { b =>
-        assert(wus.boxById(b.id).isDefined)
-      }
-
+    boxes.foreach(b => wus.boxById(b.id) should not be None)
 
     val (_, txs) = spentBoxesCounts.foldLeft(boxes -> Seq[AnyoneCanSpendTransaction]()) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
@@ -131,9 +130,7 @@ trait ErgoGenerators extends CoreGenerators {
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
     val transactions = validTransactionsFromUtxoState(utxoState)
-    transactions.flatMap(_.boxIdsToOpen).foreach { bid =>
-      assert(utxoState.boxById(bid).isDefined)
-    }
+    transactions.flatMap(_.boxIdsToOpen).foreach(bid => utxoState.boxById(bid) should not be None)
     validFullBlock(parentOpt, utxoState, transactions)
   }
 

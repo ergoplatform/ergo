@@ -130,8 +130,7 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
         (index, acc.reverse)
       } else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l))
-          .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
+        val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
         val interlinks = new PoPoWProofUtils(poWScheme).constructInterlinkVector(acc.head)
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
@@ -142,8 +141,7 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
     index = index + 2
     val innerchain = (0 until innerchainLength) map { _ =>
       val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-      val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l))
-        .getOrElse(throw new IllegalArgumentException("Cannot parse bytes to header"))
+      val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
       index = index + 2 + l
       header
     }

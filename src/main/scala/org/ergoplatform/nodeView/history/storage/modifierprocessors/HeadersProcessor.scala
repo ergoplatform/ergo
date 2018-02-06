@@ -2,13 +2,14 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings, _}
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
@@ -98,6 +99,7 @@ trait HeadersProcessor extends ScorexLogging {
     * @param header - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert = toInsert(header)
     historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
@@ -105,13 +107,13 @@ trait HeadersProcessor extends ScorexLogging {
 
     if (bestHeaderIdOpt.isEmpty) {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
-      ProgressInfo(None, Seq(), Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
       log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq(), Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq(), None, toDownload(header))
+      ProgressInfo(None, Seq.empty, None, toDownload(header))
     }
   }
 
@@ -121,7 +123,7 @@ trait HeadersProcessor extends ScorexLogging {
         Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
       case (true, false) =>
         Seq((BlockTransactions.modifierTypeId, h.transactionsId))
-      case (false, _) => Seq()
+      case (false, _) => Seq.empty
     }
   }
 
@@ -138,18 +140,22 @@ trait HeadersProcessor extends ScorexLogging {
     val toRemove = Seq(headerScoreKey(modifierId), ByteArrayWrapper(modifierId)) ++ payloadModifiers
     val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestHeaderKey -> ByteArrayWrapper(header.parentId))
-    } else Seq()
+    } else {
+      Seq.empty
+    }
     val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
       Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
-    } else Seq()
+    } else {
+      Seq.empty
+    }
     (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
-
   }
 
   /**
     * @param header - header to validate
     * @return Success() if header is valid, Failure(error) otherwise
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def validate(header: Header): Try[Unit] = {
     lazy val parentOpt = typedModifierById[Header](header.parentId)
     if (header.parentId sameElements Header.GenesisParentId) {
@@ -179,7 +185,7 @@ trait HeadersProcessor extends ScorexLogging {
     } else if (!powScheme.verify(header)) {
       Failure(new Error(s"Wrong proof-of-work solution for $header"))
     } else if (isSemanticallyValid(header.parentId) == ModifierSemanticValidity.Invalid) {
-      Failure(new Error(s"Parent header is marked as semantically invalid"))
+      Failure(new Error("Parent header is marked as semantically invalid"))
     } else {
       Success()
     }.recoverWith { case thr =>
@@ -220,7 +226,7 @@ trait HeadersProcessor extends ScorexLogging {
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
     def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
-      if (acc.length == limit || until(header)) {
+      if (acc.lengthCompare(limit) == 0 || until(header)) {
         acc
       } else {
         typedModifierById[Header](header.parentId) match {
@@ -234,12 +240,32 @@ trait HeadersProcessor extends ScorexLogging {
       }
     }
 
-    if (bestHeaderIdOpt.isEmpty || (limit == 0)) HeaderChain(Seq())
-    else HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+    if (bestHeaderIdOpt.isEmpty || (limit == 0)) {
+      HeaderChain(Seq.empty)
+    } else {
+      HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+    }
   }
 
+  /**
+    * Find first header with the best height <= $height which id satisfies condition $p
+    * @param height - start height
+    * @param p - condition to satisfy
+    * @return found header
+    */
+  @tailrec
+  protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] = {
+    headerIdsAtHeight(height).find(id => p(id)).flatMap(id => typedModifierById[Header](id)) match {
+      case Some(header) => Some(header)
+      case None if height > 0 => loopHeightDown(height - 1, p)
+      case None => None
+    }
+  }
+
+  //TODO rework option.get
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
 
+  @SuppressWarnings(Array("OptionGet"))
   private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
@@ -252,7 +278,7 @@ trait HeadersProcessor extends ScorexLogging {
     } else {
       val blockScore = scoreOf(h.parentId).get + requiredDifficulty
       val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
-        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq()
+        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
 
       val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(blockScore.toByteArray)
       val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
@@ -279,21 +305,16 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficulty: Difficulty =
-    bestHeaderIdOpt
-      .flatMap(id => typedModifierById[Header](id))
-      .map(h => requiredDifficultyAfter(h))
-      .getOrElse(Constants.InitialDifficulty)
-
+  //TODO rework option.get
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentId: ModifierId = parent.id
     val parentHeight = heightOf(parentId).get
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
-    if (heights.length == 1) {
+    if (heights.lengthCompare(1) == 0) {
       difficultyCalculator.calculate(Seq((parentHeight, parent)))
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (h: Header) => false)
+      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
         .ensuring(_.length == (heights.min to heights.max).length)
       val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
         .ensuring(_.length == heights.length)

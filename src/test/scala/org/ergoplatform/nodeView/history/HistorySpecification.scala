@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
@@ -55,7 +55,7 @@ trait HistorySpecification extends PropSpec
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, false, miningDelay, false)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)

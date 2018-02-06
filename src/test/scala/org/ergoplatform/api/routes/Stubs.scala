@@ -5,7 +5,8 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorSystem, Props}
 import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.modifiers.history.{DefaultFakePowScheme, Header}
+import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -134,7 +135,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, false, miningDelay, false)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)

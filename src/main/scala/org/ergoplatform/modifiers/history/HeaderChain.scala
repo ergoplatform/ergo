@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-case class HeaderChain(headers: Seq[Header]) {
+case class HeaderChain(headers: IndexedSeq[Header]) {
   headers.indices.foreach { i =>
     if (i > 0) require(headers(i).parentId sameElements headers(i - 1).id,
       s"Incorrect chain: ${headers(i - 1)},${headers(i)}")
@@ -8,6 +8,7 @@ case class HeaderChain(headers: Seq[Header]) {
 
   def exists(f: Header => Boolean): Boolean = headers.exists(f)
 
+  @SuppressWarnings(Array("TraversableHead"))
   def head: Header = headers.head
 
   def headOption: Option[Header] = headers.headOption
@@ -16,9 +17,9 @@ case class HeaderChain(headers: Seq[Header]) {
 
   def tail: HeaderChain = HeaderChain(headers.tail)
 
-  def take(i: Int) = HeaderChain(headers.take(i))
+  def take(i: Int): HeaderChain = HeaderChain(headers.take(i))
 
-  def drop(i: Int) = HeaderChain(headers.drop(i))
+  def drop(i: Int): HeaderChain = HeaderChain(headers.drop(i))
 
   def takeAfter(h: Header): HeaderChain = {
     val commonIndex = headers.indexWhere(_.id sameElements h.id)
@@ -32,10 +33,12 @@ case class HeaderChain(headers: Seq[Header]) {
 
   lazy val length: Int = headers.size
 
-  def ++(c: HeaderChain) = HeaderChain(headers ++ c.headers)
+  def ++(c: HeaderChain): HeaderChain = HeaderChain(headers ++ c.headers)
 }
 
 object HeaderChain {
-  lazy val empty = HeaderChain(Seq())
+  lazy val empty = HeaderChain(IndexedSeq.empty[Header])
+
+  def apply(seq: Seq[Header]): HeaderChain = HeaderChain(seq.toIndexedSeq)
 }
 

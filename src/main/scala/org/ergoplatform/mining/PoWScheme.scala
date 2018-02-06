@@ -1,18 +1,16 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.mining
 
-import com.google.common.primitives.{Chars, Ints}
-import io.circe.Json
-import io.circe.syntax._
+import com.google.common.primitives.Chars
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
-import scorex.core.serialization.JsonSerializable
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -20,32 +18,7 @@ import scorex.crypto.hash.Digest32
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
-import scala.util.{Random, Try}
-import io.circe.syntax._
-
-
-case class CandidateBlock(parentOpt: Option[Header],
-                          nBits: Long,
-                          stateRoot: ADDigest,
-                          adProofBytes: SerializedAdProof,
-                          transactions: Seq[AnyoneCanSpendTransaction],
-                          timestamp: Timestamp,
-                          votes: Array[Byte]) extends JsonSerializable {
-  override lazy val json: Json = Map(
-    "parentId" -> parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
-    "nBits" -> nBits.asJson,
-    "stateRoot" -> Algos.encode(stateRoot).asJson,
-    "adProofBytes" -> Algos.encode(adProofBytes).asJson,
-    "timestamp" -> timestamp.asJson,
-    "transactions" -> transactions.map(_.json).asJson,
-    "transactionsNumber" -> transactions.length.asJson,
-    "votes" -> Algos.encode(votes).asJson
-  ).asJson
-
-  override def toString = s"CandidateBlock(${json.noSpaces})"
-}
+import scala.util.Try
 
 trait PoWScheme {
 
@@ -59,20 +32,6 @@ trait PoWScheme {
             startingNonce: Long,
             finishingNonce: Long
            ): Option[Header]
-
-
-  def prove(parentOpt: Option[Header],
-            nBits: Long,
-            stateRoot: ADDigest,
-            adProofsRoot: Digest32,
-            transactionsRoot: Digest32,
-            timestamp: Timestamp,
-            votes: Array[Byte]): Header = {
-    val start = Long.MinValue
-    val finish = Long.MaxValue
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, start, finish).get
-  }
-
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
@@ -90,7 +49,6 @@ trait PoWScheme {
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
       timestamp, votes, startingNonce, finishingNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }
   }
@@ -111,23 +69,8 @@ trait PoWScheme {
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, nonce, nonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }
-  }
-
-  def proveBlock(parentOpt: Option[Header],
-                 nBits: Long,
-                 stateRoot: ADDigest,
-                 adProofBytes: SerializedAdProof,
-                 transactions: Seq[AnyoneCanSpendTransaction],
-                 timestamp: Timestamp,
-                 votes: Array[Byte]): ErgoFullBlock = {
-
-    val start = Long.MinValue
-    val finish = Long.MaxValue
-
-    proveBlock(parentOpt, nBits, stateRoot, adProofBytes, transactions, timestamp, votes, start, finish).get
   }
 
   def verify(header: Header): Boolean
@@ -136,7 +79,7 @@ trait PoWScheme {
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq())
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
@@ -155,19 +98,15 @@ trait PoWScheme {
 object PoWScheme {
   type Solution = Seq[Int]
 
-  //todo: do n & k as Option[Char]
-  def apply(powType: String, n: Int, k: Int): PoWScheme = {
-    if (powType == "fake") DefaultFakePowScheme else
-      new EquihashPowScheme(n.toChar, k.toChar)
-  }
+  def apply(n: Int, k: Int): PoWScheme = new EquihashPowScheme(n.toChar, k.toChar)
 }
-
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
     Chars.toByteArray(n) ++
     Chars.toByteArray(k)
 
+  @SuppressWarnings(Array("NullParameter"))
   override def prove(parentOpt: Option[Header],
                      nBits: Long,
                      stateRoot: ADDigest,
@@ -187,9 +126,9 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
 
-    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson)
+    val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce = 0L, null)
+      nBits, height, votes, nonce = 0L, null) // scalastyle:ignore
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
@@ -217,10 +156,14 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   }
 
   override def verify(header: Header): Boolean =
-    Try {
-      Equihash.validateSolution(n, k, ergoPerson,
+    EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).map { solutionIndices =>
+      Equihash.validateSolution(
+        n,
+        k,
+        ergoPerson,
         HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
-        EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).get)
+        solutionIndices.toIndexedSeq
+      )
     }.recover {
       case NonFatal(e) =>
         log.debug(s"Block ${header.id} is invalid due pow", e)
@@ -231,33 +174,3 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
   override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
 }
-
-
-class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
-
-  override def prove(parentOpt: Option[Header],
-                     nBits: Long,
-                     stateRoot: ADDigest,
-                     adProofsRoot: Digest32,
-                     transactionsRoot: Digest32,
-                     timestamp: Timestamp,
-                     votes: Array[Byte],
-                     startingNonce: Long,
-                     finishingNonce: Long): Option[Header] = {
-
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
-
-    val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
-
-    Some(new Header(version, parentId, interlinks,
-      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
-      nonce = 0L, Ints.toByteArray(level)))
-  }
-
-  override def verify(header: Header): Boolean = true
-
-  override def realDifficulty(header: Header): Difficulty =
-    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
-}
-
-object DefaultFakePowScheme extends FakePowScheme(None)

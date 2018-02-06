@@ -6,14 +6,14 @@ import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
+import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
 
 import scala.util.{Failure, Success, Try}
@@ -55,6 +55,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     }
   }
 
+  @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => tx.semanticValidity.get)
@@ -110,8 +111,56 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
       Failure(new Exception("unknown modifier"))
   }
 
-  override def rollbackVersions: Iterable[VersionTag] =
-    persistentProver.storage.rollbackVersions.map(v => VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+  @SuppressWarnings(Array("OptionGet"))
+  override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions.map { v =>
+    VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data
+  }
+
+  /**
+    * Generate proofs for specified transactions if applied to current state
+    * TODO not efficient at all
+    * TODO do not modify state during proofs generation
+    *
+    * @param txs - transactions to generate proofs
+    * @return proof for specified transactions and new state digest
+    */
+  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+    val rootHash = persistentProver.digest
+
+    def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
+      .ensuring(persistentProver.digest.sameElements(rootHash), "Incorrect digest after rollback:" +
+        s" ${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
+
+    Try {
+      require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
+      require(persistentProver.digest.sameElements(rootHash), "Incorrect persistent proover: " +
+        s"${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
+      require(storage.version.get.sameElements(rootHash), "Incorrect storage: " +
+        s"${Algos.encode(storage.version.get)} != ${Algos.encode(rootHash)}")
+
+      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
+      //persistentProver.checkTree(true)
+
+      val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
+      //todo .get
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          val opRes = persistentProver.performOneOperation(m)
+          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
+          opRes
+        })
+      }.get
+
+      val proof = persistentProver.generateProofAndUpdateStorage()
+
+      val digest = persistentProver.digest
+
+      proof -> digest
+    } match {
+      case Success(res) => rollback().map(_ => res)
+      case Failure(e) => rollback().flatMap(_ => Failure(e))
+    }
+  }
 
 }
 
@@ -132,6 +181,7 @@ object UtxoState {
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
   }
 
+  @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
     val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))

@@ -28,18 +28,16 @@ object Equihash {
 
   private val byteSize = 8
 
-  def countLeadingZeroes(bytes: Array[Byte]): Byte = {
-    (0 until byteSize * bytes.length).foldLeft(0.toByte) {
-      case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => (res + 1).toByte
-      case (res, _) => return res
-    }
+  def countLeadingZeroes(bytes: Array[Byte]): Int = (0 until byteSize * bytes.length).foldLeft(0.toByte) {
+    case (res, i) if (bytes(i / byteSize) << i % byteSize & 0x80) == 0 => (res + 1).toByte
+    case (res, _) => res
   }
 
   def hasCollision(ha: Array[Byte], hb: Array[Byte], i: Int, lenght: Int): Boolean = {
     ((i - 1) * lenght / 8 until i * lenght / 8).forall(j => ha(j) == hb(j))
   }
 
-  def distinctIndices(a: Seq[Int], b: Seq[Int]): Boolean = !a.exists(b.contains)
+  def distinctIndices(a: Seq[Int], b: Seq[Int]): Boolean = !a.exists(v => b.contains(v))
 
   def xor(ha: Array[Byte], hb: Array[Byte]): Array[Byte] = {
     for {(a, b) <- ha.zip(hb)} yield (a ^ b).toByte
@@ -108,7 +106,9 @@ object Equihash {
         accValue = accValue.shiftLeft(bitLen).and(wordMask).or(BigInteger.valueOf(inp(j).toLong))
         for (x <- bytePad until inWidth) {
           // Apply bit_len_mask across byte boundaries
-          val b = BigInteger.valueOf(inp(j + x)).and(bitLenMask.shiftRight(8 * (inWidth - x - 1)).and(BigInteger.valueOf(0xFF))).shiftLeft(8 * (inWidth - x - 1))
+          val b = BigInteger.valueOf(inp(j + x)).and(bitLenMask.shiftRight(8 * (inWidth - x - 1))
+            .and(BigInteger.valueOf(0xFF)))
+            .shiftLeft(8 * (inWidth - x - 1))
           accValue = accValue.or(b) //Big - endian
         }
         j += inWidth
@@ -264,7 +264,8 @@ object Equihash {
     * @param solutionIndices Solution indices
     * @return Return True if solution is valid, False if not.
     */
-  def validateSolution(n: Char, k: Char, personal: Array[Byte], header: Array[Byte], solutionIndices: Seq[Int]): Boolean = {
+  @SuppressWarnings(Array("NullParameter"))
+  def validateSolution(n: Char, k: Char, personal: Array[Byte], header: Array[Byte], solutionIndices: IndexedSeq[Int]): Boolean = {
     assert(n > 1)
     assert(k >= 3)
     assert(n % 8 == 0)
@@ -289,8 +290,9 @@ object Equihash {
       for (s <- 0 until k) {
         val d = 1 << s
         for (i <- 0 until solutionLen by 2 * d) {
-          if (solutionIndices(i) >= solutionIndices(i + d))
+          if (solutionIndices(i) >= solutionIndices(i + d)) {
             return false
+          }
         }
       }
 
@@ -305,8 +307,9 @@ object Equihash {
         val d = 1 << s
         for (i <- 0 until solutionLen by 2 * d) {
           val w = words(i).xor(words(i + d))
-          if (w.shiftRight(n - (s + 1) * bitsPerStage) != BigInteger.ZERO)
+          if (w.shiftRight(n - (s + 1) * bitsPerStage) != BigInteger.ZERO) {
             return false
+          }
           words(i) = w
         }
       }

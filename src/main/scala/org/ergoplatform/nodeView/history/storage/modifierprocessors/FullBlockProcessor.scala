@@ -25,7 +25,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
-  protected[history] def continuationHeaderChains(header: Header): Seq[HeaderChain]
+  protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
 
   /**
     * Process full block when we have one.
@@ -34,6 +34,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     * @param txsAreNew - flag, that transactions where added last
     * @return ProgressInfo required for State to process to be consistent with History
     */
+  @SuppressWarnings(Array("OptionGet"))
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val header: Header = fullBlock.header
@@ -42,7 +43,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       .ensuring(_.isDefined || txsAreNew, "Only transactions can be new when proofs are empty")
     val newModRow = if (txsAreNew) txs else adProofsOpt.get
     val storageVersion = ByteArrayWrapper(if (txsAreNew) txs.id else adProofsOpt.get.id)
-    val continuations = continuationHeaderChains(header).map(_.headers.tail)
+    val continuations = continuationHeaderChains(header, _ => true).map(_.tail)
     val bestFullChain = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
       .map(c => header +: c)
       .maxBy(c => scoreOf(c.last.id))
@@ -77,16 +78,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq())
+          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq.empty)
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
-          historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
-          ProgressInfo(None, Seq(), None, Seq())
+          historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
+          ProgressInfo(None, Seq.empty, None, Seq.empty)
         }
       case _ =>
         log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
-        historyStorage.insert(storageVersion, Seq(), Seq(newModRow))
-        ProgressInfo(None, Seq(), None, Seq())
+        historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
+        ProgressInfo(None, Seq.empty, None, Seq.empty)
     }
   }
 
@@ -107,7 +108,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                             toApply: ErgoFullBlock,
                             bestFullHeaderId: ModifierId): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq((BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))), Seq(newModRow))
-    ProgressInfo(None, Seq(), Some(toApply), Seq())
+    ProgressInfo(None, Seq.empty, Some(toApply), Seq.empty)
   }
 
 }

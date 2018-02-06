@@ -17,21 +17,27 @@ import scala.util.{Failure, Success, Try}
   * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
-class DigestState private(override val version: VersionTag,
-                          override val rootHash: ADDigest,
-                          store: Store,
-                          settings: NodeConfigurationSettings)
+class DigestState protected(override val version: VersionTag,
+                            override val rootHash: ADDigest,
+                            val store: Store,
+                            settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
 
+  store.lastVersionID
+    .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
+
   override val maxRollbackDepth = 10
 
+  @SuppressWarnings(Array("OptionGet"))
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       Try {
-        assert(ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot))
-
+        //TODO: Code smells
+        if (!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot)) {
+          throw new Error("Incorrect proofs digest")
+        }
         val txs = fb.blockTransactions.txs
         val declaredHash = fb.header.stateRoot
 
@@ -50,12 +56,13 @@ class DigestState private(override val version: VersionTag,
 
     case h: Header => Success()
 
-    case a: Any => log.info(s"Modifier not validated: $a"); Try(this)
+    case a: Any =>
+      Failure(new Error(s"Modifier not validated: $a"))
   }
 
   private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
     val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq(), toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
+    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
     new DigestState(newVersion, newRootHash, store, settings)
   }
 
@@ -63,7 +70,7 @@ class DigestState private(override val version: VersionTag,
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
       log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.id, fb.header.stateRoot))
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
       //TODO should not get this messages from node view holders
@@ -83,10 +90,12 @@ class DigestState private(override val version: VersionTag,
       Try(this)
   }
 
+  @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
+      store.clean(ErgoState.KeepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store, settings)
@@ -94,6 +103,9 @@ class DigestState private(override val version: VersionTag,
   }
 
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
+
+  def close(): Unit = store.close()
+
 }
 
 object DigestState {
@@ -101,25 +113,23 @@ object DigestState {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             settings: NodeConfigurationSettings): Try[DigestState] = Try {
-    val store = new LSMStore(dir, keepVersions = 10) //todo: read from settings
+             settings: NodeConfigurationSettings): DigestState = Try {
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
-
       case (Some(version), Some(rootHash)) =>
-        if (store.lastVersionID.isDefined) {
+        val state = if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
           new DigestState(version, rootHash, store, settings)
         } else {
-          new DigestState(version, rootHash, store, settings).update(version, rootHash).get //sync store
-        }.ensuring(store.lastVersionID.get.data.sameElements(version))
-
+          val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
+          new DigestState(inVersion, rootHash, store, settings).update(version, rootHash).get //sync store
+        }
+        state.ensuring(store.lastVersionID.get.data.sameElements(version))
       case (None, None) =>
-        val version = ADDigest @@ store.get(store.lastVersionID.get).get.data
+        val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-
-        new DigestState(VersionTag @@ version, ADDigest @@ rootHash, store, settings)
-
+        new DigestState(version, ADDigest @@ rootHash, store, settings)
       case _ => ???
     }
-  }
+  }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))
 }

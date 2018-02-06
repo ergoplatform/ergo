@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
@@ -10,7 +11,6 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base16
 
 import scala.util.Try
 
@@ -24,25 +24,12 @@ import scala.util.Try
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging {
+  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging with ErgoStateReader {
 
   self: IState =>
 
-  def rootHash(): ADDigest
-
   //TODO implement correctly
   def stateHeight: Int = 0
-
-  /**
-    * Extract ordered sequence of operations on UTXO set from set of transactions
-    */
-  def boxChanges(txs: Seq[AnyoneCanSpendTransaction]): BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =
-  BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](txs.flatMap { tx =>
-    tx.boxIdsToOpen.map(id => Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](id)) ++
-      tx.newBoxes.map(b => Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](b))
-  })
-
-  override def version: VersionTag
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
@@ -57,9 +44,12 @@ object ErgoState extends ScorexLogging {
 
   val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
 
-  def stateDir(settings: ErgoSettings) = new File(s"${settings.directory}/state")
+  //TODO move to settings?
+  val KeepVersions = 200
 
-  def generateGenesisUtxoState(stateDir: File): (UtxoState, BoxHolder) = {
+  def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
+
+  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
     lazy val genesisSeed = Long.MaxValue
     lazy val rndGen = new scala.util.Random(genesisSeed)
@@ -70,41 +60,34 @@ object ErgoState extends ScorexLogging {
 
     val bh = BoxHolder(initialBoxes)
 
-    UtxoState.fromBoxHolder(bh, stateDir).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
       log.info("Genesis UTXO state generated")
       us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
   def generateGenesisDigestState(stateDir: File, settings: NodeConfigurationSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings).get //todo: .get
+    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-  //33 bytes
-  //TODO replace to Algos.decode
-  val afterGenesisStateDigestHex: String = "f2343e160d4e42a83a87ea1a2f56b6fa2046ab8146c5e61727c297be578da0f510"
-  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex)
+  //33 bytes in Base58 encoding
+  val afterGenesisStateDigestHex: String = "2Ex5aoUXVCg47AYAsGwRBKarv5PEdig5ZuJwdzkvoxqu6o"
+  //TODO rework try.get
+  val afterGenesisStateDigest: ADDigest = ADDigest @@ Algos.decode(afterGenesisStateDigestHex).get
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 
-  def readOrGenerate(settings: ErgoSettings): Option[ErgoState[_]] = {
+  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
-    if (dir.listFiles().isEmpty) {
-      None
+    if (settings.nodeSettings.ADState) {
+      DigestState.create(None, None, dir, settings.nodeSettings)
+    } else if (dir.listFiles().isEmpty) {
+      ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
     } else {
-      //todo: considering db state
-      if (settings.nodeSettings.ADState) DigestState.create(None, None, dir, settings.nodeSettings).toOption
-      else Some(UtxoState.create(dir))
+      UtxoState.create(dir, nodeViewHolderRef)
     }
   }
-}
-
-/**
-  * Tool to print new target digest in case of initial utxo state re-generation
-  */
-object DigestPrinter extends App {
-  println(Algos.encode(ErgoState.generateGenesisUtxoState(new File("/tmp/ergo11/").ensuring(_.mkdirs()))._1.rootHash))
 }

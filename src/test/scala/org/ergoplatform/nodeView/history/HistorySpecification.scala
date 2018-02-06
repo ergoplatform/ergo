@@ -1,14 +1,15 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.settings.ScorexSettings
+import scorex.core.utils.NetworkTimeProvider
 import scorex.testkit.TestkitHelpers
 
 import scala.concurrent.duration._
@@ -16,7 +17,6 @@ import scala.concurrent.duration._
 trait HistorySpecification extends PropSpec
   with PropertyChecks
   with GeneratorDrivenPropertyChecks
-  with Matchers
   with ErgoGenerators
   with ErgoTestHelpers
   with TestkitHelpers
@@ -30,7 +30,7 @@ trait HistorySpecification extends PropSpec
   def bestFullOptToSeq(history: ErgoHistory): Seq[ErgoFullBlock] = history.bestFullBlockOpt.toSeq
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
-    val historyHeight = history.height
+    val historyHeight = history.headersHeight
     if (historyHeight < height) {
       history match {
         case _: EmptyBlockTransactionsProcessor =>
@@ -48,18 +48,24 @@ trait HistorySpecification extends PropSpec
                       ADState: Boolean,
                       PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
-                      epochLength: Int = 100000000): ErgoHistory = {
+                      epochLength: Int = 100000000,
+                      useLastEpochs: Int = 10): ErgoHistory = {
 
     val blockInterval = 1.minute
+    val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, false, false)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
-    val chainSettings = ChainSettings(blockInterval, epochLength, DefaultFakePowScheme)
+    val testingSettings: TestingSettings = null
+    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)
 
     val dir = createTempDir
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, nodeSettings, scorexSettings)
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
+      nodeSettings, scorexSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings)
+    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
+
+    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
 }

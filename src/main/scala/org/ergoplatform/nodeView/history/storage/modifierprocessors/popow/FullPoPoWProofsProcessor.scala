@@ -16,6 +16,7 @@ import ErgoHistory.GenesisHeight
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
+  @SuppressWarnings(Array("TraversableHead"))
   def validate(m: PoPoWProof): Try[Unit] = new PoPoWProofUtils(powScheme).validate(m).map { _ =>
     bestHeaderIdOpt match {
       case Some(genesisId) =>
@@ -23,7 +24,9 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
           case Some(GenesisHeight) =>
             if (!(m.suffix ++ m.innerchain).forall(_.interlinks.head sameElements genesisId)) {
               Failure(new Error(s"Genesis id is incorrect for $m"))
-            } else Success()
+            } else {
+              Success()
+            }
           case height =>
             //TODO what if we trying to apply better popow proof to non-empty history?
             Failure(new Error(s"Trying to apply PoPoW proof to history with height $height"))
@@ -36,18 +39,17 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
   def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = {
     val headers = m.innerchain ++ m.suffix
     val bestHeader = m.suffix.last
-    val headersRows: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = headers.zipWithIndex.flatMap { case (h, i) =>
+    val headersIndexes: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = headers.zipWithIndex.flatMap { case (h, i) =>
       val requiredDifficulty: BigInt = h.requiredDifficulty
       val headerHeight: Int = h.height
-      Seq((ByteArrayWrapper(h.id), ByteArrayWrapper(HistoryModifierSerializer.toBytes(h))),
-        (headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(headerHeight))),
+      Seq((headerHeightKey(h.id), ByteArrayWrapper(Ints.toByteArray(headerHeight))),
         //TODO howto?
         (headerScoreKey(h.id), ByteArrayWrapper((requiredDifficulty * (1 + i)).toByteArray)))
     }
     val bestHeaderRow = (BestHeaderKey, ByteArrayWrapper(bestHeader.id))
-    historyStorage.insert(bestHeader.id, bestHeaderRow +: headersRows)
+    historyStorage.insert(ByteArrayWrapper(bestHeader.id), bestHeaderRow +: headersIndexes, headers)
 
-    ProgressInfo(None, toRemove = Seq(), toApply = Seq(m.suffix.last), toDownload = Seq())
+    ProgressInfo(None, toRemove = Seq.empty, toApply = Some(m.suffix.last), toDownload = Seq.empty)
   }
 }
 

@@ -12,7 +12,11 @@ target
 .editorconfig
 
 # standalone docker
-Dockerfile
+!Dockerfile
+
+# local application.conf
+local-application.conf
+my-application.conf
 
 # logs
 *.log

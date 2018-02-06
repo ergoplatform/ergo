@@ -34,7 +34,7 @@ object RequiredDifficulty extends Serializer[NBits] {
     if (size >= 1) bytes(4) = ((compact >> 16) & 0xFF).toByte
     if (size >= 2) bytes(5) = ((compact >> 8) & 0xFF).toByte
     if (size >= 3) bytes(6) = (compact & 0xFF).toByte
-    decodeMPI(bytes, true)
+    decodeMPI(bytes, hasLength = true)
   }
 
   /**
@@ -44,8 +44,11 @@ object RequiredDifficulty extends Serializer[NBits] {
     val value = requiredDifficulty.bigInteger
     var result: Long = 0L
     var size: Int = value.toByteArray.length
-    if (size <= 3) result = value.longValue << 8 * (3 - size)
-    else result = value.shiftRight(8 * (size - 3)).longValue
+    if (size <= 3) {
+      result = value.longValue << 8 * (3 - size)
+    } else {
+      result = value.shiftRight(8 * (size - 3)).longValue
+    }
     // The 0x00800000 bit denotes the sign.
     // Thus, if it is already set, divide the mantissa by 256 and increase the exponent.
     if ((result & 0x00800000L) != 0) {
@@ -72,19 +75,24 @@ object RequiredDifficulty extends Serializer[NBits] {
     *
     * @param hasLength can be set to false if the given array is missing the 4 byte length field
     */
+  @SuppressWarnings(Array("NullAssignment"))
   private def decodeMPI(mpi: Array[Byte], hasLength: Boolean): BigInteger = {
-    var buf: Array[Byte] = null
+    var buf: Array[Byte] = null // scalastyle:ignore
     if (hasLength) {
       val length: Int = readUint32BE(mpi).toInt
       buf = new Array[Byte](length)
       System.arraycopy(mpi, 4, buf, 0, length)
+    } else {
+      buf = mpi
     }
-    else buf = mpi
-    if (buf.length == 0) return BigInteger.ZERO
+    if (buf.length == 0) { return BigInteger.ZERO }
     val isNegative: Boolean = (buf(0) & 0x80) == 0x80
     if (isNegative) buf(0) = (buf(0) & 0x7f).toByte
     val result: BigInteger = new BigInteger(buf)
-    if (isNegative) result.negate
-    else result
+    if (isNegative) {
+      result.negate
+    } else {
+      result
+    }
   }
 }

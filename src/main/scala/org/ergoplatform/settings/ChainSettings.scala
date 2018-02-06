@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.modifiers.history.PoWScheme
+import org.ergoplatform.mining.PoWScheme
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -10,5 +10,5 @@ import scala.concurrent.duration.FiniteDuration
   */
 case class ChainSettings(blockInterval: FiniteDuration,
                          epochLength: Int,
-                         poWScheme: PoWScheme
-                        )
+                         useLastEpochs: Int,
+                         poWScheme: PoWScheme)

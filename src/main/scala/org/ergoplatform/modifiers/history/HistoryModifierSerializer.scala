@@ -17,7 +17,7 @@ object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
       throw new Error(s"Serialization for unknown modifier: ${m.json.noSpaces}")
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = bytes.head match {
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = Try(bytes.head).flatMap {
     case Header.`modifierTypeId` =>
       HeaderSerializer.parseBytes(bytes.tail)
     case ADProofs.`modifierTypeId` =>

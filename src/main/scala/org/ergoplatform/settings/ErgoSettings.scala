@@ -62,7 +62,6 @@ object ErgoSettings extends ScorexLogging with SettingsReaders{
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
     }
-
     config
   }
 }

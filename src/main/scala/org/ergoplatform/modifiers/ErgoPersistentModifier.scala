@@ -8,5 +8,5 @@ trait ErgoPersistentModifier extends PersistentNodeViewModifier {
   //val version: Version
 
   //TODO Remove from base class
-  def parentId: ModifierId = null
+  def parentId: ModifierId = null  //scalastyle:ignore
 }

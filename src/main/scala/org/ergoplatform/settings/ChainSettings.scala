@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.modifiers.history.PoWScheme
+import org.ergoplatform.mining.PoWScheme
 
 import scala.concurrent.duration.FiniteDuration
 

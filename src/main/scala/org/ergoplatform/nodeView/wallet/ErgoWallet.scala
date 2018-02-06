@@ -23,9 +23,9 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTr
 
   override def boxes(): Seq[WalletBox[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = ???
 
-  override def publicKeys: Set[PI] = Set()
+  override def publicKeys: Set[PI] = Set.empty
 
-  override def secrets: Set[S] = Set()
+  override def secrets: Set[S] = Set.empty
 
   //todo: implement
   override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = this
@@ -43,5 +43,6 @@ class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTr
 }
 
 object ErgoWallet {
+  @SuppressWarnings(Array("UnusedMethodParameter"))
   def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
 }

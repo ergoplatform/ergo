@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Json
+import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -35,13 +36,14 @@ object PoPoWProof {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (105: Byte)
 }
 
+@SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
 class PoPoWProofUtils(poWScheme: PoWScheme) {
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
     //todo: why initial difficulty here?
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
-    if (proof.suffix.length != proof.k) {
+    if (proof.suffix.lengthCompare(proof.k) != 0) {
       Failure(new Error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}"))
     } else if (proof.k < 1) {
       Failure(new Error(s"k should positive, ${proof.k} given"))
@@ -63,7 +65,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
     }
   }
 
-  def isLevel(header: Header, level: Int) = {
+  def isLevel(header: Header, level: Int): Boolean = {
     val headerDiff = poWScheme.realDifficulty(header)
     val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
     headerDiff >= levelDiff
@@ -87,15 +89,16 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
 
       val pLevel = maxLevel(parent)
 
-      val pLevels = if (pLevel > 0) Seq.fill(pLevel)(parent.id) else Seq()
+      val pLevels = if (pLevel > 0) Seq.fill(pLevel)(parent.id) else Seq.empty
 
-      val priorLevels = if(tail.length > pLevel) tail.drop(pLevel) else Seq()
+      val priorLevels = if(tail.length > pLevel) tail.drop(pLevel) else Seq.empty
 
       (genesisId +: pLevels) ++ priorLevels
     }
   }
 }
 
+@SuppressWarnings(Array("TraversableHead"))
 class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
@@ -114,6 +117,7 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
       innerchainBytes)
   }
 
+  @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Byte]): Try[PoPoWProof] = Try {
     val m = bytes.head
     val k = bytes(1)
@@ -122,8 +126,9 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
     val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
 
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
-      if (acc.length == k) (index, acc.reverse)
-      else {
+      if (acc.lengthCompare(k.toInt) == 0)  {
+        (index, acc.reverse)
+      } else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
         val interlinks = new PoPoWProofUtils(poWScheme).constructInterlinkVector(acc.head)

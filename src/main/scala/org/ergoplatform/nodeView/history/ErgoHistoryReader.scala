@@ -14,6 +14,7 @@ import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds}
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Try}
 
 /**
@@ -77,6 +78,7 @@ trait ErgoHistoryReader
   /**
     * Get ErgoPersistentModifier of type T by it's id if it is in history
     */
+  @SuppressWarnings(Array("IsInstanceOf"))
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T@unchecked) if m.isInstanceOf[T] => Some(m)
     case _ => None
@@ -133,6 +135,7 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headerss, that node with info should download and apply to synchronize
     */
+  @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
     if (isEmpty) {
       info.startingPoints
@@ -157,19 +160,28 @@ trait ErgoHistoryReader
   }.toOption
 
   /**
-    * @return all possible forks, that contains specified header
+    *
+    * @param header - header to start
+    * @param withFilter - condition to satisfy
+    * @return all possible forks, starting from specified header and satisfying withFilter condition
     */
-  protected[history] def continuationHeaderChains(header: Header): Seq[HeaderChain] = {
-    def loop(acc: Seq[Header]): Seq[HeaderChain] = {
-      val bestHeader = acc.last
-      val currentHeight = heightOf(bestHeader.id).get
+  //TODO rework option.get and traversable.head
+  protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]] = {
+    @tailrec
+    def loop(currentHeight: Int, acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
       val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
-        .filter(_.parentId sameElements bestHeader.id)
-      if (nextLevelHeaders.isEmpty) Seq(HeaderChain(acc))
-      else nextLevelHeaders.map(h => acc :+ h).flatMap(chain => loop(chain))
+        .filter(h => withFilter(h))
+      if (nextLevelHeaders.isEmpty) {
+        acc.map(chain => chain.reverse)
+      } else {
+        val updatedChains = nextLevelHeaders
+          .flatMap(h => acc.find(chain => h.parentId sameElements chain.head.id).map(c => h +: c))
+        val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId sameElements chain.head.id))
+        loop(currentHeight + 1, updatedChains ++ nonUpdatedChains)
+      }
     }
 
-    loop(Seq(header))
+    loop(heightOf(header.id).get, Seq(Seq(header)))
   }
 
 
@@ -177,7 +189,7 @@ trait ErgoHistoryReader
     * @return Node ErgoSyncInfo
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfo(Seq())
+    ErgoSyncInfo(Seq.empty)
   } else {
     ErgoSyncInfo(lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
   }
@@ -226,7 +238,7 @@ trait ErgoHistoryReader
         .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
         .filter(id => !contains(id._2))
     } else {
-      Seq()
+      Seq.empty
     }
   }
 

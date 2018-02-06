@@ -65,6 +65,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     * Restore a local view during a node startup. If no any stored view found
     * (e.g. if it is a first launch of a node) None is to be returned
     */
+  @SuppressWarnings(Array("AsInstanceOf"))
   override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
@@ -75,6 +76,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     Some((history, state, wallet, memPool))
   }
 
+  @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): StateType = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
@@ -82,7 +84,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
 
     {
       (version, digest) match {
-        case (Some(v), Some(d)) if settings.nodeSettings.ADState =>
+        case (Some(_), Some(_)) if settings.nodeSettings.ADState =>
           DigestState.create(version, digest, dir, settings.nodeSettings)
         case _ =>
           ErgoState.readOrGenerate(settings, Some(self))
@@ -91,6 +93,8 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
       .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
   }
 
+  // scalastyle:off cyclomatic.complexity
+  @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
@@ -100,7 +104,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
         log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
-        log.debug(s"State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        log.debug("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash
@@ -127,6 +131,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
     log.error("Failed to recover state, try to resync from genesis manually", e)
     ErgoApp.forceStopApplication(500)
   }.get
+  // scalastyle:on
 
 }
 
@@ -138,7 +143,10 @@ private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvi
 
 object ErgoNodeViewHolder {
   def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
-    if (settings.nodeSettings.ADState) system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
-    else system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
+    if (settings.nodeSettings.ADState) {
+      system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
+    } else {
+      system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
+    }
   }
 }

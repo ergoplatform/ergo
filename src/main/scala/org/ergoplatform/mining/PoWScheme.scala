@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Chars
+import com.typesafe.scalalogging.LazyLogging
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -11,14 +12,12 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scala.util.Try
 
 trait PoWScheme {
 
@@ -101,7 +100,7 @@ object PoWScheme {
   def apply(n: Int, k: Int): PoWScheme = new EquihashPowScheme(n.toChar, k.toChar)
 }
 
-class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
+class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with LazyLogging {
   lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
     Chars.toByteArray(n) ++
     Chars.toByteArray(k)
@@ -135,7 +134,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
     @tailrec
     def generateHeader(nonce: Long): Option[Header] = {
-      log.debug("Trying nonce: " + nonce)
+      logger.debug("Trying nonce: " + nonce)
       val currentDigest = new Blake2bDigest(digest)
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
@@ -166,7 +165,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
       )
     }.recover {
       case NonFatal(e) =>
-        log.debug(s"Block ${header.id} is invalid due pow", e)
+        logger.debug(s"Block ${header.id} is invalid due pow", e)
         false
     }.getOrElse(false)
 

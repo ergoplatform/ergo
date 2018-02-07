@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
+import com.typesafe.scalalogging.LazyLogging
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.modifiers.history._
@@ -16,7 +17,7 @@ import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfiguration
 import scorex.core._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.encode.Base58
 
 import scala.util.Try
@@ -45,8 +46,7 @@ trait ErgoHistory
     with ADProofsProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
-    with BlockTransactionsProcessor
-    with ScorexLogging {
+    with BlockTransactionsProcessor {
 
   override type NVCT = ErgoHistory
 
@@ -201,7 +201,7 @@ trait ErgoHistory
 
 }
 
-object ErgoHistory extends ScorexLogging {
+object ErgoHistory {
 
   type Height = Int
   type Score = BigInt

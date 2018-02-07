@@ -4,16 +4,14 @@ import java.io.File
 
 import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
-import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
+import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
-
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -24,7 +22,7 @@ import scala.util.Try
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging with ErgoStateReader {
+  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
 
   self: IState =>
 

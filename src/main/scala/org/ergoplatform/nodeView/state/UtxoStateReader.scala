@@ -4,14 +4,14 @@ import io.iohk.iodb.Store
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADKey
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
+trait UtxoStateReader extends ErgoStateReader
+  with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
   implicit val hf = new Blake2b256Unsafe
 

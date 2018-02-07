@@ -12,6 +12,7 @@ import com.spotify.docker.client.DockerClient.RemoveContainerParam
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, NetworkConfig, PortBinding}
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
+import com.typesafe.scalalogging.LazyLogging
 import org.asynchttpclient.Dsl._
 import scorex.core.utils.ScorexLogging
 
@@ -26,7 +27,7 @@ case class NodeInfo(
                      containerId: String)
 
 class Docker(suiteConfig: Config = ConfigFactory.empty,
-             tag: String = "") extends AutoCloseable with ScorexLogging {
+             tag: String = "") extends AutoCloseable with LazyLogging {
 
   import Docker._
 
@@ -109,7 +110,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   override def close(): Unit = {
     if (isStopped.compareAndSet(false, true)) {
-      log.info("Stopping containers")
+      logger.info("Stopping containers")
       nodes.foreach {
         case (id, n) =>
           n.close()
@@ -133,7 +134,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
       val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"
       val logFile = logDir.resolve(s"$fileName.log").toFile
-      log.info(s"Writing logs of $containerId to ${logFile.getAbsolutePath}")
+      logger.info(s"Writing logs of $containerId to ${logFile.getAbsolutePath}")
 
       val fileStream = new FileOutputStream(logFile, false)
       client

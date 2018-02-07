@@ -3,6 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef}
 import akka.pattern._
 import akka.util.Timeout
+import com.typesafe.scalalogging.LazyLogging
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -18,7 +19,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -26,8 +27,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHolderRef: ActorRef, nodeId: Array[Byte],
-                timeProvider: NetworkTimeProvider) extends Actor
-  with ScorexLogging {
+                timeProvider: NetworkTimeProvider) extends Actor with LazyLogging {
 
   import ErgoMiner._
 
@@ -63,7 +63,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
 
     case StartMining =>
       if (!isMining && ergoSettings.nodeSettings.mining) {
-        log.info("Starting Mining")
+        logger.info("Starting Mining")
         isMining = true
         context.system.scheduler.scheduleOnce(5.second) {
           produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
@@ -76,7 +76,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
     case c: CandidateBlock =>
       val oldHeight = candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)
       val newHeight = c.parentOpt.map(_.height).getOrElse(0)
-      log.debug(s"New candidate $c. Height change $oldHeight -> $newHeight")
+      logger.debug(s"New candidate $c. Height change $oldHeight -> $newHeight")
       if (newHeight > oldHeight) {
         nonce = 0
       }
@@ -86,11 +86,11 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
       nonce = nonce + 1
       candidateOpt match {
         case Some(candidate) =>
-          log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
+          logger.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
           //Mine in separate thread for faster responses to API requests and new candidate block application
           Future(powScheme.proveBlock(candidate, nonce)).onComplete {
             case Success(Some(newBlock)) =>
-              log.info("New block found: " + newBlock)
+              logger.info("New block found: " + newBlock)
 
               viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
               viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
@@ -110,7 +110,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
 
     case m =>
-      log.warn(s"Unexpected message $m")
+      logger.warn(s"Unexpected message $m")
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
@@ -152,12 +152,12 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
           val nBits = bestHeaderOpt.map(parent => history.requiredDifficultyAfter(parent))
             .map(d => RequiredDifficulty.encodeCompactBits(d)).getOrElse(Constants.InitialNBits)
           val candidate = CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
-          log.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
+          logger.debug(s"Send candidate block with ${candidate.transactions.length} transactions")
           //TODO takes a lot of time
           candidate
 
         }.recoverWith { case thr =>
-          log.warn("Error when trying to generate a block: ", thr)
+          logger.warn("Error when trying to generate a block: ", thr)
           Failure(thr)
         }.toOption
       } else {
@@ -170,7 +170,7 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
 }
 
 
-object ErgoMiner extends ScorexLogging {
+object ErgoMiner {
 
   case object StartMining
 

@@ -2,13 +2,13 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import com.typesafe.scalalogging.LazyLogging
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 
 import scala.util.{Failure, Success, Try}
@@ -23,7 +23,7 @@ class DigestState protected(override val version: VersionTag,
                             settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
-    with ScorexLogging {
+    with LazyLogging {
 
   store.lastVersionID
     .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
@@ -47,10 +47,10 @@ class DigestState protected(override val version: VersionTag,
           .getOrElse(Failure(new Error("Proofs are empty"))))
       }.flatten match {
         case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
+          logger.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
           s
         case Failure(e) =>
-          log.warn(s"Modifier $mod is not valid: ", e)
+          logger.warn(s"Modifier $mod is not valid: ", e)
           Failure(e)
       }
 
@@ -69,7 +69,7 @@ class DigestState protected(override val version: VersionTag,
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
-      log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
+      logger.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
@@ -77,7 +77,7 @@ class DigestState protected(override val version: VersionTag,
       Try(this)
 
     case h: Header if !settings.verifyTransactions =>
-      log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
+      logger.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(VersionTag @@ h.id, h.stateRoot)
 
     case h: Header if settings.verifyTransactions =>
@@ -86,18 +86,18 @@ class DigestState protected(override val version: VersionTag,
 
     case a: Any =>
       //todo: fail here? or not?
-      log.info(s"Unhandled modifier: $a")
+      logger.info(s"Unhandled modifier: $a")
       Try(this)
   }
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
-    log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
+    logger.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
       store.clean(ErgoState.KeepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
-      log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
+      logger.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store, settings)
     }
   }

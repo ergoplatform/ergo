@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import akka.actor.ActorRef
+import com.typesafe.scalalogging.LazyLogging
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -25,10 +26,10 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val version: VersionTag, val store: Store, nodeViewHolderRef: Option[ActorRef])
   extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
-    with UtxoStateReader {
+    with UtxoStateReader with LazyLogging {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if (nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
+    if (nodeViewHolderRef.isEmpty) logger.warn("Got proof while nodeViewHolderRef is empty")
     nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
 
@@ -40,7 +41,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
-    log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
+    logger.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
         val rollbackResult = p.rollback(ADDigest @@ hash.data).map { _ =>
@@ -77,7 +78,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
+      logger.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
         s"to UtxoState with root hash ${Algos.encode(rootHash)}")
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
@@ -85,7 +86,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
-        log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
+        logger.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
           s"root hash ${Algos.encode(rootHash)}")
         if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
           throw new Error("Storage kept roothash is not equal to the declared one")
@@ -97,7 +98,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
         new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
       }
       stateTry.recoverWith[UtxoState] { case e =>
-        log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+        logger.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
           s" ${Algos.encode(rootHash)}: ", e)
         persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
         Failure(e)
@@ -107,7 +108,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
       Success(new UtxoState(VersionTag @@ h.id, this.store, nodeViewHolderRef))
 
     case a: Any =>
-      log.info(s"Unhandled modifier: $a")
+      logger.info(s"Unhandled modifier: $a")
       Failure(new Exception("unknown modifier"))
   }
 
@@ -146,7 +147,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
           val opRes = persistentProver.performOneOperation(m)
-          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
+          if (opRes.isFailure) logger.warn(s"modification: $m, failure $opRes")
           opRes
         })
       }.get

@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain, PoPoWProof}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -13,7 +12,7 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process PoPoWProofs and generate them.
   */
-trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
+trait PoPoWProofsProcessor extends HeadersProcessor {
 
   def validate(m: PoPoWProof): Try[Unit]
 

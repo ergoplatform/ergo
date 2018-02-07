@@ -16,6 +16,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.0-RC1",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.0-RC1",
   "com.typesafe.akka" % "akka-stream_2.12" % "2.5.9",
+  "com.typesafe.scala-logging" % "scala-logging_2.12" % "3.7.2",
   "commons-net" % "commons-net" % "3.6",
   "de.heikoseeberger" % "akka-http-circe_2.12" % "1.18.0",
   "io.circe" % "circe-core_2.12" % "0.8.0",
@@ -46,4 +47,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 2618b7e3d88fc7887c6108d28aa587b0c729b2d8
+// LIBRARY_DEPENDENCIES_HASH b1d6e18d30c03a1ccb3b410a9996086061d67964

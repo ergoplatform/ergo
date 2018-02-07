@@ -11,13 +11,12 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.NodeViewHolder.GetDataFromCurrentView
-import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
-class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) extends Actor with ScorexLogging {
+class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) extends Actor {
   var txGenerator: Cancellable = _
 
   var isStarted = false

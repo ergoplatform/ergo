@@ -19,7 +19,7 @@ import scorex.crypto.encode.Base58
 import scala.concurrent.Future
 
 case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte], digest: Boolean)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   private val powScheme = ergoSettings.chainSettings.poWScheme
 

@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef}
+import com.typesafe.scalalogging.LazyLogging
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder._
-import scorex.core.utils.ScorexLogging
 
-class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
+class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with LazyLogging {
 
   override def preStart(): Unit = {
     val vhEvents = Seq(
@@ -45,7 +45,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
         case Some(historyReader) =>
           sender() ! f(historyReader)
         case None =>
-          log.warn("Trying to get data from undefined history reader")
+          logger.warn("Trying to get data from undefined history reader")
       }
 
     case _ =>

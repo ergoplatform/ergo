@@ -6,12 +6,10 @@ import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, 
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
-import scorex.core.utils.ScorexLogging
 
 import scala.util.{Success, Try}
 
-class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoWallet]
-  with ScorexLogging {
+class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoWallet] {
   override type S = Nothing
   override type PI = AnyoneCanSpendProposition.type
 

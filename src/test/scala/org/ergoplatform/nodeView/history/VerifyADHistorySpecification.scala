@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import scorex.core.consensus.ModifierSemanticValidity
 
+import scala.util.Random
+
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
@@ -23,31 +25,30 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs and transactions in random order") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    val chain = genChain(3, Seq())
+    forAll(smallInt) { i =>
+      var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+      val r = new Random()
+      val chainHeight = 1 + i % 5
+      val chain = genChain(chainHeight, Seq())
+      history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
-    val block0 = chain.head
-    val block1 = chain(1)
-    val block2 = chain(2)
+      r.shuffle((0 until chainHeight).toList).foreach { i =>
+        val prevBest = history.bestFullBlockOpt
+        val block = chain(i)
+        history.append(block.blockTransactions) shouldBe 'success
+        history.append(block.aDProofs.get) shouldBe 'success
 
-    history.append(block0.header) shouldBe 'success
-    history.append(block1.header) shouldBe 'success
-    history.append(block2.header) shouldBe 'success
+        prevBest match {
+          case None if block.header.isGenesis =>
+            history.bestFullBlockOpt should not be prevBest
+          case Some(p) if p.id sameElements block.parentId =>
+            history.bestFullBlockOpt should not be prevBest
+          case _ =>
+            history.bestFullBlockOpt shouldBe prevBest
+        }
 
-    history.bestFullBlockOpt shouldBe None
-    history.bestHeaderOpt shouldBe Some(block2.header)
-
-    history.append(block2.aDProofs.get) shouldBe 'success
-    history.append(block2.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe None
-
-    history.append(block0.aDProofs.get) shouldBe 'success
-    history.append(block0.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    history.append(block1.aDProofs.get) shouldBe 'success
-    history.append(block1.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe Some(block2)
+      }
+    }
   }
 
   property("apply proofs that link incomplete chain") {

@@ -24,18 +24,21 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
-class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHolderRef: ActorRef, nodeId: Array[Byte],
-                timeProvider: NetworkTimeProvider) extends Actor
-  with ScorexLogging {
+class ErgoMiner(ergoSettings: ErgoSettings,
+                viewHolderRef: ActorRef,
+                readersHolderRef: ActorRef,
+                nodeId: Array[Byte],
+                timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
+  private val startTime = timeProvider.time()
+  private val votes: Array[Byte] = nodeId
+
+  //shared mutable state
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
   private var miningThreads: Seq[ActorRef] = Seq.empty
-
-  private val startTime = timeProvider.time()
-  private val votes: Array[Byte] = nodeId
 
   override def preStart(): Unit = {
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
@@ -47,7 +50,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
         mod match {
           case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
             produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-
           case _ =>
         }
       } else if (ergoSettings.nodeSettings.mining) {

@@ -65,7 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       candidateOpt match {
         case Some(candidate) if !isMining && ergoSettings.nodeSettings.mining =>
           log.info("Starting Mining")
-          miningThreads = Seq(context.actorOf(ErgoMiningThread(ergoSettings, viewHolderRef, candidate)))
+          miningThreads = Seq(context.actorOf(ErgoMiningThread.props(ergoSettings, viewHolderRef, candidate)))
           isMining = true
         case None =>
           context.system.scheduler.scheduleOnce(5.second) {

@@ -51,12 +51,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val newBestAfterThis = bestFullChain.last
 
     (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(newBestAfterThis.id)) match {
-      case (None, _, _) if config.blocksToKeep < 0 && header.isGenesis =>
+      case (None, _, _) if header.isGenesis =>
         log.info(s"Initialize full block chain with genesis header ${header.encodedId} with transactions and proofs")
         updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
+/*
+      //TODO find a correct way here. State should know that we'll start from this header. https://github.com/ergoplatform/ergo/issues/146
       case (None, _, _) if config.blocksToKeep >= 0 =>
+
         log.info(s"Initialize full block chain with new best header ${header.encodedId} with transactions and proofs")
         updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
+*/
       case (Some(prevBest), _, Some(score)) if header.parentId sameElements prevBest.header.id =>
         log.info(s"New best full block with header ${newBestAfterThis.encodedId}. " +
           s"Height = ${newBestAfterThis.height}, score = $score")

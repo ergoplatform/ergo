@@ -23,6 +23,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "io.circe" % "circe-jawn_2.12" % "0.8.0",
   "io.circe" % "circe-numbers_2.12" % "0.8.0",
   "io.circe" % "circe-parser_2.12" % "0.8.0",
+  "javax.xml.bind" % "jaxb-api" % "2.3.0",
   "net.jpountz.lz4" % "lz4" % "1.3.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.58",
@@ -46,4 +47,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 2618b7e3d88fc7887c6108d28aa587b0c729b2d8
+// LIBRARY_DEPENDENCIES_HASH 122d9a8592c881b6a7d1534d59e5d1fe70b77896

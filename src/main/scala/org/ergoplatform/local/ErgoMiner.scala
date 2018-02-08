@@ -15,7 +15,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -23,21 +22,23 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
-class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHolderRef: ActorRef, nodeId: Array[Byte],
-                timeProvider: NetworkTimeProvider) extends Actor
-  with ScorexLogging {
+class ErgoMiner(ergoSettings: ErgoSettings,
+                viewHolderRef: ActorRef,
+                readersHolderRef: ActorRef,
+                nodeId: Array[Byte],
+                timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
-  private var isMining = false
-  private var nonce = 0
-  private var candidateOpt: Option[CandidateBlock] = None
-
-  private val powScheme = ergoSettings.chainSettings.poWScheme
   private val startTime = timeProvider.time()
   private val votes: Array[Byte] = nodeId
+
+  //shared mutable state
+  private var isMining = false
+  private var candidateOpt: Option[CandidateBlock] = None
+  private var miningThreads: Seq[ActorRef] = Seq.empty
 
   override def preStart(): Unit = {
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
@@ -49,7 +50,6 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
         mod match {
           case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
             produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-
           case _ =>
         }
       } else if (ergoSettings.nodeSettings.mining) {
@@ -62,49 +62,27 @@ class ErgoMiner(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, readersHold
       }
 
     case StartMining =>
-      if (!isMining && ergoSettings.nodeSettings.mining) {
-        log.info("Starting Mining")
-        isMining = true
-        context.system.scheduler.scheduleOnce(5.second) {
-          produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
-            self ! c
-            self ! MineBlock
-          }))
-        }
+      candidateOpt match {
+        case Some(candidate) if !isMining && ergoSettings.nodeSettings.mining =>
+          log.info("Starting Mining")
+          miningThreads = Seq(context.actorOf(ErgoMiningThread.props(ergoSettings, viewHolderRef, candidate)))
+          isMining = true
+        case None =>
+          context.system.scheduler.scheduleOnce(5.second) {
+            produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
+              self ! c
+              self ! StartMining
+            }))
+          }
+        case _ =>
       }
 
     case c: CandidateBlock =>
       val oldHeight = candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)
       val newHeight = c.parentOpt.map(_.height).getOrElse(0)
       log.debug(s"New candidate $c. Height change $oldHeight -> $newHeight")
-      if (newHeight > oldHeight) {
-        nonce = 0
-      }
       candidateOpt = Some(c)
-
-    case MineBlock =>
-      nonce = nonce + 1
-      candidateOpt match {
-        case Some(candidate) =>
-          log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
-          //Mine in separate thread for faster responses to API requests and new candidate block application
-          Future(powScheme.proveBlock(candidate, nonce)).onComplete {
-            case Success(Some(newBlock)) =>
-              log.info("New block found: " + newBlock)
-
-              viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-              viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-              newBlock.aDProofs.foreach { adp =>
-                viewHolderRef ! LocallyGeneratedModifier(adp)
-              }
-              context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay)(self ! MineBlock)
-            case _ =>
-              self ! MineBlock
-          }
-        case None =>
-          //Waiting until we'll create our first candidate block
-          context.system.scheduler.scheduleOnce(1.second)(self ! MineBlock)
-      }
+      miningThreads.foreach(t => t ! c)
 
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
@@ -174,8 +152,6 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object MineBlock
-
   case object MiningStatusRequest
 
   case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
@@ -185,4 +161,5 @@ object ErgoMiner extends ScorexLogging {
       "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
     ).asJson
   }
+
 }

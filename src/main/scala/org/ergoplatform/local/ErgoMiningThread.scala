@@ -52,7 +52,7 @@ object ErgoMiningThread {
 
   case class MineBlock(nonce: Long)
 
-  def apply(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, startCandidate: CandidateBlock): Props = {
+  def props(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, startCandidate: CandidateBlock): Props = {
     Props(new ErgoMiningThread(ergoSettings, viewHolderRef, startCandidate))
   }
 }

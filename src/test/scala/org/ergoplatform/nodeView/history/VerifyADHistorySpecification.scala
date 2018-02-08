@@ -25,29 +25,72 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs and transactions in random order") {
-    forAll(smallInt) { chainHeight =>
-      var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-      val r = new Random(chainHeight)
-      val chain = genChain(chainHeight, Seq())
-      history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
+      whenever(chainHeight > 0 && chainHeight <= 20) {
+        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+        val r = new Random(seed)
+        val chain = genChain(chainHeight, Seq())
+        history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
-      r.shuffle((0 until chainHeight).toList).foreach { i =>
-        val prevBest = history.bestFullBlockOpt
-        val block = chain(i)
-        history.append(block.blockTransactions) shouldBe 'success
-        history.append(block.aDProofs.get) shouldBe 'success
+        r.shuffle(chain.indices.toList).foreach { i =>
+          val prevBest = history.bestFullBlockOpt
+          val block = chain(i)
+          history.append(block.blockTransactions) shouldBe 'success
+          history.append(block.aDProofs.get) shouldBe 'success
 
-        prevBest match {
-          case None if block.header.isGenesis =>
-            history.bestFullBlockOpt should not be prevBest
-          case Some(p) if p.id sameElements block.parentId =>
-            history.bestFullBlockOpt should not be prevBest
-          case _ =>
-            history.bestFullBlockOpt shouldBe prevBest
+          prevBest match {
+            case None if block.header.isGenesis =>
+              history.bestFullBlockOpt should not be prevBest
+            case Some(p) if p.id sameElements block.parentId =>
+              history.bestFullBlockOpt should not be prevBest
+            case _ =>
+              history.bestFullBlockOpt shouldBe prevBest
+          }
+        }
+        history.bestFullBlockOpt shouldBe chain.lastOption
+      }
+    }
+  }
+
+  property("fork processing at proofs and transactions application in random order") {
+    forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
+      whenever(chainHeight > 0) {
+        val chainHeight = 1
+        val seed = 0
+        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+        val r = new Random(seed)
+        val genesis = genChain(1, Seq()).head
+        history.append(genesis.header) shouldBe 'success
+        history.append(genesis.blockTransactions) shouldBe 'success
+        history.append(genesis.aDProofs.get) shouldBe 'success
+        history.bestFullBlockOpt shouldBe Some(genesis)
+
+        val chains = Seq(genChain(chainHeight, Seq(genesis)), genChain(chainHeight + 1, Seq(genesis))).map(_.tail)
+        chains.foreach(chain => applyHeaderChain(history, HeaderChain(chain.map(_.header))))
+        val indices: Seq[(Int, Int)] = chains.indices.flatMap { chainIndex =>
+          val chain = chains(chainIndex)
+          chain.indices.map(blockIndex => (chainIndex, blockIndex))
+        }
+
+        r.shuffle(indices).foreach { i =>
+          val block = chains(i._1)(i._2)
+          val prevBest = history.bestFullBlockOpt
+          history.append(block.blockTransactions) shouldBe 'success
+          history.append(block.aDProofs.get) shouldBe 'success
+
+          prevBest match {
+            case None if block.header.isGenesis =>
+              history.bestFullBlockOpt should not be prevBest
+            case Some(p) if p.id sameElements block.parentId =>
+              history.bestFullBlockOpt should not be prevBest
+            case _ =>
+              history.bestFullBlockOpt shouldBe prevBest
+          }
         }
       }
     }
   }
+
 
   property("apply proofs that link incomplete chain") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)

@@ -25,10 +25,9 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs and transactions in random order") {
-    forAll(smallInt) { i =>
+    forAll(smallInt) { chainHeight =>
       var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-      val r = new Random()
-      val chainHeight = 1 + i % 5
+      val r = new Random(chainHeight)
       val chain = genChain(chainHeight, Seq())
       history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
@@ -46,7 +45,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
           case _ =>
             history.bestFullBlockOpt shouldBe prevBest
         }
-
       }
     }
   }

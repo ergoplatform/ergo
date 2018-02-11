@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern._
 import akka.util.Timeout
 import io.circe.Json
@@ -65,7 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       candidateOpt match {
         case Some(candidate) if !isMining && ergoSettings.nodeSettings.mining =>
           log.info("Starting Mining")
-          miningThreads = Seq(context.actorOf(ErgoMiningThread.props(ergoSettings, viewHolderRef, candidate)))
+          miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidate)(context))
           isMining = true
         case None =>
           context.system.scheduler.scheduleOnce(5.second) {
@@ -149,6 +149,30 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  def props(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider,
+            name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
 
   case object StartMining
 

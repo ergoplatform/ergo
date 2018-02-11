@@ -1,6 +1,6 @@
 package org.ergoplatform.network
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -92,6 +92,38 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+  def props(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            localInterfaceRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            networkSettings: NetworkSettings,
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, localInterfaceRef,
+      syncInfoSpec, networkSettings, timeProvider))
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            localInterfaceRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            networkSettings: NetworkSettings,
+            timeProvider: NetworkTimeProvider)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(networkControllerRef, viewHolderRef, localInterfaceRef,
+      syncInfoSpec, networkSettings, timeProvider))
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            localInterfaceRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            networkSettings: NetworkSettings,
+            timeProvider: NetworkTimeProvider,
+            name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(networkControllerRef, viewHolderRef, localInterfaceRef,
+      syncInfoSpec, networkSettings, timeProvider), name)
+
+
+
   case object CheckModifiersToDownload
   case class MissedModifiers(m: Seq[(ModifierTypeId, ModifierId)])
 }

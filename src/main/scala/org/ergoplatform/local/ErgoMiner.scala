@@ -69,10 +69,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           isMining = true
         case None =>
           context.system.scheduler.scheduleOnce(5.second) {
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
-              self ! c
-              self ! StartMining
-            }))
+            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete{_.toOption.flatten match {
+              case Some(c) =>
+                self ! c
+                self ! StartMining
+              case None =>
+                self ! StartMining
+              }
+            }
           }
         case _ =>
       }
@@ -92,7 +96,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
-  def produceCandidate(readersHolderRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
+  def produceCandidate(readersHolderRef: ActorRef,
+                       ergoSettings: ErgoSettings,
+                       nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       val history = v.history
@@ -144,7 +150,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }).mapTo[Option[CandidateBlock]]
   }
-
 }
 
 
@@ -161,5 +166,4 @@ object ErgoMiner extends ScorexLogging {
       "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
     ).asJson
   }
-
 }

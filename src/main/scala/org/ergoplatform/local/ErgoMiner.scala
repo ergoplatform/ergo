@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern._
 import akka.util.Timeout
 import io.circe.Json
@@ -65,14 +65,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       candidateOpt match {
         case Some(candidate) if !isMining && ergoSettings.nodeSettings.mining =>
           log.info("Starting Mining")
-          miningThreads = Seq(context.actorOf(ErgoMiningThread.props(ergoSettings, viewHolderRef, candidate)))
+          miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidate)(context))
           isMining = true
         case None =>
           context.system.scheduler.scheduleOnce(5.second) {
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => {
-              self ! c
+            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete { candOptTry =>
+              candOptTry.toOption.flatten.foreach(c => self ! c)
               self ! StartMining
-            }))
+            }
           }
         case _ =>
       }
@@ -92,7 +92,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
-  def produceCandidate(readersHolderRef: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
+  def produceCandidate(readersHolderRef: ActorRef,
+                       ergoSettings: ErgoSettings,
+                       nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       val history = v.history
@@ -144,11 +146,34 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }).mapTo[Option[CandidateBlock]]
   }
-
 }
 
 
 object ErgoMiner extends ScorexLogging {
+
+  def props(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider,
+            name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
 
   case object StartMining
 

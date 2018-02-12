@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -55,6 +55,16 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 }
 
 object ErgoReadersHolder {
+  def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
+
+  def apply(viewHolderRef: ActorRef)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(viewHolderRef))
+
+  def apply(viewHolderRef: ActorRef,
+            name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(viewHolderRef), name)
 
   case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
 

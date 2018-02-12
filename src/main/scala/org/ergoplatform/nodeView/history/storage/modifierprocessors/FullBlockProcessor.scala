@@ -82,7 +82,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq.empty)
+          val headerToApply = newChain.tail.headOption
+          val fbToApply = headerToApply.flatMap(h => getFullBlock(h))
+            .ensuring(_.isDefined, s"Full block to apply should be defined for ${headerToApply}")
+          ProgressInfo(Some(prevChain.head.id), toRemove, fbToApply, Seq.empty)
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
           historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))

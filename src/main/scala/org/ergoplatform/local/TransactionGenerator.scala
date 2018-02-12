@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, ActorSystem, Cancellable, Props}
 import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -56,6 +56,16 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
 }
 
 object TransactionGenerator {
+  def props(viewHolder: ActorRef, settings: TestingSettings): Props =
+    Props(new TransactionGenerator(viewHolder, settings))
+
+  def apply(viewHolder: ActorRef, settings: TestingSettings)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(viewHolder, settings))
+
+  def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(viewHolder, settings), name)
 
   case object StartGeneration
 

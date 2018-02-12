@@ -69,13 +69,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           isMining = true
         case None =>
           context.system.scheduler.scheduleOnce(5.second) {
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete{_.toOption.flatten match {
-              case Some(c) =>
-                self ! c
-                self ! StartMining
-              case None =>
-                self ! StartMining
-              }
+            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete { candOptTry =>
+              candOptTry.toOption.flatten.foreach(c => self ! c)
+              self ! StartMining
             }
           }
         case _ =>
@@ -166,4 +162,5 @@ object ErgoMiner extends ScorexLogging {
       "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
     ).asJson
   }
+
 }

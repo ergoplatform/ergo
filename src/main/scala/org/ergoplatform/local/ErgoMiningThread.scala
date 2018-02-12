@@ -1,13 +1,13 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.local.ErgoMiningThread.MineBlock
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.utils.ScorexLogging
-import scala.concurrent.ExecutionContext.Implicits.global
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Random
 
 class ErgoMiningThread(ergoSettings: ErgoSettings,
@@ -49,10 +49,25 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 }
 
 object ErgoMiningThread {
+  def props(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            startCandidate: CandidateBlock): Props =
+    Props(new ErgoMiningThread(ergoSettings, viewHolderRef, startCandidate))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            startCandidate: CandidateBlock)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            startCandidate: CandidateBlock,
+            name: String)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate), name)
+
 
   case class MineBlock(nonce: Long)
 
-  def props(ergoSettings: ErgoSettings, viewHolderRef: ActorRef, startCandidate: CandidateBlock): Props = {
-    Props(new ErgoMiningThread(ergoSettings, viewHolderRef, startCandidate))
-  }
 }

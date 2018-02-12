@@ -50,10 +50,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    minerRef ! StartMining
-  }
-
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
   )
@@ -61,6 +57,10 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,
       ErgoSyncInfoMessageSpec, settings.network, timeProvider)
+
+  if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
+    minerRef ! StartMining
+  }
 
   if (ergoSettings.testingSettings.transactionGeneration) {
     val txGen = TransactionGenerator(nodeViewHolderRef, ergoSettings.testingSettings)

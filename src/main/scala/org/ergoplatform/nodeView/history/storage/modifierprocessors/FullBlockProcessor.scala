@@ -71,7 +71,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         //TODO currentScore == prevBestScore
         val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, header)
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
-        if(toRemove.nonEmpty) {
+        if(toRemove.lengthCompare(prevChain.length - 1) == 0) {
           log.info(s"Process fork for new best full block with header ${newBestAfterThis.encodedId}. " +
             s"Height = ${newBestAfterThis.height}, score = $score")
           updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)

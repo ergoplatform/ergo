@@ -1,8 +1,10 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import scorex.core.consensus.ModifierSemanticValidity
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 
@@ -55,8 +57,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("fork processing at proofs and transactions application in random order") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
-        val chainHeight = 1
-        val seed = 0
         var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
         val r = new Random(seed)
         val genesis = genChain(1, Seq()).head
@@ -72,20 +72,36 @@ class VerifyADHistorySpecification extends HistorySpecification {
           chain.indices.map(blockIndex => (chainIndex, blockIndex))
         }
 
+        var appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
+
+        def findBestBlock(appendedToCheck: Seq[ErgoFullBlock]): ErgoFullBlock = {
+          def firstInAppended(h: Header): Header = {
+            appended.find(_.header.id sameElements h.parentId).map(_.header) match {
+              case Some(prev) => firstInAppended(prev)
+              case None => h
+            }
+          }
+
+          if (appendedToCheck.isEmpty) {
+            genesis
+          } else {
+            val best = appendedToCheck.maxBy(_.header.height)
+            if (firstInAppended(best.header).parentId sameElements genesis.id) {
+              best
+            } else {
+              findBestBlock(appendedToCheck.filter(b => !(b.id sameElements best.id)))
+            }
+          }
+        }
+
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
-          val prevBest = history.bestFullBlockOpt
           history.append(block.blockTransactions) shouldBe 'success
-          history.append(block.aDProofs.get) shouldBe 'success
+          history.append(block.aDProofs.get).get
 
-          prevBest match {
-            case None if block.header.isGenesis =>
-              history.bestFullBlockOpt should not be prevBest
-            case Some(p) if p.id sameElements block.parentId =>
-              history.bestFullBlockOpt should not be prevBest
-            case _ =>
-              history.bestFullBlockOpt shouldBe prevBest
-          }
+          appended += block
+
+          findBestBlock(appended) shouldBe history.bestFullBlockOpt.get
         }
       }
     }

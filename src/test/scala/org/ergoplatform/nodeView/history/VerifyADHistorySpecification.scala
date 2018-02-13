@@ -26,35 +26,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
   }
 
-  property("apply proofs and transactions in random order") {
-    forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
-      whenever(chainHeight > 0 && chainHeight <= 20) {
-        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-        val r = new Random(seed)
-        val chain = genChain(chainHeight, Seq())
-        history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-
-        r.shuffle(chain.indices.toList).foreach { i =>
-          val prevBest = history.bestFullBlockOpt
-          val block = chain(i)
-          history.append(block.blockTransactions) shouldBe 'success
-          history.append(block.aDProofs.get) shouldBe 'success
-
-          prevBest match {
-            case None if block.header.isGenesis =>
-              history.bestFullBlockOpt should not be prevBest
-            case Some(p) if p.id sameElements block.parentId =>
-              history.bestFullBlockOpt should not be prevBest
-            case _ =>
-              history.bestFullBlockOpt shouldBe prevBest
-          }
-        }
-        history.bestFullBlockOpt shouldBe chain.lastOption
-      }
-    }
-  }
-
-  property("fork processing at proofs and transactions application in random order") {
+  property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
         var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
@@ -107,7 +79,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
-
   property("apply proofs that link incomplete chain") {
     var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
     val chain = genChain(4, Seq())
@@ -137,7 +108,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.append(block1.aDProofs.get) shouldBe 'success
     history.bestFullBlockOpt shouldBe Some(block3)
   }
-
 
   //TODO fix this correctly
   ignore("bootstrap from headers and last full blocks") {

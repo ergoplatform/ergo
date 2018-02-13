@@ -263,9 +263,10 @@ trait ErgoHistoryReader
 
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
+    val heightDiff = Math.max(header1.height - header2.height, 0)
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
-      val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
+      val r = commonBlockThenSuffixes(otherChain, header1, numberBack + heightDiff)
       if (r._1.head == r._2.head) {
         r
       } else {

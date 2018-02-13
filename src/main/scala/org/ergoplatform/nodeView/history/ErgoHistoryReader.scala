@@ -261,6 +261,13 @@ trait ErgoHistoryReader
     }
   }
 
+  /**
+    * Find common block and subchains from common block to header1 and header2
+    *
+    * @param header1: Header - header in first subchain
+    * @param header2: Header - header in second subchain
+    * @return (chain from common block to header1, chain from common block to header2)
+    */
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
     val heightDiff = Math.max(header1.height - header2.height, 0)

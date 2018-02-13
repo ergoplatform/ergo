@@ -15,7 +15,7 @@ class InfoRoutesSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, corsAllowed = false, 10.seconds)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route = InfoRoute(readersRef, minerRef, pmRef, digest = true, restApiSettings, nodeId).route
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 

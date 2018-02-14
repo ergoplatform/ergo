@@ -224,8 +224,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, inChain)
 
     val fork1 = genChain(3, bestFullOptToSeq(history)).tail
-    history = applyChain(history, fork1)
     val fork2 = genChain(3, bestFullOptToSeq(history)).tail
+    fork1.head.parentId shouldEqual fork2.head.parentId
+
+    history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
     history.reportSemanticValidity(inChain.last.header, valid = false, inChain.last.parentId)
@@ -249,6 +251,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     val fork1 = genChain(3, Seq(common)).tail
     val fork2 = genChain(2, Seq(common)).tail
+
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 

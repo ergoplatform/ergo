@@ -61,4 +61,6 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
 }
 
-object DefaultFakePowScheme extends FakePowScheme(None)
+object DefaultFakePowScheme extends FakePowScheme(None) {
+  val schemeName = "fake"
+}

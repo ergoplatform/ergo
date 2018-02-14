@@ -5,6 +5,8 @@ import java.net.InetSocketAddress
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
+import io.circe.syntax._
+import org.ergoplatform.api.routes.InfoRoute.Info
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 
@@ -22,7 +24,8 @@ class InfoRoutesSpec extends FlatSpec
   it should "return info" in {
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers.length, readers, "digest").toString shouldEqual responseAs[String]
+      val resp = responseAs[String]
+      Info.make(nodeId, minerInfo, connectedPeers.length, readers, "digest").asJson.toString shouldEqual resp
     }
   }
 }

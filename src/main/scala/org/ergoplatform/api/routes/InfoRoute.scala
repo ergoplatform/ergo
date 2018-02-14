@@ -3,9 +3,11 @@ package org.ergoplatform.api.routes
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
-import io.circe.Json
+import io.circe.{Encoder, Json}
+import io.circe.generic.semiauto._
 import io.circe.syntax._
 import org.ergoplatform.Version
+import org.ergoplatform.api.routes.InfoRoute.Info
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.settings.Algos
@@ -24,6 +26,8 @@ case class InfoRoute(readersHolder: ActorRef,
                     (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
   override val route = info
 
+  import InfoRoute.Info._
+
   private def getConnectedPeers: Future[Int] = (peerManager ? PeerManager.GetConnectedPeers).mapTo[Seq[Handshake]].map(_.size)
 
   private def getStateType: String = if (digest) "digest" else "utxo"
@@ -39,7 +43,7 @@ case class InfoRoute(readersHolder: ActorRef,
       connectedPeers <- connectedPeersF
       readers <- readersF
     } yield {
-      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers, readers, getStateType)
+      Info.make(nodeId, minerInfo, connectedPeers, readers, getStateType).asJson
     }).okJson()
   }
 }
@@ -73,4 +77,60 @@ object InfoRoute {
       "peersCount" -> connectedPeersLength.asJson
     ).asJson
   }
+
+
+  case class Info(
+                   name: String,
+                   version: String,
+                   headersHeight: Int,
+                   fullHeight: Int,
+                   bestHeaderId: Option[String],
+                   bestFullHeaderId: Option[String],
+                   previousFullHeaderId: Option[String],
+                   stateRoot: Option[String],
+                   difficulty: Long,
+                   unconfirmedCount: Int,
+                   stateType: String,
+                   stateVersion: Option[String],
+                   isMining: Boolean,
+                   votes: String,
+                   peersCount: Int
+                 )
+
+  object Info {
+
+    def make(nodeId: Array[Byte],
+             minerInfo: MiningStatusResponse,
+             connectedPeersLength: Int,
+             readers: Readers,
+             stateType: String): Info = {
+      val stateVersion = readers.s.map(_.version).map(Algos.encode)
+      val bestHeader = readers.h.flatMap(_.bestHeaderOpt)
+      val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
+      val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
+      val stateRoot = readers.s.map(s => Algos.encode(s.rootHash))
+      Info(
+        Algos.encode(nodeId),
+        Version.VersionString,
+        bestHeader.map(_.height).getOrElse(0),
+        bestFullBlock.map(_.header.height).getOrElse(0),
+        bestHeader.map(_.encodedId),
+        bestFullBlock.map(_.header.encodedId),
+        bestFullBlock.map(_.header.parentId).map(Base58.encode),
+        stateRoot,
+        bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).toLong,
+        unconfirmedCount,
+        stateType,
+        stateVersion,
+        minerInfo.isMining,
+        Algos.encode(minerInfo.votes),
+        connectedPeersLength
+      )
+    }
+
+
+    implicit val encoder: Encoder[Info] = deriveEncoder
+  }
 }
+
+

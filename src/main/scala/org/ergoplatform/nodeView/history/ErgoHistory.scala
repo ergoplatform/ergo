@@ -171,12 +171,15 @@ trait ErgoHistory
           //applied best header to history
           ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
         } else {
-          //in fork processing
+          //Marked non-best full block as valid. Should have more blocks to apply to sync state and history.
           val modHeight = heightOf(fb.header.id).get
           val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
+            .ensuring(_.headOption.isDefined, s"Should have next block to apply, failed for ${fb.header}")
           //block in the best chain that link to this header
           val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
-            .ensuring(_.get.header.parentId sameElements fb.header.id, "Should never be here, State is inconsistent")
+            .ensuring(_.isDefined, s"Should be able to get full block for header ${chainBack.headOption}")
+            .ensuring(_.get.header.parentId sameElements fb.header.id,
+              s"Block to appy should link to current block. Failed for ${chainBack.headOption} and ${fb.header}")
           ProgressInfo[ErgoPersistentModifier](None, Seq.empty, toApply, Seq.empty)
         }
       case _ =>

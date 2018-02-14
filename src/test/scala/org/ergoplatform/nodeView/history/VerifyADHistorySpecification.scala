@@ -1,7 +1,11 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import scorex.core.consensus.ModifierSemanticValidity
+
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 
 class VerifyADHistorySpecification extends HistorySpecification {
@@ -22,32 +26,57 @@ class VerifyADHistorySpecification extends HistorySpecification {
     missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
   }
 
-  property("apply proofs and transactions in random order") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    val chain = genChain(3, Seq())
+  property("proofs and transactions application in random order with forks") {
+    forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
+      whenever(chainHeight > 0) {
+        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+        val r = new Random(seed)
+        val genesis = genChain(1, Seq()).head
+        history.append(genesis.header) shouldBe 'success
+        history.append(genesis.blockTransactions) shouldBe 'success
+        history.append(genesis.aDProofs.get) shouldBe 'success
+        history.bestFullBlockOpt shouldBe Some(genesis)
 
-    val block0 = chain.head
-    val block1 = chain(1)
-    val block2 = chain(2)
+        val chains = Seq(genChain(chainHeight, Seq(genesis)), genChain(chainHeight + 1, Seq(genesis))).map(_.tail)
+        chains.foreach(chain => applyHeaderChain(history, HeaderChain(chain.map(_.header))))
+        val indices: Seq[(Int, Int)] = chains.indices.flatMap { chainIndex =>
+          val chain = chains(chainIndex)
+          chain.indices.map(blockIndex => (chainIndex, blockIndex))
+        }
 
-    history.append(block0.header) shouldBe 'success
-    history.append(block1.header) shouldBe 'success
-    history.append(block2.header) shouldBe 'success
+        var appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
 
-    history.bestFullBlockOpt shouldBe None
-    history.bestHeaderOpt shouldBe Some(block2.header)
+        def findBestBlock(appendedToCheck: Seq[ErgoFullBlock]): ErgoFullBlock = {
+          def firstInAppended(h: Header): Header = {
+            appended.find(_.header.id sameElements h.parentId).map(_.header) match {
+              case Some(prev) => firstInAppended(prev)
+              case None => h
+            }
+          }
 
-    history.append(block2.aDProofs.get) shouldBe 'success
-    history.append(block2.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe None
+          if (appendedToCheck.isEmpty) {
+            genesis
+          } else {
+            val best = appendedToCheck.maxBy(_.header.height)
+            if (firstInAppended(best.header).parentId sameElements genesis.id) {
+              best
+            } else {
+              findBestBlock(appendedToCheck.filter(b => !(b.id sameElements best.id)))
+            }
+          }
+        }
 
-    history.append(block0.aDProofs.get) shouldBe 'success
-    history.append(block0.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe Some(block0)
+        r.shuffle(indices).foreach { i =>
+          val block = chains(i._1)(i._2)
+          history.append(block.blockTransactions) shouldBe 'success
+          history.append(block.aDProofs.get).get
 
-    history.append(block1.aDProofs.get) shouldBe 'success
-    history.append(block1.blockTransactions) shouldBe 'success
-    history.bestFullBlockOpt shouldBe Some(block2)
+          appended += block
+
+          findBestBlock(appended) shouldBe history.bestFullBlockOpt.get
+        }
+      }
+    }
   }
 
   property("apply proofs that link incomplete chain") {
@@ -79,7 +108,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.append(block1.aDProofs.get) shouldBe 'success
     history.bestFullBlockOpt shouldBe Some(block3)
   }
-
 
   //TODO fix this correctly
   ignore("bootstrap from headers and last full blocks") {

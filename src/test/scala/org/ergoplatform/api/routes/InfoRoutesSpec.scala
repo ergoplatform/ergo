@@ -25,7 +25,7 @@ class InfoRoutesSpec extends FlatSpec
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val resp = responseAs[String]
-      Info.make(nodeId, minerInfo, connectedPeers.length, readers, "digest").asJson.toString shouldEqual resp
+      Info(nodeId, minerInfo, connectedPeers.length, readers, "digest").asJson.toString shouldEqual resp
     }
   }
 }

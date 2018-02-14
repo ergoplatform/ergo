@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import scorex.core.consensus.ModifierSemanticValidity
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import scala.util.{Random, Try}
 
 
 class VerifyADHistorySpecification extends HistorySpecification {
@@ -138,6 +138,29 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.lastHeaderIds.last shouldEqual chain.last.header.id
   }
 
+  property("reportSemanticValidity(valid = true) when better header chain exists") {
+    var history = genHistory()
+
+    val inChain = genChain(2, bestFullOptToSeq(history))
+    history = applyChain(history, inChain)
+
+    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
+    val fork2 = genChain(4, bestFullOptToSeq(history)).tail
+    fork1.head.parentId shouldEqual fork2.head.parentId
+
+    history = applyChain(history, fork1)
+    history = applyHeaderChain(history, HeaderChain(fork2.map(_.header)))
+    history.bestFullBlockOpt.get shouldBe fork1.last
+    history.bestHeaderOpt.get shouldBe fork2.last.header
+
+    fork1.indices.foreach { i =>
+      val fullBlock = fork1(i)
+      val progressInfo = history.reportSemanticValidity(fullBlock, valid = true, fullBlock.header.parentId)
+      val nextBlock = Try(fork1(i + 1)).toOption
+      progressInfo._2.toApply shouldBe nextBlock
+    }
+  }
+
   property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
     var history = genHistory()
 
@@ -169,7 +192,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Valid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
     }
-
   }
 
   property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {

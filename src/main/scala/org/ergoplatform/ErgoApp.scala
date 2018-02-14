@@ -30,7 +30,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  //TODO remove after Scorex update
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)

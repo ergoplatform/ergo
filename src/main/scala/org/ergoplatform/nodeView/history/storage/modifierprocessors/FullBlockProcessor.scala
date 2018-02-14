@@ -51,12 +51,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val newBestAfterThis = bestFullChain.last
 
     (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(newBestAfterThis.id)) match {
-      case (None, _, _) if config.blocksToKeep < 0 && header.isGenesis =>
-        log.info(s"Initialize full block chain with genesis header ${header.encodedId} with transactions and proofs")
-        updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
-      case (None, _, _) if config.blocksToKeep >= 0 =>
-        log.info(s"Initialize full block chain with new best header ${header.encodedId} with transactions and proofs")
-        updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
+      case (None, _, _) if header.isGenesis =>
+        log.info(s"Initialize full block chain with genesis header ${newBestAfterThis.encodedId} with transactions and proofs")
+        updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)
+      /*
+            //TODO find a correct way here. State should know that we'll start from this header. https://github.com/ergoplatform/ergo/issues/146
+            case (None, _, _) if config.blocksToKeep >= 0 =>
+
+              log.info(s"Initialize full block chain with new best header ${header.encodedId} with transactions and proofs")
+              updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
+      */
       case (Some(prevBest), _, Some(score)) if header.parentId sameElements prevBest.header.id =>
         log.info(s"New best full block with header ${newBestAfterThis.encodedId}. " +
           s"Height = ${newBestAfterThis.height}, score = $score")
@@ -67,7 +71,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         //TODO currentScore == prevBestScore
         val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, header)
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
-        if(toRemove.nonEmpty) {
+        val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
+          .flatMap(h => if(h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
+
+        if (toApply.lengthCompare(newChain.length - 1) == 0) {
           log.info(s"Process fork for new best full block with header ${newBestAfterThis.encodedId}. " +
             s"Height = ${newBestAfterThis.height}, score = $score")
           updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)
@@ -78,7 +85,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(prevChain.head.id), toRemove, Some(getFullBlock(newChain(1)).get), Seq.empty)
+          ProgressInfo(Some(prevChain.head.id), toRemove, toApply.headOption, Seq.empty)
         } else {
           log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
           historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))

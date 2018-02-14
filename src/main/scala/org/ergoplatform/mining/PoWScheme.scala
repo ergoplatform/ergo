@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Chars
+import com.typesafe.config.ConfigException
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -18,7 +19,6 @@ import scorex.crypto.hash.Digest32
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scala.util.Try
 
 trait PoWScheme {
 
@@ -98,7 +98,15 @@ trait PoWScheme {
 object PoWScheme {
   type Solution = Seq[Int]
 
-  def apply(n: Int, k: Int): PoWScheme = new EquihashPowScheme(n.toChar, k.toChar)
+  def apply(powType: String, nParam: Option[Int], kParam: Option[Int]): PoWScheme = (powType, nParam, kParam) match {
+    case (DefaultFakePowScheme.schemeName, _, _) => DefaultFakePowScheme
+    case (EquihashPowScheme.schemeName, Some(n), Some(k)) => new EquihashPowScheme(n.toChar, k.toChar)
+    case (EquihashPowScheme.schemeName,  None , _) => throw new ConfigException.Missing("ergo.chain.poWScheme.n",
+                                                      new NoSuchElementException("Missing 'n' parameter for Equihash"))
+    case (EquihashPowScheme.schemeName,  _ , None) => throw new ConfigException.Missing("ergo.chain.poWScheme.k",
+                                                      new NoSuchElementException("Missing 'k' parameter for Equihash"))
+    case _ => throw new ConfigException.BadValue("ergo.chain.poWScheme.powType", powType)
+  }
 }
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
@@ -173,4 +181,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
 
   override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
+}
+
+object EquihashPowScheme {
+  val schemeName = "equihash"
 }

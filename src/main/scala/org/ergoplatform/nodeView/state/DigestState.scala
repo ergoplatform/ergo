@@ -50,7 +50,7 @@ class DigestState protected(override val version: VersionTag,
           log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
           s
         case Failure(e) =>
-          log.warn(s"Modifier $mod is not valid: ", e)
+          log.warn(s"Modifier of type ${mod.modifierTypeId} with id ${mod.encodedId} is not valid: ${e.getMessage}")
           Failure(e)
       }
 

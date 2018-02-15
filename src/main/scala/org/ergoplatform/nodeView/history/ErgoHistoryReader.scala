@@ -165,23 +165,25 @@ trait ErgoHistoryReader
     * @param withFilter - condition to satisfy
     * @return all possible forks, starting from specified header and satisfying withFilter condition
     */
-  //TODO rework option.get and traversable.head
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]] = {
     @tailrec
-    def loop(currentHeight: Int, acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
-      val nextLevelHeaders = headerIdsAtHeight(currentHeight + 1).map(id => typedModifierById[Header](id).get)
-        .filter(h => withFilter(h))
+    def loop(currentHeight: Option[Int], acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
+      val nextLevelHeaders = currentHeight.toList
+        .flatMap{ h => headerIdsAtHeight(h + 1) }
+        .flatMap { id => typedModifierById[Header](id) }
+        .filter(withFilter)
       if (nextLevelHeaders.isEmpty) {
         acc.map(chain => chain.reverse)
       } else {
-        val updatedChains = nextLevelHeaders
-          .flatMap(h => acc.find(chain => h.parentId sameElements chain.head.id).map(c => h +: c))
+        val updatedChains = nextLevelHeaders.flatMap { h =>
+          acc.find(chain => chain.nonEmpty && (h.parentId sameElements chain.head.id)).map(c => h +: c)
+        }
         val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId sameElements chain.head.id))
-        loop(currentHeight + 1, updatedChains ++ nonUpdatedChains)
+        loop(currentHeight.map(_ + 1), updatedChains ++ nonUpdatedChains)
       }
     }
 
-    loop(heightOf(header.id).get, Seq(Seq(header)))
+    loop(heightOf(header.id), Seq(Seq(header)))
   }
 
 
@@ -259,11 +261,19 @@ trait ErgoHistoryReader
     }
   }
 
+  /**
+    * Find common block and subchains from common block to header1 and header2
+    *
+    * @param header1: Header - header in first subchain
+    * @param header2: Header - header in second subchain
+    * @return (chain from common block to header1, chain from common block to header2)
+    */
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
+    val heightDiff = Math.max(header1.height - header2.height, 0)
 
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
-      val r = commonBlockThenSuffixes(otherChain, header1, numberBack)
+      val r = commonBlockThenSuffixes(otherChain, header1, numberBack + heightDiff)
       if (r._1.head == r._2.head) {
         r
       } else {

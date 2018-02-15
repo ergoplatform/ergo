@@ -3,7 +3,7 @@ package org.ergoplatform.api.routes
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
-import io.circe.{Encoder, Json}
+import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
 import org.ergoplatform.Version
@@ -59,7 +59,7 @@ object InfoRoute {
                    bestFullHeaderId: Option[String],
                    previousFullHeaderId: Option[String],
                    stateRoot: Option[String],
-                   difficulty: Long,
+                   difficulty: String,
                    unconfirmedCount: Int,
                    stateType: String,
                    stateVersion: Option[String],
@@ -80,6 +80,7 @@ object InfoRoute {
       val bestFullBlock = readers.h.flatMap(_.bestFullBlockOpt)
       val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
       val stateRoot = readers.s.map(s => Algos.encode(s.rootHash))
+      val difficulty = bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).toString()
       Info(
         Algos.encode(nodeId),
         Version.VersionString,
@@ -89,7 +90,7 @@ object InfoRoute {
         bestFullBlock.map(_.header.encodedId),
         bestFullBlock.map(_.header.parentId).map(Base58.encode),
         stateRoot,
-        bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).toLong,
+        difficulty,
         unconfirmedCount,
         stateType,
         stateVersion,

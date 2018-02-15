@@ -69,7 +69,7 @@ object InfoRoute {
       "bestFullHeaderId" -> bestFullBlock.map(_.header.encodedId).getOrElse("null").asJson,
       "previousFullHeaderId" -> bestFullBlock.map(_.header.parentId).map(Base58.encode).getOrElse("null").asJson,
       "stateRoot" -> stateRoot.asJson,
-      "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).asJson,
+      "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).toString(10).asJson,
       "unconfirmedCount" -> unconfirmedCount.asJson,
       "stateType" -> stateType.asJson,
       "stateVersion" -> stateVersion.asJson,

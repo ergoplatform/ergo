@@ -78,7 +78,7 @@ trait ErgoHistory
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
                                       unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) =
-    if (valid)  {
+    if (valid) {
       this -> markModifierValid(modifier)
     } else {
       this -> markModifierInvalid(modifier)
@@ -158,7 +158,6 @@ trait ErgoHistory
   private def markModifierValid(modifier: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     modifier match {
       case fb: ErgoFullBlock =>
-        val bestHeader = bestHeaderOpt.get
         val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
@@ -172,8 +171,9 @@ trait ErgoHistory
           ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
         } else {
           //Marked non-best full block as valid. Should have more blocks to apply to sync state and history.
-          val modHeight = heightOf(fb.header.id).get
-          val chainBack = headerChainBack(headersHeight - modHeight, bestHeader, h => h.parentId sameElements fb.header.id)
+          val bestFullHeader = bestFullBlockOpt.get.header
+          val limit = bestFullHeader.height - fb.header.height
+          val chainBack = headerChainBack(limit, bestFullHeader, h => h.parentId sameElements fb.header.id)
             .ensuring(_.headOption.isDefined, s"Should have next block to apply, failed for ${fb.header}")
           //block in the best chain that link to this header
           val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))

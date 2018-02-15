@@ -61,7 +61,7 @@ object InfoRoute {
     val unconfirmedCount = readers.m.map(_.size).getOrElse(0)
     val stateRoot = readers.s.map(s => Algos.encode(s.rootHash)).getOrElse("null")
     Map(
-      "name" -> Algos.encode(nodeId).asJson,
+      "name" -> nodeName.asJson,
       "appVersion" -> Version.VersionString.asJson,
       "headersHeight" -> bestHeader.map(_.height).getOrElse(0).asJson,
       "fullHeight" -> bestFullBlock.map(_.header.height).getOrElse(0).asJson,

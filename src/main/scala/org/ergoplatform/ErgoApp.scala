@@ -30,17 +30,15 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  //TODO remove after Scorex update
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings, timeProvider)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val readersHolderRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoReadersHolder], nodeViewHolderRef))
+  val readersHolderRef: ActorRef = ErgoReadersHolder(nodeViewHolderRef)
 
-  val minerRef: ActorRef = actorSystem.actorOf(Props(classOf[ErgoMiner], ergoSettings, nodeViewHolderRef,
-    readersHolderRef, nodeId, timeProvider))
+  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
@@ -51,20 +49,20 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    minerRef ! StartMining
-  }
-
   override val localInterface: ActorRef = actorSystem.actorOf(
     Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
   )
 
-  override val nodeViewSynchronizer: ActorRef = actorSystem.actorOf(
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)))
+  override val nodeViewSynchronizer: ActorRef =
+    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,
+      ErgoSyncInfoMessageSpec, settings.network, timeProvider)
+
+  if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
+    minerRef ! StartMining
+  }
 
   if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = actorSystem.actorOf(Props(classOf[TransactionGenerator], nodeViewHolderRef, ergoSettings.testingSettings))
+    val txGen = TransactionGenerator(nodeViewHolderRef, ergoSettings.testingSettings)
     txGen ! StartGeneration
   }
 

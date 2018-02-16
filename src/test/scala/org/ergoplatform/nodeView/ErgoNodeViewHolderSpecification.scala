@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestKit}
+import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpecLike}
+import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
 import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder.EventType._
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
@@ -24,15 +24,15 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, NodeViewHolder}
 import scorex.testkit.utils.FileUtils
 
-import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
-class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
-  with ImplicitSender
-  with PropSpecLike
+class ErgoNodeViewHolderSpecification extends PropSpec
   with ErgoGenerators
   with Matchers
   with FileUtils
   with BeforeAndAfterAll {
+
+  implicit val system = ActorSystem("WithIsoFix")
 
   case class NodeViewHolderConfig(adState: Boolean, verifyTransactions: Boolean, popowBootstrap: Boolean) {
     override def toString: String = {
@@ -121,67 +121,98 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
   def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, String](v => Algos.encode(v.state.rootHash))
 
-  class TestCase(val name: String, val test: (NodeViewHolderConfig, ActorRef) => Unit)
+  case class TestCase(name: String)(test: NodeViewFixture => Unit) {
+    def run(c: NodeViewHolderConfig): Unit = new NodeViewFixture(c).run(test)
+  }
 
-  val t1 = new TestCase("check genesis state", (c, a) => {
-    val msg = checkAfterGenesisState(c)
-    a ! msg
+  /** This uses TestProbe to receive messages from actor.
+    * To make TestProbe work `defaultSender` implicit should be imported
+    */
+  class NodeViewFixture(val nodeViewConfig: NodeViewHolderConfig) {
+    val nodeViewDir = createTempDir
+    val nodeViewRef: ActorRef = actorRef(nodeViewConfig, Option(nodeViewDir))
+    val testProbe = new TestProbe(system)
+
+    /** This sender should be imported to make TestProbe work! */
+    implicit val defaultSender: ActorRef = testProbe.testActor
+
+    @inline def send(msg: Any): Unit = testProbe.send(nodeViewRef, msg)
+    @inline def defaultTimeout = testProbe.remainingOrDefault
+    @inline def expectMsg[T](obj: T) = testProbe.expectMsg(obj)
+    @inline def expectMsgType[T](implicit t: ClassTag[T]) = testProbe.expectMsgType
+    @inline def expectNoMsg = testProbe.expectNoMessage(defaultTimeout)
+
+    def withRecoveredNodeViewRef(test: ActorRef => Unit) = {
+      val a = actorRef(nodeViewConfig, Option(nodeViewDir))
+      try test(a) finally system.stop(a)
+    }
+
+    def run(test: NodeViewFixture => Unit) = try test(this) finally stop()
+    def stop() = { system.stop(nodeViewRef); system.stop(testProbe.ref) }
+  }
+
+  val t1 = TestCase("check genesis state") { fixture =>
+    import fixture._
+    nodeViewRef ! checkAfterGenesisState(nodeViewConfig)
     expectMsg(true)
-  })
+  }
 
-  val t2 = new TestCase("check history after genesis", (c, a) => {
-    a ! bestHeaderOpt(c)
+  val t2 = TestCase("check history after genesis") { fixture =>
+    import fixture._
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(None)
-  })
+  }
 
-  val t3 = new TestCase("apply valid block header", (c, a) => {
+  val t3 = TestCase("apply valid block header") { fixture =>
+    import fixture._
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val block = validFullBlock(None, us, bh)
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(None)
 
-    a ! historyHeight(c)
+    nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     //sending header
-    a ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    a ! historyHeight(c)
+    nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(0)
 
-    a ! heightOf(block.header.id, c)
+    nodeViewRef ! heightOf(block.header.id, nodeViewConfig)
     expectMsg(Some(0))
 
-    a ! lastHeadersLength(10, c)
+    nodeViewRef ! lastHeadersLength(10, nodeViewConfig)
     expectMsg(1)
 
-    a ! openSurfaces(c)
+    nodeViewRef ! openSurfaces(nodeViewConfig)
     expectMsg(Seq(ByteArrayWrapper(block.header.id)))
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(block.header))
-  })
+  }
 
-  val t4 = new TestCase("apply valid block as genesis", (c, a) => {
+  val t4 = TestCase("apply valid block as genesis") { fixture =>
+    import fixture._
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    a ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
-    a ! LocallyGeneratedModifier(genesis.header)
+    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
-      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
-      if (c.adState) {
+      if (nodeViewConfig.adState) {
         expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
         expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
       }
@@ -190,139 +221,143 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
         expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
       }
 
-      a ! bestFullBlock(c)
+      nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(genesis))
     }
-  })
+  }
 
-  val t5 = new TestCase("apply full blocks after genesis", (c, a) => {
+  val t5 = TestCase("apply full blocks after genesis") { fixture =>
+    import fixture._
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
-    a ! LocallyGeneratedModifier(genesis.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
-      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
     }
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
-    a ! LocallyGeneratedModifier(block.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(block.blockTransactions)
-      a ! LocallyGeneratedModifier(block.aDProofs.get)
-      a ! bestFullBlock(c)
+    nodeViewRef ! LocallyGeneratedModifier(block.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(block.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(block.aDProofs.get)
+      nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(block))
     }
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(block.header))
 
-    a ! historyHeight(c)
+    nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(1)
 
-    a ! lastHeadersLength(10, c)
+    nodeViewRef ! lastHeadersLength(10, nodeViewConfig)
     expectMsg(2)
-  })
+  }
 
-  val t6 = new TestCase("add transaction to memory pool", (c, a) => {
+  val t6 = TestCase("add transaction to memory pool") { fixture =>
+    import fixture._
     val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
-    a ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
-    a ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
-    expectNoMsg()
-    a ! poolSize(c)
+    nodeViewRef ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
+    nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    expectNoMsg
+    nodeViewRef ! poolSize(nodeViewConfig)
     expectMsg(1)
-  })
+  }
 
-  val t7 = new TestCase("apply invalid full block", (c, a) => {
+  val t7 = TestCase("apply invalid full block") { fixture =>
+    import fixture._
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
-    a ! LocallyGeneratedModifier(genesis.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
-      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
     }
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
     val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
 
-    a ! LocallyGeneratedModifier(block.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(block.blockTransactions)
-      a ! LocallyGeneratedModifier(block.aDProofs.get)
-      a ! rootHash(c)
+    nodeViewRef ! LocallyGeneratedModifier(block.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(block.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(block.aDProofs.get)
+      nodeViewRef ! rootHash(nodeViewConfig)
       expectMsg(Algos.encode(wusAfterBlock.rootHash))
     }
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(block.header))
 
     val brokenBlock = validFullBlock(Some(block.header), wusAfterBlock)
 
-    a ! LocallyGeneratedModifier(brokenBlock.header)
+    nodeViewRef ! LocallyGeneratedModifier(brokenBlock.header)
 
     val brokenTransactions = brokenBlock.blockTransactions.copy(txs = brokenBlock.blockTransactions.txs.tail)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(brokenTransactions)
-      a ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)
-      a ! bestFullBlock(c)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(brokenTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)
+      nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(block))
     }
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     //TODO Note and verify!
     expectMsg(Some(brokenBlock.header))
-  })
+  }
 
-  val t8 = new TestCase("switching for a better chain", (c: NodeViewHolderConfig, a: ActorRef) => {
+  val t8 = TestCase("switching for a better chain") { fixture =>
+    import fixture._
     val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
-    a ! LocallyGeneratedModifier(genesis.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
-      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
     }
 
-    a ! rootHash(c)
+    nodeViewRef ! rootHash(nodeViewConfig)
     expectMsg(Algos.encode(wusAfterGenesis.rootHash))
 
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
-    a ! LocallyGeneratedModifier(chain1block1.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(chain1block1.blockTransactions)
-      a ! LocallyGeneratedModifier(chain1block1.aDProofs.get)
+    nodeViewRef ! LocallyGeneratedModifier(chain1block1.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(chain1block1.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(chain1block1.aDProofs.get)
     }
 
-    a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+    nodeViewRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
-    a ! bestHeaderOpt(c)
+    if (nodeViewConfig.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(chain1block1.header))
 
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
-    a ! LocallyGeneratedModifier(chain2block1.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(chain2block1.blockTransactions)
-      a ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
+    nodeViewRef ! LocallyGeneratedModifier(chain2block1.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(chain2block1.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
     }
 
-    a ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
+    nodeViewRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
       v.history.bestFullBlockOpt
     }
-    if (c.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
-    a ! bestHeaderOpt(c)
+    if (nodeViewConfig.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(chain1block1.header))
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
@@ -330,88 +365,82 @@ class ErgoNodeViewHolderSpecification extends TestKit(ActorSystem("WithIsoFix"))
 
     chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 
-    a ! LocallyGeneratedModifier(chain2block2.header)
-    if (c.verifyTransactions) {
-      a ! LocallyGeneratedModifier(chain2block2.blockTransactions)
-      a ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
-      a ! bestFullBlockEncodedId(c)
+    nodeViewRef ! LocallyGeneratedModifier(chain2block2.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(chain2block2.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
+      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
       expectMsg(Some(chain2block2.header.encodedId))
     }
 
-    a ! bestHeaderOpt(c)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(chain2block2.header))
 
-    a ! rootHash(c)
+    nodeViewRef ! rootHash(nodeViewConfig)
     expectMsg(Algos.encode(chain2block2.header.stateRoot))
 
-  })
+  }
 
-  val t9 = new TestCase("UTXO state should generate ADProofs and put them in history", (c, a) => {
-    if (c.adState == false) {
-      val nodeViewDir = Some(createTempDir)
-
+  val t9 = TestCase("UTXO state should generate ADProofs and put them in history") { fixture =>
+    import fixture._
+    if (!nodeViewConfig.adState) {
       val dir = createTempDir
-      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
 
-      a ! LocallyGeneratedModifier(genesis.header)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.header)
 
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
 
-      a ! bestFullBlock(c)
+      nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(genesis))
 
-      a ! modifierById(genesis.aDProofs.get.id)
+      nodeViewRef ! modifierById(genesis.aDProofs.get.id)
       expectMsg(genesis.aDProofs)
     }
-  })
+  }
 
-  val t10 = new TestCase("NodeViewHolder start from inconsistent state", (c, _) => {
-    if (c.verifyTransactions) {
-
-      val nodeViewDir = Some(createTempDir)
-      val a = actorRef(c, nodeViewDir)
+  val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
+    import fixture._
+    if (nodeViewConfig.verifyTransactions) {
 
       val dir = createTempDir
-      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(a))
+      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
       val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
-      a ! LocallyGeneratedModifier(genesis.header)
-      a ! LocallyGeneratedModifier(genesis.blockTransactions)
-      a ! LocallyGeneratedModifier(genesis.aDProofs.get)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
       val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
 
-      a ! LocallyGeneratedModifier(block1.header)
-      a ! LocallyGeneratedModifier(block1.aDProofs.get)
-      a ! LocallyGeneratedModifier(block1.blockTransactions)
-      a ! bestFullBlock(c)
+      nodeViewRef ! LocallyGeneratedModifier(block1.header)
+      nodeViewRef ! LocallyGeneratedModifier(block1.aDProofs.get)
+      nodeViewRef ! LocallyGeneratedModifier(block1.blockTransactions)
+      nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(block1))
 
-      a ! rootHash(c)
+      nodeViewRef ! rootHash(nodeViewConfig)
       expectMsg(Algos.encode(block1.header.stateRoot))
 
-      system.stop(a)
-      val stateDir = new File(s"${nodeViewDir.get.getAbsolutePath}/state")
+      system.stop(nodeViewRef)
+      val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
       for (file <- stateDir.listFiles) file.delete
 
-      val a2 = actorRef(c, nodeViewDir)
-      a2 ! rootHash(c)
-      expectMsg(Algos.encode(block1.header.stateRoot))
+      withRecoveredNodeViewRef { nodeViewRef2 =>
+        nodeViewRef2 ! rootHash(nodeViewConfig)
+        expectMsg(Algos.encode(block1.header.stateRoot))
+      }
     }
-  })
+  }
 
   val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
-        import akka.testkit._
-        5.seconds.dilated
-        val a = actorRef(c)
-        t.test(c, a)
-        system.stop(a)
+        t.run(c)
       }
     }
   }

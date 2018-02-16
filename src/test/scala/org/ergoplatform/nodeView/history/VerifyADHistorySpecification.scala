@@ -61,7 +61,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
             if (firstInAppended(best.header).parentId sameElements genesis.id) {
               best
             } else {
-              findBestBlock(appendedToCheck.filter(b => !(b.id sameElements best.id)))
+              findBestBlock(appendedToCheck.filterNot(_.id sameElements best.id))
             }
           }
         }
@@ -69,11 +69,11 @@ class VerifyADHistorySpecification extends HistorySpecification {
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
           history.append(block.blockTransactions) shouldBe 'success
-          history.append(block.aDProofs.get).get
+          history.append(block.aDProofs.get) shouldBe 'success
 
           appended += block
 
-          findBestBlock(appended) shouldBe history.bestFullBlockOpt.get
+          findBestBlock(appended).header.height shouldBe history.bestFullBlockOpt.get.header.height
         }
       }
     }

@@ -18,8 +18,8 @@ class InfoRoutesSpec extends FlatSpec
   it should "return info" in {
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val state = if (settings.nodeSettings.ADState) "digest" else "utxo"
-      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers.length, readers, state,
+      val stateType = settings.nodeSettings.stateType
+      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers.length, readers, stateType,
         settings.scorexSettings.network.nodeName).toString shouldEqual responseAs[String]
     }
   }

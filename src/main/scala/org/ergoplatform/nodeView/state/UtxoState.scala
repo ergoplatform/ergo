@@ -74,7 +74,6 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   }
 
   //todo: utxo snapshot could go here
-  //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
@@ -125,6 +124,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     * @return proof for specified transactions and new state digest
     */
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+    log.trace(s"Going to create proof for transactions $txs")
     val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)

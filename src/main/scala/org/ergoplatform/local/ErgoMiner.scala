@@ -97,6 +97,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                        nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+      log.info("Start candidate creation")
       val history = v.history
       val state = v.state
       val pool = v.pool
@@ -137,7 +138,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           candidate
 
         }.recoverWith { case thr =>
-          log.warn("Error when trying to generate a block: ", thr)
+          log.warn("Error when trying to produce a candidate block: ", thr)
           Failure(thr)
         }.toOption
       } else {

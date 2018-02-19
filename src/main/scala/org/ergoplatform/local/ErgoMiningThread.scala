@@ -3,6 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.local.ErgoMiningThread.MineBlock
 import org.ergoplatform.mining.CandidateBlock
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.LocalInterface.LocallyGeneratedModifier
 import scorex.core.utils.ScorexLogging
@@ -34,7 +35,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-          if (ergoSettings.nodeSettings.ADState) {
+          if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
             newBlock.aDProofs.foreach { adp =>
               viewHolderRef ! LocallyGeneratedModifier(adp)
             }

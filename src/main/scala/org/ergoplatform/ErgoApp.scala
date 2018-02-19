@@ -44,8 +44,8 @@ class ErgoApp(args: Seq[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings, nodeId),
-    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
+    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 

@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
@@ -20,13 +20,13 @@ import scorex.crypto.authds.ADDigest
 import scala.util.Try
 
 
-abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: ErgoSettings,
+abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                                      timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
 
-  override type MS = StateType
+  override type MS = State
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
   override type VL = ErgoWallet
@@ -77,25 +77,25 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
   }
 
   @SuppressWarnings(Array("AsInstanceOf"))
-  private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): StateType = {
+  private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): State = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
     for (file <- dir.listFiles) file.delete
 
     {
-      (version, digest) match {
-        case (Some(_), Some(_)) if settings.nodeSettings.ADState =>
+      (version, digest, settings.nodeSettings.stateType) match {
+        case (Some(_), Some(_), StateType.Digest) =>
           DigestState.create(version, digest, dir, settings.nodeSettings)
         case _ =>
           ErgoState.readOrGenerate(settings, Some(self))
       }
-    }.asInstanceOf[StateType]
+    }.asInstanceOf[State]
       .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
   }
 
   // scalastyle:off cyclomatic.complexity
   @SuppressWarnings(Array("TryGet"))
-  private def restoreConsistentState(stateIn: StateType, history: ErgoHistory): StateType = Try {
+  private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
         log.debug("State and history are both empty on startup")
@@ -110,7 +110,7 @@ abstract class ErgoNodeViewHolder[StateType <: ErgoState[StateType]](settings: E
         // Just update state root hash
         log.debug(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(VersionTag @@ bestFullBlock.id), Some(bestFullBlock.header.stateRoot))
-      case (stateId, Some(historyBestBlock), state: StateType) =>
+      case (stateId, Some(historyBestBlock), state: State) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.debug(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
@@ -142,11 +142,14 @@ private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvi
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 object ErgoNodeViewHolder {
-  def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
-    if (settings.nodeSettings.ADState) {
-      system.actorOf(Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
-    } else {
-      system.actorOf(Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
+
+  def viewHolderClass(settings: ErgoSettings): Class[_ <: ErgoNodeViewHolder[_]] =
+    settings.nodeSettings.stateType match  {
+      case StateType.Digest => classOf[DigestErgoNodeViewHolder]
+      case StateType.Utxo => classOf[UtxoErgoNodeViewHolder]
     }
+
+  def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
+    system.actorOf(Props.create(viewHolderClass(settings), settings, timeProvider))
   }
 }

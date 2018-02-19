@@ -49,7 +49,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (isMining) {
         mod match {
           case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
+            self ! ProduceCandidate
           case _ =>
         }
       } else if (ergoSettings.nodeSettings.mining) {
@@ -68,11 +68,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidate)(context))
           isMining = true
         case None =>
-          context.system.scheduler.scheduleOnce(5.second) {
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete { candOptTry =>
-              candOptTry.toOption.flatten.foreach(c => self ! c)
-              self ! StartMining
-            }
+          self ! ProduceCandidate
+          context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
+            self ! StartMining
           }
         case _ =>
       }
@@ -86,6 +84,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, votes, candidateOpt)
+
+    case ProduceCandidate =>
+      produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach {
+        case Some(c) => self ! c
+        case None =>
+          context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
+            self ! ProduceCandidate
+          }
+      }
 
     case m =>
       log.warn(s"Unexpected message $m")
@@ -177,6 +184,8 @@ object ErgoMiner extends ScorexLogging {
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
 
   case object StartMining
+
+  case object ProduceCandidate
 
   case object MiningStatusRequest
 

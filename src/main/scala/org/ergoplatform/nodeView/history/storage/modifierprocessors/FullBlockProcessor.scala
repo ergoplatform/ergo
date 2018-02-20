@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
@@ -52,19 +52,8 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
     (bestFullBlockOpt, bestFullBlockIdOpt.flatMap(scoreOf), scoreOf(newBestAfterThis.id)) match {
       case (None, _, _) if header.isGenesis =>
-        log.info(s"Initialize full block chain with genesis header ${newBestAfterThis.encodedId} with transactions and proofs")
-        updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)
-      /*
-            //TODO find a correct way here. State should know that we'll start from this header. https://github.com/ergoplatform/ergo/issues/146
-            case (None, _, _) if config.blocksToKeep >= 0 =>
-
-              log.info(s"Initialize full block chain with new best header ${header.encodedId} with transactions and proofs")
-              updateStorage(newModRow, storageVersion, fullBlock, fullBlock.header.id)
-      */
-      case (Some(prevBest), _, Some(score)) if header.parentId sameElements prevBest.header.id =>
-        log.info(s"New best full block with header ${newBestAfterThis.encodedId}. " +
-          s"Height = ${newBestAfterThis.height}, score = $score")
-        if (config.blocksToKeep >= 0) pruneOnNewBestBlock(header)
+        //TODO find a correct to start form non-genesis block. https://github.com/ergoplatform/ergo/issues/146
+        logStatus(Seq(), Seq(fullBlock), fullBlock, None)
         updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)
 
       case (Some(prevBest), Some(prevBestScore), Some(score)) if score > prevBestScore =>
@@ -72,11 +61,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, header)
         val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
         val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
-          .flatMap(h => if(h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
+          .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
 
-        if (toApply.lengthCompare(newChain.length - 1) == 0) {
-          log.info(s"Process fork for new best full block with header ${newBestAfterThis.encodedId}. " +
-            s"Height = ${newBestAfterThis.height}, score = $score")
+        if (toApply.lengthCompare(newChain.length - 1) != 0) {
+          //block have higher score but is not linkable to full chain
+          nonBestBlock(fullBlock, newModRow, storageVersion)
+        } else {
+          //application of this block leads to full chain with higher score
+          logStatus(toRemove, toApply, fullBlock, Some(prevBest))
+          val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
+
           updateStorage(newModRow, storageVersion, fullBlock, newBestAfterThis.id)
 
           if (config.blocksToKeep >= 0) {
@@ -85,17 +79,38 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
             val lastKept = bestHeight - config.blocksToKeep
             pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
           }
-          ProgressInfo(Some(prevChain.head.id), toRemove, toApply.headOption, Seq.empty)
-        } else {
-          log.info(s"Got transactions and proofs for header ${header.encodedId} with no connection to genesis")
-          historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
-          ProgressInfo(None, Seq.empty, None, Seq.empty)
+          ProgressInfo(branchPoint, toRemove, toApply.headOption, Seq.empty)
         }
+
+      case (None, _, _) =>
+        //Full chain is not initialized yet
+        nonBestBlock(fullBlock, newModRow, storageVersion)
+
       case _ =>
-        log.info(s"Got transactions and proofs for non-best header ${header.encodedId}")
-        historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
-        ProgressInfo(None, Seq.empty, None, Seq.empty)
+        //Orphaned block
+        nonBestBlock(fullBlock, newModRow, storageVersion)
     }
+  }
+
+  private def nonBestBlock(fullBlock: ErgoFullBlock,
+                           newModRow: ErgoPersistentModifier,
+                           storageVersion: ByteArrayWrapper): ProgressInfo[ErgoPersistentModifier] = {
+    logStatus(Seq(), Seq(), fullBlock, None)
+    historyStorage.insert(storageVersion, Seq.empty, Seq(newModRow))
+    ProgressInfo(None, Seq.empty, None, Seq.empty)
+  }
+
+  private def logStatus(toRemove: Seq[ErgoFullBlock],
+                        toApply: Seq[ErgoFullBlock],
+                        appliedBlock: ErgoFullBlock,
+                        prevBest: Option[ErgoFullBlock]): Unit = {
+    val toRemoveStr = if (toRemove.nonEmpty) s" and to remove ${toRemove.length}" else ""
+    val newStatusStr = if (toApply.nonEmpty) {
+      s" New best block is ${toApply.last.header.encodedId} with height ${toApply.last.header.height} updates block " +
+        s"${prevBest.map(_.encodedId).getOrElse("None")} with height ${prevBest.map(_.header.height).getOrElse(-1)}"
+    } else ""
+    log.info(s"Full block ${appliedBlock.encodedId} appended, going to apply ${toApply.length}$toRemoveStr modifiers." +
+      newStatusStr)
   }
 
   private def pruneOnNewBestBlock(header: Header): Unit = heightOf(header.id).filter(h => h > config.blocksToKeep)
@@ -115,6 +130,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                             toApply: ErgoFullBlock,
                             bestFullHeaderId: ModifierId): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(storageVersion, Seq((BestFullBlockKey, ByteArrayWrapper(bestFullHeaderId))), Seq(newModRow))
+      .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= full height $fullBlockHeight")
     ProgressInfo(None, Seq.empty, Some(toApply), Seq.empty)
   }
 

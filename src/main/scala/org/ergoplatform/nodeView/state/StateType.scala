@@ -17,10 +17,21 @@ object StateType {
     def stateTypeName: String = "digest"
   }
 
+  type UtxoType = Utxo.type
+  type DigestType = Digest.type
+
   val values: Seq[StateType] = Seq(Utxo, Digest)
 
+  /** This class allows to check the correspondence between concrete instances of [[StateType]] and [[ErgoState]]
+    */
+  sealed trait Evidence[ST <: StateType, S <: ErgoState[S]]
+
+  implicit object UtxoEvidence extends Evidence[UtxoType, UtxoState]
+  implicit object DigestEvidence extends Evidence[DigestType, DigestState]
+
+  /** This is for json representation of [[StateType]] instances
+    */
   implicit val stateTypeEncoder: Encoder[StateType] =
     Encoder.encodeString.contramap[StateType](_.stateTypeName)
+
 }
-
-

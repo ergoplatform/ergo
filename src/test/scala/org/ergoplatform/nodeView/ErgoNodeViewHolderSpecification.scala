@@ -74,7 +74,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
       chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
     )
     val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
-    ErgoNodeViewHolder.createActor(system, settings, timeProvider)
+    ErgoNodeViewRef(settings, timeProvider)
   }
 
   def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>

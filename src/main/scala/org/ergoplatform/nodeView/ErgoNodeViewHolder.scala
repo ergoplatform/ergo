@@ -141,15 +141,14 @@ private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings, timePro
 private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
-object ErgoNodeViewHolder {
+object ErgoNodeViewRef {
 
-  def viewHolderClass(settings: ErgoSettings): Class[_ <: ErgoNodeViewHolder[_]] =
+  def props(settings: ErgoSettings, timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match  {
-      case StateType.Digest => classOf[DigestErgoNodeViewHolder]
-      case StateType.Utxo => classOf[UtxoErgoNodeViewHolder]
+      case StateType.Digest => Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider)
+      case StateType.Utxo => Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider)
     }
 
-  def createActor(system: ActorSystem, settings: ErgoSettings, timeProvider: NetworkTimeProvider): ActorRef = {
-    system.actorOf(Props.create(viewHolderClass(settings), settings, timeProvider))
-  }
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings, timeProvider))
 }

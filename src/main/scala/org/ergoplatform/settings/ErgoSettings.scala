@@ -15,7 +15,7 @@ case class ErgoSettings(directory: String,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings)
 
-object ErgoSettings extends ScorexLogging with SettingsReaders{
+object ErgoSettings extends ScorexLogging with PowSchemeReaders with SettingsReaders {
 
   val configPath: String = "ergo"
   val scorexConfigPath: String = "scorex"

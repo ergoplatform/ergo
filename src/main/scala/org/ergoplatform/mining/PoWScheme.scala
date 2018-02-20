@@ -18,7 +18,6 @@ import scorex.crypto.hash.Digest32
 import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.control.NonFatal
-import scala.util.Try
 
 trait PoWScheme {
 
@@ -97,8 +96,6 @@ trait PoWScheme {
 
 object PoWScheme {
   type Solution = Seq[Int]
-
-  def apply(n: Int, k: Int): PoWScheme = new EquihashPowScheme(n.toChar, k.toChar)
 }
 
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {

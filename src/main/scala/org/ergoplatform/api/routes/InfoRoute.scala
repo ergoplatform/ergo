@@ -72,7 +72,7 @@ object InfoRoute {
       "stateRoot" -> stateRoot.asJson,
       "difficulty" -> bestFullBlock.map(_.header.requiredDifficulty).getOrElse(BigInt(0)).toString(10).asJson,
       "unconfirmedCount" -> unconfirmedCount.asJson,
-      "stateType" -> stateType.toString.asJson,
+      "stateType" -> stateType.asJson,
       "stateVersion" -> stateVersion.asJson,
       "isMining" -> minerInfo.isMining.asJson,
       "votes" -> Algos.encode(minerInfo.votes).asJson,

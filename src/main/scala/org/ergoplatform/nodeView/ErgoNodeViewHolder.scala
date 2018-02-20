@@ -20,8 +20,7 @@ import scorex.crypto.authds.ADDigest
 import scala.util.Try
 
 
-abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
-                                                                     timeProvider: NetworkTimeProvider)
+abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings, timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
@@ -135,18 +134,37 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 }
 
-private[nodeView] class DigestErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
   extends ErgoNodeViewHolder[DigestState](settings, timeProvider)
 
-private[nodeView] class UtxoErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkTimeProvider)
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
+
+
+/** This class guarantees to its inheritors the creation of correct instance of [[ErgoNodeViewHolder]]
+  *  for the given instance of [[StateType]]
+  */
+sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
+                                       (implicit ev: StateType.Evidence[ST, S]) {
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType:ST): Props
+}
+
+object DigestNodeViewProps extends ErgoNodeViewProps[StateType.DigestType, DigestState, DigestNodeViewHolder] {
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: StateType.DigestType): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
+}
+
+object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState, UtxoNodeViewHolder]  {
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: StateType.UtxoType): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
+}
 
 object ErgoNodeViewRef {
 
   def props(settings: ErgoSettings, timeProvider: NetworkTimeProvider): Props =
-    settings.nodeSettings.stateType match  {
-      case StateType.Digest => Props.create(classOf[DigestErgoNodeViewHolder], settings, timeProvider)
-      case StateType.Utxo => Props.create(classOf[UtxoErgoNodeViewHolder], settings, timeProvider)
+    settings.nodeSettings.stateType match {
+      case digestType @ StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType)
+      case utxoType @ StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType)
     }
 
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =

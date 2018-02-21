@@ -12,7 +12,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.settings._
 import scorex.core._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
@@ -227,8 +228,8 @@ object ErgoHistory extends ScorexLogging {
     val db = new HistoryStorage(indexStore, objectsStore)
     val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
-      case (true, true, true) =>
+    val history: ErgoHistory = (nodeSettings.stateType, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
+      case (StateType.Digest, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
@@ -238,7 +239,7 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (true, true, false) =>
+      case (StateType.Digest, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
@@ -248,7 +249,7 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (false, true, true) =>
+      case (StateType.Utxo, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
@@ -258,7 +259,7 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PoWScheme = chainSettings.poWScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (false, true, false) =>
+      case (StateType.Utxo, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
           with FullnodeBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {

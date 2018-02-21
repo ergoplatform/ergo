@@ -41,7 +41,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
   override val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
 
   //Node view components
-  //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false,
+  //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo,
   //PoPoWBootstrap = false, -1)
 
   override val memPool: MPool = ErgoMemPool.empty

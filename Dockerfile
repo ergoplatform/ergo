@@ -8,7 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends sbt
 COPY . /ergo
 WORKDIR /ergo
-RUN sbt assembly
+RUN sbt reload clean assembly
 RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
 CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 

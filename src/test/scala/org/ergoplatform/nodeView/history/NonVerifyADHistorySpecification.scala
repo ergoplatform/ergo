@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.crypto.encode.Base58
@@ -9,7 +10,7 @@ import scorex.crypto.encode.Base58
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
@@ -35,7 +36,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     val epochLength = 3
     val useLastEpochs = 3
 
-    var history = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0,
+    var history = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0,
       epochLength = epochLength, useLastEpochs = useLastEpochs)
     val blocksBeforeRecalculate = epochLength * useLastEpochs + 1
 

@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
 import scorex.core._
@@ -118,10 +119,10 @@ trait HeadersProcessor extends ScorexLogging {
   }
 
   private def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    (config.verifyTransactions, config.ADState) match {
-      case (true, true) =>
+    (config.verifyTransactions, config.stateType) match {
+      case (true, StateType.Digest) =>
         Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
-      case (true, false) =>
+      case (true, StateType.Utxo) =>
         Seq((BlockTransactions.modifierTypeId, h.transactionsId))
       case (false, _) => Seq.empty
     }

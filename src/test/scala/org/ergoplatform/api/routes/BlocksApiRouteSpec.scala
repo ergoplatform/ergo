@@ -20,7 +20,7 @@ class BlocksApiRouteSpec extends FlatSpec
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 
   val prefix = "/blocks"
-  val route = BlocksApiRoute(readersRef, minerRef, settings, nodeId, digest = true).route
+  val route = BlocksApiRoute(readersRef, minerRef, settings, nodeId).route
 
 
   it should "get last blocks" in {

@@ -2,10 +2,11 @@ package org.ergoplatform
 
 import org.ergoplatform.ErgoSanity.{HT, PM, UTXO_ST}
 import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.nodeView.state.StateType
 import org.scalacheck.Gen
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, -1)
+  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None))
 

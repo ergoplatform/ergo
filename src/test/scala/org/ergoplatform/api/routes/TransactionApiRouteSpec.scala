@@ -21,7 +21,7 @@ class TransactionApiRouteSpec extends FlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10 seconds)
   val prefix = "/transactions"
-  val route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings, digest = true).route
+  val route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
   val tx = AnyoneCanSpendTransaction(IndexedSeq(1L,2L), IndexedSeq(3L, 4L))
 

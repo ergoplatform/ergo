@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.nodeView.state.StateType
 import scorex.core.consensus.ModifierSemanticValidity
 
 import scala.collection.mutable.ArrayBuffer
@@ -11,7 +12,7 @@ import scala.util.{Random, Try}
 class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory(height: Int = 0): ErgoHistory = {
-    val inHistory = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     if (height > 0) applyChain(inHistory, genChain(height, bestFullOptToSeq(inHistory)))
     else inHistory
   }
@@ -29,7 +30,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
-        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+        var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
         val r = new Random(seed)
         val genesis = genChain(1, Seq()).head
         history.append(genesis.header) shouldBe 'success
@@ -80,7 +81,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs that link incomplete chain") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     val chain = genChain(4, Seq())
 
     val block0 = chain.head
@@ -111,7 +112,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   //TODO fix this correctly
   ignore("bootstrap from headers and last full blocks") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+    var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None
 

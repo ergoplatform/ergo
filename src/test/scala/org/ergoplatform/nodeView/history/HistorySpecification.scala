@@ -3,11 +3,12 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import org.scalacheck.Gen
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.PropSpec
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.testkit.TestkitHelpers
@@ -45,7 +46,7 @@ trait HistorySpecification extends PropSpec
   }
 
   def generateHistory(verifyTransactions: Boolean,
-                      ADState: Boolean,
+                      stateType: StateType,
                       PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
@@ -54,7 +55,7 @@ trait HistorySpecification extends PropSpec
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
-    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null

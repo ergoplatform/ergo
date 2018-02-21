@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.DigestState
+import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
@@ -125,7 +125,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val networkControllerRef = system.actorOf(NetworkControllerStub.props())
 
   def generateHistory(verifyTransactions: Boolean = true,
-                      ADState: Boolean = true,
+                      stateType: StateType = StateType.Digest,
                       PoPoWBootstrap: Boolean = false,
                       blocksToKeep: Int  = 100,
                       epochLength: Int = 100000000,
@@ -134,7 +134,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
-    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(ADState, verifyTransactions, blocksToKeep,
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null

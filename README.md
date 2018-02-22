@@ -36,6 +36,6 @@ To run certain Ergo version as a service with custom config:
     sudo docker run -d -p 9001:9001 -p 9051:9051
 		-v ergo:/root/ergo/data
 		-v /path/on/host/system/to/myergo.conf:/root/ergo/myergo.conf
-		ergoplatform/ergo:v0.1.1 /root/ergo/myergo.conf
+		ergoplatform/ergo:v0.2.1 /root/ergo/myergo.conf
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to changed location) and open ports 9001 and 9051 on host system.

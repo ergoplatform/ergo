@@ -1,0 +1,29 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+ \PYG{k}{if}\PYG{o}{(}\PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader} \PYG{o}{==} \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{//Do nothing, State is already updated}
+  \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{k}{if}\PYG{o}{(}\PYG{n}{VerifyTransactions} \PYG{o}{==} \PYG{k+kc}{false}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{//Just update State rootshash to best header in history}
+    \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{setBestHeader}\PYG{o}{(}\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{)}
+  \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{//we have headers chain better then full block}
+    \PYG{l+m+mf}{3.1}\PYG{o}{.} \PYG{n}{Request} \PYG{n}{transaction} \PYG{n}{ids} \PYG{n}{from} \PYG{n}{all} \PYG{n}{headers} \PYG{n}{without} \PYG{n}{transactions}
+      \PYG{n+nf}{assert}\PYG{o}{(}\PYG{n}{history} \PYG{n}{contains} \PYG{n}{header} \PYG{n}{chain} \PYG{n}{from} \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader} \PYG{n}{to} \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeaders}\PYG{o}{)}
+      \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{continuation}\PYG{o}{(}\PYG{n}{from} \PYG{o}{=} \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{,} \PYG{n}{size} \PYG{o}{=} \PYG{o}{???).}\PYG{n+na}{get}\PYG{o}{.}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{header} \PYG{o}{=\PYGZgt{}}
+        \PYG{n}{sendToRandomFullNode}\PYG{o}{(}\PYG{n}{GetTransactionIdsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))}
+        \PYG{k}{if}\PYG{o}{(}\PYG{n}{ADState} \PYG{o}{==} \PYG{k+kc}{true}\PYG{o}{)} \PYG{n}{sendToRandomFullNode}\PYG{o}{(}\PYG{n}{GetADProofsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))}
+      \PYG{o}{\PYGZcb{}}
+    \PYG{l+m+mf}{3.2}\PYG{o}{.} \PYG{n}{On} \PYG{n}{receiving} \PYG{n}{TransactionIdsForHeader}\PYG{o}{:}
+      \PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{TransactionIdsForHeader}\PYG{o}{)}
+      \PYG{n}{TransactionIdsForHeader}\PYG{o}{.}\PYG{n+na}{filter}\PYG{o}{(}\PYG{n}{txId} \PYG{o}{=\PYGZgt{}} \PYG{o}{!}\PYG{n}{MemPool}\PYG{o}{.}\PYG{n+na}{contains}\PYG{o}{(}\PYG{n}{txId}\PYG{o}{)).}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{txId} \PYG{o}{=\PYGZgt{}}
+        \PYG{n}{request} \PYG{n}{transaction} \PYG{n}{with} \PYG{n}{txId}
+      \PYG{o}{\PYGZcb{}}
+    \PYG{l+m+mf}{3.3}\PYG{o}{.} \PYG{n}{On} \PYG{n}{receiving} \PYG{n}{a} \PYG{n}{transaction}\PYG{o}{:}
+      \PYG{k}{if}\PYG{o}{(}\PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{transaction}\PYG{o}{).}\PYG{n+na}{isSuccess}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+         \PYG{n}{Broadcast} \PYG{n}{INV} \PYG{k}{for} \PYG{k}{this} \PYG{n}{transaction}
+         \PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{getHeadersWithAllTransactions} \PYG{o}{\PYGZob{}} \PYG{n}{BlockTransactions} \PYG{o}{=\PYGZgt{}}
+            \PYG{n}{GOTO} \PYG{l+m+mf}{3.4} \PYG{c+c1}{//now we have BlockTransactions}
+         \PYG{o}{\PYGZcb{}}
+      \PYG{o}{\PYGZcb{}}
+    \PYG{l+m+mf}{3.4}\PYG{o}{.} \PYG{o}{(}\PYG{n}{same} \PYG{n}{as} \PYG{l+m+mf}{3.2}\PYG{o}{.} \PYG{n}{from} \PYG{n}{bootstrap}\PYG{o}{)}
+  \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

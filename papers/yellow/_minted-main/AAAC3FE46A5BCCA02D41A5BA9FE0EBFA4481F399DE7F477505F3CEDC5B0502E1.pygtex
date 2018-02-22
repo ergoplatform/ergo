@@ -1,0 +1,6 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{lastBestHeaders}\PYG{o}{(}\PYG{n}{BlocksToKeep}\PYG{o}{).}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{header} \PYG{o}{=\PYGZgt{}}
+    \PYG{n}{send} \PYG{n+nf}{message}\PYG{o}{(}\PYG{n}{GetBlockTransactionsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))} \PYG{n}{to} \PYG{n}{Random} \PYG{n}{fullnode}
+    \PYG{n}{send} \PYG{n+nf}{message}\PYG{o}{(}\PYG{n}{GetAdProofsHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))} \PYG{n}{to} \PYG{n}{Random} \PYG{n}{fullnode}
+  \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

@@ -1,0 +1,15 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{if}\PYG{o}{(}\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{modifier}\PYG{o}{)} \PYG{o}{==} \PYG{n}{Success}\PYG{o}{(}\PYG{n}{ProgressInfo}\PYG{o}{))} \PYG{o}{\PYGZob{}}
+  \PYG{c+cm}{/* TODO if history now contains both ADProofs and BlockTransactions,}
+\PYG{c+cm}{  it should return ProgressInfo with both of them, otherwise}
+\PYG{c+cm}{  it should return empty ProgressInfo */}
+\PYG{k}{if}\PYG{o}{(}\PYG{n}{State}\PYG{o}{().}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{ProgressInfo}\PYG{o}{)} \PYG{o}{==} \PYG{n}{Success}\PYG{o}{((}\PYG{n}{newState}\PYG{o}{,} \PYG{n}{ADProofs}\PYG{o}{)))}
+\PYG{o}{\PYGZob{}}
+\PYG{k}{if}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}mode\PYGZdq{}}\PYG{o}{==}\PYG{l+s}{\PYGZdq{}pruned\PYGZhy{}full\PYGZdq{}}\PYG{o}{)} \PYG{n}{drop} \PYG{n}{BlockTransactions} \PYG{n}{and} \PYG{n}{ADProofs} \PYG{n}{older} \PYG{n}{than} \PYG{n}{BlocksToKeep}
+\PYG{o}{\PYGZcb{}}
+\PYG{k}{else} \PYG{o}{\PYGZob{}}
+         \PYG{c+cm}{/*Drop Header from history, because it\PYGZsq{}s transaction sequence is not valid*/}
+         \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{drop}\PYG{o}{(}\PYG{n}{BlockTransactions}\PYG{o}{.}\PYG{n+na}{headerId}\PYG{o}{)}
+     \PYG{o}{\PYGZcb{}}
+  \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

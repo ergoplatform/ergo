@@ -1,0 +1,10 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{State}\PYG{o}{.}\PYG{n+na}{applyChunk}\PYG{o}{(}\PYG{n}{UTXOSnapshotChunk}\PYG{o}{)} \PYG{n}{match} \PYG{o}{\PYGZob{}}
+     \PYG{k}{case} \PYG{n}{Success}\PYG{o}{(}\PYG{n}{Some}\PYG{o}{(}\PYG{n}{newMinimalState}\PYG{o}{))} \PYG{o}{=\PYGZgt{}} \PYG{n}{GOTO} \PYG{l+m+mi}{8}
+     \PYG{k}{case} \PYG{n}{Success}\PYG{o}{(}\PYG{n}{None}\PYG{o}{)} \PYG{o}{=\PYGZgt{}} \PYG{n}{stay} \PYG{n}{at} \PYG{l+m+mi}{7}
+     \PYG{c+cm}{/*we need more chunks to construct state.}
+\PYG{c+cm}{     TODO periodicaly request missed chunks*/}
+     \PYG{k}{case} \PYG{n}{Failure}\PYG{o}{(}\PYG{n}{e}\PYG{o}{)} \PYG{o}{=\PYGZgt{}} \PYG{o}{???}
+     \PYG{c+c1}{//UTXOSnapshotChunk or constcucted state roothash is invalid}
+  \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

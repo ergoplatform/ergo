@@ -1,6 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-   \PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{transactionIdsForHeader}\PYG{o}{)}
-  \PYG{n}{transactionIdsForHeader}\PYG{o}{.}\PYG{n+na}{filter}\PYG{o}{(}\PYG{n}{txId} \PYG{o}{=\PYGZgt{}} \PYG{o}{!}\PYG{n}{MemPool}\PYG{o}{.}\PYG{n+na}{contains}\PYG{o}{(}\PYG{n}{txId}\PYG{o}{)).}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{txId} \PYG{o}{=\PYGZgt{}}
-    \PYG{n}{request} \PYG{n}{transaction} \PYG{n}{with} \PYG{n}{txId}
-  \PYG{o}{\PYGZcb{}}
-\end{Verbatim}

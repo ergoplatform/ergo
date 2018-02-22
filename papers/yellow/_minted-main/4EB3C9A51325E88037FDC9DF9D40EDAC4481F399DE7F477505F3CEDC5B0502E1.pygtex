@@ -1,0 +1,34 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+ \PYG{k}{if}\PYG{o}{(}\PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader} \PYG{o}{==} \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{//Do nothing, State is already updated}
+  \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{k}{if}\PYG{o}{(}\PYG{n}{VerifyTransactions} \PYG{o}{==} \PYG{k+kc}{false}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+\PYG{c+cm}{/*Just update State rootshash to best header in history*/}
+    \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{setBestHeader}\PYG{o}{(}\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{)}
+  \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{o}{\PYGZob{}}
+\PYG{c+cm}{/*we have headers chain better then full block */}
+    \PYG{l+m+mf}{3.1}\PYG{o}{.}
+      \PYG{k}{assert}\PYG{o}{(}\PYG{n}{history} \PYG{n}{contains} \PYG{n}{header} \PYG{n}{chain} \PYG{n}{from} \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader} \PYG{n}{to} \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{bestHeaders}\PYG{o}{)}
+      \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{continuation}\PYG{o}{(}\PYG{n}{from} \PYG{o}{=} \PYG{n}{State}\PYG{o}{.}\PYG{n+na}{bestHeader}\PYG{o}{,} \PYG{n}{size} \PYG{o}{=} \PYG{o}{???).}\PYG{n+na}{get}\PYG{o}{.}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{header} \PYG{o}{=\PYGZgt{}}
+        \PYG{n}{sendToRandomFullNode}\PYG{o}{(}\PYG{n}{GetBlockTransactionsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))}
+        \PYG{k}{if}\PYG{o}{(}\PYG{n}{ADState} \PYG{o}{==} \PYG{k+kc}{true}\PYG{o}{)} \PYG{n}{sendToRandomFullNode}\PYG{o}{(}\PYG{n}{GetADProofsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))}
+      \PYG{o}{\PYGZcb{}}
+    \PYG{l+m+mf}{3.2}\PYG{o}{.} \PYG{n}{On} \PYG{n}{receiving} \PYG{n}{modifiers} \PYG{n}{ADProofs} \PYG{n}{or} \PYG{n}{BlockTransactions}
+      \PYG{c+cm}{/*TODO History should return non\PYGZhy{}empty ProgressInfo}
+\PYG{c+cm}{      only if it contains both ADProofs and BlockTransactions,}
+\PYG{c+cm}{      or it contains BlockTransactions and ADState==false*/}
+      \PYG{k}{if}\PYG{o}{(}\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{modifier}\PYG{o}{)} \PYG{o}{==} \PYG{n}{Success}\PYG{o}{(}\PYG{n}{ProgressInfo}\PYG{o}{))} \PYG{o}{\PYGZob{}}
+        \PYG{k}{if}\PYG{o}{(}\PYG{n}{State}\PYG{o}{().}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{ProgressInfo}\PYG{o}{)} \PYG{o}{==} \PYG{n}{Success}\PYG{o}{((}\PYG{n}{newState}\PYG{o}{,} \PYG{n}{ADProofs}\PYG{o}{)))} \PYG{o}{\PYGZob{}}
+          \PYG{k}{if}\PYG{o}{(}\PYG{n}{ADState}\PYG{o}{==}\PYG{k+kc}{false}\PYG{o}{)} \PYG{n}{ADProofs}\PYG{o}{.}\PYG{n+na}{foreach} \PYG{o}{(} \PYG{n}{ADProof} \PYG{o}{=\PYGZgt{}} \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{ADProof}\PYG{o}{))}
+          \PYG{k}{if}\PYG{o}{(}\PYG{n}{BlocksToKeep}\PYG{o}{\PYGZgt{}=}\PYG{l+m+mi}{0}\PYG{o}{)}
+          \PYG{c+cm}{/*remove BlockTransactions and ADProofs older than BlocksToKeep from history*/}
+        \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{o}{\PYGZob{}}
+      \PYG{c+cm}{/*Drop Header from history,}
+\PYG{c+cm}{      because it\PYGZsq{}s transaction sequence is not valid*/}
+          \PYG{n}{History}\PYG{o}{.}\PYG{n+na}{drop}\PYG{o}{(}\PYG{n}{modifier}\PYG{o}{.}\PYG{n+na}{headerId}\PYG{o}{)}
+        \PYG{o}{\PYGZcb{}}
+      \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{o}{\PYGZob{}}
+        \PYG{n}{blacklistPeer}
+      \PYG{o}{\PYGZcb{}}
+      \PYG{n}{GOTO} \PYG{l+m+mi}{3}
+    \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

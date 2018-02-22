@@ -1,0 +1,8 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+   \PYG{k}{if}\PYG{o}{(}\PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{transaction}\PYG{o}{).}\PYG{n+na}{isSuccess}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+    \PYG{k}{if}\PYG{o}{(!}\PYG{n}{isInitialBootstrapping}\PYG{o}{)} \PYG{n}{Broadcast} \PYG{n}{INV} \PYG{k}{for} \PYG{k}{this} \PYG{n}{transaction}
+    \PYG{n}{Mempool}\PYG{o}{.}\PYG{n+na}{getHeadersWithAllTransactions} \PYG{o}{\PYGZob{}} \PYG{n}{BlockTransactions} \PYG{o}{=\PYGZgt{}}
+       \PYG{n}{GOTO} \PYG{l+m+mi}{7}
+    \PYG{o}{\PYGZcb{}}
+ \PYG{o}{\PYGZcb{}}
+\end{Verbatim}

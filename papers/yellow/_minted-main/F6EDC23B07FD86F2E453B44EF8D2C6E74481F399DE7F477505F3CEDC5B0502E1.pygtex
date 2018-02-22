@@ -1,8 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{k}{if}\PYG{o}{(}\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{apply}\PYG{o}{(}\PYG{n}{header}\PYG{o}{).}\PYG{n+na}{isSuccess}\PYG{o}{)} \PYG{o}{\PYGZob{}}
-    \PYG{k}{if}\PYG{o}{(!}\PYG{n}{isInitialBootstrapping}\PYG{o}{)} \PYG{n}{Broadcast} \PYG{n}{INV} \PYG{k}{for} \PYG{k}{this} \PYG{n}{header}
-    \PYG{n}{Request} \PYG{n}{transaction} \PYG{n}{ids} \PYG{n}{from} \PYG{k}{this} \PYG{n}{block}
- \PYG{o}{\PYGZcb{}} \PYG{k}{else} \PYG{o}{\PYGZob{}}
-    \PYG{n}{blacklist} \PYG{n}{peer}
- \PYG{o}{\PYGZcb{}}
-\end{Verbatim}

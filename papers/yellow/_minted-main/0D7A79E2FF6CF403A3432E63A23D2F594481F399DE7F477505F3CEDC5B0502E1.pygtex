@@ -1,5 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n}{History}\PYG{o}{.}\PYG{n+na}{headersStartingFromId}\PYG{o}{(}\PYG{n}{State}\PYG{o}{.}\PYG{n+na}{headerId}\PYG{o}{).}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{header} \PYG{o}{=\PYGZgt{}}
-    \PYG{n}{send} \PYG{n+nf}{message}\PYG{o}{(}\PYG{n}{GetBlockTransactionsForHeader}\PYG{o}{(}\PYG{n}{header}\PYG{o}{))} \PYG{n}{to} \PYG{n}{Random} \PYG{n}{fullnode}
-  \PYG{o}{\PYGZcb{}}
-\end{Verbatim}

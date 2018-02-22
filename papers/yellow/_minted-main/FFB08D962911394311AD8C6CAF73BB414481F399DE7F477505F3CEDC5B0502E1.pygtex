@@ -1,5 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n}{UTXOSnapshotManifest}\PYG{o}{.}\PYG{n+na}{chunks}\PYG{o}{.}\PYG{n+na}{foreach} \PYG{o}{\PYGZob{}} \PYG{n}{chunk} \PYG{o}{=\PYGZgt{}}
-    \PYG{n}{request} \PYG{n}{chunk} \PYG{n}{from} \PYG{n+nf}{sender}\PYG{o}{()} \PYG{c+c1}{//Or from random fullnode}
-  \PYG{o}{\PYGZcb{}}
-\end{Verbatim}

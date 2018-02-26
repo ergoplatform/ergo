@@ -3,14 +3,14 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 
 import scala.util.Random
 
 class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = true, ADState = false, PoPoWBootstrap = false, BlocksToKeep)
+    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
   property("missedModifiersForFullChain") {
     var history = genHistory()

@@ -8,6 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
 import scorex.core.network.peer.PeerManager
@@ -28,9 +29,9 @@ case class InfoRoute(readersHolder: ActorRef,
 
   private def getConnectedPeers: Future[Int] = (peerManager ? PeerManager.GetConnectedPeers).mapTo[Seq[Handshake]].map(_.size)
 
-  private def getStateType: String = if (ergoSettings.nodeSettings.ADState) "digest" else "utxo"
+  private def stateType: StateType = ergoSettings.nodeSettings.stateType
 
-  private def getNodeName: String = ergoSettings.scorexSettings.network.nodeName
+  private def nodeName: String = ergoSettings.scorexSettings.network.nodeName
 
   private def getMinerInfo: Future[MiningStatusResponse] = (miner ? MiningStatusRequest).mapTo[MiningStatusResponse]
 
@@ -43,7 +44,7 @@ case class InfoRoute(readersHolder: ActorRef,
       connectedPeers <- connectedPeersF
       readers <- readersF
     } yield {
-      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers, readers, getStateType, getNodeName)
+      InfoRoute.makeInfoJson(nodeId, minerInfo, connectedPeers, readers, stateType, nodeName)
     }).okJson()
   }
 }
@@ -53,7 +54,7 @@ object InfoRoute {
                    minerInfo: MiningStatusResponse,
                    connectedPeersLength: Int,
                    readers: Readers,
-                   stateType: String,
+                   stateType: StateType,
                    nodeName: String): Json = {
     val stateVersion = readers.s.map(_.version).map(Algos.encode)
     val bestHeader = readers.h.flatMap(_.bestHeaderOpt)

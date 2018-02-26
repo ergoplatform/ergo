@@ -125,7 +125,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     * @return proof for specified transactions and new state digest
     */
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
-    log.trace(s"Going to create proof for transactions $txs")
+    log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)

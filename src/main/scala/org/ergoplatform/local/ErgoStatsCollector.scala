@@ -1,16 +1,22 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import org.ergoplatform.Version
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{LocalInterface, ModifierId}
 
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
-class ErgoStatsCollector(override val viewHolderRef: ActorRef)
+class ErgoStatsCollector(override val viewHolderRef: ActorRef,
+                         settings: ErgoSettings)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
+
+  var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
+    settings.nodeSettings.stateType, "null", isMining = false, "null", None, None)
 
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
 
@@ -36,11 +42,11 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef)
 }
 
 object ErgoStatsCollectorRef {
-  def props(viewHolderRef: ActorRef): Props = Props(new ErgoStatsCollector(viewHolderRef))
+  def props(viewHolderRef: ActorRef, settings: ErgoSettings): Props = Props(new ErgoStatsCollector(viewHolderRef, settings))
 
-  def apply(viewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef))
+  def apply(viewHolderRef: ActorRef, settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef, settings))
 
-  def apply(name: String, viewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef), name)
+  def apply(name: String, viewHolderRef: ActorRef, settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef, settings), name)
 }

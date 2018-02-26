@@ -12,12 +12,13 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.StateType
 import scorex.core.LocalInterface.LocallyGeneratedTransaction
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
-case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, restApiSettings: RESTApiSettings, digest: Boolean)
+case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, restApiSettings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {

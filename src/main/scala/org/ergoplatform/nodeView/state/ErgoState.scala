@@ -4,11 +4,10 @@ import java.io.File
 
 import akka.actor.ActorRef
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
-import scorex.core.transaction.state.{BoxStateChanges, Insertion, MinimalState, Removal}
+import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 
@@ -82,12 +81,10 @@ object ErgoState extends ScorexLogging {
     val dir = stateDir(settings)
     dir.mkdirs()
 
-    if (settings.nodeSettings.ADState) {
-      DigestState.create(None, None, dir, settings.nodeSettings)
-    } else if (dir.listFiles().isEmpty) {
-      ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
-    } else {
-      UtxoState.create(dir, nodeViewHolderRef)
+    settings.nodeSettings.stateType match {
+      case StateType.Digest => DigestState.create(None, None, dir, settings.nodeSettings)
+      case StateType.Utxo  if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
+      case _ => ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
     }
   }
 }

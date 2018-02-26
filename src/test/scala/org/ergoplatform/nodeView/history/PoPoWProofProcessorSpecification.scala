@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.NoShrink
 import org.scalacheck.Gen
@@ -14,7 +15,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   val MaxK = 11
 
   private def genHistory() =
-    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   println("1")
@@ -142,7 +143,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m, k).get
 
-      var newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = true, 0)
+      var newHistory = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = true, 0)
       newHistory.applicable(proof) shouldBe true
       newHistory = newHistory.append(proof).get._1
       newHistory.bestHeaderOpt.isDefined shouldBe true
@@ -152,7 +153,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   property("non-PoPoW history should ignore PoPoWProof proofs") {
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m, k).get
-      val newHistory = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, 0)
+      val newHistory = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, 0)
       newHistory.applicable(proof) shouldBe false
     }
   }

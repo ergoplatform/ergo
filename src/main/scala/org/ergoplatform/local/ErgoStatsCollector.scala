@@ -1,15 +1,15 @@
 package org.ergoplatform.local
 
-import akka.actor.ActorRef
-import org.ergoplatform.local.ErgoMiner.StartMining
+import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.{LocalInterface, ModifierId, VersionTag}
+import scorex.core.{LocalInterface, ModifierId}
 
-
-class ErgoLocalInterface (override val viewHolderRef: ActorRef)
+/**
+  * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
+  */
+class ErgoStatsCollector(override val viewHolderRef: ActorRef)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
@@ -33,4 +33,14 @@ class ErgoLocalInterface (override val viewHolderRef: ActorRef)
   override protected def onNewSurface(newSurface: Seq[ModifierId]): Unit = {}
 
   override protected def onRollbackFailed(): Unit = {}
+}
+
+object ErgoStatsCollectorRef {
+  def props(viewHolderRef: ActorRef): Props = Props(new ErgoStatsCollector(viewHolderRef))
+
+  def apply(viewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef))
+
+  def apply(name: String, viewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef), name)
 }

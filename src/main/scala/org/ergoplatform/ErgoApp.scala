@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
+import org.ergoplatform.local.{ErgoMiner, ErgoStatsCollector, ErgoStatsCollectorRef, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -49,9 +49,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  override val localInterface: ActorRef = actorSystem.actorOf(
-    Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
-  )
+  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef)
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,

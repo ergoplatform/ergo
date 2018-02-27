@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.{ChangedHistory, ChangedMempool, Subscribe}
 import scorex.core.transaction.state.StateReader
+import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{LocalInterface, ModifierId, NodeViewHolder}
 import scorex.crypto.encode.Base58
 
@@ -20,7 +21,8 @@ import scorex.crypto.encode.Base58
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
 class ErgoStatsCollector(override val viewHolderRef: ActorRef,
-                         settings: ErgoSettings)
+                         settings: ErgoSettings,
+                         timeProvider: NetworkTimeProvider)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
 
   override def preStart(): Unit = {
@@ -37,7 +39,8 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
   // TODO peersCount.
   // TODO get actual votes and isMining from miner
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
-    settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None)
+    settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None,
+    timeProvider.time())
 
   override def receive: Receive = getNodeInfo orElse onMempoolChanged orElse onHistoryChanged orElse super.receive
 
@@ -103,7 +106,8 @@ object ErgoStatsCollector {
                       isMining: Boolean,
                       votes: String,
                       bestHeaderOpt: Option[Header],
-                      bestFullBlockOpt: Option[ErgoFullBlock]) {
+                      bestFullBlockOpt: Option[ErgoFullBlock],
+                      launchTime: Long) {
     lazy val json = Map(
       "name" -> nodeName.asJson,
       "appVersion" -> Version.VersionString.asJson,
@@ -119,18 +123,22 @@ object ErgoStatsCollector {
       "stateVersion" -> stateVersion.asJson,
       "isMining" -> isMining.asJson,
       "votes" -> votes.asJson,
-      "peersCount" -> peersCount.asJson
+      "peersCount" -> peersCount.asJson,
+      "launchTime" -> launchTime.asJson
     ).asJson
   }
 
 }
 
 object ErgoStatsCollectorRef {
-  def props(viewHolderRef: ActorRef, settings: ErgoSettings): Props = Props(new ErgoStatsCollector(viewHolderRef, settings))
+  def props(viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoStatsCollector(viewHolderRef, settings, timeProvider))
 
-  def apply(viewHolderRef: ActorRef, settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, settings))
+  def apply(viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+           (implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef, settings, timeProvider))
 
-  def apply(name: String, viewHolderRef: ActorRef, settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, settings), name)
+  def apply(name: String, viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+           (implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(viewHolderRef, settings, timeProvider), name)
 }

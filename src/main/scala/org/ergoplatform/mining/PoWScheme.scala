@@ -145,7 +145,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
         case headerWithFoundSolution: Some[Header] =>
           headerWithFoundSolution
         case None =>
-          if (nonce + 1 == finishingNonce) None else generateHeader(nonce + 1)
+          if (nonce + 1 >= finishingNonce) None else generateHeader(nonce + 1)
       }
     }
 

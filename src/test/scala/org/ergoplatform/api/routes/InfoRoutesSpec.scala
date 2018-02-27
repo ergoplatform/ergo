@@ -4,6 +4,7 @@ import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
+import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoStatsCollector.NodeInfo
 import org.ergoplatform.local.ErgoStatsCollectorRef
@@ -24,19 +25,20 @@ class InfoRoutesSpec extends FlatSpec
   }
 
   val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewRef, settings, fakeTimeProvider)
-  val route = InfoRoute(localInterface, settings.scorexSettings.restApi).route
+  val route = InfoRoute(localInterface, settings.scorexSettings.restApi, fakeTimeProvider).route
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
   val nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
     settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None,
     fakeTimeProvider.time())
+  val expectedJson = nodeInfo.json.deepMerge(Map("currentTime" -> fakeTimeProvider.time().asJson).asJson)
 
   it should "return info" in {
 
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val stateType = settings.nodeSettings.stateType
-      nodeInfo.json.spaces2 shouldEqual responseAs[String]
+      expectedJson.spaces2 shouldEqual responseAs[String]
     }
   }
 }

@@ -44,51 +44,58 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
   }
 
-  override def receive: Receive = {
-    case SemanticallySuccessfulModifier(mod) =>
-      if (isMining) {
-        mod match {
-          case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-          case _ =>
-        }
-      } else if (ergoSettings.nodeSettings.mining) {
-        mod match {
-          case f: ErgoFullBlock if f.header.timestamp >= startTime =>
-            self ! StartMining
-
-          case _ =>
-        }
-      }
-
-    case StartMining =>
-      candidateOpt match {
-        case Some(candidate) if !isMining && ergoSettings.nodeSettings.mining =>
-          log.info("Starting Mining")
-          miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidate)(context))
-          isMining = true
-        case None =>
-          context.system.scheduler.scheduleOnce(5.second) {
-            produceCandidate(readersHolderRef, ergoSettings, nodeId).onComplete { candOptTry =>
-              candOptTry.toOption.flatten.foreach(c => self ! c)
-              self ! StartMining
-            }
-          }
-        case _ =>
-      }
-
-    case c: CandidateBlock =>
-      val oldHeight = candidateOpt.flatMap(_.parentOpt).map(_.height).getOrElse(0)
-      val newHeight = c.parentOpt.map(_.height).getOrElse(0)
-      log.debug(s"New candidate $c. Height change $oldHeight -> $newHeight")
-      candidateOpt = Some(c)
-      miningThreads.foreach(t => t ! c)
-
-    case MiningStatusRequest =>
-      sender ! MiningStatusResponse(isMining, votes, candidateOpt)
-
+  private def unknownMessage: Receive = {
     case m =>
       log.warn(s"Unexpected message $m")
+  }
+
+  private def miningStatus: Receive = {
+    case MiningStatusRequest =>
+      sender ! MiningStatusResponse(isMining, votes, candidateOpt)
+  }
+
+  private def startMining: Receive = {
+    case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
+      log.info("Starting Mining")
+      miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get)(context))
+      isMining = true
+    case StartMining if candidateOpt.isEmpty =>
+      produceCandidate(readersHolderRef, ergoSettings, nodeId).pipeTo(self)
+      context.system.scheduler.scheduleOnce(5.second) {
+        self ! StartMining
+      }
+  }
+
+  private def receiveSemanticallySuccessfulModifier: Receive = {
+    case SemanticallySuccessfulModifier(mod) if isMining => mod match {
+        case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
+          produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
+        case _ =>
+    }
+    case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
+        case f: ErgoFullBlock if f.header.timestamp >= startTime =>
+          self ! StartMining
+        case _ =>
+      }
+  }
+
+  private def receiverCandidateBlock: Receive = {
+    case c: CandidateBlock =>
+      procCandidateBlock(c)
+    case cOpt: Option[CandidateBlock] if cOpt.nonEmpty =>
+      procCandidateBlock(cOpt.get)
+  }
+
+  override def receive: Receive = receiveSemanticallySuccessfulModifier orElse
+    receiverCandidateBlock orElse
+    miningStatus orElse
+    startMining orElse
+    unknownMessage
+
+  private def procCandidateBlock(c: CandidateBlock): Unit = {
+    log.debug(s"Got candidate block $c")
+    candidateOpt = Some(c)
+    miningThreads.foreach(_ ! c)
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
@@ -97,6 +104,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                        nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+      log.info("Start candidate creation")
       val history = v.history
       val state = v.state
       val pool = v.pool
@@ -111,20 +119,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
           //only transactions valid from against the current utxo state we take from the mem pool
           //todo: move magic number to testnet settings
-          val txs = coinbase +: state.filterValid(pool.take(10).toSeq)
+          val txs = coinbase +: state.filterValid(pool.unconfirmed.values.toSeq)
 
           //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
           //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
           //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
           // the pool
-          val txsNoConflict = txs.foldLeft((Seq.empty[AnyoneCanSpendTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
-            val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
-            if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-              (s :+ tx) -> (keys ++ bxsBaw)
-            } else {
-              (s, keys)
-            }
-          }._1
+          val txsNoConflict = fixTxsConflicts(txs)
 
           val (adProof, adDigest) = state.proofsForTransactions(txsNoConflict).get
 
@@ -137,7 +138,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           candidate
 
         }.recoverWith { case thr =>
-          log.warn("Error when trying to generate a block: ", thr)
+          log.warn("Error when trying to produce a candidate block: ", thr)
           Failure(thr)
         }.toOption
       } else {
@@ -146,6 +147,16 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }).mapTo[Option[CandidateBlock]]
   }
+
+  private def fixTxsConflicts(txs: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = txs
+    .foldLeft((Seq.empty[AnyoneCanSpendTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
+      val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+        (s :+ tx) -> (keys ++ bxsBaw)
+      } else {
+        (s, keys)
+      }
+    }._1
 }
 
 

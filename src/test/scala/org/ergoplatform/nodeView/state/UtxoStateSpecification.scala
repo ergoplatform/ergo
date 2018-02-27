@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.nodeView.WrappedUtxoState
@@ -27,12 +27,16 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("fromBoxHolder  + proofsForTransactions") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      val boxes = bh.take(1000)._1
-      val tx = AnyoneCanSpendTransaction(boxes.map(_.nonce).toIndexedSeq, IndexedSeq(boxes.map(_.value).sum))
-      us.proofsForTransactions(Seq(tx)).isSuccess shouldBe true
+  property("proofsForTransactions") {
+    var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    forAll(invalidHeaderGen) { header =>
+      val boxes = us.anyoneCanSpendBoxesAtHeight(header.height)
+      val txs = Seq(AnyoneCanSpendTransaction(boxes.map(_.nonce).toIndexedSeq, IndexedSeq(boxes.map(_.value).sum)))
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      us = us.applyModifier(fb).get
     }
   }
 

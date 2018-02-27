@@ -16,7 +16,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   implicit val hf = new Blake2b256Unsafe
 
   val store: Store
-  private lazy val np = NodeParameters(keySize = 32, valueSize = ErgoState.BoxSize, labelSize = 32)
+  private lazy val np = NodeParameters(keySize = 32, valueSize = Some(ErgoState.BoxSize), labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] = {

@@ -39,7 +39,7 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
     settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None)
 
-  override def receive: Receive = getNodeInfo orElse onMempoolChanged orElse super.receive
+  override def receive: Receive = getNodeInfo orElse onMempoolChanged orElse onHistoryChanged orElse super.receive
 
   private def getNodeInfo: Receive = {
     case GetNodeInfo => sender ! nodeInfo

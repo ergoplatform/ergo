@@ -127,7 +127,7 @@ object Equihash {
     val collisionLength = n / (k + 1)
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
-    log.debug("Generating first list")
+    log.trace("Generating first list")
     //  1) Generate first list
     val tmpHash = new Array[Byte](digest.getDigestSize)
     var X = for {i <- (0 until Math.pow(2, collisionLength + 1).toInt).toVector} yield {
@@ -145,13 +145,13 @@ object Equihash {
 
     //  3) Repeat step 2 until 2n/(k+1) bits remain
     for (i <- 1 until k) {
-      log.debug(s"Round $i")
+      log.trace(s"Round $i")
 
       //  2a) Sort the list
-      log.debug("- Sorting list")
+      log.trace("- Sorting list")
       X = X.sortBy(_._1.toIterable)
 
-      log.debug("- Finding collisions")
+      log.trace("- Finding collisions")
       var Xc = Vector.empty[(Array[Byte], Seq[Int])]
       while (X.nonEmpty) {
         //  2b) Find next set of unordered pairs with collisions on first n/(k+1) bits
@@ -184,12 +184,12 @@ object Equihash {
     }
 
     //  k+1) Find a collision on last 2n(k+1) bits
-    log.debug("Final round:")
-    log.debug("- Sorting list")
+    log.trace("Final round:")
+    log.trace("- Sorting list")
 
     X = X.sortBy(_._1.toIterable)
 
-    log.debug("- Finding collisions")
+    log.trace("- Finding collisions")
 
     var solns = Vector.empty[Seq[Int]]
 

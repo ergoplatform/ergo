@@ -70,10 +70,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case SemanticallySuccessfulModifier(mod) if isMining => mod match {
         case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
           produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-      }
+        case _ =>
+    }
     case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
         case f: ErgoFullBlock if f.header.timestamp >= startTime =>
           self ! StartMining
+        case _ =>
       }
   }
 
@@ -102,6 +104,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                        nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
     implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
     (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+      log.info("Start candidate creation")
       val history = v.history
       val state = v.state
       val pool = v.pool
@@ -135,7 +138,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           candidate
 
         }.recoverWith { case thr =>
-          log.warn("Error when trying to generate a block: ", thr)
+          log.warn("Error when trying to produce a candidate block: ", thr)
           Failure(thr)
         }.toOption
       } else {

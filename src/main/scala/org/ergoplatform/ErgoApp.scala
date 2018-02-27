@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
+import org.ergoplatform.local.{ErgoMiner, ErgoStatsCollector, ErgoStatsCollectorRef, TransactionGenerator}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -40,18 +40,16 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
+  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, ergoSettings, timeProvider)
+
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
-    InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings, nodeId),
+    InfoRoute(localInterface, settings.restApi, timeProvider),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-
-  override val localInterface: ActorRef = actorSystem.actorOf(
-    Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
-  )
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,

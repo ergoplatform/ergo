@@ -40,16 +40,16 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
+  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, ergoSettings)
+
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
-    InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings, nodeId),
+    InfoRoute(localInterface, settings.restApi),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-
-  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef)
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,

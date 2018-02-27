@@ -70,10 +70,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case SemanticallySuccessfulModifier(mod) if isMining => mod match {
         case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
           produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-      }
+        case _ =>
+    }
     case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
         case f: ErgoFullBlock if f.header.timestamp >= startTime =>
           self ! StartMining
+        case _ =>
       }
   }
 

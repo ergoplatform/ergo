@@ -188,8 +188,6 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object ProduceCandidate
-
   case object MiningStatusRequest
 
   case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {

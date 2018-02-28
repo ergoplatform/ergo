@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 
 object CoinEmissionPrinter extends App {
 
-  val emissionCurve = CoinsEmission2
+  val emissionCurve = CoinsEmission3
 
   // Number of coins issued after slow start period
   lazy val SlowStartFinalSupply: Long = (0 until emissionCurve.SlowStartPeriod)
@@ -21,6 +21,8 @@ object CoinEmissionPrinter extends App {
   println(s"BlocksPerYear = ${emissionCurve.BlocksPerYear}")
   println(s"SlowStartPeriod = ${emissionCurve.SlowStartPeriod}")
   println(s"SlowStartFinalSupply = ${SlowStartFinalSupply / emissionCurve.CoinsInOneErgo}")
+  println(s"SlowStartFinalRate = ${emissionCurve.emissionAtHeight(emissionCurve.SlowStartPeriod) / emissionCurve.CoinsInOneErgo}")
+  println(s"EndRate = ${emissionCurve.emissionAtHeight(emissionCurve.BlocksTotal).toDouble / emissionCurve.CoinsInOneErgo}")
   println("First year supply")
   println(25000000)
   println(FirstYearSupply / emissionCurve.CoinsInOneErgo)

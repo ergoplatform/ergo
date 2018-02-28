@@ -19,7 +19,7 @@ class TransactionApiRouteSpec extends FlatSpec
 
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, false, 10 seconds)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10 seconds)
   val prefix = "/transactions"
   val route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 

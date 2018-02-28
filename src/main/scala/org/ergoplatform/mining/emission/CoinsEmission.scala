@@ -26,7 +26,7 @@ object CoinsEmission {
   // 1 Month slow start period
   val SlowStartPeriod: Int = 30 * 24 * BlocksPerHour
 
-  // Number of blocks issued at the end of slow start period
+  // Number of coins isseud per block at the end of slow start period
   lazy val SlowStartFinalRate: Long = slowStartFunction(SlowStartPeriod)
 
   // 99999773 coins total supply

@@ -105,6 +105,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props() = Props(new NetworkControllerStub)
   }
 
+  class PeerManagerStub extends Actor {
+    def receive = { case _ => println("hey") }
+  }
+
+  object PeerManagerStub {
+    def props() = Props(new PeerManagerStub)
+  }
+
 
   class ReadersStub extends Actor {
     def receive = {
@@ -120,6 +128,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val readersRef = system.actorOf(ReadersStub.props())
   lazy val minerRef = system.actorOf(MinerStub.props())
+  lazy val peerManagerRef = system.actorOf(PeerManagerStub.props())
   lazy val pmRef = system.actorOf(PeersManagerStub.props())
   lazy val nodeViewRef = system.actorOf(NodeViewStub.props())
   lazy val networkControllerRef = system.actorOf(NetworkControllerStub.props())

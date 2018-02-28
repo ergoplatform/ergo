@@ -12,10 +12,15 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.{ChangedHistory, ChangedMempool, Subscribe}
+import scorex.core.network.Handshake
+import scorex.core.network.peer.PeerManager
 import scorex.core.transaction.state.StateReader
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{LocalInterface, ModifierId, NodeViewHolder}
 import scorex.crypto.encode.Base58
+
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
@@ -33,17 +38,18 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
       NodeViewHolder.EventType.MempoolChanged
     )
     viewHolderRef ! Subscribe(events)
+    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! PeerManager.GetConnectedPeers)
   }
 
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
 
-  // TODO peersCount.
   // TODO get actual votes and isMining from miner
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
     settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None,
     timeProvider.time())
 
-  override def receive: Receive = getNodeInfo orElse onMempoolChanged orElse onHistoryChanged orElse super.receive
+  override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
+    onHistoryChanged orElse super.receive
 
   private def getNodeInfo: Receive = {
     case GetNodeInfo => sender ! nodeInfo
@@ -58,6 +64,11 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
     case ChangedHistory(h) if h.isInstanceOf[ErgoHistory] =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.asInstanceOf[ErgoHistory].bestFullBlockOpt,
         bestHeaderOpt = h.asInstanceOf[ErgoHistory].bestHeaderOpt)
+  }
+
+  private def onConnectedPeers: Receive = {
+    case peers: Seq[Handshake@unchecked] if peers.headOption.forall(_.isInstanceOf[Handshake]) =>
+      nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 
   override protected def onChangedState(stateReader: StateReader): Unit = stateReader match {

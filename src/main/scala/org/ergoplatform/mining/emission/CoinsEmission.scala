@@ -2,7 +2,7 @@ package org.ergoplatform.mining.emission
 
 /**
   * Ergo coin emission curve, proposal #1.
-  * Goals:
+  * Properties:
   * block every minute
   * ~25M coins after the first year
   * ~100M coins total
@@ -29,9 +29,6 @@ object CoinsEmission {
   // Number of blocks issued at the end of slow start period
   lazy val SlowStartFinalRate: Long = slowStartFunction(SlowStartPeriod)
 
-  // Number of coins issued after slow start period
-  lazy val SlowStartFinalSupply: Long = (0 until SlowStartPeriod).map(h => emissionAtHeight(h)).sum
-
   // 99999773 coins total supply
   lazy val TotalSupply: Long = FirstYearSupply + (BlocksPerYear until BlocksTotal).map(h => emissionAtHeight(h)).sum
 
@@ -47,11 +44,6 @@ object CoinsEmission {
 
   def slowStartFunction(h: Long): Long = h * h * 250 / 100 + (h + 1) * 2473
 
-
-  def main(args: Array[String]): Unit ={
-    println("First year supply: " + FirstYearSupply)
-    println("total supply: " + TotalSupply)
-  }
 }
 
 

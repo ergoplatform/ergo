@@ -28,10 +28,13 @@ object CoinEmissionPrinter extends App {
   println(100000000)
   println(TotalSupply / emissionCurve.CoinsInOneErgo)
 
+  println("================")
+  println("age (years), total coins, current rate")
+
   @tailrec
   def loop(height: Int, supply: Long): Unit = if (height < emissionCurve.BlocksTotal) {
     val currentSupply = emissionCurve.emissionAtHeight(height)
-    if (height % (emissionCurve.BlocksPerHour * 60) == 0) println(s"$height, ${supply / emissionCurve.CoinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.CoinsInOneErgo}")
+    if (height % (emissionCurve.BlocksPerHour * 60) == 0) println(s"${height.toDouble / emissionCurve.BlocksPerYear}, ${supply / emissionCurve.CoinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.CoinsInOneErgo}")
     loop(height + 1, supply + currentSupply)
   }
 

@@ -24,7 +24,7 @@ class InfoRoutesSpec extends FlatSpec
     override def time(): Time = 123
   }
 
-  val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewRef, settings, fakeTimeProvider)
+  val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewRef, peerManagerRef, settings, fakeTimeProvider)
   val route = InfoRoute(localInterface, settings.scorexSettings.restApi, fakeTimeProvider).route
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))

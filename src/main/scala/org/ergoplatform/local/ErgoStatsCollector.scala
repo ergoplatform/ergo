@@ -21,6 +21,7 @@ import scorex.crypto.encode.Base58
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
 class ErgoStatsCollector(override val viewHolderRef: ActorRef,
+                         peerManager: ActorRef,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
   extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
@@ -131,14 +132,21 @@ object ErgoStatsCollector {
 }
 
 object ErgoStatsCollectorRef {
-  def props(viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoStatsCollector(viewHolderRef, settings, timeProvider))
+  def props(viewHolderRef: ActorRef,
+            peerManager: ActorRef,
+            settings: ErgoSettings,
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoStatsCollector(viewHolderRef, peerManager, settings, timeProvider))
 
-  def apply(viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  def apply(viewHolderRef: ActorRef, peerManager: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, settings, timeProvider))
+    system.actorOf(props(viewHolderRef, peerManager, settings, timeProvider))
 
-  def apply(name: String, viewHolderRef: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  def apply(name: String,
+            viewHolderRef: ActorRef,
+            peerManager: ActorRef,
+            settings: ErgoSettings,
+            timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, settings, timeProvider), name)
+    system.actorOf(props(viewHolderRef, peerManager, settings, timeProvider), name)
 }

@@ -33,7 +33,7 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
 
   override def preStart(): Unit = {
     val events = Seq(
-      NodeViewHolder.EventType.StateChanged,
+      NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier,
       NodeViewHolder.EventType.HistoryChanged,
       NodeViewHolder.EventType.MempoolChanged
     )
@@ -71,15 +71,6 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 
-  override protected def onChangedState(stateReader: StateReader): Unit = stateReader match {
-    case r: ErgoStateReader =>
-      nodeInfo = nodeInfo.copy(stateRoot = Algos.encode(r.asInstanceOf[ErgoStateReader].rootHash),
-        stateVersion = Algos.encode(r.version))
-    case _ =>
-      log.warn(s"Got state reader of incorrect type $stateReader")
-  }
-
-
   //TODO move default empty implementations to Scorex
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
 
@@ -95,7 +86,11 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
 
   override protected def onSyntacticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 
-  override protected def onSemanticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = {}
+  override protected def onSemanticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = mod match {
+    case fb: ErgoFullBlock =>
+      nodeInfo = nodeInfo.copy(stateRoot = Algos.encode(fb.header.stateRoot), stateVersion = fb.encodedId)
+    case _ =>
+  }
 
   override protected def onSemanticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 

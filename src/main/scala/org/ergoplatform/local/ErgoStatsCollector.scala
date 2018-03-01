@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import io.circe.JsonNumber
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
@@ -123,7 +124,7 @@ object ErgoStatsCollector {
       "bestHeaderId" -> bestHeaderOpt.map(_.encodedId).asJson,
       "bestFullHeaderId" -> bestFullBlockOpt.map(_.header.encodedId).asJson,
       "previousFullHeaderId" -> bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).asJson,
-      "difficulty" -> bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).asJson,
+      "difficulty" -> bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
       "unconfirmedCount" -> unconfirmedCount.asJson,
       "stateRoot" -> stateRoot.asJson,
       "stateType" -> stateType.stateTypeName.asJson,

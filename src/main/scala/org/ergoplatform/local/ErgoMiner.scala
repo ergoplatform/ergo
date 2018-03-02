@@ -58,18 +58,16 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       log.info("Starting Mining")
       miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get)(context))
+      miningThreads.foreach(_ ! candidateOpt.get)
       isMining = true
     case StartMining if candidateOpt.isEmpty =>
-      produceCandidate(readersHolderRef, ergoSettings, nodeId).pipeTo(self)
-      context.system.scheduler.scheduleOnce(5.second) {
-        self ! StartMining
-      }
+      produceCandidate(readersHolderRef, ergoSettings, nodeId)
   }
 
   private def receiveSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod) if isMining => mod match {
         case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-          produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
+          produceCandidate(readersHolderRef, ergoSettings, nodeId)
         case _ =>
     }
     case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
@@ -95,15 +93,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def procCandidateBlock(c: CandidateBlock): Unit = {
     log.debug(s"Got candidate block $c")
     candidateOpt = Some(c)
+    if(!isMining) self ! StartMining
     miningThreads.foreach(_ ! c)
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
   def produceCandidate(readersHolderRef: ActorRef,
                        ergoSettings: ErgoSettings,
-                       nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
-    implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
-    (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+                       nodeId: Array[Byte]): Unit = {
+    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       log.info("Start candidate creation")
       val history = v.history
       val state = v.state
@@ -145,7 +143,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         //Do not try to mine genesis block when offlineGeneration = false
         None
       }
-    }).mapTo[Option[CandidateBlock]]
+    }
   }
 
   private def fixTxsConflicts(txs: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = txs

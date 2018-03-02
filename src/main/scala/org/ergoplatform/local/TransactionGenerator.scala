@@ -56,6 +56,15 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
 }
 
 object TransactionGenerator {
+
+  case object StartGeneration
+
+  case object FetchBoxes
+
+  case object StopGeneration
+}
+
+object TransactionGeneratorRef {
   def props(viewHolder: ActorRef, settings: TestingSettings): Props =
     Props(new TransactionGenerator(viewHolder, settings))
 
@@ -66,10 +75,4 @@ object TransactionGenerator {
   def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolder, settings), name)
-
-  case object StartGeneration
-
-  case object FetchBoxes
-
-  case object StopGeneration
 }

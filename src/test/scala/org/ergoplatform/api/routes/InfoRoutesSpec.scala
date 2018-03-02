@@ -28,8 +28,8 @@ class InfoRoutesSpec extends FlatSpec
   val route = InfoRoute(localInterface, settings.scorexSettings.restApi, fakeTimeProvider).route
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
-  val nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
-    settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None,
+  val nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None,
     fakeTimeProvider.time())
   val expectedJson = nodeInfo.json.deepMerge(Map("currentTime" -> fakeTimeProvider.time().asJson).asJson)
 

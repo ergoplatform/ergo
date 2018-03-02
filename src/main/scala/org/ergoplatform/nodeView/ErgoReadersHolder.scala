@@ -55,6 +55,16 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 }
 
 object ErgoReadersHolder {
+
+  case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
+
+  case object GetReaders
+
+  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
+
+}
+
+object ErgoReadersHolderRef {
   def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
 
   def apply(viewHolderRef: ActorRef)
@@ -65,11 +75,5 @@ object ErgoReadersHolder {
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolderRef), name)
-
-  case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
-
-  case object GetReaders
-
-  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
 
 }

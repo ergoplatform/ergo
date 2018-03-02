@@ -1,8 +1,6 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import akka.pattern._
-import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -19,9 +17,6 @@ import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -58,25 +53,23 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       log.info("Starting Mining")
       miningThreads = Seq(ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get)(context))
+      miningThreads.foreach(_ ! candidateOpt.get)
       isMining = true
     case StartMining if candidateOpt.isEmpty =>
-      produceCandidate(readersHolderRef, ergoSettings, nodeId).pipeTo(self)
-      context.system.scheduler.scheduleOnce(5.second) {
-        self ! StartMining
-      }
+      produceCandidate(readersHolderRef, ergoSettings, nodeId)
   }
 
   private def receiveSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod) if isMining => mod match {
-        case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-          produceCandidate(readersHolderRef, ergoSettings, nodeId).foreach(_.foreach(c => self ! c))
-        case _ =>
+      case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
+        produceCandidate(readersHolderRef, ergoSettings, nodeId)
+      case _ =>
     }
     case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
-        case f: ErgoFullBlock if f.header.timestamp >= startTime =>
-          self ! StartMining
-        case _ =>
-      }
+      case f: ErgoFullBlock if f.header.timestamp >= startTime =>
+        self ! StartMining
+      case _ =>
+    }
   }
 
   private def receiverCandidateBlock: Receive = {
@@ -95,15 +88,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def procCandidateBlock(c: CandidateBlock): Unit = {
     log.debug(s"Got candidate block $c")
     candidateOpt = Some(c)
+    if (!isMining) self ! StartMining
     miningThreads.foreach(_ ! c)
   }
 
   //TODO rewrite from readers when state.proofsForTransactions will be ready
   def produceCandidate(readersHolderRef: ActorRef,
                        ergoSettings: ErgoSettings,
-                       nodeId: Array[Byte]): Future[Option[CandidateBlock]] = {
-    implicit val timeout = Timeout(ergoSettings.scorexSettings.restApi.timeout)
-    (viewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
+                       nodeId: Array[Byte]): Unit = {
+    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Option[CandidateBlock]] { v =>
       log.info("Start candidate creation")
       val history = v.history
       val state = v.state
@@ -145,7 +138,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         //Do not try to mine genesis block when offlineGeneration = false
         None
       }
-    }).mapTo[Option[CandidateBlock]]
+    }
   }
 
   private def fixTxsConflicts(txs: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = txs
@@ -161,6 +154,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  case object StartMining
+
+  case object MiningStatusRequest
+
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
+    lazy val json: Json = Map(
+      "isMining" -> isMining.asJson,
+      "votes" -> Algos.encode(votes).asJson,
+      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+    ).asJson
+  }
+
+}
+
+object ErgoMinerRef {
 
   def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
@@ -185,17 +194,4 @@ object ErgoMiner extends ScorexLogging {
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
-
-  case object StartMining
-
-  case object MiningStatusRequest
-
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
-    lazy val json: Json = Map(
-      "isMining" -> isMining.asJson,
-      "votes" -> Algos.encode(votes).asJson,
-      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
-    ).asJson
-  }
-
 }

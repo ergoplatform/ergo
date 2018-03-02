@@ -5,9 +5,9 @@ import akka.pattern.ask
 import akka.testkit.TestKit
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMiner, TransactionGenerator}
+import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolder}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{FlatSpecLike, Matchers}
@@ -34,11 +34,11 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
     val nodeId = Array.fill(10)(1: Byte)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
-    val readersHolderRef: ActorRef = ErgoReadersHolder(nodeViewHolderRef)
-    val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
     val testingSettings = TestingSettings(true, 500)
-    val txGen = TransactionGenerator(nodeViewHolderRef, testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, testingSettings)
     txGen ! StartGeneration
     minerRef ! StartMining
 
@@ -46,6 +46,6 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
 
     val respF = (minerRef ? MiningStatusRequest).mapTo[MiningStatusResponse]
     //check that miner actor is still alive
-    noException should be thrownBy  Await.result(respF, defaultAwaitDuration)
+    noException should be thrownBy Await.result(respF, defaultAwaitDuration)
   }
 }

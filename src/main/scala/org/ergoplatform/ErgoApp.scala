@@ -4,13 +4,13 @@ import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMiner, ErgoStatsCollector, ErgoStatsCollectorRef, TransactionGenerator}
+import org.ergoplatform.local._
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolder}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolder, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -36,9 +36,9 @@ class ErgoApp(args: Seq[String]) extends Application {
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val readersHolderRef: ActorRef = ErgoReadersHolder(nodeViewHolderRef)
+  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
   override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings,
     timeProvider)
@@ -61,7 +61,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   }
 
   if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGenerator(nodeViewHolderRef, ergoSettings.testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
     txGen ! StartGeneration
   }
 

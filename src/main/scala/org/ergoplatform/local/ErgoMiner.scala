@@ -1,8 +1,6 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import akka.pattern._
-import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -19,9 +17,6 @@ import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -66,15 +61,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def receiveSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod) if isMining => mod match {
-        case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-          produceCandidate(readersHolderRef, ergoSettings, nodeId)
-        case _ =>
+      case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
+        produceCandidate(readersHolderRef, ergoSettings, nodeId)
+      case _ =>
     }
     case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
-        case f: ErgoFullBlock if f.header.timestamp >= startTime =>
-          self ! StartMining
-        case _ =>
-      }
+      case f: ErgoFullBlock if f.header.timestamp >= startTime =>
+        self ! StartMining
+      case _ =>
+    }
   }
 
   private def receiverCandidateBlock: Receive = {
@@ -93,7 +88,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def procCandidateBlock(c: CandidateBlock): Unit = {
     log.debug(s"Got candidate block $c")
     candidateOpt = Some(c)
-    if(!isMining) self ! StartMining
+    if (!isMining) self ! StartMining
     miningThreads.foreach(_ ! c)
   }
 
@@ -160,6 +155,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
+  case object StartMining
+
+  case object MiningStatusRequest
+
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
+    lazy val json: Json = Map(
+      "isMining" -> isMining.asJson,
+      "votes" -> Algos.encode(votes).asJson,
+      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+    ).asJson
+  }
+
+}
+
+object ErgoMinerRef {
+
   def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
@@ -183,17 +194,4 @@ object ErgoMiner extends ScorexLogging {
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
-
-  case object StartMining
-
-  case object MiningStatusRequest
-
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
-    lazy val json: Json = Map(
-      "isMining" -> isMining.asJson,
-      "votes" -> Algos.encode(votes).asJson,
-      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
-    ).asJson
-  }
-
 }

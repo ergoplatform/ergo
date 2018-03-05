@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import io.circe.JsonNumber
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
@@ -33,7 +34,7 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
 
   override def preStart(): Unit = {
     val events = Seq(
-      NodeViewHolder.EventType.StateChanged,
+      NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier,
       NodeViewHolder.EventType.HistoryChanged,
       NodeViewHolder.EventType.MempoolChanged
     )
@@ -44,8 +45,8 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
 
   // TODO get actual votes and isMining from miner
-  var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, "null",
-    settings.nodeSettings.stateType, "null", isMining = settings.nodeSettings.mining, votes, None, None,
+  var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
@@ -71,15 +72,6 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 
-  override protected def onChangedState(stateReader: StateReader): Unit = stateReader match {
-    case r: ErgoStateReader =>
-      nodeInfo = nodeInfo.copy(stateRoot = Algos.encode(r.asInstanceOf[ErgoStateReader].rootHash),
-        stateVersion = Algos.encode(r.version))
-    case _ =>
-      log.warn(s"Got state reader of incorrect type $stateReader")
-  }
-
-
   //TODO move default empty implementations to Scorex
   override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
 
@@ -95,7 +87,11 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
 
   override protected def onSyntacticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 
-  override protected def onSemanticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = {}
+  override protected def onSemanticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = mod match {
+    case fb: ErgoFullBlock =>
+      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)), stateVersion = Some(fb.encodedId))
+    case _ =>
+  }
 
   override protected def onSemanticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
 
@@ -112,9 +108,9 @@ object ErgoStatsCollector {
                       appVersion: String,
                       unconfirmedCount: Int,
                       peersCount: Int,
-                      stateRoot: String,
+                      stateRoot: Option[String],
                       stateType: StateType,
-                      stateVersion: String,
+                      stateVersion: Option[String],
                       isMining: Boolean,
                       votes: String,
                       bestHeaderOpt: Option[Header],
@@ -123,12 +119,12 @@ object ErgoStatsCollector {
     lazy val json = Map(
       "name" -> nodeName.asJson,
       "appVersion" -> Version.VersionString.asJson,
-      "headersHeight" -> bestHeaderOpt.map(_.height.toString).getOrElse("null").asJson,
-      "fullHeight" -> bestFullBlockOpt.map(_.header.height.toString).getOrElse("null").asJson,
-      "bestHeaderId" -> bestHeaderOpt.map(_.encodedId).getOrElse("null").asJson,
-      "bestFullHeaderId" -> bestFullBlockOpt.map(_.header.encodedId).getOrElse("null").asJson,
-      "previousFullHeaderId" -> bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).getOrElse("null").asJson,
-      "difficulty" -> bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).getOrElse("null").asJson,
+      "headersHeight" -> bestHeaderOpt.map(_.height).asJson,
+      "fullHeight" -> bestFullBlockOpt.map(_.header.height).asJson,
+      "bestHeaderId" -> bestHeaderOpt.map(_.encodedId).asJson,
+      "bestFullHeaderId" -> bestFullBlockOpt.map(_.header.encodedId).asJson,
+      "previousFullHeaderId" -> bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).asJson,
+      "difficulty" -> bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
       "unconfirmedCount" -> unconfirmedCount.asJson,
       "stateRoot" -> stateRoot.asJson,
       "stateType" -> stateType.stateTypeName.asJson,

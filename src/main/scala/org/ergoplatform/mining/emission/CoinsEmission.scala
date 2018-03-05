@@ -28,7 +28,7 @@ class CoinsEmission(val coinsInOneErgo: Long = 100000000, val blocksPerHour: Int
   private lazy val fixedRatePeriod = 2 * blocksPerYear - rewardReductionPeriod
 
   // NUmber of coins issued per block during FixedRatePeriod
-  private val fixedRate = 75  * coinsInOneErgo
+  private val fixedRate = 2250 * coinsInOneErgo / blocksPerHour
 
   //Total number of epochs with different number of coins issued
   private val decreasingEpochs = (blocksTotal - fixedRatePeriod) / rewardReductionPeriod

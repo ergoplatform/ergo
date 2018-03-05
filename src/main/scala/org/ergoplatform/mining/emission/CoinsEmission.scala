@@ -1,50 +1,47 @@
 package org.ergoplatform.mining.emission
 
 /**
-  * Ergo coin emission curve, proposal #1.
+  * Ergo coin emission curve.
   * Properties:
-  * block every minute
-  * ~25M coins after the first year
-  * ~100M coins total
-  * ~1 month slow start period
-  * smooth graph
+  * block every 2 minutes
+  * fixed rate during first 2 years
+  * 19710000 coins after the first year
+  * 97739925 coins total
+  * no slow start period
+  * reward reduction every 3 month
+  *
+  * @param coinsInOneErgo - number of <minimal coin name> in 1 Ergo
+  * @param blocksPerHour - munber of blocks per hour. Should be correlated with LinearDifficultyControl.desiredInterval
   */
-object CoinsEmission {
-
-  // 1 Ergo = 100 000 000 <minimal coin name>
-  val CoinsInOneErgo: Long = 100000000
-
-  // Number of blocks per hour on average
-  val BlocksPerHour: Int = 60
+class CoinsEmission(val coinsInOneErgo: Long = 100000000, val blocksPerHour: Int = 30) {
 
   // Number of blocks per year on average
-  val BlocksPerYear: Int = 365 * 24 * BlocksPerHour
+  private val blocksPerYear: Int = 365 * 24 * blocksPerHour
 
   // 8 years of emission
-  val BlocksTotal: Int = BlocksPerYear * 8
+  val blocksTotal: Int = blocksPerYear * 8
 
-  // 1 Month slow start period
-  val SlowStartPeriod: Int = 30 * 24 * BlocksPerHour
+  // reward reduction every 3 month
+  private lazy val rewardReductionPeriod: Int = 90 * 24 * blocksPerHour
 
-  // Number of coins isseud per block at the end of slow start period
-  lazy val SlowStartFinalRate: Long = slowStartFunction(SlowStartPeriod)
+  // Number of blocks for initial fixed rate
+  private lazy val fixedRatePeriod = 2 * blocksPerYear - rewardReductionPeriod
 
-  // 99999773 coins total supply
-  lazy val TotalSupply: Long = FirstYearSupply + (BlocksPerYear until BlocksTotal).map(h => emissionAtHeight(h)).sum
+  // NUmber of coins issued per block during FixedRatePeriod
+  private val fixedRate = 75  * coinsInOneErgo
 
-  // 22382800 coins first year supply
-  lazy val FirstYearSupply: Long = (0 until BlocksPerYear).map(h => emissionAtHeight(h)).sum
+  //Total number of epochs with different number of coins issued
+  private val decreasingEpochs = (blocksTotal - fixedRatePeriod) / rewardReductionPeriod
 
   def emissionAtHeight(h: Long): Long = {
-    if (h <= SlowStartPeriod) slowStartFunction(h)
-    else if (h > BlocksTotal) 0
-    else -SlowStartFinalRate * (h - SlowStartPeriod) / (BlocksTotal - SlowStartPeriod) + SlowStartFinalRate
+    if (h <= fixedRatePeriod) fixedRate
+    else if (h > blocksTotal) 0
+    else {
+      val epoch: Int = ((h - fixedRatePeriod) / rewardReductionPeriod).toInt
+      fixedRate - fixedRate * epoch / decreasingEpochs
+    }
   }.ensuring(_ >= 0, s"Negative at $h")
 
 
-  def slowStartFunction(h: Long): Long = h * h * 250 / 100 + (h + 1) * 2473
-
 }
-
-
 

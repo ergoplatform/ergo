@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+          integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style type="text/css">
+        .line {
+            fill: none;
+            stroke: #ffab00;
+            stroke-width: 3;
+        }
+
+        .axis {
+            font: 14px sans-serif;
+        }
+
+        .dot {
+            fill: #ffab00;
+            stroke: #fff;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <span class="navbar-brand mb-0 h1">Ergo Platform</span>
+</nav>
+<div class="container-fluid">
+    <div class="row">
+        <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+            <div class="sidebar-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <p>Bencnmark Charts</p>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+        <main role="main">
+            <h5>100 modifiers</h5>
+            <div class="first"></div>
+            <h5>1000 modifiers</h5>
+            <div class="second"></div>
+            <h5>10000 modifiers</h5>
+            <div class="third"></div>
+        </main>
+    </div>
+</div>
+</body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.13.0/d3.js"></script>
+<script src="chart.js"></script>
+<script>
+    render("result100.csv", ".first");
+    render("result1000.csv", ".second");
+    render("result10000.csv", ".third");
+</script>

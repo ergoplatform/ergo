@@ -2,13 +2,13 @@ package org.ergoplatform.bench
 
 import akka.actor.ActorRef
 import org.ergoplatform.api.routes.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
-import org.ergoplatform.local.{ErgoMiner, ErgoStatsCollectorRef}
+import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -45,9 +45,9 @@ class ModifiersCrawler(args: Array[String]) extends Application {
   override val nodeViewHolderRef: ActorRef = BenchmarkErgoNodeViewHolderRef(ergoSettings, timeProvider, benchConfig)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val readersHolderRef: ActorRef = ErgoReadersHolder(nodeViewHolderRef)
+  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
   override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
   //actorSystem.actorOf(Props(classOf[EmptyLocalInterface], nodeViewHolderRef))

@@ -29,19 +29,19 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   }
 
   @SuppressWarnings(Array("TraversableHead"))
-  def calculate(previousHeaders: Seq[(Int, Header)]): Difficulty = {
+  def calculate(previousHeaders: Seq[Header]): Difficulty = {
     if (previousHeaders.lengthCompare(useLastEpochs + 1) == 0) {
       val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
         val start = d.head
         val end = d.last
-        require(end._1 - start._1 == epochLength, s"Incorrect heights interval for $d")
-        val diff = end._2.requiredDifficulty * desiredInterval.toMillis * epochLength / (end._2.timestamp - start._2.timestamp)
-        (end._1, diff)
+        require(end.height - start.height  == epochLength, s"Incorrect heights interval for $d")
+        val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
+        (end.height, diff)
       }
       val diff = interpolate(data)
       if (diff >= 1) diff else Constants.InitialDifficulty
     } else {
-      previousHeaders.maxBy(_._1)._2.requiredDifficulty
+      previousHeaders.maxBy(_.height).requiredDifficulty
     }
   }
 

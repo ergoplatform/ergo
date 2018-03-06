@@ -314,13 +314,11 @@ trait HeadersProcessor extends ScorexLogging {
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
-      difficultyCalculator.calculate(Seq((parentHeight, parent)))
+      difficultyCalculator.calculate(Seq(parent))
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
-        .ensuring(_.length == (heights.min to heights.max).length)
-      val previousHeaders = (heights.min to heights.max).zip(chain.headers).filter(p => heights.contains(p._1))
-        .ensuring(_.length == heights.length)
-      difficultyCalculator.calculate(previousHeaders)
+      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false).headers
+        .filter(p => heights.contains(p.height))
+      difficultyCalculator.calculate(chain)
     }
   }
 }

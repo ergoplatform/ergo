@@ -1,9 +1,10 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, MissedModifiers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -63,10 +64,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       ids.foreach { id => requestDownload(id._1, id._2) }
   }
 
-  protected val onSemanticallySuccessfulModifier: Receive = {
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-    //Do nothing, other nodes will request required modifiers via ProgressInfo.toDownload
-    case SemanticallySuccessfulModifier(mod) =>
+  protected val onSyntacticallySuccessfulModifier: Receive = {
+    case SyntacticallySuccessfulModifier(mod: Header@unchecked) if mod.isInstanceOf[Header] =>
       broadcastModifierInv(mod)
   }
 
@@ -84,7 +83,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected def viewHolderEvents: Receive =
-    onSemanticallySuccessfulModifier orElse
+    onSyntacticallySuccessfulModifier orElse
       onDownloadRequest orElse
       onCheckModifiersToDownload orElse
       onMissedModifiers orElse
@@ -123,7 +122,8 @@ object ErgoNodeViewSynchronizer {
       syncInfoSpec, networkSettings, timeProvider), name)
 
 
-
   case object CheckModifiersToDownload
+
   case class MissedModifiers(m: Seq[(ModifierTypeId, ModifierId)])
+
 }

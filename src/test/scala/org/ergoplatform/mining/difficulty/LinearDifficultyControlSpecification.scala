@@ -49,7 +49,7 @@ class LinearDifficultyControlSpecification extends PropSpec
   property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
     forAll(Gen.choose(1, Int.MaxValue), invalidHeaderGen) { (height: Int, header: Header) =>
       val previousHeaders = control.previousHeadersRequiredForRecalculation(height)
-        .map(i => (i, header.copy(timestamp = header.timestamp + i)))
+        .map(i => header.copy(timestamp = header.timestamp + i, height = i))
 
       Try(control.calculate(previousHeaders)) shouldBe 'success
     }
@@ -59,11 +59,11 @@ class LinearDifficultyControlSpecification extends PropSpec
   property("calculate() should require correct heights") {
     forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (i: Int, header: Header) =>
       val previousHeaders = control.previousHeadersRequiredForRecalculation(i * Epoch + 1)
-        .map(i => (i, header.copy(timestamp = header.timestamp + i)))
+        .map(i => header.copy(timestamp = header.timestamp + i, height = i))
       previousHeaders.length shouldBe UseLastEpochs + 1
 
       Try(control.calculate(previousHeaders)) shouldBe 'success
-      Try(control.calculate(previousHeaders.map(i => (i._1 * 2, i._2)))) shouldBe 'failure
+      Try(control.calculate(previousHeaders.map(h => h.copy(height = h.height * 2)))) shouldBe 'failure
     }
   }
 
@@ -105,7 +105,7 @@ class LinearDifficultyControlSpecification extends PropSpec
       whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1)
-          .map(i => (i, header.copy(timestamp = header.timestamp + i * interval)))
+          .map(i => header.copy(timestamp = header.timestamp + i * interval, height = i))
         previousHeaders.length shouldBe useLastEpochs + 1
         control.calculate(previousHeaders) shouldBe header.requiredDifficulty
       }
@@ -118,12 +118,13 @@ class LinearDifficultyControlSpecification extends PropSpec
       whenever(useLastEpochs > 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map { i =>
-          (i, header.copy(timestamp = header.timestamp + i * interval,
-            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step)))
+          header.copy(timestamp = header.timestamp + i * interval,
+            height = i,
+            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step))
         }
 
         previousHeaders.length shouldBe useLastEpochs + 1
-        val expectedDifficulty = previousHeaders.last._2.requiredDifficulty + step
+        val expectedDifficulty = previousHeaders.last.requiredDifficulty + step
         val error = BigDecimal(control.calculate(previousHeaders) - expectedDifficulty) / BigDecimal(expectedDifficulty)
         error should be < BigDecimal(1) / LinearDifficultyControl.PrecisionConstant
       }

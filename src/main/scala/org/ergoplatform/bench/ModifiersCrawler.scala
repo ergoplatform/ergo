@@ -32,8 +32,8 @@ class ModifiersCrawler(args: Array[String]) extends Application {
   lazy val benchConfig = BenchmarkConfig(fileToSave, threshold)
   lazy val tempDir = TempDir.createTempDir
 
-  logger.error(s"Temp dir is ${tempDir.getAbsolutePath}")
-  logger.error(s"Config is $benchConfig")
+  log.info(s"Temp dir is ${tempDir.getAbsolutePath}")
+  log.info(s"Config is $benchConfig")
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 

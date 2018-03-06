@@ -17,14 +17,14 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 
   override def receive: Receive = {
     case Sub(ref) =>
-      logger.error("Subscribing")
+      log.info("Subscribing")
       ref ! Subscribe(Seq(EventType.SuccessfulSemanticallyValidModifier,
         EventType.SyntacticallyFailedPersistentModifier,
         EventType.SemanticallyFailedPersistentModifier)
       )
     case Start(ref, modifiers) =>
       start = System.currentTimeMillis()
-      logger.error(s"start is $start")
+      log.info(s"start is $start")
       modifiers.foreach(m => ref ! m)
     case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] =>
       self ! "increase"
@@ -34,13 +34,13 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
       self ! "increase"
     case "increase" =>
       counter += 1
-      if (counter % 1000 == 0 ) logger.error(s"counter is $counter")
+      if (counter % 1000 == 0 ) log.error(s"counter is $counter")
       if (counter >= threshold) {
         finish = System.currentTimeMillis()
         val seconds = (finish - start) / 1000
-        logger.error(s"start is $start")
-        logger.error(s"finish is $finish")
-        logger.error(s"FINISHED APPLYING $threshold MODIFIERS in $seconds seconds.")
+        log.info(s"start is $start")
+        log.info(s"finish is $finish")
+        log.info(s"FINISHED APPLYING $threshold MODIFIERS in $seconds seconds.")
         FileWriter.writeToFile(s"$fileName$threshold.csv", Result(finish, seconds))
         System.exit(0)
       }

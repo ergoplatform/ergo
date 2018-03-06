@@ -20,13 +20,13 @@ class BenchmarkErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkT
 
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
     if (counter >= b.modifiersThreshold) {
-      logger.error("SHUTTING DOWN")
+      log.info("Shutting Down")
       writer.flush()
       writer.close()
       System.exit(0)
     } else {
       counter += 1
-      logger.error(s"GOT ${counter} modifiers")
+      log.info(s"GOT ${counter} modifiers")
       val bytes: Array[Byte] = pmod.bytes
       val typeId: Byte = pmod.modifierTypeId
       writer.println(Base58.encode(typeId +: bytes))

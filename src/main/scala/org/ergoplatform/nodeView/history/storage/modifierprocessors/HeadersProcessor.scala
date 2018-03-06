@@ -105,13 +105,14 @@ trait HeadersProcessor extends ScorexLogging {
     val dataToInsert = toInsert(header)
     historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
     val score = scoreOf(header.id).getOrElse(-1)
+    val toProcess = if(config.verifyTransactions) None else Some(header)
 
     if (bestHeaderIdOpt.isEmpty) {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
-      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
       log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq.empty, Some(header), toDownload(header))
+      ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
       ProgressInfo(None, Seq.empty, None, toDownload(header))

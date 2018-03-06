@@ -32,7 +32,7 @@ object ErgoTestReadFromDisk extends ScorexLogging {
     val benchRef = system.actorOf(Props.apply(classOf[BenchActor], threshold))
     val userDir = TempDir.createTempDir
 
-    logger.error("Starting benchmark.")
+    log.info("Starting benchmark.")
 
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(directory =  userDir.getAbsolutePath)
 
@@ -47,10 +47,10 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
-    logger.error("Starting to read modifiers.")
+    log.info("Starting to read modifiers.")
     val modifiers = readModifiers(peer)
-    logger.error("Finished read modifiers, starting to bench.")
-    logger.error(s"$threshold modifiers to go")
+    log.info("Finished read modifiers, starting to bench.")
+    log.info(s"$threshold modifiers to go")
     runBench(benchRef, nodeViewHolderRef, modifiers)
     writeHtml
   }
@@ -63,7 +63,7 @@ object ErgoTestReadFromDisk extends ScorexLogging {
     .map { s =>
       counter += 1
       if (counter % 1000 == 0) {
-        logger.error(s"ALREADY PROCESS $counter lines")
+        log.info(s"ALREADY PROCESS $counter lines")
       }
       val bytes = Base58.decode(s).get
       val typeId = ModifierTypeId @@ bytes.head

@@ -7,7 +7,7 @@ import scala.util.Try
 
 trait ObjectsStore {
 
-  def get(id: ModifierId): Option[Array[Byte]]
+  def get(id: ModifierId): Option[ErgoPersistentModifier]
 
   def delete(id: ModifierId): Try[Unit]
 

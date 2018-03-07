@@ -30,9 +30,6 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
     case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] =>
       log.info("SUCC SEM")
       self ! "increase"
-    case _: SyntacticallySuccessfulModifier[ErgoPersistentModifier] =>
-      log.info("SUCC SYN")
-      self ! "increase"
     case _: SyntacticallyFailedModification[ErgoPersistentModifier] =>
       log.info("SYN FAIL")
       self ! "increase"

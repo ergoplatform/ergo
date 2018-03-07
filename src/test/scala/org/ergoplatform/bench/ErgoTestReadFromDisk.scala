@@ -60,7 +60,7 @@ object ErgoTestReadFromDisk extends ScorexLogging {
     var counter = 0
     Source
     .fromInputStream(getClass.getResourceAsStream("/bench/modifiers.txt"))
-    .getLines().take(2000)
+    .getLines()
     .map { s =>
       counter += 1
       if (counter % 1000 == 0) {

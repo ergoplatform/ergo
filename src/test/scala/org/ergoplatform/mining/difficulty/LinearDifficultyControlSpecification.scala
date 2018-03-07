@@ -21,7 +21,8 @@ class LinearDifficultyControlSpecification extends PropSpec
   val Epoch = 123
 
   val UseLastEpochs = 4
-  val control = new LinearDifficultyControl(1.minute, UseLastEpochs, Epoch)
+  val DesiredInterval = 1.minute
+  val control = new LinearDifficultyControl(DesiredInterval, UseLastEpochs, Epoch)
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
     val height = Epoch * (UseLastEpochs + 1) + 1
@@ -66,6 +67,19 @@ class LinearDifficultyControlSpecification extends PropSpec
       Try(control.calculate(previousHeaders.map(h => h.copy(height = h.height * 2)))) shouldBe 'failure
     }
   }
+
+  property("calculate() should decrease difficulty if block time interval is higher than expected") {
+    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (startEpoch: Int, header: Header) =>
+      whenever(header.requiredDifficulty > 10) {
+        val previousHeaders = control.previousHeadersRequiredForRecalculation(startEpoch * Epoch + 1)
+          .map(i => header.copy(timestamp = header.timestamp + DesiredInterval.toMillis * 2 * i, height = i))
+        previousHeaders.length shouldBe UseLastEpochs + 1
+
+        control.calculate(previousHeaders) < header.requiredDifficulty shouldBe true
+      }
+    }
+  }
+
 
   property("interpolate() vectors") {
     val diff = BigInt("675204474840679645414180963439886534428")

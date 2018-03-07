@@ -27,7 +27,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     */
   def blockchainSimulator(difficultyControl: LinearDifficultyControl, initialHeader: Header): Unit = {
     // number of blocks in simulated chain
-    val chainLength = difficultyControl.useLastEpochs * difficultyControl.epochLength * 2
+    val chainLength = difficultyControl.useLastEpochs * difficultyControl.epochLength * 100
     // simulated time for one hash calculation
     val timeForOneHash = difficultyControl.desiredInterval.toMillis / 60
 
@@ -55,25 +55,25 @@ object DifficultyControlChecker extends App with ErgoGenerators {
         val timeDiff = simulateTimeDiff()
         val newHeader = lastHeader.copy(timestamp = lastHeader.timestamp + timeDiff, height = curHeight + 1)
         curChain(newHeader.height) = newHeader
+
         genchain(curHeight + 1)
       }
     }
 
-    genchain(initialHeader.height)
+    val chain = genchain(initialHeader.height)
+    val firstRecalculatedHeader = chain(difficultyControl.useLastEpochs * difficultyControl.epochLength * 2)
+    val lastRecalculatedHeader = chain(chainLength)
+    val simulated = (lastRecalculatedHeader.timestamp - firstRecalculatedHeader.timestamp) /
+      (lastRecalculatedHeader.height - firstRecalculatedHeader.height)
+    val desired = difficultyControl.desiredInterval.toMillis
+    val error = Math.abs(simulated - desired).toFloat * 100 / desired
+
+    println(s"Control:")
+    println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
+      difficultyControl.useLastEpochs)
+    println(s"Simulated average interval = $simulated, error  = $error%")
 
 
-    def requiredDifficultyAfter(blockchain: mutable.Map[Int, Header]): Difficulty = {
-      val parent: Header = blockchain.head._2
-      val parentHeight = parent.height
-      val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
-        .ensuring(_.last == parentHeight)
-      if (heights.lengthCompare(1) == 0) {
-        difficultyControl.calculate(Seq(parent))
-      } else {
-        val headersToCalculate = heights.map(h => blockchain(h))
-        difficultyControl.calculate(headersToCalculate)
-      }
-    }
   }
 
   def printTestnetData(): Unit = {
@@ -108,6 +108,20 @@ object DifficultyControlChecker extends App with ErgoGenerators {
 
     println(s"height,requiredDifficulty,realDifficulty,timeDiff")
     last1000.foreach(d => println(d))
+  }
+
+
+  private def requiredDifficultyAfter(blockchain: mutable.Map[Int, Header]): Difficulty = {
+    val parent: Header = blockchain.head._2
+    val parentHeight = parent.height
+    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
+      .ensuring(_.last == parentHeight)
+    if (heights.lengthCompare(1) == 0) {
+      difficultyControl.calculate(Seq(parent))
+    } else {
+      val headersToCalculate = heights.map(h => blockchain(h))
+      difficultyControl.calculate(headersToCalculate)
+    }
   }
 
 }

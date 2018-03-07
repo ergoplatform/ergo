@@ -19,6 +19,7 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
     case Sub(ref) =>
       log.info("Subscribing")
       ref ! Subscribe(Seq(EventType.SuccessfulSemanticallyValidModifier,
+        EventType.SuccessfulSyntacticallyValidModifier,
         EventType.SyntacticallyFailedPersistentModifier,
         EventType.SemanticallyFailedPersistentModifier)
       )
@@ -27,14 +28,20 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
       log.info(s"start is $start")
       modifiers.foreach(m => ref ! m)
     case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] =>
+      log.info("SUCC SEM")
+      self ! "increase"
+    case _: SyntacticallySuccessfulModifier[ErgoPersistentModifier] =>
+      log.info("SUCC SYN")
       self ! "increase"
     case _: SyntacticallyFailedModification[ErgoPersistentModifier] =>
+      log.info("SYN FAIL")
       self ! "increase"
     case _: SemanticallyFailedModification[ErgoPersistentModifier] =>
+      log.info("SEM FAIL")
       self ! "increase"
     case "increase" =>
       counter += 1
-      if (counter % 1000 == 0 ) log.error(s"counter is $counter")
+      if (counter % 100 == 0 ) {log.error(s"counter is $counter")}
       if (counter >= threshold) {
         finish = System.currentTimeMillis()
         val seconds = (finish - start) / 1000

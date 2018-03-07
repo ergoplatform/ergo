@@ -309,8 +309,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   //TODO rework option.get
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    val parentId: ModifierId = parent.id
-    val parentHeight = heightOf(parentId).get
+    val parentHeight = parent.height
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {

@@ -60,16 +60,20 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def receiveSemanticallySuccessfulModifier: Receive = {
-    case SemanticallySuccessfulModifier(mod) if isMining => mod match {
-      case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
-        produceCandidate(readersHolderRef, ergoSettings, nodeId)
-      case _ =>
-    }
-    case SemanticallySuccessfulModifier(mod) if ergoSettings.nodeSettings.mining => mod match {
-      case f: ErgoFullBlock if f.header.timestamp >= startTime =>
-        self ! StartMining
-      case _ =>
-    }
+    case SemanticallySuccessfulModifier(mod) =>
+      if (isMining) {
+        mod match {
+          case f: ErgoFullBlock if !candidateOpt.flatMap(_.parentOpt).exists(_.id sameElements f.header.id) =>
+            produceCandidate(readersHolderRef, ergoSettings, nodeId)
+          case _ =>
+        }
+      } else if (ergoSettings.nodeSettings.mining) {
+        mod match {
+          case f: ErgoFullBlock if f.header.timestamp >= startTime =>
+            self ! StartMining
+          case _ =>
+        }
+      }
   }
 
   private def receiverCandidateBlock: Receive = {

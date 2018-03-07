@@ -9,7 +9,7 @@ import scala.concurrent.duration.FiniteDuration
 
 class LinearDifficultyControl(val desiredInterval: FiniteDuration,
                               val useLastEpochs: Int,
-                              epochLength: Int) extends ScorexLogging {
+                              val epochLength: Int) extends ScorexLogging {
 
   import LinearDifficultyControl._
 

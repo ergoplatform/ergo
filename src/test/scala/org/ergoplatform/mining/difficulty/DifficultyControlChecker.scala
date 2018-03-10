@@ -53,7 +53,9 @@ object DifficultyControlChecker extends App with ErgoGenerators {
         }
 
         val timeDiff = simulateTimeDiff()
-        val newHeader = lastHeader.copy(timestamp = lastHeader.timestamp + timeDiff, height = curHeight + 1)
+        val newHeader = lastHeader.copy(timestamp = lastHeader.timestamp + timeDiff,
+          height = curHeight + 1,
+          nBits = RequiredDifficulty.encodeCompactBits(requiredDifficulty))
         curChain(newHeader.height) = newHeader
 
         genchain(curHeight + 1)
@@ -72,6 +74,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
       difficultyControl.useLastEpochs)
     println(s"Simulated average interval = $simulated, error  = $error%")
+    printLast1000(chain.values.toSeq.sortBy(_.height))
 
 
   }
@@ -89,7 +92,11 @@ object DifficultyControlChecker extends App with ErgoGenerators {
         interlinks = Seq(),
         nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2))))
     }
+    printLast1000(headers)
+  }
 
+
+  def printLast1000(headers: Seq[Header]): Unit = {
     case class DiffRow(height: Int, requiredDifficulty: BigInt, timeDiff: Long, timestamp: Long) {
       val realDifficulty = requiredDifficulty * chainSettings.blockInterval.toMillis * chainSettings.epochLength / timeDiff
 
@@ -112,7 +119,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
 
 
   private def requiredDifficultyAfter(blockchain: mutable.Map[Int, Header]): Difficulty = {
-    val parent: Header = blockchain.head._2
+    val parent: Header = blockchain.maxBy(_._1)._2
     val parentHeight = parent.height
     val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)

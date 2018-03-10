@@ -8,14 +8,14 @@ import org.ergoplatform.utils.ErgoGenerators
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.io.Source
+import scala.concurrent.duration._
 import scala.util.Random
 
 object DifficultyControlChecker extends App with ErgoGenerators {
 
   val baseHeader = invalidHeaderGen.sample.get
-  val chainSettings = ErgoSettings.read(None).chainSettings.copy(epochLength = 1)
-  val difficultyControl = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs, chainSettings.epochLength)
+//  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
+  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 50, epochLength = 50)
 
   blockchainSimulator(difficultyControl, baseHeader.copy(height = 0, timestamp = 0, interlinks = Seq(), nBits = 16842752))
 
@@ -27,7 +27,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     */
   def blockchainSimulator(difficultyControl: LinearDifficultyControl, initialHeader: Header): Unit = {
     // number of blocks in simulated chain
-    val chainLength = difficultyControl.useLastEpochs * difficultyControl.epochLength * 100
+    val chainLength = 10000
     // simulated time for one hash calculation
     val timeForOneHash = difficultyControl.desiredInterval.toMillis / 60
 
@@ -74,7 +74,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
       difficultyControl.useLastEpochs)
     println(s"Simulated average interval = $simulated, error  = $error%")
-    printLast1000(chain.values.toSeq.sortBy(_.height))
+//    printLast1000(chain.values.toSeq.sortBy(_.height))
 
 
   }
@@ -98,7 +98,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
 
   def printLast1000(headers: Seq[Header]): Unit = {
     case class DiffRow(height: Int, requiredDifficulty: BigInt, timeDiff: Long, timestamp: Long) {
-      val realDifficulty = requiredDifficulty * chainSettings.blockInterval.toMillis * chainSettings.epochLength / timeDiff
+      val realDifficulty: BigInt = requiredDifficulty * difficultyControl.desiredInterval.toMillis / timeDiff
 
       override def toString: String = s"$height,$requiredDifficulty,$realDifficulty,$timeDiff"
     }

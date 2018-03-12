@@ -104,7 +104,7 @@ object DifficultyControlChecker extends App with ErgoGenerators {
 
     val initEpochs: Seq[Epoch] = epochs.take(difficultyControl.useLastEpochs).tail
     val stableEpochs: Seq[Epoch] = epochs.drop(difficultyControl.useLastEpochs)
-    val simulatedInit = initEpochs.map(_.blockInterval.toMillis).sum / stableEpochs.length
+    val simulatedInit = initEpochs.map(_.blockInterval.toMillis).sum / initEpochs.length
     val simulatedStable = stableEpochs.map(_.blockInterval.toMillis).sum / stableEpochs.length
     val desired = difficultyControl.desiredInterval.toMillis
     val errorInit = Math.abs(simulatedInit - desired).toFloat * 100 / desired

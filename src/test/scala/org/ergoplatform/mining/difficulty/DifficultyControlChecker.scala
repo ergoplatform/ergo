@@ -28,13 +28,15 @@ object DifficultyControlChecker extends App with ErgoGenerators {
   def blockchainSimulator(difficultyControl: LinearDifficultyControl, initialHeader: Header): Unit = {
     // number of blocks in simulated chain
     val chainLength = 10000
-    // simulated time for one hash calculation
-    val timeForOneHash = difficultyControl.desiredInterval.toMillis / 60
 
     val curChain = mutable.Map[Int, Header](initialHeader.height -> initialHeader)
 
     @tailrec
     def genchain(curHeight: Int): mutable.Map[Int, Header] = {
+      // simulated time for one hash calculation
+//      val timeForOneHash = 1000
+      val timeForOneHash = 1000 - curHeight / 20
+
       if (curHeight >= chainLength) {
         curChain
       } else {
@@ -63,18 +65,8 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     }
 
     val chain = genchain(initialHeader.height)
-    val firstRecalculatedHeader = chain(difficultyControl.useLastEpochs * difficultyControl.epochLength * 2)
-    val lastRecalculatedHeader = chain(chainLength)
-    val simulated = (lastRecalculatedHeader.timestamp - firstRecalculatedHeader.timestamp) /
-      (lastRecalculatedHeader.height - firstRecalculatedHeader.height)
-    val desired = difficultyControl.desiredInterval.toMillis
-    val error = Math.abs(simulated - desired).toFloat * 100 / desired
 
-    println(s"Control:")
-    println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
-      difficultyControl.useLastEpochs)
-    println(s"Simulated average interval = $simulated, error  = $error%")
-//    printLast1000(chain.values.toSeq.sortBy(_.height))
+    printEpochs(chain.values.toSeq.sortBy(_.height), difficultyControl)
 
 
   }
@@ -92,29 +84,40 @@ object DifficultyControlChecker extends App with ErgoGenerators {
         interlinks = Seq(),
         nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2))))
     }
-    printLast1000(headers)
+    printEpochs(headers, difficultyControl)
   }
 
+  def printEpochs(headers: Seq[Header], difficultyControl: LinearDifficultyControl): Unit = {
+    case class Epoch(startHeight: Int, requiredDifficulty: BigInt, blockInterval: FiniteDuration, timestamp: Long) {
+      val realDifficulty: BigInt = requiredDifficulty * difficultyControl.desiredInterval.toMillis / blockInterval.toMillis
 
-  def printLast1000(headers: Seq[Header]): Unit = {
-    case class DiffRow(height: Int, requiredDifficulty: BigInt, timeDiff: Long, timestamp: Long) {
-      val realDifficulty: BigInt = requiredDifficulty * difficultyControl.desiredInterval.toMillis / timeDiff
-
-      override def toString: String = s"$height,$requiredDifficulty,$realDifficulty,$timeDiff"
+      override def toString: String = s"$startHeight,$requiredDifficulty,$realDifficulty,${blockInterval.toMillis}"
     }
 
-    val data: Seq[DiffRow] = headers.sliding(2).map { p =>
+    val epochs: Seq[Epoch] = headers.filter(h => h.height % difficultyControl.epochLength == 0).sliding(2).map { p =>
       val start = p.head
       val end = p.last
+      val meanInterval = ((end.timestamp - start.timestamp) / (end.height - start.height)).millis
 
-      DiffRow(end.height, end.requiredDifficulty, end.timestamp - start.timestamp, end.timestamp)
+      Epoch(start.height, end.requiredDifficulty, meanInterval, end.timestamp)
     }.toSeq
 
-    //header in more or less stable situation
-    val last1000 = data.takeRight(1000)
+    val initEpochs: Seq[Epoch] = epochs.take(difficultyControl.useLastEpochs).tail
+    val stableEpochs: Seq[Epoch] = epochs.drop(difficultyControl.useLastEpochs)
+    val simulatedInit = initEpochs.map(_.blockInterval.toMillis).sum / stableEpochs.length
+    val simulatedStable = stableEpochs.map(_.blockInterval.toMillis).sum / stableEpochs.length
+    val desired = difficultyControl.desiredInterval.toMillis
+    val errorInit = Math.abs(simulatedInit - desired).toFloat * 100 / desired
+    val errorStable = Math.abs(simulatedStable - desired).toFloat * 100 / desired
+
+    println(s"Control:")
+    println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
+      difficultyControl.useLastEpochs)
+    println(s"Init simulated average interval = $simulatedInit, error  = $errorInit%")
+    println(s"Stable simulated average interval = $simulatedStable, error  = $errorStable%")
 
     println(s"height,requiredDifficulty,realDifficulty,timeDiff")
-    last1000.foreach(d => println(d))
+    epochs.foreach(d => println(d))
   }
 
 

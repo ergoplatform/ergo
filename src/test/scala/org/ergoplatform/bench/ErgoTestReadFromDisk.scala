@@ -27,10 +27,11 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
     new File(targetDirectory).mkdirs()
 
-    val threshold =args.headOption.getOrElse("10000").toInt
+    val threshold = args.headOption.getOrElse("1000").toInt
 
     val benchRef = system.actorOf(Props.apply(classOf[BenchActor], threshold))
     val userDir = TempDir.createTempDir
+    log.info(s"User dir is $userDir")
 
     log.info("Starting benchmark.")
 

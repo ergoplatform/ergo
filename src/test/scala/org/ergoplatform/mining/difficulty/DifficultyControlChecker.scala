@@ -15,9 +15,14 @@ object DifficultyControlChecker extends App with ErgoGenerators {
 
   val baseHeader = invalidHeaderGen.sample.get
 //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
-  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 50, epochLength = 50)
+  val difficultyControl = new LinearDifficultyControl(2.minute, useLastEpochs = 8, epochLength = 256)
+  // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
+  // Increasing rate: Stable simulated average interval = 119841, error  = 0.1325% | Init simulated average interval = 119077, error  = 0.76916665%
+  // Random rate: Stable simulated average interval = 120539, error  = 0.44916666% | Init simulated average interval = 115519, error  = 3.7341666%
 
-  blockchainSimulator(difficultyControl, baseHeader.copy(height = 0, timestamp = 0, interlinks = Seq(), nBits = 16842752))
+  blockchainSimulator(difficultyControl,
+    baseHeader.copy(height = 0, timestamp = 0, interlinks = Seq(), nBits = 16842752),
+    randomHashRate)
 
   /**
     * Generate blockchain starting from initial header with specified difficulty control and measure mean time interval between blocks
@@ -25,32 +30,33 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     * @param difficultyControl
     * @param initialHeader
     */
-  def blockchainSimulator(difficultyControl: LinearDifficultyControl, initialHeader: Header): Unit = {
+  def blockchainSimulator(difficultyControl: LinearDifficultyControl,
+                          initialHeader: Header,
+                          timeForOneHash: Int => Int): Unit = {
     // number of blocks in simulated chain
-    val chainLength = 10000
+    val chainLength = 100000
 
     val curChain = mutable.Map[Int, Header](initialHeader.height -> initialHeader)
 
     @tailrec
     def genchain(curHeight: Int): mutable.Map[Int, Header] = {
-      // simulated time for one hash calculation
-//      val timeForOneHash = 1000
-      val timeForOneHash = 1000 - curHeight / 20
 
       if (curHeight >= chainLength) {
         curChain
       } else {
         val lastHeader = curChain(curHeight)
-        val requiredDifficulty = requiredDifficultyAfter(curChain)
+        val requiredDifficulty = requiredDifficultyAfter(lastHeader, curChain)
         val target = 1.toDouble / requiredDifficulty.toDouble
+
+        val hashTime = timeForOneHash(curHeight)
 
         @tailrec
         def simulateTimeDiff(currentDiff: Long = 0): Long = {
           val hit = Random.nextDouble()
           if (hit < target) {
-            currentDiff + timeForOneHash
+            currentDiff + hashTime
           } else {
-            simulateTimeDiff(currentDiff + timeForOneHash)
+            simulateTimeDiff(currentDiff + hashTime)
           }
         }
 
@@ -116,13 +122,14 @@ object DifficultyControlChecker extends App with ErgoGenerators {
     println(s"Init simulated average interval = $simulatedInit, error  = $errorInit%")
     println(s"Stable simulated average interval = $simulatedStable, error  = $errorStable%")
 
+/*
     println(s"height,requiredDifficulty,realDifficulty,timeDiff")
     epochs.foreach(d => println(d))
+*/
   }
 
 
-  private def requiredDifficultyAfter(blockchain: mutable.Map[Int, Header]): Difficulty = {
-    val parent: Header = blockchain.maxBy(_._1)._2
+  private def requiredDifficultyAfter(parent: Header, blockchain: mutable.Map[Int, Header]): Difficulty = {
     val parentHeight = parent.height
     val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
@@ -133,5 +140,10 @@ object DifficultyControlChecker extends App with ErgoGenerators {
       difficultyControl.calculate(headersToCalculate)
     }
   }
+
+
+  def constantHashRate(height: Int): Int = 1000
+  def linearGrowingHashRate(height: Int): Int = Math.max(2000 - height / 20, 100)
+  def randomHashRate(height: Int): Int = Random.nextInt(1000)
 
 }

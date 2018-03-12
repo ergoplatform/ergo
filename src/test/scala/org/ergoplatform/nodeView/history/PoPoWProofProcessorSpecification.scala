@@ -24,7 +24,9 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
   val chain = genHeaderChain(acc =>
     acc
       .dropRight(MaxK)
-      .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM, history.bestHeaderOpt.toSeq
+      .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM,
+    history.bestHeaderOpt.toSeq,
+    defaultDifficultyControl
   ).ensuring(_.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
 
   println("3")

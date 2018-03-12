@@ -39,12 +39,18 @@ class LinearDifficultyControlSpecification extends PropSpec
     }
   }
 
-
   property("previousHeadersRequiredForRecalculation() should return previous block if there should not be difficulty recalculation") {
     control.previousHeadersRequiredForRecalculation(Epoch / 2 + 1) shouldBe Seq(Epoch / 2)
-    control.previousHeadersRequiredForRecalculation(Epoch + 1) shouldBe Seq(Epoch)
     control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs) shouldBe Seq(Epoch * UseLastEpochs - 1)
     control.previousHeadersRequiredForRecalculation(Epoch * UseLastEpochs + 2) shouldBe Seq(Epoch * UseLastEpochs + 1)
+  }
+
+  property("previousHeadersRequiredForRecalculation() should return as much block heights as possible") {
+    control.previousHeadersRequiredForRecalculation(Epoch + 1) shouldBe Seq(0, Epoch)
+    control.previousHeadersRequiredForRecalculation(2 * Epoch + 1) shouldBe Seq(0, Epoch, 2 * Epoch)
+    control.previousHeadersRequiredForRecalculation(3 * Epoch + 1) shouldBe Seq(0, Epoch, 2 * Epoch, 3 * Epoch)
+    control.previousHeadersRequiredForRecalculation(4 * Epoch + 1) shouldBe Seq(0, Epoch, 2 * Epoch, 3 * Epoch, 4 * Epoch)
+    control.previousHeadersRequiredForRecalculation(5 * Epoch + 1) shouldBe Seq(Epoch, 2 * Epoch, 3 * Epoch, 4 * Epoch, 5 * Epoch)
   }
 
   property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {

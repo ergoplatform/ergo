@@ -46,5 +46,5 @@ object BenchmarkErgoNodeViewHolderRef {
 case class BenchmarkConfig(fileToSave: String = "/", modifiersThreshold: Int = 15000)
 
 case class Result(t: Long, v: Long) extends WritableData {
-  override def toDataLine: String = s"$t,$v"
+  override def toDataLine: String = s"$v"
 }

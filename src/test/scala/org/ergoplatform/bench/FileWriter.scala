@@ -15,7 +15,7 @@ object FileWriter {
   val linesLimit = 100
 
   def writeToFile(fileName: String, data: WritableData): Unit = {
-    val lines: List[String] = Try(Source.fromFile(fileName).getLines().toList).getOrElse(List.empty)
+    val lines: List[String] = List.empty
     val resultToSave = if (lines.length < linesLimit) { lines :+ data.toDataLine }
     else { lines.takeRight(linesLimit - 1) :+ data.toDataLine }
     val file = new java.io.File(fileName)

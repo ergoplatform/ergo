@@ -53,7 +53,7 @@ object ErgoTestReadFromDisk extends ScorexLogging {
     log.info("Finished read modifiers, starting to bench.")
     log.info(s"$threshold modifiers to go")
     runBench(benchRef, nodeViewHolderRef, modifiers)
-    writeHtml
+    //writeHtml
   }
 
   private def readModifiers(peer: ConnectedPeer): Vector[ModifiersFromRemote] = {

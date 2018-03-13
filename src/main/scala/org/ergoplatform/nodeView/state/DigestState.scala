@@ -31,6 +31,8 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
+    case fb: ErgoFullBlock if notInitialized => Success()
+
     case fb: ErgoFullBlock =>
       fb.aDProofs match {
         case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
@@ -49,12 +51,6 @@ class DigestState protected(override val version: VersionTag,
 
     case a: Any =>
       Failure(new Error(s"Modifier not validated: $a"))
-  }
-
-  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
-    val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
-    new DigestState(newVersion, newRootHash, store, settings)
   }
 
   //todo: utxo snapshot could go here
@@ -96,6 +92,15 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
 
   def close(): Unit = store.close()
+
+  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
+    val wrappedVersion = ByteArrayWrapper(newVersion)
+    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
+    new DigestState(newVersion, newRootHash, store, settings)
+  }
+
+  // DigestState is not initialized yet. Waiting for first full block to apply without checks
+  private lazy val notInitialized = settings.blocksToKeep >= 0 && (version sameElements ErgoState.genesisStateVersion)
 
 }
 

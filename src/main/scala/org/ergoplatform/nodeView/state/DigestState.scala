@@ -28,7 +28,7 @@ class DigestState protected(override val version: VersionTag,
   store.lastVersionID
     .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
 
-  override val maxRollbackDepth = 10
+  override val maxRollbackDepth: Int = store.rollbackVersions().size
 
   @SuppressWarnings(Array("OptionGet"))
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {

@@ -38,10 +38,10 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     var history = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0,
       epochLength = epochLength, useLastEpochs = useLastEpochs)
-    val blocksBeforeRecalculate = epochLength * useLastEpochs + 1
+    val blocksBeforeRecalculate = epochLength + 1
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
-    history.requiredDifficultyAfter(history.bestHeaderOpt.get) should not be Constants.InitialDifficulty
+    history.requiredDifficultyAfter(history.bestHeaderOpt.get) shouldBe Constants.InitialDifficulty
   }
 
   property("lastHeaders() should return correct number of blocks") {
@@ -206,7 +206,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common))
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common), defaultDifficultyControl)
 
         history = applyHeaderChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last

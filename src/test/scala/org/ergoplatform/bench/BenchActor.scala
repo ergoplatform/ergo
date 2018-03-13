@@ -3,8 +3,9 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.bench.BenchActor.{Start, Sub}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.ScorexLogging
 
 class BenchActor(threshold: Int) extends Actor with ScorexLogging {

@@ -28,30 +28,21 @@ class DigestState protected(override val version: VersionTag,
   store.lastVersionID
     .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
 
-  override val maxRollbackDepth: Int = store.rollbackVersions().size
+  override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
-  @SuppressWarnings(Array("OptionGet"))
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
-      Try {
-        //TODO: Code smells
-        if (!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot)) {
-          throw new Error("Incorrect proofs digest")
-        }
-        val txs = fb.blockTransactions.txs
-        val declaredHash = fb.header.stateRoot
-
-        txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-          status.flatMap(_ => tx.semanticValidity)
-        }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
-          .getOrElse(Failure(new Error("Proofs are empty"))))
-      }.flatten match {
-        case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
-          s
-        case Failure(e) =>
-          log.warn(s"Modifier of type ${mod.modifierTypeId} with id ${mod.encodedId} is not valid: ${e.getMessage}")
-          Failure(e)
+      fb.aDProofs match {
+        case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
+          Failure(new Error("Incorrect proofs digest"))
+        case Some(proofs) =>
+          val txs = fb.blockTransactions.txs
+          val declaredHash = fb.header.stateRoot
+          txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
+            status.flatMap(_ => tx.semanticValidity)
+          }.map(_ => proofs.verify(boxChanges(txs), rootHash, declaredHash))
+        case None =>
+          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
     case h: Header => Success()

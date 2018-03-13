@@ -63,7 +63,6 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
       val ySum = y.sum
       val xSum = x.sum
 
-      //TODO check?
       val b: BigInt = (xySum * size - xSum * ySum) * PrecisionConstant / (x2Sum * size - xSum * xSum)
       val a: BigInt = (ySum * PrecisionConstant - b * xSum) / size / PrecisionConstant
 

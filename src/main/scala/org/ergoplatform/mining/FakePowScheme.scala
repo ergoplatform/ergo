@@ -36,7 +36,8 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
   override def verify(header: Header): Boolean = true
 
-  override def realDifficulty(header: Header): Difficulty = header.requiredDifficulty
+  override def realDifficulty(header: Header): Difficulty =
+    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
 
   def prove(parentOpt: Option[Header],
             nBits: Long,

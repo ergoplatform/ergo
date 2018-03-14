@@ -39,7 +39,7 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
       directory =  userDir.getAbsolutePath,
-      chainSettings = ChainSettings(1 minute, 1, 100, DefaultFakePowScheme)
+      chainSettings = ChainSettings(1 minute, 1, 100, FakePowForBench)
     )
 
     log.info(s"$ergoSettings")

@@ -5,8 +5,9 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.bench.BenchActor.{Start, Sub}
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.ErgoNodeViewRef
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
 import scorex.core.network.{ConnectedPeer, Handshake, Incoming}
@@ -14,6 +15,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.duration._
 import scala.io.Source
 
 object ErgoTestReadFromDisk extends ScorexLogging {
@@ -35,7 +37,12 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
     log.info("Starting benchmark.")
 
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(directory =  userDir.getAbsolutePath)
+    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
+      directory =  userDir.getAbsolutePath,
+      chainSettings = ChainSettings(1 minute, 1, 100, DefaultFakePowScheme)
+    )
+
+    log.info(s"$ergoSettings")
 
     val timeProvider = new NetworkTimeProvider(ergoSettings.scorexSettings.ntp)
 
@@ -75,7 +82,8 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ModifiersFromRemote]): Unit = {
     benchRef ! Sub(nodeRef)
-    benchRef ! Start(nodeRef, modifiers)
+    benchRef ! Start
+    modifiers.foreach { m => nodeRef ! m }
   }
 
 

@@ -3,8 +3,10 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.bench.BenchActor.{Start, Sub}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import scorex.core.ModifierId
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
 import scorex.core.utils.ScorexLogging
 
 class BenchActor(threshold: Int) extends Actor with ScorexLogging {
@@ -18,24 +20,16 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
   override def receive: Receive = {
     case Sub(ref) =>
       log.info("Subscribing")
-      ref ! Subscribe(Seq(EventType.SuccessfulSemanticallyValidModifier,
-        EventType.SuccessfulSyntacticallyValidModifier,
+      ref ! Subscribe(Seq(
+        EventType.SuccessfulSemanticallyValidModifier,
+        EventType.SuccessfulTransaction,
+        EventType.SemanticallyFailedPersistentModifier,
         EventType.SyntacticallyFailedPersistentModifier,
-        EventType.SemanticallyFailedPersistentModifier)
-      )
-    case Start(ref, modifiers) =>
+        EventType.FailedTransaction))
+    case Start =>
       start = System.currentTimeMillis()
       log.info(s"start is $start")
-      modifiers.foreach(m => ref ! m)
-    case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] =>
-      log.info("SUCC SEM")
-      self ! "increase"
-    case _: SyntacticallyFailedModification[ErgoPersistentModifier] =>
-      log.info("SYN FAIL")
-      self ! "increase"
-    case _: SemanticallyFailedModification[ErgoPersistentModifier] =>
-      log.info("SEM FAIL")
-      self ! "increase"
+    case _: ModificationOutcome => self ! "increase"
     case "increase" =>
       counter += 1
       if (counter % 100 == 0 ) {log.error(s"counter is $counter")}
@@ -53,5 +47,5 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 
 object BenchActor {
   case class Sub(actorRef: ActorRef)
-  case class Start(actorRef: ActorRef, modifiers: Vector[ModifiersFromRemote])
+  case object Start
 }

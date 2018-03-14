@@ -1,6 +1,6 @@
 package org.ergoplatform.bench
 
-import java.io.{FileOutputStream, PrintWriter}
+import java.io.PrintWriter
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -16,7 +16,6 @@ class BenchmarkErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkT
   var counter = 0
   val writer = new PrintWriter(b.fileToSave)
 
-  val fos = new FileOutputStream(b.fileToSave)
 
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
     if (counter >= b.modifiersThreshold) {
@@ -26,10 +25,11 @@ class BenchmarkErgoNodeViewHolder(settings: ErgoSettings, timeProvider: NetworkT
       System.exit(0)
     } else {
       counter += 1
-      log.info(s"GOT ${counter} modifiers")
+      if ( counter % 1000 == 0 ) { log.error(s"GOT ${counter} modifiers") }
       val bytes: Array[Byte] = pmod.bytes
       val typeId: Byte = pmod.modifierTypeId
       writer.println(Base58.encode(typeId +: bytes))
+      writer.flush()
       super.pmodModify(pmod)
     }
 }
@@ -46,5 +46,5 @@ object BenchmarkErgoNodeViewHolderRef {
 case class BenchmarkConfig(fileToSave: String = "/", modifiersThreshold: Int = 15000)
 
 case class Result(t: Long, v: Long) extends WritableData {
-  override def toDataLine: String = s"$v"
+  override def toDataLine: String = s"$t,$v"
 }

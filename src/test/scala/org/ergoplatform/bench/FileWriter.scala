@@ -12,14 +12,15 @@ trait WritableData {
 
 object FileWriter {
 
-  val linesLimit = 100
+  val linesLimit = 20
 
   def writeToFile(fileName: String, data: WritableData): Unit = {
-    val lines: List[String] = List.empty
+    val lines: List[String] = Try(Source.fromFile(fileName).getLines().drop(1).toList).getOrElse(List.empty)
     val resultToSave = if (lines.length < linesLimit) { lines :+ data.toDataLine }
     else { lines.takeRight(linesLimit - 1) :+ data.toDataLine }
     val file = new java.io.File(fileName)
     val writer = new FileWriter(file)
+    writer.write("Date,Time\n")
     resultToSave.foreach { l =>
       writer.write(l)
       writer.write('\n')

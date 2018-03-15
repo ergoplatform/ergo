@@ -190,11 +190,12 @@ trait HeadersProcessor extends ScorexLogging {
       Failure(new Error("Parent header is marked as semantically invalid"))
     } else {
       Success()
-    }.recoverWith { case thr =>
-      log.warn("Validation error: ", thr)
-      Failure(thr)
     }
+  }.recoverWith { case thr =>
+    log.warn("Validation error: ", thr)
+    Failure(thr)
   }
+
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 

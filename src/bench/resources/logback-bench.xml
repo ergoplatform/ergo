@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <logger name="scorex.crypto.authds.avltree.batch.VersionedIODBAVLStorage" level="ERROR"/>
+    <logger name="scorex.core.network.PeerConnectionHandler" level="ERROR"/>
+    <logger name="org.ergoplatform.network.ErgoNodeViewSynchronizer" level="ERROR"/>
+    <logger name="scorex.core.network.NetworkController " level="ERROR"/>
+    <logger name="org.ergoplatform.nodeView.history" level="ERROR"/>
+    <logger name="org.ergoplatform.nodeView.history.storage.modifierprocessors" level="ERROR"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder>
+            <pattern>[%thread] >> [%-5level] %logger{36} >> %d{HH:mm:ss.SSS} %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root>
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+
+
+</configuration>

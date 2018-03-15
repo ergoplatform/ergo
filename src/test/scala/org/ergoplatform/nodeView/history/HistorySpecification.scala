@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
@@ -27,8 +26,6 @@ trait HistorySpecification extends PropSpec
 
   val BlocksInChain = 10
   val BlocksToKeep = BlocksInChain + 1
-
-  def bestFullOptToSeq(history: ErgoHistory): Seq[ErgoFullBlock] = history.bestFullBlockOpt.toSeq
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.headersHeight

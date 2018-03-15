@@ -290,8 +290,8 @@ object ErgoHistory extends ScorexLogging {
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case m =>
-        throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +
-          s"poPoWBootstrap==${m._1}")
+        throw new Error(s"Unsupported settings combination stateType==${m._1}, verifyTransactions==${m._2}, " +
+          s"poPoWBootstrap==${m._3}")
     }
     history
   }

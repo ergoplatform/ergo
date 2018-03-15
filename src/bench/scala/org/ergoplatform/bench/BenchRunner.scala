@@ -89,7 +89,7 @@ object BenchRunner extends ScorexLogging {
   }
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ModifiersFromRemote]): Unit = {
-    benchRef ! SubTo(nodeRef, Seq(EventType.SuccessfulSyntacticallyValidModifier))
+    benchRef ! SubTo(nodeRef, Seq(EventType.SuccessfulSemanticallyValidModifier))
     benchRef ! Start
     modifiers.foreach { m => nodeRef ! m }
   }

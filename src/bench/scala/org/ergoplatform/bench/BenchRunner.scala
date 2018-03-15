@@ -68,7 +68,7 @@ object BenchRunner extends ScorexLogging {
   private def readModifiers(peer: ConnectedPeer): Vector[ModifiersFromRemote] = {
     var counter = 0
     log.info("Start reading modifiers from data file.")
-    val is = getClass.getResourceAsStream("/bench/mods.data")
+    val is = getClass.getResourceAsStream("/bench/mods.dat")
     val result = Stream
       .continually {
         val mod = ModifierWriter.read(is)

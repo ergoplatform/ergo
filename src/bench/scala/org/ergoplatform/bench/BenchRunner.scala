@@ -8,6 +8,7 @@ import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.{Start, SubTo}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
+import org.ergoplatform.mining.EquihashPowScheme
 import scorex.core.NodeViewHolder.EventType
 import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
 import scorex.core.network.{ConnectedPeer, Handshake, Incoming}
@@ -38,7 +39,7 @@ object BenchRunner extends ScorexLogging {
 
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
       directory =  userDir.getAbsolutePath,
-      chainSettings = ChainSettings(1 minute, 1, 100, FakePowForBench)
+      chainSettings = ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar))
     )
 
     log.info(s"Setting that being used:")

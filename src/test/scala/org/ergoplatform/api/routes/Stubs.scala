@@ -30,7 +30,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   implicit val system: ActorSystem
 
-  lazy val chain = genChain(4, Seq.empty)
+  lazy val chain = genChain(4)
 
   lazy val nodeId = Algos.hash("testroute").take(5)
 

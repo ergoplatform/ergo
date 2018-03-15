@@ -13,13 +13,13 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory(height: Int = 0): ErgoHistory = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    if (height > 0) applyChain(inHistory, genChain(height, bestFullOptToSeq(inHistory)))
+    if (height > 0) applyChain(inHistory, genChain(height, inHistory))
     else inHistory
   }
 
   property("missedModifiersForFullChain") {
     var history = genHistory()
-    val chain = genChain(BlocksToKeep, Seq())
+    val chain = genChain(BlocksToKeep)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
     val missed = history.missedModifiersForFullChain()
@@ -32,13 +32,13 @@ class VerifyADHistorySpecification extends HistorySpecification {
       whenever(chainHeight > 0) {
         var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
         val r = new Random(seed)
-        val genesis = genChain(1, Seq()).head
+        val genesis = genChain(1).head
         history.append(genesis.header) shouldBe 'success
         history.append(genesis.blockTransactions) shouldBe 'success
         history.append(genesis.aDProofs.get) shouldBe 'success
         history.bestFullBlockOpt shouldBe Some(genesis)
 
-        val chains = Seq(genChain(chainHeight, Seq(genesis)), genChain(chainHeight + 1, Seq(genesis))).map(_.tail)
+        val chains = Seq(genChain(chainHeight, genesis), genChain(chainHeight + 1, genesis)).map(_.tail)
         chains.foreach(chain => applyHeaderChain(history, HeaderChain(chain.map(_.header))))
         val indices: Seq[(Int, Int)] = chains.indices.flatMap { chainIndex =>
           val chain = chains(chainIndex)
@@ -82,7 +82,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("apply proofs that link incomplete chain") {
     var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    val chain = genChain(4, Seq())
+    val chain = genChain(4)
 
     val block0 = chain.head
     val block1 = chain(1)
@@ -116,7 +116,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None
 
-    val chain = genChain(BlocksToKeep * 2, Seq())
+    val chain = genChain(BlocksToKeep * 2)
 
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestHeaderOpt.get shouldBe chain.last.header
@@ -133,7 +133,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("syncInfo()") {
     var history = genHistory()
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val chain = genChain(BlocksInChain, history)
     history = applyChain(history, chain)
     val si = history.syncInfo
     si.lastHeaderIds.last shouldEqual chain.last.header.id
@@ -142,11 +142,11 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("reportSemanticValidity(valid = true) when better header chain exists") {
     var history = genHistory()
 
-    val inChain = genChain(2, bestFullOptToSeq(history))
+    val inChain = genChain(2, history)
     history = applyChain(history, inChain)
 
-    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
-    val fork2 = genChain(4, bestFullOptToSeq(history)).tail
+    val fork1 = genChain(3, history).tail
+    val fork2 = genChain(4, history).tail
     fork1.head.parentId shouldEqual fork2.head.parentId
 
     history = applyChain(history, fork1)
@@ -165,7 +165,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
     var history = genHistory()
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val chain = genChain(BlocksInChain, history)
     chain.foreach { fullBlock =>
       history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
       history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
@@ -200,7 +200,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history.bestFullBlockOpt should not be None
 
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, history.bestFullBlockOpt.get).tail
     (chain.head.header.parentId sameElements Header.GenesisParentId) shouldBe false
 
     history = applyChain(history, chain)
@@ -221,11 +221,11 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("reportSemanticValidity(valid = false) should mark invalid all forks containing this header") {
     var history = genHistory()
 
-    val inChain = genChain(2, bestFullOptToSeq(history))
+    val inChain = genChain(2, history)
     history = applyChain(history, inChain)
 
-    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
-    val fork2 = genChain(3, bestFullOptToSeq(history)).tail
+    val fork1 = genChain(3, history).tail
+    val fork2 = genChain(3, history).tail
     fork1.head.parentId shouldEqual fork2.head.parentId
 
     history = applyChain(history, fork1)
@@ -250,8 +250,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
     var history = genHistory(3)
     val common = history.bestFullBlockOpt.get
 
-    val fork1 = genChain(3, Seq(common)).tail
-    val fork2 = genChain(2, Seq(common)).tail
+    val fork1 = genChain(3, common).tail
+    val fork2 = genChain(2, common).tail
 
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
@@ -266,7 +266,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
     var history = genHistory()
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val chain = genChain(BlocksInChain, history)
     history = applyChain(history, chain)
 
     history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
@@ -288,7 +288,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("Report invalid for best full block") {
     var history = genHistory()
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val chain = genChain(BlocksInChain, history)
     history = applyChain(history, chain)
 
     chain.takeRight(BlocksToKeep - 2).reverse.foreach { fullBlock =>
@@ -310,7 +310,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val blocksToPrune = 20
 
     var history = genHistory()
-    val chain = genChain(BlocksToKeep + blocksToPrune + 1, Seq())
+    val chain = genChain(BlocksToKeep + blocksToPrune + 1)
 
     history = applyChain(history, chain)
     history.bestHeaderOpt.get shouldBe chain.last.header
@@ -329,10 +329,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from genesis") {
-    val genesis = genChain(1, Seq()).head
+    val genesis = genChain(1).head
     var history = applyChain(genHistory(), Seq(genesis))
-    val fork1 = genChain(1, Seq(history.bestFullBlockOpt.get)).tail
-    val fork2 = genChain(2, Seq(history.bestFullBlockOpt.get)).tail
+    val fork1 = genChain(1, history.bestFullBlockOpt.get).tail
+    val fork2 = genChain(2, history.bestFullBlockOpt.get).tail
 
     history = applyChain(history, fork1)
     history.bestHeaderOpt.get shouldBe fork1.last.header
@@ -353,14 +353,14 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from existing chain") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
+    var history = applyChain(genHistory(), genChain(BlocksInChain))
 
     history.bestFullBlockOpt.isDefined should not be None
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val branchPoint = history.bestFullBlockOpt.get
-        val fork1 = genChain(forkLength, Seq(branchPoint)).tail
-        val fork2 = genChain(forkLength + 1, Seq(branchPoint)).tail
+        val fork1 = genChain(forkLength, branchPoint).tail
+        val fork2 = genChain(forkLength + 1, branchPoint).tail
 
         history = applyChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last.header
@@ -383,9 +383,9 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Appended full blocks to best chain in full history") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
+    var history = applyChain(genHistory(), genChain(BlocksInChain))
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history)).tail
+    val chain = genChain(BlocksInChain, history).tail
     chain.foreach { fullBlock =>
       val startFullBlock = history.bestFullBlockOpt.get
       val header = fullBlock.header

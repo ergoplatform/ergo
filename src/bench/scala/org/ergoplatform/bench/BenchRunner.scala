@@ -1,24 +1,23 @@
 package org.ergoplatform.bench
 
-import java.io.{File, FileWriter}
+import java.io.{File, FileInputStream, FileWriter}
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.bench.BenchActor.{Start, Sub}
-import org.ergoplatform.mining.DefaultFakePowScheme
+import akka.actor.{ActorRef, ActorSystem}
+import org.ergoplatform.bench.misc.ModifierWriter
+import org.ergoplatform.bench.protocol.{Start, SubTo}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
-import scorex.core.ModifierTypeId
+import scorex.core.NodeViewHolder.EventType
 import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
 import scorex.core.network.{ConnectedPeer, Handshake, Incoming}
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import scorex.crypto.encode.Base58
+import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.io.Source
 
-object ErgoTestReadFromDisk extends ScorexLogging {
+object BenchRunner extends ScorexLogging {
 
   implicit val system: ActorSystem = ActorSystem("bench")
   implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -31,10 +30,10 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
     val threshold = args.headOption.getOrElse("1000").toInt
 
-    val benchRef = system.actorOf(Props.apply(classOf[BenchActor], threshold))
+    val benchRef = BenchActor(threshold)
     val userDir = TempDir.createTempDir
-    log.info(s"User dir is $userDir")
 
+    log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
@@ -42,9 +41,12 @@ object ErgoTestReadFromDisk extends ScorexLogging {
       chainSettings = ChainSettings(1 minute, 1, 100, FakePowForBench)
     )
 
+    log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-    val timeProvider = new NetworkTimeProvider(ergoSettings.scorexSettings.ntp)
+
+    val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
+    val timeProvider = new NetworkTimeProvider(ntpSettings)
 
     val peer = ConnectedPeer(
       new InetSocketAddress("localhost", 9001),
@@ -65,23 +67,29 @@ object ErgoTestReadFromDisk extends ScorexLogging {
 
   private def readModifiers(peer: ConnectedPeer): Vector[ModifiersFromRemote] = {
     var counter = 0
-    Source
-    .fromInputStream(getClass.getResourceAsStream("/bench/modifiers.txt"))
-    .getLines()
-    .map { s =>
-      counter += 1
-      if (counter % 1000 == 0) {
-        log.info(s"ALREADY PROCESS $counter lines")
+    log.info("Start reading modifiers from data file.")
+    val is = getClass.getResourceAsStream("/bench/mods.data")
+    val result = Stream
+      .continually {
+        val mod = ModifierWriter.read(is)
+        mod.map { case (id, arr) =>
+          counter += 1
+          if (counter % 1000 == 0) {
+            log.info(s"Already read $counter modifiers.")
+          }
+          ModifiersFromRemote(peer, id, Seq(arr))
+
+        }
       }
-      val bytes = Base58.decode(s).get
-      val typeId = ModifierTypeId @@ bytes.head
-      val array = bytes.tail
-      ModifiersFromRemote(peer, typeId, Seq(array))
-    }.toVector
+      .takeWhile(_.isDefined)
+      .flatten
+      .toVector
+
+    result
   }
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ModifiersFromRemote]): Unit = {
-    benchRef ! Sub(nodeRef)
+    benchRef ! SubTo(nodeRef, Seq(EventType.SuccessfulSyntacticallyValidModifier))
     benchRef ! Start
     modifiers.foreach { m => nodeRef ! m }
   }

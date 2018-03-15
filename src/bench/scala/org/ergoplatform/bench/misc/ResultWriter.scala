@@ -10,7 +10,7 @@ trait WritableData {
   def toDataLine: String
 }
 
-object FileWriter {
+object ResultWriter {
 
   val linesLimit = 20
 
@@ -29,4 +29,8 @@ object FileWriter {
     writer.close()
   }
 
+}
+
+case class Result(t: Long, v: Long) extends  WritableData {
+  override def toDataLine: String = s"$t,$v"
 }

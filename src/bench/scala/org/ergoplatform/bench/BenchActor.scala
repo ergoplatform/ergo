@@ -1,11 +1,7 @@
 package org.ergoplatform.bench
 
-import akka.actor.{Actor, ActorRef}
-import org.ergoplatform.bench.BenchActor.{Start, Sub}
-import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import scorex.core.ModifierId
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.ergoplatform.bench.protocol.{Start, SubTo}
 import scorex.core.NodeViewHolder._
 import scorex.core.utils.ScorexLogging
 
@@ -18,14 +14,9 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
   val fileName = "target/bench/result"
 
   override def receive: Receive = {
-    case Sub(ref) =>
-      log.info("Subscribing")
-      ref ! Subscribe(Seq(
-        EventType.SuccessfulSemanticallyValidModifier,
-        EventType.SuccessfulTransaction,
-        EventType.SemanticallyFailedPersistentModifier,
-        EventType.SyntacticallyFailedPersistentModifier,
-        EventType.FailedTransaction))
+    case SubTo(ref, events) =>
+      log.trace(s"Bench actor is subscribig to ${events.mkString(" ")}")
+      ref ! Subscribe(events)
     case Start =>
       start = System.currentTimeMillis()
       log.info(s"start is $start")
@@ -39,13 +30,14 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
         log.info(s"start is $start")
         log.info(s"finish is $finish")
         log.info(s"FINISHED APPLYING $threshold MODIFIERS in $seconds seconds.")
-        FileWriter.writeToFile(s"$fileName$threshold.csv", Result(finish, seconds))
+        ResultWriter.writeToFile(s"$fileName$threshold.csv", Result(finish, seconds))
         System.exit(0)
       }
   }
 }
 
 object BenchActor {
-  case class Sub(actorRef: ActorRef)
-  case object Start
+  def apply(threshold: Int)(implicit ac: ActorSystem): ActorRef =
+    ac.actorOf(Props.apply(classOf[BenchActor], threshold))
 }
+

@@ -34,9 +34,11 @@ class CoinsEmission(val coinsInOneErgo: Long = 100000000, val blocksPerHour: Int
   private val decreasingEpochs = (blocksTotal - fixedRatePeriod) / rewardReductionPeriod
 
   def emissionAtHeight(h: Long): Long = {
-    if (h <= fixedRatePeriod) fixedRate
-    else if (h > blocksTotal) 0
-    else {
+    if (h <= fixedRatePeriod) {
+      fixedRate
+    } else if (h > blocksTotal) {
+      0
+    } else {
       val epoch: Int = ((h - fixedRatePeriod) / rewardReductionPeriod).toInt
       fixedRate - fixedRate * epoch / decreasingEpochs
     }

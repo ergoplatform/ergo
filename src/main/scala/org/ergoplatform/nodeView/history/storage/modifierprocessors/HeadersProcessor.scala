@@ -56,6 +56,17 @@ trait HeadersProcessor extends ScorexLogging {
 
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
+  /**
+    * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+    */
+  def isHeadersChainSynced: Boolean = minimalFullBlockHeight != Int.MaxValue
+
+  /**
+    * Start height to download full blocks.
+    * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
+    */
+  protected var minimalFullBlockHeight: Int = Int.MaxValue
+
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
 
@@ -105,13 +116,14 @@ trait HeadersProcessor extends ScorexLogging {
     val dataToInsert = toInsert(header)
     historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
     val score = scoreOf(header.id).getOrElse(-1)
-    val toProcess = if(config.verifyTransactions) None else Some(header)
+    val toProcess = if (config.verifyTransactions) None else Some(header)
 
     if (bestHeaderIdOpt.isEmpty) {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
-      log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
+      log.info(s"New best header ${Algos.encode(header.id)} atC height ${header.height} with score $score")
+      if (config.blocksToKeep >= 0) minimalFullBlockHeight = header.height - config.blocksToKeep
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
@@ -119,19 +131,53 @@ trait HeadersProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * Checks, whether it's time to download full chain and return toDownload modifiers
+    */
   private def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    (config.verifyTransactions, config.stateType) match {
-      case (true, StateType.Digest) =>
-        Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
-      case (true, StateType.Utxo) =>
+    def justSynced(header: Header, downloadProofs: Boolean): Seq[(ModifierTypeId, ModifierId)] = {
+      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height + 1
+      minimalFullBlockHeight = header.height - limit
+      val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
+      if (downloadProofs) {
+        headersChain.flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId),
+          (ADProofs.modifierTypeId, h.ADProofsId)))
+      } else {
+        headersChain.map(h => (BlockTransactions.modifierTypeId, h.transactionsId))
+      }
+    }
+
+    config.stateType match {
+      case _ if !config.verifyTransactions =>
+        // Regime that do not download and verify transaction
+        Seq.empty
+      case StateType.Utxo if h.height >= minimalFullBlockHeight =>
+        // Already synced and header is not too far back. Download BlockTransactions for this header
         Seq((BlockTransactions.modifierTypeId, h.transactionsId))
-      case (false, _) => Seq.empty
+      case StateType.Utxo if h.height >= minimalFullBlockHeight =>
+        // Already synced and header is not too far back. Download BlockTransactions and ADProofs for this header
+        Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
+      case StateType.Utxo if !isHeadersChainSynced && isNewHeader(h) =>
+        // Headers chain is synced after this header. Start downloading full blocks
+        justSynced(h, downloadProofs = false)
+      case StateType.Digest if !isHeadersChainSynced && isNewHeader(h) =>
+        // Headers chain is synced after this header. Start downloading full blocks
+        justSynced(h, downloadProofs = true)
+      case _ =>
+        Seq.empty
     }
   }
 
   /**
+    * Estimate, that this block is new enough
+    */
+  private def isNewHeader(h: Header): Boolean = {
+    timeProvider.time() - h.timestamp < difficultyCalculator.desiredInterval.toMillis
+  }
+
+  /**
     *
-    * @param header - header we're going to remove from history
+    * @param header - header we're going to remove from history+
     * @return ids to remove, new data to apply
     */
   protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
@@ -251,8 +297,9 @@ trait HeadersProcessor extends ScorexLogging {
 
   /**
     * Find first header with the best height <= $height which id satisfies condition $p
+    *
     * @param height - start height
-    * @param p - condition to satisfy
+    * @param p      - condition to satisfy
     * @return found header
     */
   @tailrec

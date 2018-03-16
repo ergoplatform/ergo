@@ -23,16 +23,13 @@ import scala.util.{Failure, Success, Try}
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ScorexLogging {
+trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
 
   private val charsetName = "UTF-8"
-
-  protected val timeProvider: NetworkTimeProvider
 
   protected val historyStorage: HistoryStorage
 
   protected val config: NodeConfigurationSettings
-  protected val chainSettings: ChainSettings
 
   val powScheme: PoWScheme
 
@@ -49,23 +46,6 @@ trait HeadersProcessor extends ScorexLogging {
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
-
-  def bestFullBlockOpt: Option[ErgoFullBlock]
-
-  def contains(id: ModifierId): Boolean
-
-  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
-
-  /**
-    * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
-    */
-  def isHeadersChainSynced: Boolean = minimalFullBlockHeight != Int.MaxValue
-
-  /**
-    * Start height to download full blocks.
-    * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
-    */
-  protected var minimalFullBlockHeight: Int = Int.MaxValue
 
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
@@ -123,56 +103,12 @@ trait HeadersProcessor extends ScorexLogging {
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
       log.info(s"New best header ${Algos.encode(header.id)} atC height ${header.height} with score $score")
-      if (config.blocksToKeep >= 0) minimalFullBlockHeight = header.height - config.blocksToKeep
+      onNewBestHeader(header)
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else {
       log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
       ProgressInfo(None, Seq.empty, None, toDownload(header))
     }
-  }
-
-  /**
-    * Checks, whether it's time to download full chain and return toDownload modifiers
-    */
-  private def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    def justSynced(header: Header, downloadProofs: Boolean): Seq[(ModifierTypeId, ModifierId)] = {
-      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height + 1
-      minimalFullBlockHeight = header.height - limit
-      val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
-      if (downloadProofs) {
-        headersChain.flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId),
-          (ADProofs.modifierTypeId, h.ADProofsId)))
-      } else {
-        headersChain.map(h => (BlockTransactions.modifierTypeId, h.transactionsId))
-      }
-    }
-
-    config.stateType match {
-      case _ if !config.verifyTransactions =>
-        // Regime that do not download and verify transaction
-        Seq.empty
-      case StateType.Utxo if h.height >= minimalFullBlockHeight =>
-        // Already synced and header is not too far back. Download BlockTransactions for this header
-        Seq((BlockTransactions.modifierTypeId, h.transactionsId))
-      case StateType.Utxo if h.height >= minimalFullBlockHeight =>
-        // Already synced and header is not too far back. Download BlockTransactions and ADProofs for this header
-        Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
-      case StateType.Utxo if !isHeadersChainSynced && isNewHeader(h) =>
-        // Headers chain is synced after this header. Start downloading full blocks
-        justSynced(h, downloadProofs = false)
-      case StateType.Digest if !isHeadersChainSynced && isNewHeader(h) =>
-        // Headers chain is synced after this header. Start downloading full blocks
-        justSynced(h, downloadProofs = true)
-      case _ =>
-        Seq.empty
-    }
-  }
-
-  /**
-    * Estimate, that this block is new enough
-    */
-  private def isNewHeader(h: Header): Boolean = {
-    timeProvider.time() - h.timestamp < difficultyCalculator.desiredInterval.toMillis
   }
 
   /**

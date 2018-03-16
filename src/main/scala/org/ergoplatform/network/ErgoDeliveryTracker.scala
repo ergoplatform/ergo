@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+
 import akka.actor.{ActorContext, ActorRef}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
@@ -16,19 +17,17 @@ class ErgoDeliveryTracker(context: ActorContext,
                           timeProvider: NetworkTimeProvider)
   extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
-  val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
+  private val ToDownloadRetryInterval = 10.seconds
+  private val ToDownloadLifetime = 1.hour
+  private val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
-  //TODO move to config
-  private val ToDownloadRetryInterval = 30.seconds
-  private val ToDownloadLifetime = 24.hours
-  private val MaxModifiersToDownload = 100
-  private var lastTime = timeProvider.time()
+  def toDownloadQueue: Iterable[ModifierId] = ModifierId @@ toDownload.keys.map(_.array)
 
   def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    lastTime = Math.max(timeProvider.time(), lastTime + 1)
+    val downloadRequestTime = timeProvider.time()
     val newValue = toDownload.get(key(modifierId))
-      .map(_.copy(lastTry = lastTime))
-      .getOrElse(ToDownloadStatus(modifierTypeId, lastTime, lastTime))
+      .map(_.copy(lastTry = downloadRequestTime))
+      .getOrElse(ToDownloadStatus(modifierTypeId, downloadRequestTime, downloadRequestTime))
     toDownload.put(key(modifierId), newValue)
   }
 
@@ -39,23 +38,16 @@ class ErgoDeliveryTracker(context: ActorContext,
       .foreach(i => toDownload.remove(i._1))
   }
 
-  def downloadRetry(historyReaderOpt: Option[ErgoHistoryReader]): Seq[(ModifierId, ToDownloadStatus)] = {
-    removeOutdatedToDownload(historyReaderOpt)
+  def idsToRetry(): Seq[(ModifierTypeId, ModifierId)] = {
     val currentTime = timeProvider.time()
     toDownload.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
       .sortBy(_._2.lastTry)
-      .take(MaxModifiersToDownload)
-      .map(i => (ModifierId @@ i._1.array, i._2))
+      .map(i => (i._2.tp, ModifierId @@ i._1.array))
   }
 
-  @SuppressWarnings(Array("ComparingUnrelatedTypes"))
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
-    if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
-      toDownload.remove(key(mid))
-      expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3).foreach(e => expecting-= e)
-      delivered(key(mid)) = cp
-    } else {
-      deliveredSpam(key(mid)) = cp
-    }
+    toDownload.remove(key(mid))
+    super.receive(mtid, mid, cp)
   }
+
 }

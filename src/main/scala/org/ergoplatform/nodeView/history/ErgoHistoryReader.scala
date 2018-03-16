@@ -41,6 +41,7 @@ trait ErgoHistoryReader
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
     with BlockTransactionsProcessor
+    with ToDownloadProcessor
     with ScorexLogging {
 
   protected val chainSettings: ChainSettings

@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -42,23 +42,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def requestDownload(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
+    deliveryTracker.expectFromRandom(modifierTypeId, modifierId)
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> Seq(modifierId)), None)
     //todo: Full nodes should be here, not a random peer
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
 
   protected val onSyntacticallySuccessfulModifier: Receive = {
-    case SyntacticallySuccessfulModifier(mod: Header@unchecked) if mod.isInstanceOf[Header] =>
+    case SyntacticallySuccessfulModifier(mod) if mod.isInstanceOf[Header] &&
+      historyReaderOpt.exists(_.isHeadersChainSynced) =>
+
       broadcastModifierInv(mod)
   }
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedToDownload(historyReaderOpt)
+      deliveryTracker.removeOutdatedExpectingFromRandom(historyReaderOpt)
       historyReaderOpt.foreach { h =>
-        val currentQueue = deliveryTracker.toDownloadQueue
+        val currentQueue = deliveryTracker.expectingFromRandomQueue
         val newIds = h.nextModifiersToDownload(networkSettings.networkChunkSize - currentQueue.size, currentQueue)
-        val oldIds = deliveryTracker.idsToRetry()
+        val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).foreach(id => requestDownload(id._1, id._2))
       }
   }

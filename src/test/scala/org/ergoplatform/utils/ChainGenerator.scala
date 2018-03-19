@@ -12,7 +12,6 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
 
-import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -23,52 +22,82 @@ trait ChainGenerator {
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
   val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
+  val defaultVotes = Array.fill(5)(0.toByte)
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
+  /** Generates a [[HeaderChain]] of given height starting from a History last block
+    */
   def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
-    genHeaderChain(height, history.bestHeaderOpt.toSeq, history.difficultyCalculator)
+    genHeaderChain(height, history.bestHeaderOpt, history.difficultyCalculator)
 
+  /** Generates a [[HeaderChain]] of given height starting from a given header
+    */
   final def genHeaderChain(height: Int,
-                           accIn: Seq[Header],
-                           control: LinearDifficultyControl): HeaderChain =
-    genHeaderChain(acc => acc.length == accIn.length + height, accIn, control)
+                           prefix: Option[Header] = None,
+                           control: LinearDifficultyControl = defaultDifficultyControl,
+                           votes: Array[Byte] = defaultVotes): HeaderChain =
+    HeaderChain(headerStream(prefix, control, votes).take(height + prefix.size))
 
-  @tailrec
+  /** Generates a minimal [[HeaderChain]] that satisfies the given condition
+    */
   final def genHeaderChain(until: Seq[Header] => Boolean,
-                           acc: Seq[Header],
-                           control: LinearDifficultyControl): HeaderChain = if (until(acc)) {
-    HeaderChain(acc.reverse)
-  } else {
-    val header = powScheme.prove(
-      acc.headOption,
+                           prefix: Option[Header],
+                           control: LinearDifficultyControl): HeaderChain = {
+    val headers = headerStream(prefix, control)
+    val chain = Iterator.from(prefix.size).map(size => headers.take(size)).find(until).get
+    HeaderChain(chain)
+  }
+
+  private def headerStream(prefix: Option[Header], control: LinearDifficultyControl,
+                           votes: Array[Byte] = defaultVotes): Stream[Header] = {
+    val firstHeader = nextHeader(prefix, control, votes)
+    lazy val headers: Stream[Header] = firstHeader #:: headers.map(cur => nextHeader(Option(cur), control, votes))
+    prefix.toSeq ++: headers
+  }
+
+  def nextHeader(prev: Option[Header], control: LinearDifficultyControl,
+                 votes: Array[Byte] = defaultVotes): Header =
+    powScheme.prove(
+      prev,
       Constants.InitialNBits,
       EmptyStateRoot,
       EmptyDigest32,
       EmptyDigest32,
-      acc.headOption.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
-      Array.fill(5)(0.toByte)
-    ): Header
-    genHeaderChain(until, header +: acc, control)
+      prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
+      votes
+    )
+
+  def genChain(height: Int): Seq[ErgoFullBlock] =
+    blockStream(None).take(height)
+
+  def genChain(height: Int, prefix: ErgoFullBlock): Seq[ErgoFullBlock] =
+    blockStream(Option(prefix)).take(height + 1)
+
+  def genChain(height: Int, history: ErgoHistory): Seq[ErgoFullBlock] = {
+    val prefix = history.bestFullBlockOpt
+    blockStream(prefix).take(height + prefix.size)
   }
 
-  @tailrec
-  final def genChain(height: Int, acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = if (height == 0) {
-    acc.reverse
-  } else {
-    val txs = Seq(AnyoneCanSpendTransaction(IndexedSeq(height.toLong), IndexedSeq(1L)))
-    val votes = Array.fill(5)(0.toByte)
+  protected def blockStream(prefix: Option[ErgoFullBlock]): Stream[ErgoFullBlock] = {
+    def tx(i: Long) = Seq(AnyoneCanSpendTransaction(IndexedSeq(i), IndexedSeq(1L)))
+    lazy val blocks: Stream[ErgoFullBlock] =
+      nextBlock(prefix, tx(1)) #::
+      blocks.zip(Stream.from(2)).map({case (prev, i) => nextBlock(Option(prev), tx(i))})
+    prefix ++: blocks
+  }
 
-    val block = powScheme.proveBlock(acc.headOption.map(_.header),
+  def nextBlock(prev: Option[ErgoFullBlock], txs: Seq[AnyoneCanSpendTransaction],
+                votes: Array[Byte] = defaultVotes): ErgoFullBlock =
+    powScheme.proveBlock(
+      prev.map(_.header),
       Constants.InitialNBits,
       EmptyStateRoot,
       emptyProofs,
       txs,
-      Math.max(timeProvider.time(), acc.headOption.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      votes)
-
-    genChain(height - 1, block +: acc)
-  }
+      Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
+      votes
+    )
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {
     var history = historyIn

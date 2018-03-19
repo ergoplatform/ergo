@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.utils.NoShrink
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.crypto.encode.Base58
 
@@ -17,7 +18,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   property("missedModifiersForFullChain") {
     var history = genHistory()
-    val chain = genChain(BlocksToKeep, Seq())
+    val chain = genChain(BlocksToKeep)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
     history.missedModifiersForFullChain().isEmpty shouldBe true
@@ -194,19 +195,23 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   }
 
-
   property("commonBlockThenSuffixes()") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)
 
     val forkDepth = BlocksInChain / 2
-    forAll(smallInt) { forkLength: Int =>
+    implicit val noShrink = NoShrink[Array[Byte]]
+    forAll(smallInt, genBytesList(5)) { (forkLength: Int, votes: Array[Byte]) =>
       whenever(forkLength > forkDepth) {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common), defaultDifficultyControl)
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
+                                                            defaultDifficultyControl, votes)
+        val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
+        val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
+        (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty
 
         history = applyHeaderChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last

@@ -14,7 +14,8 @@ import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder
-import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SemanticallySuccessfulModifier, Subscribe}
+import scorex.core.NodeViewHolder.ReceivableMessages._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.util.{Failure, Try}

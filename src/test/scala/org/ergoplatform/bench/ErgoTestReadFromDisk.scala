@@ -8,7 +8,7 @@ import org.ergoplatform.bench.BenchActor.{Start, Sub}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.ModifierTypeId
-import scorex.core.network.NodeViewSynchronizer.ModifiersFromRemote
+import scorex.core.NodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import scorex.core.network.{ConnectedPeer, Handshake, Incoming}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.encode.Base58

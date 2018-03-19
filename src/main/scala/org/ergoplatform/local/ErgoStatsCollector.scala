@@ -10,12 +10,12 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.NodeViewHolder.{ChangedHistory, ChangedMempool, Subscribe}
+import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.Handshake
-import scorex.core.network.peer.PeerManager
-import scorex.core.transaction.state.StateReader
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{LocalInterface, ModifierId, NodeViewHolder}
 import scorex.crypto.encode.Base58
@@ -39,7 +39,7 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
       NodeViewHolder.EventType.MempoolChanged
     )
     viewHolderRef ! Subscribe(events)
-    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! PeerManager.GetConnectedPeers)
+    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
   }
 
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))

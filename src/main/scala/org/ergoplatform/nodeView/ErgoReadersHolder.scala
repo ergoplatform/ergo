@@ -5,8 +5,10 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import scorex.core.LocalInterface.ReceivableMessages._
 import scorex.core.NodeViewHolder
-import scorex.core.NodeViewHolder._
+import scorex.core.NodeViewHolder.ReceivableMessages._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.ScorexLogging
 
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {

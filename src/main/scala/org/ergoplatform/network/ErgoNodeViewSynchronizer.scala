@@ -10,8 +10,10 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, Subscribe}
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NetworkController.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings

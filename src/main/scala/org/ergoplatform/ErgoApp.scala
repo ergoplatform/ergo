@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import akka.actor.{ActorRef, Props}
+import akka.actor.ActorRef
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolder, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -71,7 +71,7 @@ object ErgoApp {
 
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
-  def forceStopApplication(code: Int = 1) = {
+  def forceStopApplication(code: Int = 1): Nothing = {
     new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
     throw new Error("Exit")
   }

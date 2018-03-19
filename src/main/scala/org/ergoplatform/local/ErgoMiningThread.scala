@@ -5,7 +5,7 @@ import org.ergoplatform.local.ErgoMiningThread.MineBlock
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.LocalInterface.LocallyGeneratedModifier
+import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.ExecutionContext.Implicits.global

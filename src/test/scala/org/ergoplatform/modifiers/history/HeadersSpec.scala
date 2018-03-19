@@ -13,7 +13,7 @@ class HeadersSpec extends PropSpec
   with TestkitHelpers
   with ChainGenerator {
 
-  val chain = genHeaderChain(50, Seq(), defaultDifficultyControl)
+  val chain = genHeaderChain(50)
   val genesisId = chain.head.id
 
   property("Header.interlinks.tail should not contain genesis id") {

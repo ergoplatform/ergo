@@ -14,7 +14,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
   property("missedModifiersForFullChain") {
     var history = genHistory()
-    val chain = genChain(BlocksToKeep, Seq())
+    val chain = genChain(BlocksToKeep)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
     val missed = history.missedModifiersForFullChain()
@@ -59,9 +59,9 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   property("Appended headers and transactions blocks to best chain in tx history") {
     var history = genHistory()
 
-    history = applyChain(history, genChain(BlocksInChain, bestFullOptToSeq(history)))
+    history = applyChain(history, genChain(BlocksInChain, history))
 
-    genChain(BlocksInChain, bestFullOptToSeq(history)).tail.foreach { fullBlock =>
+    genChain(BlocksInChain, history).tail.foreach { fullBlock =>
       val startFullBlock = history.bestFullBlockOpt.get
 
       val header = fullBlock.header

@@ -17,11 +17,12 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
-import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
+import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder.EventType._
-import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, Subscribe}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{ModifierId, NodeViewHolder}
+import scorex.core.ModifierId
 import scorex.testkit.utils.FileUtils
 
 import scala.reflect.ClassTag
@@ -165,7 +166,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     //sending header
     nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
@@ -193,7 +194,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -253,7 +254,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     import fixture._
     val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
+    nodeViewRef ! Subscribe(Seq(FailedTransaction))
     nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
     expectNoMsg
     nodeViewRef ! poolSize(nodeViewConfig)

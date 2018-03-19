@@ -17,9 +17,9 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
-import scorex.core.network.peer.{PeerInfo, PeerManager}
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
+import scorex.core.network.peer.PeerInfo
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.{NetworkTime, NetworkTimeProvider}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
@@ -30,7 +30,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   implicit val system: ActorSystem
 
-  lazy val chain = genChain(4, Seq.empty)
+  lazy val chain = genChain(4)
 
   lazy val nodeId = Algos.hash("testroute").take(5)
 
@@ -69,9 +69,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class PeersManagerStub extends Actor {
     def receive = {
-      case PeerManager.GetConnectedPeers => sender() ! connectedPeers
-      case PeerManager.GetAllPeers => sender() ! peers
-      case PeerManager.GetBlacklistedPeers => sender() ! blacklistedPeers
+      case GetConnectedPeers => sender() ! connectedPeers
+      case GetAllPeers => sender() ! peers
+      case GetBlacklistedPeers => sender() ! blacklistedPeers
     }
   }
 

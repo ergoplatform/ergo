@@ -49,7 +49,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected val onSyntacticallySuccessfulModifier: Receive = {
-    case SyntacticallySuccessfulModifier(mod) if mod.isInstanceOf[Header] &&
+    case SyntacticallySuccessfulModifier(mod) if (mod.isInstanceOf[Header] || mod.isInstanceOf[BlockTransactions]) &&
       historyReaderOpt.exists(_.isHeadersChainSynced) =>
 
       broadcastModifierInv(mod)

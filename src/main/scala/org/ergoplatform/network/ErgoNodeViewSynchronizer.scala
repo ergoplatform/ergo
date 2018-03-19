@@ -8,8 +8,10 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import scorex.core.NodeViewHolder.ReceivableMessages.Subscribe
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NetworkController.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.core.network.message.Message
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings

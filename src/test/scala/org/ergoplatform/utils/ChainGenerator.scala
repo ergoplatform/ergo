@@ -80,10 +80,10 @@ trait ChainGenerator {
   }
 
   protected def blockStream(prefix: Option[ErgoFullBlock]): Stream[ErgoFullBlock] = {
-    def tx(i: Long) = Seq(AnyoneCanSpendTransaction(IndexedSeq(i), IndexedSeq(1L)))
+    def txs(i: Long) = Seq(AnyoneCanSpendTransaction(IndexedSeq(i), IndexedSeq(1L)))
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, tx(1)) #::
-      blocks.zip(Stream.from(2)).map({case (prev, i) => nextBlock(Option(prev), tx(i))})
+      nextBlock(prefix, txs(1)) #::
+      blocks.zip(Stream.from(2)).map({case (prev, i) => nextBlock(Option(prev), txs(i))})
     prefix ++: blocks
   }
 

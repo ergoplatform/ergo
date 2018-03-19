@@ -19,39 +19,39 @@ class ErgoDeliveryTracker(context: ActorContext,
 
   private val ToDownloadRetryInterval = 10.seconds
   private val ToDownloadLifetime = 1.hour
-  private val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
+  private val expectingFromRandom: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
   /**
     * @return ids we're going to download
     */
-  def toDownloadQueue: Iterable[ModifierId] = ModifierId @@ toDownload.keys.map(_.array)
+  def expectingFromRandomQueue: Iterable[ModifierId] = ModifierId @@ expectingFromRandom.keys.map(_.array)
 
   /**
     * Process download request of modifier of type modifierTypeId with id modifierId
     */
-  def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
+  def expectFromRandom(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
     val downloadRequestTime = timeProvider.time()
-    val newValue = toDownload.get(key(modifierId))
+    val newValue = expectingFromRandom.get(key(modifierId))
       .map(_.copy(lastTry = downloadRequestTime))
       .getOrElse(ToDownloadStatus(modifierTypeId, downloadRequestTime, downloadRequestTime))
-    toDownload.put(key(modifierId), newValue)
+    expectingFromRandom.put(key(modifierId), newValue)
   }
 
   /**
     * Remove old modifiers from download queue
     */
-  def removeOutdatedToDownload(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
+  def removeOutdatedExpectingFromRandom(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
     val currentTime = timeProvider.time()
-    toDownload.filter(td => td._2.firstViewed < currentTime - ToDownloadLifetime.toMillis)
-      .foreach(i => toDownload.remove(i._1))
+    expectingFromRandom.filter(td => td._2.firstViewed < currentTime - ToDownloadLifetime.toMillis)
+      .foreach(i => expectingFromRandom.remove(i._1))
   }
 
   /**
-    * Id's that are already in queue to download but are not downloaded yet
+    * Id's that are already in queue to download but are not downloaded yet and were not requested recently
     */
-  def idsToRetry(): Seq[(ModifierTypeId, ModifierId)] = {
+  def idsExpectingFromRandomToRetry(): Seq[(ModifierTypeId, ModifierId)] = {
     val currentTime = timeProvider.time()
-    toDownload.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
+    expectingFromRandom.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
       .sortBy(_._2.lastTry)
       .map(i => (i._2.tp, ModifierId @@ i._1.array))
   }
@@ -60,12 +60,10 @@ class ErgoDeliveryTracker(context: ActorContext,
     * Modifier downloaded
     */
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
-    if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
-      toDownload.remove(key(mid))
-      expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3).foreach(e => expecting -= e)
-      delivered(key(mid)) = cp
+    if(expectingFromRandom.contains(key(mid))) {
+      expectingFromRandom.remove(key(mid))
     } else {
-      deliveredSpam(key(mid)) = cp
+      super.receive(mtid, mid, cp)
     }
   }
 

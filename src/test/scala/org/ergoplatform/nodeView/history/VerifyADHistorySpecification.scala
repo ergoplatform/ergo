@@ -17,16 +17,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     else inHistory
   }
 
-  property("missedModifiersForFullChain") {
-    var history = genHistory()
-    val chain = genChain(BlocksToKeep)
-    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-
-    val missed = history.missedModifiersForFullChain()
-    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
-    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
-  }
-
   property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {

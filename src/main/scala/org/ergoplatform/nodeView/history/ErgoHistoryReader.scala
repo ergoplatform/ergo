@@ -220,17 +220,6 @@ trait ErgoHistoryReader
     }
   }
 
-  def missedModifiersForFullChain(): Seq[(ModifierTypeId, ModifierId)] = {
-    if (config.verifyTransactions) {
-      bestHeaderOpt.toSeq
-        .flatMap(h => headerChainBack(headersHeight + 1, h, _ => false).headers)
-        .flatMap(h => Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId)))
-        .filter(id => !contains(id._2))
-    } else {
-      Seq.empty
-    }
-  }
-
   /**
     * Return headers, required to apply to reach header2 if you are at header1 position.
     *

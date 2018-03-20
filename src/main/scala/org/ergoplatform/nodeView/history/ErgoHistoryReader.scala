@@ -10,8 +10,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransac
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core._
-import scorex.core.consensus.History.{HistoryComparisonResult, ModifierIds}
-import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
+import scorex.core.consensus.History._
+import scorex.core.consensus.{Unknown => _, _}
 import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
@@ -100,33 +100,33 @@ trait ErgoHistoryReader
     * @param info other's node sync info
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
     */
-  override def compare(info: ErgoSyncInfo): HistoryComparisonResult.Value = {
+  override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
         //Our best header is the same as other node best header
-        HistoryComparisonResult.Equal
+        Equal
       case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
         //Our best header is in other node best chain, but not at the last position
-        HistoryComparisonResult.Older
+        Older
       case Some(_) if info.lastHeaderIds.isEmpty =>
         //Other history is empty, our contain some headers
-        HistoryComparisonResult.Younger
+        Younger
       case Some(_) =>
         //We are on different forks now.
         if(info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
           //Return Younger, because we can send blocks from our fork that other node can download.
-          HistoryComparisonResult.Younger
+          Younger
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
-          HistoryComparisonResult.Unknown
+          Unknown
         }
       case None if info.lastHeaderIds.isEmpty =>
         //Both nodes do not keep any blocks
-        HistoryComparisonResult.Equal
+        Equal
       case None =>
         //Our history is empty, other contain some headers
-        HistoryComparisonResult.Older
+        Older
     }
   }
 
@@ -301,15 +301,15 @@ trait ErgoHistoryReader
   }
 
 
-  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value = {
+  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
-      case None if contains(modifierId) => ModifierSemanticValidity.Unknown
-      case None => ModifierSemanticValidity.Absent
+      case Some(b) if b.data.headOption.contains(1.toByte) => Valid
+      case Some(b) if b.data.headOption.contains(0.toByte) => Invalid
+      case None if contains(modifierId) => scorex.core.consensus.Unknown
+      case None => Absent
       case m =>
         log.error(s"Incorrect validity status: $m")
-        ModifierSemanticValidity.Absent
+        Absent
     }
   }
 }

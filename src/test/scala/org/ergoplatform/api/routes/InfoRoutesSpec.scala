@@ -31,7 +31,7 @@ class InfoRoutesSpec extends FlatSpec
   val nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
     settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None,
     fakeTimeProvider.time())
-  val expectedJson = nodeInfo.json.deepMerge(Map("currentTime" -> fakeTimeProvider.time().asJson).asJson)
+  val expectedJson = nodeInfo.asJson.deepMerge(Map("currentTime" -> fakeTimeProvider.time().asJson).asJson)
 
   it should "return info" in {
 

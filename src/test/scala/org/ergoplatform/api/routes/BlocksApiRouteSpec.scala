@@ -40,7 +40,7 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.lastHeaders(1, 0).headers.map(_.json).asJson.toString() shouldEqual responseAs[String]
+      history.lastHeaders(1, 0).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -71,7 +71,7 @@ class BlocksApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val expected = history.typedModifierById[Header](headerIdBytes)
         .flatMap(history.getFullBlock)
-        .map(_.json)
+        .map(_.asJson)
         .get
         .toString
       responseAs[String] shouldEqual expected
@@ -84,7 +84,7 @@ class BlocksApiRouteSpec extends FlatSpec
       val expected = history
         .typedModifierById[Header](headerIdBytes)
         .flatMap(history.getFullBlock)
-        .map(_.header.json)
+        .map(_.header.asJson)
         .get
         .toString
       responseAs[String] shouldEqual expected
@@ -97,7 +97,7 @@ class BlocksApiRouteSpec extends FlatSpec
       val expected = history
         .typedModifierById[Header](headerIdBytes)
         .flatMap(history.getFullBlock)
-        .map(_.transactions.map(_.json).asJson)
+        .map(_.transactions.map(_.asJson).asJson)
         .get
         .toString
       responseAs[String] shouldEqual expected

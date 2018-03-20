@@ -4,6 +4,7 @@ import java.io.File
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
+import scorex.crypto.encode.Base58
 
 import scala.util.Random
 
@@ -11,6 +12,22 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+
+  property("nextModifiersToDownload") {
+    var history = genHistory()
+    val chain = genChain(BlocksToKeep)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.append(chain.head.blockTransactions)
+    history.append(chain.head.aDProofs.get)
+    history.bestFullBlockOpt.get shouldBe chain.head
+
+    val missedChain = chain.tail.toList
+    val missedBT = missedChain.map(fb => (BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId))
+    history.nextModifiersToDownload(1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.take(1)
+    history.nextModifiersToDownload(BlocksToKeep - 1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT
+
+    history.nextModifiersToDownload(2, Seq(missedChain.head.blockTransactions.id)).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.tail.take(2)
+  }
 
   property("append header as genesis") {
     val history = genHistory()

@@ -29,7 +29,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   private def getMemPool: Future[Option[ErgoMemPoolReader]] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map {
-    _.map {_.take(limit).toSeq }.map(_.map(_.json).asJson).getOrElse(Json.Null)
+    _.map {_.take(limit).toSeq }.map(_.map(_.asJson).asJson).getOrElse(Json.Null)
   }
 
   //todo There in no codec for "AnyoneCanSpendTransaction" need to make one.

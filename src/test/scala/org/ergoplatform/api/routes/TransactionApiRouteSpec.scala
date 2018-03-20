@@ -27,7 +27,7 @@ class TransactionApiRouteSpec extends FlatSpec
 
   //TODO: Not fully implemented yet. There is no codec for tx.
   ignore should "post transaction" in {
-    Post(prefix, tx.json.toString()) ~> route ~> check {
+    Post(prefix, tx.asJson.toString()) ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }
@@ -42,7 +42,7 @@ class TransactionApiRouteSpec extends FlatSpec
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).toSeq.map(_.json).asJson.toString shouldBe responseAs[String]
+      memPool.take(50).toSeq.map(_.asJson).asJson.toString shouldBe responseAs[String]
     }
   }
 

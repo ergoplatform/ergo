@@ -1,10 +1,10 @@
 package org.ergoplatform.modifiers.mempool.proposition
 
 import com.google.common.primitives.Longs
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.{JsonSerializable, Serializer}
+import scorex.core.serialization.Serializer
 import scorex.core.transaction.box.Box
 import scorex.crypto.authds._
 import scorex.crypto.encode.Base58
@@ -12,15 +12,9 @@ import scorex.crypto.encode.Base58
 import scala.util.Try
 
 case class AnyoneCanSpendNoncedBox(nonce: Long, override val value: Long)
-  extends Box[AnyoneCanSpendProposition.type] with JsonSerializable {
+  extends Box[AnyoneCanSpendProposition.type] {
 
   override val proposition = AnyoneCanSpendProposition
-
-  override lazy val json: Json = Map(
-    "id" -> Base58.encode(id).asJson,
-    "nonce" -> nonce.asJson,
-    "value" -> value.asJson
-  ).asJson
 
   override val id: ADKey = ADKey @@ Algos.hash(Longs.toByteArray(nonce))
 
@@ -34,6 +28,14 @@ case class AnyoneCanSpendNoncedBox(nonce: Long, override val value: Long)
 object AnyoneCanSpendNoncedBox {
   def idFromBox(nonce: Long): Array[Byte] =
     Algos.hash(Longs.toByteArray(nonce))
+
+  implicit val jsonEncoder: Encoder[AnyoneCanSpendNoncedBox] = (b: AnyoneCanSpendNoncedBox) =>
+    Map(
+      "id" -> Base58.encode(b.id).asJson,
+      "nonce" -> b.nonce.asJson,
+      "value" -> b.value.asJson
+    ).asJson
+
 }
 
 object AnyoneCanSpendNoncedBoxSerializer extends Serializer[AnyoneCanSpendNoncedBox] {

@@ -31,7 +31,7 @@ object StateType {
 
   /** This is for json representation of [[StateType]] instances
     */
-  implicit val stateTypeEncoder: Encoder[StateType] =
+  implicit val jsonEncoder: Encoder[StateType] =
     Encoder.encodeString.contramap[StateType](_.stateTypeName)
 
 }

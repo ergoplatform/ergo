@@ -13,7 +13,7 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity
+import scorex.core.consensus.{Invalid, ModifierSemanticValidity}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -45,7 +45,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
-  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
+  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
@@ -136,6 +136,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   }
 
   /** Validates given header
+    *
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator(header).validate()
@@ -286,16 +287,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
       require(parentOpt.nonEmpty, s"Parent header with id ${Algos.encode(header.parentId)} not defined")
       val parent = parentOpt.get
       require(header.timestamp - timeProvider.time() <= MaxTimeDrift,
-              s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
+        s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
       require(header.timestamp > parent.timestamp,
-              s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
+        s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
       require(header.height == parent.height + 1,
-              s"Header height ${header.height} is not greater by 1 than parents ${parent.height + 1}")
+        s"Header height ${header.height} is not greater by 1 than parents ${parent.height + 1}")
 
       require(realDifficulty(header) >= header.requiredDifficulty,
-              s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
+        s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
       require(header.requiredDifficulty == requiredDifficultyAfter(parent),
-              s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parent)}")
+        s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parent)}")
 
       require(!historyStorage.contains(header.id), "Header is already in history")
 
@@ -303,11 +304,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
       require(parentHeightOpt.nonEmpty, s"No height found for parent header ${header.parentId}")
       val parentHeight = parentHeightOpt.get
       require(headersHeight - parentHeight < MaxRollback,
-              s"Trying to apply too old block difficulty at height $parentHeight")
+        s"Trying to apply too old block difficulty at height $parentHeight")
 
       require(powScheme.verify(header), s"Wrong proof-of-work solution for $header")
-      require(isSemanticallyValid(header.parentId) != ModifierSemanticValidity.Invalid,
-              "Parent header is marked as semantically invalid")
+      require(isSemanticallyValid(header.parentId) != Invalid,
+        "Parent header is marked as semantically invalid")
     }
   }
+
 }

@@ -25,8 +25,6 @@ case class PoPoWProof(m: Byte,
 
   override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(poWScheme)
 
-  override lazy val json: Json = ???
-
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
 

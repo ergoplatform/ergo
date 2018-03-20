@@ -269,15 +269,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   class HeaderValidator(header: Header) {
 
     def validate(): Try[Unit] = {
-      val isGenesisBlockHeader = header.parentId sameElements Header.GenesisParentId
-      val result = if (isGenesisBlockHeader) {
+      if (header.isGenesis) {
         validateGenesisBlockHeader()
       } else {
         validateChildBlockHeader()
-      }
-      result.recoverWith { case thr =>
-        log.warn("Validation error: ", thr)
-        Failure(thr)
       }
     }
 

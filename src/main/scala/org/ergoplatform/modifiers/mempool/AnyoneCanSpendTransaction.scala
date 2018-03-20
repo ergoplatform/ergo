@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
@@ -9,7 +9,6 @@ import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -38,24 +37,7 @@ case class AnyoneCanSpendTransaction(from: IndexedSeq[Nonce], to: IndexedSeq[Val
 
   override lazy val serializer: Serializer[AnyoneCanSpendTransaction] = AnyoneCanSpendTransactionSerializer
 
-  override lazy val json: Json = Map(
-    "id" -> Base58.encode(id).asJson,
-    "inputs" -> (from zip boxIdsToOpen).map { case (nonce, id) =>
-      Map(
-        "id" -> Algos.encode(id).asJson,
-        "nonce" -> nonce.asJson,
-        "signature" -> "".asJson
-      ).asJson
-    }.asJson,
-    "outputs" -> to.map { s =>
-      Map(
-        "script" -> "".asJson,
-        "value" -> s.asJson
-      ).asJson
-    }.asJson
-  ).asJson
-
-  override def toString: String = s"AnyoneCanSpendTransaction(${json.noSpaces})"
+  override def toString: String = s"AnyoneCanSpendTransaction(${this.asJson.noSpaces})"
 
   lazy val semanticValidity: Try[Unit] = Try {
     require(to.forall(_ >= 0))
@@ -71,9 +53,28 @@ object AnyoneCanSpendTransaction {
   type Nonce = Long
 
   def nonceFromDigest(digest: Array[Byte]): Nonce = Longs.fromByteArray(digest.take(8))
+
+  implicit val jsonEncoder: Encoder[AnyoneCanSpendTransaction] = (tx: AnyoneCanSpendTransaction) =>
+    Map(
+      "id" -> tx.encodedId.asJson,
+      "inputs" -> (tx.from zip tx.boxIdsToOpen).map { case (nonce, id) =>
+        Map(
+          "id" -> Algos.encode(id).asJson,
+          "nonce" -> nonce.asJson,
+          "signature" -> "".asJson
+        ).asJson
+      }.asJson,
+      "outputs" -> tx.to.map { s =>
+        Map(
+          "script" -> "".asJson,
+          "value" -> s.asJson
+        ).asJson
+      }.asJson
+    ).asJson
 }
 
 object AnyoneCanSpendTransactionSerializer extends Serializer[AnyoneCanSpendTransaction] {
+
 
   override def toBytes(m: AnyoneCanSpendTransaction): Array[Byte] = {
     Bytes.concat(

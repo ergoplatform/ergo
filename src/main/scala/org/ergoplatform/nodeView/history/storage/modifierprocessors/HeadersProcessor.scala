@@ -334,8 +334,8 @@ trait HeadersProcessor extends ScorexLogging {
       }
     }
 
-    def fatal(message: String): ValidationResult = Failure(MalformedHeaderError(message))
-    def error(message: String): ValidationResult = Failure(RecoverableHeaderError(message))
+    def fatal(message: String): ValidationResult = Failure(MalformedModifierError(message))
+    def error(message: String): ValidationResult = Failure(RecoverableModifierError(message))
     def success: ValidationResult = Success(())
   }
 }

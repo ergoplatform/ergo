@@ -102,7 +102,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else if (bestHeaderIdOpt.get sameElements header.id) {
-      log.info(s"New best header ${Algos.encode(header.id)} atC height ${header.height} with score $score")
+      log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
       onNewBestHeader(header)
       ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
     } else {

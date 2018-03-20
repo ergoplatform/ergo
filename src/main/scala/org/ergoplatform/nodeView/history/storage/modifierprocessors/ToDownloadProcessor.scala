@@ -4,12 +4,12 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, 
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
-import scorex.core.utils.NetworkTimeProvider
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
 
-trait ToDownloadProcessor {
+trait ToDownloadProcessor extends ScorexLogging {
 
   protected val config: NodeConfigurationSettings
 
@@ -75,6 +75,7 @@ trait ToDownloadProcessor {
     */
   protected def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     def justSynced(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
+      log.info(s"Headers chain is synced after header $h")
       val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height + 1
       minimalFullBlockHeight = header.height - limit
       val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers

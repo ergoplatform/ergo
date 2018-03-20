@@ -16,14 +16,6 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 
-  property("missedModifiersForFullChain") {
-    var history = genHistory()
-    val chain = genChain(BlocksToKeep)
-    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-
-    history.missedModifiersForFullChain().isEmpty shouldBe true
-  }
-
   ignore("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
       popowHistory.applicable(snapshot) shouldBe true

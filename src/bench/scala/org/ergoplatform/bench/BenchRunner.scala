@@ -9,6 +9,7 @@ import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.{Start, SubTo}
 import org.ergoplatform.mining.EquihashPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
 import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedModifier
@@ -53,26 +54,31 @@ object BenchRunner extends ScorexLogging {
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
     log.info("Starting to read modifiers.")
-    val modifiers = readModifiers(fileName)
+    val modifiers = readModifiers(fileName, threshold)
     log.info("Finished read modifiers, starting to bench.")
     log.info(s"$threshold modifiers to go")
     runBench(benchRef, nodeViewHolderRef, modifiers)
     //writeHtml
   }
 
-  private def readModifiers(fileName: String): Vector[ErgoPersistentModifier] = {
+  private def readModifiers(fileName: String, threshold: Int): Vector[ErgoPersistentModifier] = {
     var counter = 0
+    var headers = 0
     log.info("Start reading modifiers from data file.")
     val is = getUrlInputStream(fileName)
     val result = Stream
       .continually{
         counter += 1
-        if (counter % 100 == 0) { log.info(s"Already read $counter blocks.")}
-        ModifierWriter.read(is)
+        if (counter % 100 == 0) { log.error(s"Already read $counter blocks.")}
+        val mod = ModifierWriter.read(is)
+        if (mod.map{ m => m.modifierTypeId == Header.modifierTypeId}.getOrElse(false)) { headers += 1}
+        mod
       }
-      .takeWhile(_.isDefined)
+      .takeWhile(m => (headers <= threshold) && m.isDefined)
       .flatten
       .toVector
+
+    log.error(s"Total modificators ${result.length}")
 
     result
   }

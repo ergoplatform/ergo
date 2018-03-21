@@ -17,3 +17,5 @@ addSbtPlugin("com.sksamuel.scapegoat" %% "sbt-scapegoat" % "1.0.7")
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
 addSbtPlugin("com.github.sbt" % "sbt-cpd" % "2.0.0")
+
+addSbtPlugin("ch.jodersky" % "sbt-jni" % "1.3.2")

@@ -27,6 +27,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
 
   /** Process full block when we have one.
+    *
     * @param fullBlock - block to process
     * @param txsAreNew - flag, that transactions where added last
     * @return ProgressInfo required for State to process to be consistent with History
@@ -43,16 +44,17 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   private def processIfGenesisBlock(fullBlock: ErgoFullBlock,
                                     newModRow: ErgoPersistentModifier,
                                     newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
-    if (bestFullBlockOpt.isEmpty && fullBlock.header.isGenesis) {
-      Option(applyGenesisBlock(fullBlock, newModRow, newBestAfterThis))
-    } else {
-      None
+    bestFullBlockIdOpt match {
+      case None if fullBlock.header.height == minimalFullBlockHeight =>
+        Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
+      case _ =>
+        None
     }
   }
 
-  private def applyGenesisBlock(fullBlock: ErgoFullBlock,
-                                newModRow: ErgoPersistentModifier,
-                                newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
+  private def applyFirstFullBlock(fullBlock: ErgoFullBlock,
+                                  newModRow: ErgoPersistentModifier,
+                                  newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
     logStatus(Seq(), Seq(fullBlock), fullBlock, None)
     updateStorage(newModRow, newBestAfterThis.id)
     ProgressInfo(None, Seq.empty, Some(fullBlock), Seq.empty)
@@ -159,7 +161,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val indicesToInsert = Seq(BestFullBlockKey -> ByteArrayWrapper(bestFullHeaderId))
     historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
-                                                  s"full height $fullBlockHeight")
+        s"full height $fullBlockHeight")
   }
 
   private def storageVersion(newModRow: ErgoPersistentModifier) = ByteArrayWrapper(newModRow.id)

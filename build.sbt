@@ -135,3 +135,13 @@ findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "fin
 scapegoatVersion in ThisBuild := "1.3.3"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
+
+val Bench = config("bench") extend Test
+
+inConfig(Bench)(Defaults.testSettings ++  Seq(
+  fork in run := true,
+  classDirectory := (classDirectory in Compile).value,
+  dependencyClasspath := (dependencyClasspath in Compile).value
+))
+
+compile in Bench := (compile in Bench).dependsOn(compile in Test).value

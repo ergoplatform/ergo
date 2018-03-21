@@ -23,7 +23,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     * Start height to download full blocks.
     * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
     */
-  private var minimalFullBlockHeight: Int = Int.MaxValue
+  protected var minimalFullBlockHeight: Int = Int.MaxValue
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -76,7 +76,7 @@ trait ToDownloadProcessor extends ScorexLogging {
   protected def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     def justSynced(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
       log.info(s"Headers chain is synced after header $h")
-      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height + 1
+      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height
       minimalFullBlockHeight = header.height - limit
       val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
       headersChain.flatMap(h => requiredModifiersForHeader(h))
@@ -114,7 +114,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     * TODO use the same function to start mining
     */
   private def isNewHeader(h: Header): Boolean = {
-    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis
+    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis * 2
   }
 
 }

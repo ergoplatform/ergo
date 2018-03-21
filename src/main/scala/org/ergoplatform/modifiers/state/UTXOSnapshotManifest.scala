@@ -1,11 +1,10 @@
 package org.ergoplatform.modifiers.state
 
-import io.circe.Json
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 
@@ -19,8 +18,6 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
   override type M = UTXOSnapshotManifest
 
   override lazy val serializer: Serializer[UTXOSnapshotManifest] = ???
-
-  override lazy val json: Json = ???
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(LeafData @@ chunkRootHashes)
 }

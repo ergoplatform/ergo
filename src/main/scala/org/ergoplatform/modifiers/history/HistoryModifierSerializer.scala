@@ -14,7 +14,7 @@ object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
     case m: BlockTransactions =>
       BlockTransactions.modifierTypeId +: BlockTransactionsSerializer.toBytes(m)
     case m =>
-      throw new Error(s"Serialization for unknown modifier: ${m.json.noSpaces}")
+      throw new Error(s"Serialization for unknown modifier: $m")
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = Try(bytes.head).flatMap {

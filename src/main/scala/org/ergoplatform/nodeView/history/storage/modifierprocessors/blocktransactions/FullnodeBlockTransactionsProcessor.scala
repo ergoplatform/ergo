@@ -22,8 +22,7 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
     historyStorage.modifierById(txs.headerId) match {
       case Some(header: Header) =>
         historyStorage.modifierById(header.ADProofsId) match {
-          case _ if !header.isGenesis && bestFullBlockIdOpt.isEmpty =>
-            //TODO light mode when start from different block ?
+          case _ if bestFullBlockIdOpt.isEmpty && !isValidFirstFullBlock(header) =>
             justPutToHistory(txs)
           case Some(adProof: ADProofs) =>
             processFullBlock(ErgoFullBlock(header, txs, Some(adProof)), txsAreNew = true)

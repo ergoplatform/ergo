@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.nodeView.state.StateType
-import scorex.core.consensus.ModifierSemanticValidity
+import scorex.core.consensus.{Absent, Invalid, Unknown, Valid}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Random, Try}
@@ -170,9 +170,9 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
       history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Absent
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Absent
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Absent
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Absent
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Absent
 
       history = history.append(fullBlock.header).get._1
       history = history.append(fullBlock.aDProofs.get).get._1
@@ -181,17 +181,17 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
       history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Valid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Valid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Valid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Valid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Valid
     }
   }
 
@@ -206,15 +206,15 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, chain)
 
     chain.reverse.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
       history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
 
@@ -234,15 +234,15 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.reportSemanticValidity(inChain.last.header, valid = false, inChain.last.parentId)
 
     fork1.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
 
     fork2.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
 

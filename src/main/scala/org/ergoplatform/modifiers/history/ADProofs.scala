@@ -1,19 +1,19 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.state.{BoxStateChangeOperation, BoxStateChanges, Insertion, Removal}
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
+import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
-import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 
 import scala.util.{Failure, Success, Try}
 
@@ -27,12 +27,6 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
   override type M = ADProofs
 
   override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
-
-  override lazy val json: Json = Map(
-    "headerId" -> Base58.encode(headerId).asJson,
-    "proofBytes" -> Base58.encode(proofBytes).asJson,
-    "digest" -> Base58.encode(digest).asJson
-  ).asJson
 
   override def toString: String = s"ADProofs(${Base58.encode(id)},${Base58.encode(headerId)},${Base58.encode(proofBytes)})"
 
@@ -83,6 +77,7 @@ object ADProofs {
 
   /**
     * Convert operation over a box into an AVL+ tree modification
+    *
     * @param change - operation over a box
     * @return AVL+ tree modification
     */
@@ -93,6 +88,13 @@ object ADProofs {
       case r: Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
         Remove(r.boxId)
     }
+
+  implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
+    Map(
+      "headerId" -> Base58.encode(proof.headerId).asJson,
+      "proofBytes" -> Base58.encode(proof.proofBytes).asJson,
+      "digest" -> Base58.encode(proof.digest).asJson
+    ).asJson
 }
 
 object ADProofSerializer extends Serializer[ADProofs] {

@@ -4,14 +4,20 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.http.scaladsl.server.Directives._
 import io.circe.Json
+import org.ergoplatform.local.ErgoStatsCollector.NodeInfo
+import org.ergoplatform.modifiers.history.Header
 import scorex.core.ModifierId
 import scorex.core.api.http.ApiRoute
+import scorex.core.serialization.SerializerRegistry
+import scorex.core.serialization.SerializerRegistry.SerializerRecord
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.Future
 import scala.util.Success
 
 trait ErgoBaseApiRoute extends ApiRoute {
+
+  import org.ergoplatform.utils.JsonSerialization.serializerReg
 
   implicit val ec = context.dispatcher
 

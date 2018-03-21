@@ -84,10 +84,12 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (!isHeadersChainSynced && isNewHeader(header)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header $header")
-      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height
-      minimalFullBlockHeight = header.height - limit
-      val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
-      headersChain.flatMap(h => requiredModifiersForHeader(h))
+      if (config.blocksToKeep >= 0) {
+        minimalFullBlockHeight = header.height - config.blocksToKeep
+      } else {
+        minimalFullBlockHeight = 0
+      }
+      Seq.empty
     } else {
       Seq.empty
     }

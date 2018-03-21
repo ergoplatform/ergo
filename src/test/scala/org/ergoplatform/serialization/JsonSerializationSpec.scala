@@ -6,18 +6,21 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import scorex.crypto.encode.Base58
 import io.circe.parser._
+import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 
 class JsonSerializationSpec extends PropSpec with ErgoGenerators with Matchers {
 
+  import org.ergoplatform.utils.JsonSerialization._
+
   property("TransactionIdsForHeader should be converted into json correctly") {
     val modifierId = genBytesList(Constants.ModifierIdSize).sample.get
     val stringId = Base58.encode(modifierId)
     val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
     val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))
-    data.json shouldEqual expected
+    data.asJson shouldEqual expected
   }
 
   property("AnyoneCanSpendNoncedBox should be converted into json correctly") {
@@ -27,7 +30,7 @@ class JsonSerializationSpec extends PropSpec with ErgoGenerators with Matchers {
     val id = AnyoneCanSpendNoncedBox.idFromBox(nonce)
     val stringId = Base58.encode(id)
     val Right(expected) = parse(s"""{"id": "$stringId", "nonce" : $nonce, "value" : $value}""")
-    box.json shouldEqual expected
+    box.asJson shouldEqual expected
   }
 
 }

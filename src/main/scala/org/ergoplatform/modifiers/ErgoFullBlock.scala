@@ -1,13 +1,12 @@
 package org.ergoplatform.modifiers
 
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.core.serialization.Serializer
+import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
 //TODO we need it to be ErgoPersistentModifier just to put it to ProgressInfo
 case class ErgoFullBlock(header: Header,
@@ -24,12 +23,6 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val id: ModifierId = header.id
 
-  override lazy val json: Json = Map(
-    "header" -> header.json,
-    "blockTransactions" -> blockTransactions.json,
-    "adPoofs" -> aDProofs.map(_.json).getOrElse(Map.empty[String, String].asJson)
-  ).asJson
-
   override type M = ErgoFullBlock
 
   override lazy val serializer: Serializer[ErgoFullBlock] = ???
@@ -39,4 +32,11 @@ case class ErgoFullBlock(header: Header,
 
 object ErgoFullBlock {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
+
+  implicit val jsonEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+    Map(
+      "header" -> b.header.asJson,
+      "blockTransactions" -> b.blockTransactions.asJson,
+      "adPoofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+    ).asJson
 }

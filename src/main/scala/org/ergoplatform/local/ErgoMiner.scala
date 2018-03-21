@@ -1,7 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.CandidateBlock
@@ -164,13 +164,14 @@ object ErgoMiner extends ScorexLogging {
 
   case object MiningStatusRequest
 
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock]) {
-    lazy val json: Json = Map(
-      "isMining" -> isMining.asJson,
-      "votes" -> Algos.encode(votes).asJson,
-      "candidateBlock" -> candidateBlock.map(_.json).getOrElse("None".asJson)
+  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock])
+
+  implicit val jsonEncoder: Encoder[MiningStatusResponse] = (r: MiningStatusResponse) =>
+    Map(
+      "isMining" -> r.isMining.asJson,
+      "votes" -> Algos.encode(r.votes).asJson,
+      "candidateBlock" -> r.candidateBlock.map(_.asJson).getOrElse("None".asJson)
     ).asJson
-  }
 
 }
 

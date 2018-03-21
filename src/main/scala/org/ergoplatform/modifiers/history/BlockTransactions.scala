@@ -1,16 +1,15 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
-import io.circe.Json
 import io.circe.syntax._
+import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
-import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
+import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
@@ -32,11 +31,6 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   override lazy val serializer: Serializer[BlockTransactions] = BlockTransactionsSerializer
 
-  override lazy val json: Json = Map(
-    "headerId" -> Base58.encode(headerId).asJson,
-    "transactions" -> txs.map(_.json).asJson
-  ).asJson
-
   override def toString: String = s"BlockTransactions(${Base58.encode(id)},${Base58.encode(headerId)},$txs)"
 
   override lazy val transactions: Seq[AnyoneCanSpendTransaction] = txs
@@ -46,6 +40,12 @@ object BlockTransactions {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(LeafData @@ ids)
+
+  implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
+    Map(
+      "headerId" -> Base58.encode(bt.headerId).asJson,
+      "transactions" -> bt.txs.map(_.asJson).asJson
+    ).asJson
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {

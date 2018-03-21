@@ -21,6 +21,6 @@ case class InfoRoute(statsCollector: ActorRef,
 
   def info: Route = (path("info") & get) {
     val timeJson = Map("currentTime" -> timeProvider.time().asJson).asJson
-    (statsCollector ? GetNodeInfo).mapTo[NodeInfo].map(_.json.deepMerge(timeJson)).okJson()
+    (statsCollector ? GetNodeInfo).mapTo[NodeInfo].map(_.asJson.deepMerge(timeJson)).okJson()
   }
 }

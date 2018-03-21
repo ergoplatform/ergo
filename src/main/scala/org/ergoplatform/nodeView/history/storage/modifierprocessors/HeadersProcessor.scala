@@ -13,7 +13,7 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity
+import scorex.core.consensus.{Invalid, ModifierSemanticValidity}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -48,7 +48,7 @@ trait HeadersProcessor extends ScorexLogging {
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
-  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity.Value
+  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -105,7 +105,7 @@ trait HeadersProcessor extends ScorexLogging {
     val dataToInsert = toInsert(header)
     historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
     val score = scoreOf(header.id).getOrElse(-1)
-    val toProcess = if(config.verifyTransactions) None else Some(header)
+    val toProcess = if (config.verifyTransactions) None else Some(header)
 
     if (bestHeaderIdOpt.isEmpty) {
       log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
@@ -154,6 +154,7 @@ trait HeadersProcessor extends ScorexLogging {
   }
 
   /** Validates given header
+    *
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header)
@@ -213,8 +214,9 @@ trait HeadersProcessor extends ScorexLogging {
 
   /**
     * Find first header with the best height <= $height which id satisfies condition $p
+    *
     * @param height - start height
-    * @param p - condition to satisfy
+    * @param p      - condition to satisfy
     * @return found header
     */
   @tailrec
@@ -326,7 +328,7 @@ trait HeadersProcessor extends ScorexLogging {
           fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
         } else if (!powScheme.verify(header)) {
           fatal(s"Wrong proof-of-work solution for $header")
-        } else if (isSemanticallyValid(header.parentId) == ModifierSemanticValidity.Invalid) {
+        } else if (isSemanticallyValid(header.parentId) == Invalid) {
           fatal("Parent header is marked as semantically invalid")
         } else {
           success
@@ -338,4 +340,5 @@ trait HeadersProcessor extends ScorexLogging {
     def error(message: String): ValidationResult = Failure(RecoverableModifierError(message))
     def success: ValidationResult = Success(())
   }
+
 }

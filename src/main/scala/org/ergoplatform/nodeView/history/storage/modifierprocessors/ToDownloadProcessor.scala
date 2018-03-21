@@ -73,24 +73,21 @@ trait ToDownloadProcessor extends ScorexLogging {
     * Checks, whether it's time to download full chain and return toDownload modifiers
     * TODO Required to return to nodeViewHolder, but never used
     */
-  protected def toDownload(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    def justSynced(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
-      log.info(s"Headers chain is synced after header $h")
-      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height
-      minimalFullBlockHeight = header.height - limit
-      val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
-      headersChain.flatMap(h => requiredModifiersForHeader(h))
-    }
+  protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
 
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
-    } else if (h.height >= minimalFullBlockHeight) {
+    } else if (header.height >= minimalFullBlockHeight) {
       // Already synced and header is not too far back. Download required modifiers
-      requiredModifiersForHeader(h)
-    } else if (!isHeadersChainSynced && isNewHeader(h)) {
+      requiredModifiersForHeader(header)
+    } else if (!isHeadersChainSynced && isNewHeader(header)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      justSynced(h)
+      log.info(s"Headers chain is synced after header $header")
+      val limit = if (config.blocksToKeep >= 0) config.blocksToKeep else header.height
+      minimalFullBlockHeight = header.height - limit
+      val headersChain = headerChainBack(limit, header, h => h.height < minimalFullBlockHeight).headers
+      headersChain.flatMap(h => requiredModifiersForHeader(h))
     } else {
       Seq.empty
     }
@@ -114,7 +111,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     * TODO use the same function to start mining
     */
   private def isNewHeader(h: Header): Boolean = {
-    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis * 2
+    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis * 5
   }
 
 }

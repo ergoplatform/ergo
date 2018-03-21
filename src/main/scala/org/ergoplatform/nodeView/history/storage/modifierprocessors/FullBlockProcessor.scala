@@ -41,14 +41,17 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       getOrElse(nonBestBlock(fullBlock, newModRow))
   }
 
+  protected def isValidFirstFullBlock(header: Header): Boolean = {
+    header.height == minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
+  }
+
   private def processIfGenesisBlock(fullBlock: ErgoFullBlock,
                                     newModRow: ErgoPersistentModifier,
                                     newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
-    bestFullBlockIdOpt match {
-      case None if fullBlock.header.height == minimalFullBlockHeight =>
-        Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
-      case _ =>
-        None
+    if (isValidFirstFullBlock(fullBlock.header)) {
+      Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
+    } else {
+      None
     }
   }
 

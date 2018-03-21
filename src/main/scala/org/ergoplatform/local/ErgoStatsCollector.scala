@@ -1,8 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import io.circe.JsonNumber
 import io.circe.syntax._
+import io.circe.{Encoder, JsonNumber}
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.history.Header
@@ -116,24 +116,28 @@ object ErgoStatsCollector {
                       bestHeaderOpt: Option[Header],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       launchTime: Long) {
-    lazy val json = Map(
-      "name" -> nodeName.asJson,
-      "appVersion" -> Version.VersionString.asJson,
-      "headersHeight" -> bestHeaderOpt.map(_.height).asJson,
-      "fullHeight" -> bestFullBlockOpt.map(_.header.height).asJson,
-      "bestHeaderId" -> bestHeaderOpt.map(_.encodedId).asJson,
-      "bestFullHeaderId" -> bestFullBlockOpt.map(_.header.encodedId).asJson,
-      "previousFullHeaderId" -> bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).asJson,
-      "difficulty" -> bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
-      "unconfirmedCount" -> unconfirmedCount.asJson,
-      "stateRoot" -> stateRoot.asJson,
-      "stateType" -> stateType.stateTypeName.asJson,
-      "stateVersion" -> stateVersion.asJson,
-      "isMining" -> isMining.asJson,
-      "votes" -> votes.asJson,
-      "peersCount" -> peersCount.asJson,
-      "launchTime" -> launchTime.asJson
-    ).asJson
+  }
+
+  object NodeInfo {
+    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
+      Map(
+        "name" -> ni.nodeName.asJson,
+        "appVersion" -> Version.VersionString.asJson,
+        "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
+        "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
+        "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
+        "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
+        "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).asJson,
+        "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
+        "unconfirmedCount" -> ni.unconfirmedCount.asJson,
+        "stateRoot" -> ni.stateRoot.asJson,
+        "stateType" -> ni.stateType.stateTypeName.asJson,
+        "stateVersion" -> ni.stateVersion.asJson,
+        "isMining" -> ni.isMining.asJson,
+        "votes" -> ni.votes.asJson,
+        "peersCount" -> ni.peersCount.asJson,
+        "launchTime" -> ni.launchTime.asJson
+      ).asJson
   }
 
 }

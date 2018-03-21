@@ -18,7 +18,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains all functions required by History to process Headers.
@@ -157,7 +157,7 @@ trait HeadersProcessor extends ScorexLogging {
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator(header).validate()
+  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header)
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 
@@ -271,7 +271,6 @@ trait HeadersProcessor extends ScorexLogging {
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  //TODO rework option.get
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentHeight = parent.height
     val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
@@ -279,60 +278,67 @@ trait HeadersProcessor extends ScorexLogging {
     if (heights.lengthCompare(1) == 0) {
       difficultyCalculator.calculate(Seq(parent))
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false).headers
-        .filter(p => heights.contains(p.height))
-      difficultyCalculator.calculate(chain)
+      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
+      val headers = chain.headers.filter(p => heights.contains(p.height))
+      difficultyCalculator.calculate(headers)
     }
   }
 
-  class HeaderValidator(header: Header) {
+  class HeaderValidator {
 
-    def validate(): Try[Unit] = {
-      val isGenesisBlockHeader = header.parentId sameElements Header.GenesisParentId
-      val result = if (isGenesisBlockHeader) {
-        validateGenesisBlockHeader()
+    type ValidationResult = Try[Unit]
+
+    def validate(header: Header): ValidationResult = {
+      if (header.isGenesis) {
+        validateGenesisBlockHeader(header)
       } else {
-        validateChildBlockHeader()
-      }
-      result.recoverWith { case thr =>
-        log.warn("Validation error: ", thr)
-        Failure(thr)
+        validateChildBlockHeader(header)
       }
     }
 
-    private def validateGenesisBlockHeader() = Try {
-      require(bestHeaderIdOpt.isEmpty, "Trying to append genesis block to non-empty history")
-      require(header.height == GenesisHeight, s"Height of genesis block $header is incorrect")
+    private def validateGenesisBlockHeader(header: Header): ValidationResult = {
+      if (!(header.parentId sameElements Header.GenesisParentId)) {
+        fatal(s"Genesis block should have genesis parent id ${Algos.encode(Header.GenesisParentId)}." +
+              s"Found: ${Algos.encode(header.parentId)}")
+      } else if (bestHeaderIdOpt.nonEmpty) {
+        fatal("Trying to append genesis block to non-empty history")
+      } else if (header.height != GenesisHeight) {
+        fatal(s"Height of genesis block $header is incorrect")
+      } else {
+        success
+      }
     }
 
-    private def validateChildBlockHeader() = Try {
+    private def validateChildBlockHeader(header: Header): ValidationResult = {
       val parentOpt = typedModifierById[Header](header.parentId)
-      require(parentOpt.nonEmpty, s"Parent header with id ${Algos.encode(header.parentId)} not defined")
-      val parent = parentOpt.get
-      require(header.timestamp - timeProvider.time() <= MaxTimeDrift,
-        s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
-      require(header.timestamp > parent.timestamp,
-        s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
-      require(header.height == parent.height + 1,
-        s"Header height ${header.height} is not greater by 1 than parents ${parent.height + 1}")
-
-      require(realDifficulty(header) >= header.requiredDifficulty,
-        s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
-      require(header.requiredDifficulty == requiredDifficultyAfter(parent),
-        s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parent)}")
-
-      require(!historyStorage.contains(header.id), "Header is already in history")
-
-      val parentHeightOpt = heightOf(header.parentId)
-      require(parentHeightOpt.nonEmpty, s"No height found for parent header ${header.parentId}")
-      val parentHeight = parentHeightOpt.get
-      require(headersHeight - parentHeight < MaxRollback,
-        s"Trying to apply too old block difficulty at height $parentHeight")
-
-      require(powScheme.verify(header), s"Wrong proof-of-work solution for $header")
-      require(isSemanticallyValid(header.parentId) != Invalid,
-        "Parent header is marked as semantically invalid")
+      parentOpt.fold(error(s"Parent header with id ${Algos.encode(header.parentId)} not defined")) { parent =>
+        if (header.timestamp - timeProvider.time() > MaxTimeDrift) {
+          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
+        } else if (header.timestamp <= parent.timestamp) {
+          fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
+        } else if (header.height != parent.height + 1) {
+          fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height + 1}")
+        } else if (historyStorage.contains(header.id)) {
+          fatal("Header is already in history")
+        } else if (realDifficulty(header) < header.requiredDifficulty) {
+          fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
+        } else if (header.requiredDifficulty != requiredDifficultyAfter(parent)) {
+          fatal(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parent)}")
+        } else if (!heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
+          fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
+        } else if (!powScheme.verify(header)) {
+          fatal(s"Wrong proof-of-work solution for $header")
+        } else if (isSemanticallyValid(header.parentId) == Invalid) {
+          fatal("Parent header is marked as semantically invalid")
+        } else {
+          success
+        }
+      }
     }
+
+    def fatal(message: String): ValidationResult = Failure(MalformedModifierError(message))
+    def error(message: String): ValidationResult = Failure(RecoverableModifierError(message))
+    def success: ValidationResult = Success(())
   }
 
 }

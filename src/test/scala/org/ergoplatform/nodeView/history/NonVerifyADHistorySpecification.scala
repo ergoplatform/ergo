@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.NoShrink
-import scorex.core.consensus.History.HistoryComparisonResult
+import scorex.core.consensus.History.{Equal, HistoryComparisonResult, Unknown, Younger}
 import scorex.crypto.encode.Base58
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
@@ -88,11 +88,11 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Unknown
+    history.compare(getInfo(fork2)) shouldBe Younger
+    history.compare(getInfo(fork1)) shouldBe Equal
+    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfo(fork2.tail)) shouldBe Unknown
   }
 
   property("continuationIds() on forks") {

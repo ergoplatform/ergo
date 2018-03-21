@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
@@ -10,9 +10,9 @@ import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
@@ -67,23 +67,7 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId =
     ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  override lazy val json: Json = Map(
-    "id" -> Algos.encode(id).asJson,
-    "transactionsRoot" -> Algos.encode(transactionsRoot).asJson,
-    "interlinks" -> interlinks.map(i => Algos.encode(i).asJson).asJson,
-    "adProofsRoot" -> Algos.encode(ADProofsRoot).asJson,
-    "stateRoot" -> Algos.encode(stateRoot).asJson,
-    "parentId" -> Algos.encode(parentId).asJson,
-    "timestamp" -> timestamp.asJson,
-    "nonce" -> nonce.asJson,
-    "equihashSolutions" -> Algos.encode(equihashSolutions).asJson,
-    "nBits" -> nBits.asJson,
-    "height" -> height.asJson,
-    "difficulty" -> requiredDifficulty.toString.asJson,
-    "votes" -> Algos.encode(votes).asJson
-  ).asJson
-
-  override lazy val toString: String = s"Header(${json.noSpaces})"
+  override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
   override type M = Header
 
@@ -96,6 +80,23 @@ object Header {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
   lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
+
+  implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
+    Map(
+      "id" -> Algos.encode(h.id).asJson,
+      "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
+      "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
+      "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
+      "stateRoot" -> Algos.encode(h.stateRoot).asJson,
+      "parentId" -> Algos.encode(h.parentId).asJson,
+      "timestamp" -> h.timestamp.asJson,
+      "nonce" -> h.nonce.asJson,
+      "equihashSolutions" -> Algos.encode(h.equihashSolutions).asJson,
+      "nBits" -> h.nBits.asJson,
+      "height" -> h.height.asJson,
+      "difficulty" -> h.requiredDifficulty.toString.asJson,
+      "votes" -> Algos.encode(h.votes).asJson
+    ).asJson
 }
 
 
@@ -124,13 +125,14 @@ object HeaderSerializer extends Serializer[Header] {
         buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
       }
     }
+
     val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
     val interlinkBytesSize = Chars.toByteArray(interlinkBytes.length.toChar)
 
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def nonceAndSolutionBytes(h:Header): Array[Byte] = {
+  def nonceAndSolutionBytes(h: Header): Array[Byte] = {
     val equihashSolutionsSize = Chars.toByteArray(h.equihashSolutions.length.toChar)
     val equihashSolutionsBytes = h.equihashSolutions
 

@@ -22,6 +22,8 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
+  protected def fullBlockExists(header: Header): Boolean = contains(header.transactionsId)
+
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
@@ -124,7 +126,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   private def calculateBestFullChain(header: Header) = {
-    val continuations = continuationHeaderChains(header, _ => true).map(_.tail)
+    val continuations = continuationHeaderChains(header, h => fullBlockExists(h)).map(_.tail)
     val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
     chains.map(c => header +: c).maxBy(c => scoreOf(c.last.id))
   }

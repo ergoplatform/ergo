@@ -23,7 +23,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     * Start height to download full blocks.
     * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
     */
-  protected var minimalFullBlockHeight: Int = Int.MaxValue
+  protected[history] var minimalFullBlockHeight: Int = Int.MaxValue
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -66,7 +66,9 @@ trait ToDownloadProcessor extends ScorexLogging {
   }
 
   protected def onNewBestHeader(header: Header): Unit = {
-    if (config.blocksToKeep >= 0 && isHeadersChainSynced) minimalFullBlockHeight = header.height - config.blocksToKeep
+    if (config.blocksToKeep >= 0 && isHeadersChainSynced) {
+      minimalFullBlockHeight = Math.max(0, header.height - config.blocksToKeep)
+    }
   }
 
   /**
@@ -84,11 +86,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (!isHeadersChainSynced && isNewHeader(header)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header $header")
-      if (config.blocksToKeep >= 0) {
-        minimalFullBlockHeight = header.height - config.blocksToKeep
-      } else {
-        minimalFullBlockHeight = 0
-      }
+      onNewBestHeader(header)
       Seq.empty
     } else {
       Seq.empty

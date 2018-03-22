@@ -11,8 +11,9 @@ import scala.util.{Random, Try}
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
-  private def genHistory(height: Int = 0): ErgoHistory = {
+  private def genHistory(height: Int = 0, minimalFullBlockHeight: Int = 0): ErgoHistory = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+    inHistory.minimalFullBlockHeight = minimalFullBlockHeight
     if (height > 0) applyChain(inHistory, genChain(height, inHistory))
     else inHistory
   }
@@ -373,7 +374,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Appended full blocks to best chain in full history") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain))
+    var history = genHistory(1)
+    history.bestFullBlockOpt.nonEmpty shouldBe true
 
     val chain = genChain(BlocksInChain, history).tail
     chain.foreach { fullBlock =>

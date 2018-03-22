@@ -43,6 +43,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     System.exit(100) // this actor shouldn't be restarted at all so kill the whole app if that happened
   }
 
+  override def postStop(): Unit = {
+    log.warn("Stopping ErgoNodeViewHolder")
+    history().closeStorage
+    minimalState().closeStorage
+  }
+
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */

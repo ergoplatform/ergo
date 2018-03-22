@@ -23,7 +23,9 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store, nodeViewHolderRef: Option[ActorRef])
+class UtxoState(override val version: VersionTag,
+                override val store: Store,
+                nodeViewHolderRef: Option[ActorRef])
   extends ErgoState[UtxoState]
     with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
     with UtxoStateReader {

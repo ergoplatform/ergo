@@ -36,7 +36,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val newModRow = calculateNewModRow(fullBlock, txsAreNew)
     val bestFullChain = calculateBestFullChain(fullBlock.header)
     val newBestAfterThis = bestFullChain.last
-    processIfGenesisBlock(fullBlock, newModRow, newBestAfterThis).
+    processIfValidFirstBlock(fullBlock, newModRow, newBestAfterThis).
       orElse(processIfBetterChain(fullBlock, newModRow, newBestAfterThis)).
       getOrElse(nonBestBlock(fullBlock, newModRow))
   }
@@ -45,7 +45,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     header.height == minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
   }
 
-  private def processIfGenesisBlock(fullBlock: ErgoFullBlock,
+  private def processIfValidFirstBlock(fullBlock: ErgoFullBlock,
                                     newModRow: ErgoPersistentModifier,
                                     newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
     if (isValidFirstFullBlock(fullBlock.header)) {

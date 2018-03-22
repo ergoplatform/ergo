@@ -113,7 +113,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
 
   /**
     *
-    * @param header - header we're going to remove from history+
+    * @param header - header we're going to remove from history
     * @return ids to remove, new data to apply
     */
   protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {

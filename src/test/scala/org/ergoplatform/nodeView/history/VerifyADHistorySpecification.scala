@@ -21,7 +21,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
-        var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+        var history = genHistory()
         val r = new Random(seed)
         val genesis = genChain(1).head
         history.append(genesis.header) shouldBe 'success
@@ -72,7 +72,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs that link incomplete chain") {
-    var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+    var history = genHistory()
     val chain = genChain(4)
 
     val block0 = chain.head
@@ -103,7 +103,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   //TODO fix this correctly
   ignore("bootstrap from headers and last full blocks") {
-    var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+    var history = genHistory()
     //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None
 

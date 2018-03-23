@@ -11,8 +11,10 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder.ReceivableMessages.Subscribe
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
-import scorex.core.network.message.Message
+import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SendLocalSyncInfo, SyntacticallySuccessfulModifier}
+import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
+import scorex.core.network.message.{Message, ModifiersSpec}
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -48,6 +50,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> Seq(modifierId)), None)
     //todo: Full nodes should be here, not a random peer
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  }
+
+  override protected def modifiersFromRemote: Receive = {
+    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
+      super.modifiersFromRemote(DataFromPeer(spec, data, remote))
+      //If queue is empty - check, whether there are more modifiers to download
+      historyReaderOpt foreach { h =>
+        if(!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
+          // headers chain is not synced yet, but our expecting list is empty - ask for more headers
+          historyReaderOpt.foreach(r =>  sendSync(r.syncInfo))
+        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
+          // headers chain is synced, but our full block list is empty - request more full blocks
+          self ! CheckModifiersToDownload
+        }
+      }
   }
 
   protected val onSyntacticallySuccessfulModifier: Receive = {

@@ -21,6 +21,10 @@ class ErgoDeliveryTracker(context: ActorContext,
   private val ToDownloadLifetime = 1.hour
   private val expectingFromRandom: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
+  def isExpectingFromRandom: Boolean = expectingFromRandom.nonEmpty
+
+  def isExpecting: Boolean = expecting.nonEmpty
+
   /**
     * @return ids we're going to download
     */

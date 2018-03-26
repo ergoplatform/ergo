@@ -13,7 +13,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * BlockTransactions processor for settings with verifyTransactions=true
   */
-trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
+trait FullBlockTransactionsProcessor extends BlockTransactionsProcessor with FullBlockProcessor {
   protected val historyStorage: HistoryStorage
 
   protected val adState: Boolean

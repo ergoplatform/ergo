@@ -22,6 +22,40 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
+  property("should not be able to apply blocks older than blocksToKeep") {
+    var history = genHistory()._1
+    history.bestFullBlockOpt shouldBe None
+
+    val chain = genChain(BlocksToKeep * 2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.get shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    val fullBlocksToApply = chain.tail
+    history.setMinimalFullBlockHeight(1)
+
+    history.applicable(chain.head.blockTransactions) shouldBe false
+
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history.bestFullBlockOpt shouldBe None
+    history = history.append(fullBlocksToApply.head.aDProofs.get).get._1
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
+
+    history.applicable(chain.head.blockTransactions) shouldBe false
+
+    fullBlocksToApply.tail.foreach { f =>
+      history = history.append(f.blockTransactions).get._1
+      history = history.append(f.aDProofs.get).get._1
+    }
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.last.header
+
+    //block transactions should be already pruned
+    history.contains(fullBlocksToApply.head.blockTransactions) shouldBe false
+    //block transactions should not be able to apply since they are too far back in history
+    history.applicable(fullBlocksToApply.head.blockTransactions) shouldBe false
+  }
+
   property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
@@ -104,7 +138,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   property("bootstrap from headers and last full blocks") {
     var history = genHistory()._1
-    //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
     history.bestFullBlockOpt shouldBe None
 
     val chain = genChain(BlocksToKeep * 2)

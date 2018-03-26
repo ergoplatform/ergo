@@ -13,7 +13,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    minFullHeight.foreach(h => inHistory.setMinimalFullBlockHeight(h))
+    minFullHeight.foreach(h => inHistory.pruningProcessor.minimalFullBlockHeightVar = h)
+
     if (height > 0) {
       val chain = genChain(height, inHistory)
       (applyChain(inHistory, chain), chain)
@@ -33,7 +34,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
 
     val fullBlocksToApply = chain.tail
-    history.setMinimalFullBlockHeight(1)
+    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep).header)
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
@@ -147,7 +148,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
-    history.setMinimalFullBlockHeight(fullBlocksToApply.head.header.height)
 
     history = history.append(fullBlocksToApply.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None

@@ -4,6 +4,7 @@ import io.circe.Encoder
 
 sealed trait StateType {
   def stateTypeName: String
+  def downloadProofs: Boolean
   override def toString: String = stateTypeName
 }
 
@@ -11,10 +12,12 @@ object StateType {
 
   case object Utxo extends StateType {
     def stateTypeName: String = "utxo"
+    val downloadProofs: Boolean = false
   }
 
   case object Digest extends StateType {
     def stateTypeName: String = "digest"
+    val downloadProofs: Boolean = true
   }
 
   type UtxoType = Utxo.type

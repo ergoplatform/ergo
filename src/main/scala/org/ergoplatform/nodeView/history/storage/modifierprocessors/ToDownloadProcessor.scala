@@ -11,19 +11,13 @@ import scala.annotation.tailrec
 
 trait ToDownloadProcessor extends ScorexLogging {
 
+  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
+
   protected val config: NodeConfigurationSettings
 
   protected val chainSettings: ChainSettings
 
   protected val timeProvider: NetworkTimeProvider
-
-  private lazy val downloadProofs = config.stateType.isInstanceOf[StateType.DigestType]
-
-  /**
-    * Start height to download full blocks.
-    * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
-    */
-  protected[history] var minimalFullBlockHeight: Int = Int.MaxValue
 
   private var isHeadersChainSyncedVar: Boolean = false
 
@@ -34,6 +28,8 @@ trait ToDownloadProcessor extends ScorexLogging {
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
 
   def contains(id: ModifierId): Boolean
+
+  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
   /**
     * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
@@ -63,19 +59,7 @@ trait ToDownloadProcessor extends ScorexLogging {
       case Some(fb) =>
         continuation(fb.header.height + 1, Seq.empty)
       case None =>
-        continuation(minimalFullBlockHeight, Seq.empty)
-    }
-  }
-
-  def setMinimalFullBlockHeight(height: Int): Unit = minimalFullBlockHeight = height
-
-  protected def minimalFullBlockHeightAfter(header: Header): Int = {
-    if (!config.verifyTransactions) {
-      Int.MaxValue
-    } else if (config.blocksToKeep >= 0) {
-      Math.max(0, header.height - config.blocksToKeep)
-    } else {
-      0
+        continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
     }
   }
 
@@ -88,14 +72,14 @@ trait ToDownloadProcessor extends ScorexLogging {
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
-    } else if (header.height >= minimalFullBlockHeight) {
+    } else if (header.height >= pruningProcessor.minimalFullBlockHeight) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && isNewHeader(header)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header $header")
       isHeadersChainSyncedVar = true
-      minimalFullBlockHeight = minimalFullBlockHeightAfter(header)
+      pruningProcessor.updateBestFullBlock(header)
       Seq.empty
     } else {
       Seq.empty
@@ -105,15 +89,12 @@ trait ToDownloadProcessor extends ScorexLogging {
   private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!config.verifyTransactions) {
       Seq.empty
-    } else if (downloadProofs) {
+    } else if (config.stateType.downloadProofs) {
       Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
     } else {
       Seq((BlockTransactions.modifierTypeId, h.transactionsId))
     }
   }
-
-
-  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
   /**
     * Estimate, that this block is new enough.

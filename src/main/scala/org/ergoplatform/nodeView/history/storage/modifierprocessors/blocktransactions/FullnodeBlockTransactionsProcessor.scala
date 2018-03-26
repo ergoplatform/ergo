@@ -48,8 +48,9 @@ trait FullnodeBlockTransactionsProcessor extends BlockTransactionsProcessor with
       historyStorage.modifierById(m.headerId) match {
         case None =>
           Failure(new Error(s"Header for modifier $m is no defined"))
-        case Some(header: Header) if header.height < minimalFullBlockHeight =>
-          Failure(new Error(s"Too old block transactions ${m.encodedId}: ${header.height} < $minimalFullBlockHeight"))
+        case Some(header: Header) if header.height < pruningProcessor.minimalFullBlockHeight =>
+          Failure(new Error(s"Too old block transactions ${m.encodedId}: ${header.height} <" +
+            s" ${pruningProcessor.minimalFullBlockHeight}"))
         case Some(header: Header) if !(header.transactionsRoot sameElements m.digest) =>
           Failure(new Error(s"Header transactions root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
         case Some(header: Header) =>

@@ -44,12 +44,12 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   protected def isValidFirstFullBlock(header: Header): Boolean = {
-    header.height == minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
+    header.height == pruningProcessor.minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
   }
 
   private def processIfValidFirstBlock(fullBlock: ErgoFullBlock,
-                                    newModRow: ErgoPersistentModifier,
-                                    newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
+                                       newModRow: ErgoPersistentModifier,
+                                       newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
     if (isValidFirstFullBlock(fullBlock.header)) {
       Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
     } else {
@@ -99,9 +99,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       updateStorage(newModRow, newBestAfterThis.id)
 
       if (config.blocksToKeep >= 0) {
+        val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
         val bestHeight: Int = newBestAfterThis.height
         val diff = bestHeight - prevBest.header.height
-        val lastKept = bestHeight - config.blocksToKeep
         pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
       }
       ProgressInfo(branchPoint, toRemove, toApply.headOption, Seq.empty)

@@ -38,6 +38,8 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
       historyStorage.modifierById(m.headerId) match {
         case None =>
           Failure(new Error(s"Header for modifier $m is no defined"))
+        case Some(header: Header) if header.height < minimalFullBlockHeight =>
+          Failure(new Error(s"Too old proof ${m.encodedId}: ${header.height} < $minimalFullBlockHeight"))
         case Some(header: Header) if !(header.ADProofsRoot sameElements m.digest) =>
           Failure(new Error(s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
         case Some(header: Header) =>

@@ -94,6 +94,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
     val toProcess = if (config.verifyTransactions) None else Some(h)
+    val prevHeight = headersHeight
 
     val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
       val requiredDifficulty: Difficulty = h.requiredDifficulty
@@ -114,7 +115,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
         val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
         val headerIdsRow = if (score > bestHeadersChainScore) {
           // Best block. All blocks back should have their id in the first position
-          log.info(s"New best header ${h.encodedId} at height ${h.height} with score $score")
+          log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
           val self: (ByteArrayWrapper, ByteArrayWrapper) =
             heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
           val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)

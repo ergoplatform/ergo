@@ -56,8 +56,13 @@ class DigestState protected(override val version: VersionTag,
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
-      log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
+      log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
+        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
+        case e =>
+          log.warn(s"Invalid block ${fb.encodedId}, reason ${e.getMessage}")
+          Failure(e)
+      }
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
       //TODO should not get this messages from node view holders

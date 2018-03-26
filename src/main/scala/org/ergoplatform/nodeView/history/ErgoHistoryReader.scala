@@ -214,9 +214,10 @@ trait ErgoHistoryReader
   }
 
   def getFullBlock(header: Header): Option[ErgoFullBlock] = {
-    val aDProofs = typedModifierById[ADProofs](header.ADProofsId)
-    typedModifierById[BlockTransactions](header.transactionsId).map { txs =>
-      ErgoFullBlock(header, txs, aDProofs)
+    (typedModifierById[BlockTransactions](header.transactionsId), typedModifierById[ADProofs](header.ADProofsId)) match {
+      case (Some(txs), Some(proofs)) => Some(ErgoFullBlock(header, txs, Some(proofs)))
+      case (Some(txs), None) if !config.stateType.requireProofs => Some(ErgoFullBlock(header, txs, None))
+      case _ => None
     }
   }
 

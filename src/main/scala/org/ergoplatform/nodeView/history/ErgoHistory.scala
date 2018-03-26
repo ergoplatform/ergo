@@ -78,12 +78,14 @@ trait ErgoHistory
     */
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) =
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid = $valid")
     if (valid) {
       this -> markModifierValid(modifier)
     } else {
       this -> markModifierInvalid(modifier)
     }
+  }
 
   /**
     * Mark modifier and all modifiers in child chains as invalid

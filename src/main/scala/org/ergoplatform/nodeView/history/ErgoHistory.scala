@@ -231,7 +231,7 @@ object ErgoHistory extends ScorexLogging {
     val history: ErgoHistory = (nodeSettings.stateType, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (StateType.Digest, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -241,7 +241,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Digest, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -251,7 +251,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Utxo, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -261,7 +261,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Utxo, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings

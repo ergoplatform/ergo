@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoApp
 import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history._
@@ -88,25 +89,62 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
   /**
-    * @param header - header to process
+    * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  @SuppressWarnings(Array("OptionGet"))
-  protected def process(header: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val dataToInsert = toInsert(header)
-    historyStorage.insert(ByteArrayWrapper(header.id), dataToInsert._1, Seq(dataToInsert._2))
-    val score = scoreOf(header.id).getOrElse(-1)
-    val toProcess = if (config.verifyTransactions) None else Some(header)
+  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+    val toProcess = if (config.verifyTransactions) None else Some(h)
 
-    if (bestHeaderIdOpt.isEmpty) {
-      log.info(s"Initialize header chain with genesis header ${Algos.encode(header.id)}")
-      ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
-    } else if (bestHeaderIdOpt.get sameElements header.id) {
-      log.info(s"New best header ${Algos.encode(header.id)} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq.empty, toProcess, toDownload(header))
-    } else {
-      log.info(s"New orphaned header ${header.encodedId} at height ${header.height} with score $score")
-      ProgressInfo(None, Seq.empty, None, toDownload(header))
+    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
+      val requiredDifficulty: Difficulty = h.requiredDifficulty
+      if (h.isGenesis) {
+        log.info(s"Initialize header chain with genesis header ${h.encodedId}")
+        (Seq(
+          BestHeaderKey -> ByteArrayWrapper(h.id),
+          heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
+          headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
+          headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
+          h)
+      } else {
+        val score = scoreOf(h.parentId).get + requiredDifficulty
+        val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
+          if (score > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
+
+        val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
+        val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
+        val headerIdsRow = if (score > bestHeadersChainScore) {
+          // Best block. All blocks back should have their id in the first position
+          log.info(s"New best header ${h.encodedId} at height ${h.height} with score $score")
+          val self: (ByteArrayWrapper, ByteArrayWrapper) =
+            heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
+          val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
+          val forkHeaders = parentHeaderOpt.toSeq
+            .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
+            .filter(h => !isInBestChain(h))
+          val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
+            val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
+            heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
+          }
+          forkIds :+ self
+        } else {
+          // Orphaned block. Put id to the end
+          log.info(s"New orphaned header ${h.encodedId} at height ${h.height} with score $score")
+          Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
+        }
+        (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
+      }
+    }
+
+    historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
+
+    bestHeaderIdOpt match {
+      case Some(bestHeaderId) if bestHeaderId sameElements h.id =>
+        ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
+      case Some(_) =>
+        ProgressInfo(None, Seq.empty, None, toDownload(h))
+      case None =>
+        log.error("Should always have best header after header application")
+        ErgoApp.forceStopApplication()
     }
   }
 
@@ -211,44 +249,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
 
   //TODO rework option.get
   private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
-
-  @SuppressWarnings(Array("OptionGet"))
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
-    val requiredDifficulty: Difficulty = h.requiredDifficulty
-    if (h.isGenesis) {
-      (Seq(
-        BestHeaderKey -> ByteArrayWrapper(h.id),
-        heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
-        headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
-        headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-        h)
-    } else {
-      val blockScore = scoreOf(h.parentId).get + requiredDifficulty
-      val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
-        if (blockScore > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
-
-      val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(blockScore.toByteArray)
-      val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
-      val headerIdsRow = if (blockScore > bestHeadersChainScore) {
-        // Best block. All blocks back should have their id in the first position
-        val self: (ByteArrayWrapper, ByteArrayWrapper) =
-          heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
-        val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
-        val forkHeaders = parentHeaderOpt.toSeq
-          .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
-          .filter(h => !isInBestChain(h))
-        val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
-          val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
-          heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
-        }
-        forkIds :+ self
-      } else {
-        // Orphaned block. Put id to the end
-        Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
-      }
-      (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
-    }
-  }
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 

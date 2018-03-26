@@ -34,7 +34,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
 
     val fullBlocksToApply = chain.tail
-    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep).header)
+    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
@@ -146,6 +146,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
+    history.pruningProcessor.updateBestFullBlock(chain.last.header)
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
 

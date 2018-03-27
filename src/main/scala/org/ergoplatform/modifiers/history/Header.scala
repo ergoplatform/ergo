@@ -74,6 +74,15 @@ case class Header(version: Version,
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
+
+  /**
+    * Checks, that modifier m corresponds t this header
+    */
+  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = m match {
+    case p: ADProofs => ADProofsRoot sameElements p.digest
+    case t: BlockTransactions => transactionsRoot sameElements t.digest
+    case _ => false
+  }
 }
 
 object Header {

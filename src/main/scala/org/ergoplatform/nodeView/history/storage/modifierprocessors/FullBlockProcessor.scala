@@ -7,7 +7,7 @@ import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains functions required by History to process Transactions and Proofs when we have them.
@@ -170,5 +170,24 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   private def storageVersion(newModRow: ErgoPersistentModifier) = ByteArrayWrapper(newModRow.id)
+
+  protected def modifierValidation(m: ErgoPersistentModifier,
+                                   headerOpt: Option[Header]): Try[Unit] = {
+    if (historyStorage.contains(m.id)) {
+      Failure(new Error(s"Modifier $m is already in history"))
+    } else {
+      val minimalHeight = pruningProcessor.minimalFullBlockHeight
+      headerOpt match {
+        case None =>
+          Failure(new Error(s"Header for modifier $m is no defined"))
+        case Some(header: Header) if header.height < minimalHeight =>
+          Failure(new Error(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight"))
+        case Some(header: Header) if !header.isCorrespondingModifier(m) =>
+          Failure(new Error(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}"))
+        case Some(_) =>
+          Success()
+      }
+    }
+  }
 
 }

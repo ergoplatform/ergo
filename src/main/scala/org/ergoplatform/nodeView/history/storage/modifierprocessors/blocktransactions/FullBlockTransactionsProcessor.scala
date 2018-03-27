@@ -6,9 +6,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
-import scorex.crypto.encode.Base58
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
   * BlockTransactions processor for settings with verifyTransactions=true
@@ -41,21 +40,7 @@ trait FullBlockTransactionsProcessor extends BlockTransactionsProcessor with Ful
     ProgressInfo(None, Seq.empty, None, Seq.empty)
   }
 
-  override protected def validate(m: BlockTransactions): Try[Unit] = {
-    if (historyStorage.contains(m.id)) {
-      Failure(new Error(s"Modifier $m is already in history"))
-    } else {
-      historyStorage.modifierById(m.headerId) match {
-        case None =>
-          Failure(new Error(s"Header for modifier $m is no defined"))
-        case Some(header: Header) if header.height < pruningProcessor.minimalFullBlockHeight =>
-          Failure(new Error(s"Too old block transactions ${m.encodedId}: ${header.height} <" +
-            s" ${pruningProcessor.minimalFullBlockHeight}"))
-        case Some(header: Header) if !(header.transactionsRoot sameElements m.digest) =>
-          Failure(new Error(s"Header transactions root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
-        case Some(header: Header) =>
-          Success()
-      }
-    }
-  }
+  override protected def validate(m: BlockTransactions): Try[Unit] =
+    modifierValidation(m, typedModifierById[Header](m.headerId))
+
 }

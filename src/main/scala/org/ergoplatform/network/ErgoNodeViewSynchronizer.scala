@@ -45,9 +45,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
-  def requestDownload(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    deliveryTracker.expectFromRandom(modifierTypeId, modifierId)
-    val msg = Message(requestModifierSpec, Right(modifierTypeId -> Seq(modifierId)), None)
+  private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
+    modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
+    val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
     //todo: Full nodes should be here, not a random peer
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
@@ -57,9 +57,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>
-        if(!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
+        if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
-          historyReaderOpt.foreach(r =>  sendSync(r.syncInfo))
+          historyReaderOpt.foreach(r => sendSync(r.syncInfo))
         } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload
@@ -81,13 +81,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val currentQueue = deliveryTracker.expectingFromRandomQueue
         val newIds = h.nextModifiersToDownload(downloadListSize - currentQueue.size, currentQueue)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
-        (newIds ++ oldIds).foreach(id => requestDownload(id._1, id._2))
+        (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }
 
   def onDownloadRequest: Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      requestDownload(modifierTypeId, modifierId)
+      requestDownload(modifierTypeId, Seq(modifierId))
   }
 
   override protected def viewHolderEvents: Receive =

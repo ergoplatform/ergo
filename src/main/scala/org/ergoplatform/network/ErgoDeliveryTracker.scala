@@ -64,7 +64,7 @@ class ErgoDeliveryTracker(context: ActorContext,
     * Modifier downloaded
     */
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
-    if(expectingFromRandom.contains(key(mid))) {
+    if (expectingFromRandom.contains(key(mid))) {
       expectingFromRandom.remove(key(mid))
     } else {
       super.receive(mtid, mid, cp)

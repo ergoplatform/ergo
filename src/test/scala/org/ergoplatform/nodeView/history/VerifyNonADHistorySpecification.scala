@@ -13,6 +13,27 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
+  property("bootstrap from headers and last full blocks") {
+    var history = genHistory()
+    history.bestFullBlockOpt shouldBe None
+
+    val chain = genChain(BlocksToKeep * 2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.get shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    }
+
+    // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis
+    val fullBlocksToApply = chain
+
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
+  }
+
   property("nextModifiersToDownload") {
     var history = genHistory()
     val chain = genChain(BlocksToKeep)

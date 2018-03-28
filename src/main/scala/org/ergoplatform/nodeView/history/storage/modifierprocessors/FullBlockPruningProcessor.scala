@@ -29,9 +29,20 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
   private def minimalFullBlockHeightAfter(header: Header): Int = {
     if (!config.verifyTransactions) {
+      // we do not verify transactions at any height
       Int.MaxValue
-    } else if (config.blocksToKeep >= 0 && minimalFullBlockHeightVar == Int.MaxValue) {
-      Math.max(0, header.height - config.blocksToKeep + 1)
+    } else if (minimalFullBlockHeightVar == Int.MaxValue) {
+      // just synced with the headers chain - determine first full block to apply
+      if (config.blocksToKeep < 0) {
+        // keep all blocks in history
+        0
+      } else if (!config.stateType.requireProofs) {
+        //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+        0
+      } else {
+        // Start from config.blocksToKeep blocks back
+        Math.max(0, header.height - config.blocksToKeep + 1)
+      }
     } else if (config.blocksToKeep >= 0) {
       Math.max(Math.max(0, header.height - config.blocksToKeep + 1), minimalFullBlockHeightVar)
     } else {

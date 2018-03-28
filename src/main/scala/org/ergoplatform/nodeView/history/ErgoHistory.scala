@@ -51,6 +51,8 @@ trait ErgoHistory
 
   override type NVCT = ErgoHistory
 
+  def closeStorage(): Unit = historyStorage.close()
+
   /**
     * Append ErgoPersistentModifier to History if valid
     */

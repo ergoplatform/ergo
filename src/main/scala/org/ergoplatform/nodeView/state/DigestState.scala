@@ -19,7 +19,7 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
-                            val store: Store,
+                            override val store: Store,
                             settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]

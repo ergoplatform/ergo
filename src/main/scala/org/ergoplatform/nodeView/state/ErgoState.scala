@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import akka.actor.ActorRef
+import io.iohk.iodb.Store
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
@@ -29,6 +30,13 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   //TODO implement correctly
   def stateHeight: Int = 0
+
+  val store: Store
+
+  def closeStorage: Unit = {
+    log.warn("Closing state's store.")
+    store.close()
+  }
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 

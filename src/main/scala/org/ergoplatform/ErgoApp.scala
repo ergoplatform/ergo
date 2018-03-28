@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
@@ -16,8 +16,10 @@ import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
+import scorex.core.utils.ScorexLogging
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.duration._
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
@@ -65,15 +67,30 @@ class ErgoApp(args: Seq[String]) extends Application {
     txGen ! StartGeneration
   }
 
+  val actorsToStop = Seq(minerRef,
+    peerManagerRef,
+    networkControllerRef,
+    readersHolderRef,
+    nodeViewSynchronizer,
+    localInterface,
+    nodeViewHolderRef
+  )
+  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
 }
 
-object ErgoApp {
+object ErgoApp extends ScorexLogging {
 
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
-  def forceStopApplication(code: Int = 1): Nothing = {
-    new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
-    throw new Error("Exit")
+  def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
+
+  def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
+    log.warn("Terminating Actors")
+    actors.foreach{ a => a ! PoisonPill }
+    log.warn("Terminating ActorSystem")
+    val termination = system.terminate()
+    Await.result(termination, 60 seconds)
+    log.warn("Application has been terminated.")
   }
 
 }

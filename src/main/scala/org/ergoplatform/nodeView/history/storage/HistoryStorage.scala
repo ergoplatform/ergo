@@ -40,7 +40,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach(id => objectsStore.delete(id))
 
   override def close(): Unit = {
-    log.info("Closing history storage...")
+    log.warn("Closing history storage...")
     indexStore.close()
   }
 }

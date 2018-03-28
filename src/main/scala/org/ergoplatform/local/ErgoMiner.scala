@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -38,6 +38,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   override def preStart(): Unit = {
     viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
+  }
+
+  override def postStop(): Unit = {
+    log.warn("Stopping miner and his threads.")
+    miningThreads.foreach( _ ! PoisonPill)
   }
 
   private def unknownMessage: Receive = {

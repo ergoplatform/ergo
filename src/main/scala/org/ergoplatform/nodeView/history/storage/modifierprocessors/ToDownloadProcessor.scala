@@ -9,6 +9,9 @@ import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
 
+/**
+  * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
+  */
 trait ToDownloadProcessor extends ScorexLogging {
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
@@ -36,6 +39,9 @@ trait ToDownloadProcessor extends ScorexLogging {
     */
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 
+  /**
+    * Next howMany modifiers we should download to synchronize full block chain with headers chain
+    */
   def nextModifiersToDownload(howMany: Int, excluding: Iterable[ModifierId]): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
     def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
@@ -65,7 +71,6 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   /**
     * Checks, whether it's time to download full chain and return toDownload modifiers
-    * TODO Required to return to nodeViewHolder, but never used
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
 

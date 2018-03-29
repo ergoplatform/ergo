@@ -5,17 +5,16 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.mining.PoWScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, _}
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.{Invalid, ModifierSemanticValidity}
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -94,47 +93,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
     val toProcess = if (config.verifyTransactions) None else Some(h)
-    val prevHeight = headersHeight
 
-    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
-      val requiredDifficulty: Difficulty = h.requiredDifficulty
-      if (h.isGenesis) {
-        log.info(s"Initialize header chain with genesis header ${h.encodedId}")
-        (Seq(
-          BestHeaderKey -> ByteArrayWrapper(h.id),
-          heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
-          headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
-          headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-          h)
-      } else {
-        val score = scoreOf(h.parentId).get + requiredDifficulty
-        val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
-          if (score > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
-
-        val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
-        val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
-        val headerIdsRow = if (score > bestHeadersChainScore) {
-          // Best block. All blocks back should have their id in the first position
-          log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
-          val self: (ByteArrayWrapper, ByteArrayWrapper) =
-            heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
-          val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
-          val forkHeaders = parentHeaderOpt.toSeq
-            .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
-            .filter(h => !isInBestChain(h))
-          val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
-            val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
-            heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
-          }
-          forkIds :+ self
-        } else {
-          // Orphaned block. Put id to the end
-          log.info(s"New orphaned header ${h.encodedId} at height ${h.height} with score $score")
-          Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
-        }
-        (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
-      }
-    }
+    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
 
     historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
 
@@ -147,6 +107,78 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
         log.error("Should always have best header after header application")
         ErgoApp.forceStopApplication()
     }
+  }
+
+  /**
+    * Data, we should add and remove from the storage to process this modifier
+    */
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
+    val requiredDifficulty: Difficulty = h.requiredDifficulty
+    if (h.isGenesis) {
+      genesisToInsert(h, requiredDifficulty)
+    } else {
+      nonGenesisToInsert(h, requiredDifficulty)
+    }
+  }
+
+  /**
+    * Data to insert for regular block
+    */
+  private def nonGenesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
+    val score = scoreOf(h.parentId).get + requiredDifficulty
+    val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
+      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
+    val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
+    val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
+    val headerIdsRow = if (score > bestHeadersChainScore) {
+      bestBlockHeaderIdsRow(h, score)
+    } else {
+      orphanedBlockHeaderIdsRow(h, score)
+    }
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
+  }
+
+  /**
+    * Data to insert for genesis block
+    */
+  private def genesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
+    log.info(s"Initialize header chain with genesis header ${h.encodedId}")
+    (Seq(
+      BestHeaderKey -> ByteArrayWrapper(h.id),
+      heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
+      headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
+      headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
+      h)
+  }
+
+
+  /**
+    * Row to storage, that put this orphaned block id to the end of header ids at this height
+    */
+  private def orphanedBlockHeaderIdsRow(h: Header, score: Difficulty) = {
+    log.info(s"New orphaned header ${h.encodedId} at height ${h.height} with score $score")
+    Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
+  }
+
+
+  /**
+    * Update header ids to ensure, that this block id and ids of all parent blocks are in the first position of
+    * header ids at this height
+    */
+  private def bestBlockHeaderIdsRow(h: Header, score: Difficulty) = {
+    val prevHeight = headersHeight
+    log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
+    val self: (ByteArrayWrapper, ByteArrayWrapper) =
+      heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
+    val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
+    val forkHeaders = parentHeaderOpt.toSeq
+      .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
+      .filter(h => !isInBestChain(h))
+    val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
+      val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
+      heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
+    }
+    forkIds :+ self
   }
 
   /**
@@ -281,7 +313,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     private def validateGenesisBlockHeader(header: Header): ValidationResult = {
       if (!(header.parentId sameElements Header.GenesisParentId)) {
         fatal(s"Genesis block should have genesis parent id ${Algos.encode(Header.GenesisParentId)}." +
-              s"Found: ${Algos.encode(header.parentId)}")
+          s"Found: ${Algos.encode(header.parentId)}")
       } else if (bestHeaderIdOpt.nonEmpty) {
         fatal("Trying to append genesis block to non-empty history")
       } else if (header.height != GenesisHeight) {
@@ -319,7 +351,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     }
 
     def fatal(message: String): ValidationResult = Failure(MalformedModifierError(message))
+
     def error(message: String): ValidationResult = Failure(RecoverableModifierError(message))
+
     def success: ValidationResult = Success(())
   }
 

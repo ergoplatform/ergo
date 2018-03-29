@@ -98,10 +98,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>
-        val isNewBestHeader = bestHeaderId sameElements h.id
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (!config.verifyTransactions && isNewBestHeader) None else Some(h)
+        val toProcess = if (config.verifyTransactions || !(bestHeaderId sameElements h.id)) None else Some(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")

@@ -19,6 +19,8 @@ class ErgoDeliveryTracker(context: ActorContext,
 
   private val ToDownloadRetryInterval = 10.seconds
   private val ToDownloadLifetime = 1.hour
+  // Modifiers we need to download, but do not know peer that have this modifier
+  // TODO we may try to guess this peers using delivered map
   private val expectingFromRandom: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
   def isExpectingFromRandom: Boolean = expectingFromRandom.nonEmpty

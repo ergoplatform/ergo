@@ -177,7 +177,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       val minimalHeight = pruningProcessor.minimalFullBlockHeight
       headerOpt match {
         case None =>
-          Failure(new Error(s"Header for modifier $m is no defined"))
+          Failure(new Error(s"Header for modifier $m is not defined"))
         case Some(header: Header) if header.height < minimalHeight =>
           Failure(new Error(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight"))
         case Some(header: Header) if !header.isCorrespondingModifier(m) =>

@@ -92,6 +92,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+    // If we verify transactions, we don't need to send this header to state. If we don't, we should send this header
+    // to state to update state root hash
     val toProcess = if (config.verifyTransactions) None else Some(h)
 
     val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)

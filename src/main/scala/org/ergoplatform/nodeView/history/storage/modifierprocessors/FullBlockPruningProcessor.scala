@@ -4,7 +4,8 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.NodeConfigurationSettings
 
 /**
-  * Class that keeps and calculates minimal height for full blocks to keep in history
+  * Class that keeps and calculates minimal height for full blocks starting from which we need to download these full
+  * blocks from the network and keep them in our history.
   */
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
@@ -44,7 +45,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
         Math.max(0, header.height - config.blocksToKeep + 1)
       }
     } else if (config.blocksToKeep >= 0) {
-      Math.max(Math.max(0, header.height - config.blocksToKeep + 1), minimalFullBlockHeightVar)
+      Math.max(header.height - config.blocksToKeep + 1, minimalFullBlockHeightVar)
     } else {
       0
     }

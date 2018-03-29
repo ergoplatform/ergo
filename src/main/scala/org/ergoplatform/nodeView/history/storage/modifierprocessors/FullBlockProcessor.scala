@@ -22,8 +22,6 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
-  protected def fullBlockExists(header: Header): Boolean = getFullBlock(header).nonEmpty
-
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]

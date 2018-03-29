@@ -46,10 +46,11 @@ class ErgoDeliveryTracker(context: ActorContext,
   /**
     * Remove old modifiers from download queue
     */
-  def removeOutdatedExpectingFromRandom(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
+  def removeOutdatedExpectingFromRandom(): Unit = {
     val currentTime = timeProvider.time()
-    expectingFromRandom.filter(td => td._2.firstViewed < currentTime - ToDownloadLifetime.toMillis)
-      .foreach(i => expectingFromRandom.remove(i._1))
+    expectingFromRandom
+      .filter { case (_, status) => status.firstViewed < currentTime - ToDownloadLifetime.toMillis }
+      .foreach { case (key, _) => expectingFromRandom.remove(key) }
   }
 
   /**

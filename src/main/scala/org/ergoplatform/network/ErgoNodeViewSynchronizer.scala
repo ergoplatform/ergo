@@ -12,7 +12,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.Subscribe
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SendLocalSyncInfo, SyntacticallySuccessfulModifier}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
@@ -59,7 +59,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt foreach { h =>
         if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
-          historyReaderOpt.foreach(r => sendSync(r.syncInfo))
+          sendSync(h.syncInfo)
         } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload
@@ -67,6 +67,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  /**
+    * Broadcast inv on successful Header and BlockTransactions application
+    * Do not broadcast Inv messages during initial synchronization (the rest of the network should already have all
+    * this messages)
+    *
+    */
   protected val onSyntacticallySuccessfulModifier: Receive = {
     case SyntacticallySuccessfulModifier(mod) if (mod.isInstanceOf[Header] || mod.isInstanceOf[BlockTransactions]) &&
       historyReaderOpt.exists(_.isHeadersChainSynced) =>
@@ -76,7 +82,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedExpectingFromRandom(historyReaderOpt)
+      deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
         val currentQueue = deliveryTracker.expectingFromRandomQueue
         val newIds = h.nextModifiersToDownload(downloadListSize - currentQueue.size, currentQueue)

@@ -92,19 +92,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
-    // If we verify transactions, we don't need to send this header to state. If we don't, we should send this header
-    // to state to update state root hash
-    val toProcess = if (config.verifyTransactions) None else Some(h)
-
     val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
 
     historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
 
     bestHeaderIdOpt match {
-      case Some(bestHeaderId) if bestHeaderId sameElements h.id =>
+      case Some(bestHeaderId) =>
+        val isNewBestHeader = bestHeaderId sameElements h.id
+        // If we verify transactions, we don't need to send this header to state.
+        // If we don't and this is the best header, we should send this header to state to update state root hash
+        val toProcess = if (!config.verifyTransactions && isNewBestHeader) None else Some(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
-      case Some(_) =>
-        ProgressInfo(None, Seq.empty, None, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")
         ErgoApp.forceStopApplication()

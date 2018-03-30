@@ -4,6 +4,7 @@ import java.io.File
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
+import scorex.crypto.encode.Base58
 
 import scala.util.Random
 
@@ -12,14 +13,41 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
-  property("missedModifiersForFullChain") {
+  property("bootstrap from headers and last full blocks") {
+    var history = genHistory()
+    history.bestFullBlockOpt shouldBe None
+
+    val chain = genChain(BlocksToKeep * 2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.get shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    }
+
+    // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis
+    val fullBlocksToApply = chain
+
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
+  }
+
+  property("nextModifiersToDownload") {
     var history = genHistory()
     val chain = genChain(BlocksToKeep)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.append(chain.head.blockTransactions)
+    history.append(chain.head.aDProofs.get)
+    history.bestFullBlockOpt.get shouldBe chain.head
 
-    val missed = history.missedModifiersForFullChain()
-    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
-    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
+    val missedChain = chain.tail.toList
+    val missedBT = missedChain.map(fb => (BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId))
+    history.nextModifiersToDownload(1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.take(1)
+    history.nextModifiersToDownload(BlocksToKeep - 1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT
+
+    history.nextModifiersToDownload(2, Seq(missedChain.head.blockTransactions.id)).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.tail.take(2)
   }
 
   property("append header as genesis") {

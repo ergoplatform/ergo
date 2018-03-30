@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.mining.PoWScheme
+import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -240,7 +240,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (StateType.Digest, true, false) =>
@@ -250,7 +250,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (StateType.Utxo, true, true) =>
@@ -260,7 +260,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (StateType.Utxo, true, false) =>
@@ -270,7 +270,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (_, false, true) =>
@@ -280,7 +280,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (_, false, false) =>
@@ -290,7 +290,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case m =>

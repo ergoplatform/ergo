@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
@@ -30,7 +31,7 @@ class HeadersSpec extends PropSpec
       header.copy(height = header.height + 1).id should not equal initialId
       header.copy(nonce = header.nonce + 1).id should not equal initialId
       header.copy(votes = Blake2b256(header.votes).take(header.votes.length)).id should not equal initialId
-      header.copy(equihashSolutions = Array.fill(header.equihashSolutions.length)(11.toByte)).id should not equal initialId
+      header.copy(equihashSolution = EquihashSolution(Seq.fill(header.equihashSolution.ints.length)(0x0B0B0B0B))).id should not equal initialId
     }
   }
 

@@ -36,24 +36,23 @@ class EquihashPowSchemeSpecification extends PropSpec
     ).get
 
   property("Miner should generate valid block") {
-    val b = createValidBlock()
-    powScheme.verify(b.header) shouldBe true
+    val h = createValidBlock().header
+    powScheme.verify(h) shouldBe true
   }
 
   property("Valid block should be invalid by pow after equihash solutions modification") {
-    val b = createValidBlock()
-    val invB = b.header.equihashSolutions.clone()
-    invB(0) = 1
-    powScheme.verify(b.copy(header = b.header.copy(equihashSolutions = invB)).header) shouldBe false
+    val h = createValidBlock().header
+    val invB = EquihashSolution(h.equihashSolution.ints.updated(0, 1))
+    powScheme.verify(h.copy(equihashSolution = invB)) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {
-    val b = createValidBlock()
-    powScheme.verify(b.copy(header = b.header.copy(height = 3)).header) shouldBe false
+    val h = createValidBlock().header
+    powScheme.verify(h.copy(height = 3)) shouldBe false
   }
 
   property("Valid block should be invalid by pow after AD proofs root modification") {
-    val b = createValidBlock()
-    powScheme.verify(b.copy(header = b.header.copy(ADProofsRoot = Digest32 @@ Array.emptyByteArray)).header) shouldBe false
+    val h = createValidBlock().header
+    powScheme.verify(h.copy(ADProofsRoot = Digest32 @@ Array.emptyByteArray)) shouldBe false
   }
 }

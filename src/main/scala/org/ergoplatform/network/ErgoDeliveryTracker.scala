@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+
 import akka.actor.{ActorContext, ActorRef}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
@@ -16,46 +17,62 @@ class ErgoDeliveryTracker(context: ActorContext,
                           timeProvider: NetworkTimeProvider)
   extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
-  val toDownload: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
+  private val ToDownloadRetryInterval = 10.seconds
+  private val ToDownloadLifetime = 1.hour
+  // Modifiers we need to download, but do not know peer that have this modifier
+  // TODO we may try to guess this peers using delivered map
+  private val expectingFromRandom: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
-  //TODO move to config
-  private val ToDownloadRetryInterval = 30.seconds
-  private val ToDownloadLifetime = 24.hours
-  private val MaxModifiersToDownload = 100
-  private var lastTime = timeProvider.time()
+  def isExpectingFromRandom: Boolean = expectingFromRandom.nonEmpty
 
-  def downloadRequested(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
-    lastTime = Math.max(timeProvider.time(), lastTime + 1)
-    val newValue = toDownload.get(key(modifierId))
-      .map(_.copy(lastTry = lastTime))
-      .getOrElse(ToDownloadStatus(modifierTypeId, lastTime, lastTime))
-    toDownload.put(key(modifierId), newValue)
+  def isExpecting: Boolean = expecting.nonEmpty
+
+  /**
+    * @return ids we're going to download
+    */
+  def expectingFromRandomQueue: Iterable[ModifierId] = ModifierId @@ expectingFromRandom.keys.map(_.array)
+
+  /**
+    * Process download request of modifier of type modifierTypeId with id modifierId
+    */
+  def expectFromRandom(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Unit = {
+    val downloadRequestTime = timeProvider.time()
+    val newValue = expectingFromRandom.get(key(modifierId))
+      .map(_.copy(lastTry = downloadRequestTime))
+      .getOrElse(ToDownloadStatus(modifierTypeId, downloadRequestTime, downloadRequestTime))
+    expectingFromRandom.put(key(modifierId), newValue)
   }
 
-  def removeOutdatedToDownload(historyReaderOpt: Option[ErgoHistoryReader]): Unit = {
+  /**
+    * Remove old modifiers from download queue
+    */
+  def removeOutdatedExpectingFromRandom(): Unit = {
     val currentTime = timeProvider.time()
-    toDownload.filter(td => (td._2.firstViewed < currentTime - ToDownloadLifetime.toMillis)
-      || historyReaderOpt.exists(hr => hr.contains(ModifierId @@ td._1.array)))
-      .foreach(i => toDownload.remove(i._1))
+    expectingFromRandom
+      .filter { case (_, status) => status.firstViewed < currentTime - ToDownloadLifetime.toMillis }
+      .foreach { case (key, _) => expectingFromRandom.remove(key) }
   }
 
-  def downloadRetry(historyReaderOpt: Option[ErgoHistoryReader]): Seq[(ModifierId, ToDownloadStatus)] = {
-    removeOutdatedToDownload(historyReaderOpt)
+  /**
+    * Id's that are already in queue to download but are not downloaded yet and were not requested recently
+    */
+  def idsExpectingFromRandomToRetry(): Seq[(ModifierTypeId, ModifierId)] = {
     val currentTime = timeProvider.time()
-    toDownload.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
+    expectingFromRandom.filter(_._2.lastTry < currentTime - ToDownloadRetryInterval.toMillis).toSeq
       .sortBy(_._2.lastTry)
-      .take(MaxModifiersToDownload)
-      .map(i => (ModifierId @@ i._1.array, i._2))
+      .map(i => (i._2.tp, ModifierId @@ i._1.array))
   }
 
-  @SuppressWarnings(Array("ComparingUnrelatedTypes"))
+  /**
+    * Modifier downloaded
+    */
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
-    if (isExpecting(mtid, mid, cp) || toDownload.contains(key(mid))) {
-      toDownload.remove(key(mid))
-      expecting.find(e => (mtid == e._1) && (mid sameElements e._2) && cp == e._3).foreach(e => expecting-= e)
+    if (expectingFromRandom.contains(key(mid))) {
+      expectingFromRandom.remove(key(mid))
       delivered(key(mid)) = cp
     } else {
-      deliveredSpam(key(mid)) = cp
+      super.receive(mtid, mid, cp)
     }
   }
+
 }

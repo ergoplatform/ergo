@@ -80,12 +80,14 @@ trait ErgoHistory
     */
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) =
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid = $valid")
     if (valid) {
       this -> markModifierValid(modifier)
     } else {
       this -> markModifierInvalid(modifier)
     }
+  }
 
   /**
     * Mark modifier and all modifiers in child chains as invalid
@@ -233,7 +235,7 @@ object ErgoHistory extends ScorexLogging {
     val history: ErgoHistory = (nodeSettings.stateType, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
       case (StateType.Digest, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -243,7 +245,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Digest, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -253,7 +255,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Utxo, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
@@ -263,7 +265,7 @@ object ErgoHistory extends ScorexLogging {
         }
       case (StateType.Utxo, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings

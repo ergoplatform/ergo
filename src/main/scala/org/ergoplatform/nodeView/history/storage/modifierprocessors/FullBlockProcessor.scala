@@ -7,7 +7,7 @@ import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains functions required by History to process Transactions and Proofs when we have them.
@@ -27,6 +27,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
 
   /** Process full block when we have one.
+    *
     * @param fullBlock - block to process
     * @param txsAreNew - flag, that transactions where added last
     * @return ProgressInfo required for State to process to be consistent with History
@@ -35,24 +36,28 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val newModRow = calculateNewModRow(fullBlock, txsAreNew)
     val bestFullChain = calculateBestFullChain(fullBlock.header)
     val newBestAfterThis = bestFullChain.last
-    processIfGenesisBlock(fullBlock, newModRow, newBestAfterThis).
+    processIfValidFirstBlock(fullBlock, newModRow, newBestAfterThis).
       orElse(processIfBetterChain(fullBlock, newModRow, newBestAfterThis)).
       getOrElse(nonBestBlock(fullBlock, newModRow))
   }
 
-  private def processIfGenesisBlock(fullBlock: ErgoFullBlock,
-                                    newModRow: ErgoPersistentModifier,
-                                    newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
-    if (bestFullBlockOpt.isEmpty && fullBlock.header.isGenesis) {
-      Option(applyGenesisBlock(fullBlock, newModRow, newBestAfterThis))
+  protected def isValidFirstFullBlock(header: Header): Boolean = {
+    header.height == pruningProcessor.minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
+  }
+
+  private def processIfValidFirstBlock(fullBlock: ErgoFullBlock,
+                                       newModRow: ErgoPersistentModifier,
+                                       newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
+    if (isValidFirstFullBlock(fullBlock.header)) {
+      Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
     } else {
       None
     }
   }
 
-  private def applyGenesisBlock(fullBlock: ErgoFullBlock,
-                                newModRow: ErgoPersistentModifier,
-                                newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
+  private def applyFirstFullBlock(fullBlock: ErgoFullBlock,
+                                  newModRow: ErgoPersistentModifier,
+                                  newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
     logStatus(Seq(), Seq(fullBlock), fullBlock, None)
     updateStorage(newModRow, newBestAfterThis.id)
     ProgressInfo(None, Seq.empty, Some(fullBlock), Seq.empty)
@@ -92,9 +97,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
       updateStorage(newModRow, newBestAfterThis.id)
 
       if (config.blocksToKeep >= 0) {
+        val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
         val bestHeight: Int = newBestAfterThis.height
         val diff = bestHeight - prevBest.header.height
-        val lastKept = bestHeight - config.blocksToKeep
         pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
       }
       ProgressInfo(branchPoint, toRemove, toApply.headOption, Seq.empty)
@@ -119,7 +124,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   private def calculateBestFullChain(header: Header) = {
-    val continuations = continuationHeaderChains(header, _ => true).map(_.tail)
+    val continuations = continuationHeaderChains(header, h => getFullBlock(h).nonEmpty).map(_.tail)
     val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
     chains.map(c => header +: c).maxBy(c => scoreOf(c.last.id))
   }
@@ -159,9 +164,28 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     val indicesToInsert = Seq(BestFullBlockKey -> ByteArrayWrapper(bestFullHeaderId))
     historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
-                                                  s"full height $fullBlockHeight")
+        s"full height $fullBlockHeight")
   }
 
   private def storageVersion(newModRow: ErgoPersistentModifier) = ByteArrayWrapper(newModRow.id)
+
+  protected def modifierValidation(m: ErgoPersistentModifier,
+                                   headerOpt: Option[Header]): Try[Unit] = {
+    if (historyStorage.contains(m.id)) {
+      Failure(new Error(s"Modifier $m is already in history"))
+    } else {
+      val minimalHeight = pruningProcessor.minimalFullBlockHeight
+      headerOpt match {
+        case None =>
+          Failure(new Error(s"Header for modifier $m is not defined"))
+        case Some(header: Header) if header.height < minimalHeight =>
+          Failure(new Error(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight"))
+        case Some(header: Header) if !header.isCorrespondingModifier(m) =>
+          Failure(new Error(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}"))
+        case Some(_) =>
+          Success()
+      }
+    }
+  }
 
 }

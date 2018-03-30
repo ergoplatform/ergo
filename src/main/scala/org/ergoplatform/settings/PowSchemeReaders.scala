@@ -8,12 +8,12 @@ import org.ergoplatform.mining._
 
 trait PowSchemeReaders {
 
-  val readers: Seq[PowSchemeReader[_ <: PoWScheme]] = Seq(
+  val readers: Seq[PowSchemeReader[_ <: PowScheme]] = Seq(
     EquihashPowSchemeReader,
     FakePowSchemeReader
   )
 
-  implicit val powSchemeReader: ValueReader[PoWScheme] =  { (cfg, path) =>
+  implicit val powSchemeReader: ValueReader[PowScheme] =  { (cfg, path) =>
     val schemeNameKey = s"$path.powType"
     val schemeName = cfg.getString(schemeNameKey)
     val schemeReader = readers.find(_.schemeName == schemeName)
@@ -22,7 +22,7 @@ trait PowSchemeReaders {
   }
 }
 
-sealed trait PowSchemeReader[T <: PoWScheme] {
+sealed trait PowSchemeReader[T <: PowScheme] {
   def schemeName: String
   def read(config: Config, path: String): T
 }

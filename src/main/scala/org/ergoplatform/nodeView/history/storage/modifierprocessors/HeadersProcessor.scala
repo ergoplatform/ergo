@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.mining.PoWScheme
+import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -34,7 +34,7 @@ trait HeadersProcessor extends ScorexLogging {
   protected val config: NodeConfigurationSettings
   protected val chainSettings: ChainSettings
 
-  val powScheme: PoWScheme
+  val powScheme: PowScheme
 
   //TODO alternative DDoS protection
   protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis

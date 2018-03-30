@@ -11,7 +11,7 @@ import scorex.crypto.hash.Digest32
 import scala.math.BigInt
 import scala.util.Random
 
-class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
+class FakePowScheme(levelOpt: Option[Int]) extends PowScheme {
 
   val start = Long.MinValue
   val finish = Long.MaxValue
@@ -27,9 +27,8 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
                      finishingNonce: Long): Option[Header] = {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
-    def randomInt = Random.nextInt(1000) + 1
-    val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(randomInt)
-    val solution = PowSolution(level +: Seq.fill(PowSolution.length - 1)(randomInt))
+    val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
+    val solution = EquihashSolution(level +: Seq.fill(EquihashSolution.length - 1)(Random.nextInt))
     Some(new Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
       nonce = 0L, solution))
@@ -38,7 +37,7 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
   override def verify(header: Header): Boolean = true
 
   override def realDifficulty(header: Header): Difficulty =
-    header.powSolution.headOption.getOrElse(0) * header.requiredDifficulty
+    header.equihashSolution.headOption.getOrElse(0) * header.requiredDifficulty
 
   def prove(parentOpt: Option[Header],
             nBits: Long,

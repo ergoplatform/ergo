@@ -15,7 +15,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
                        viewHolderRef: ActorRef,
                        startCandidate: CandidateBlock) extends Actor with ScorexLogging {
 
-  private val powScheme = ergoSettings.chainSettings.poWScheme
+  private val powScheme = ergoSettings.chainSettings.powScheme
   private var candidate: CandidateBlock = startCandidate
 
 

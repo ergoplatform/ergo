@@ -22,7 +22,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
   val defaultAwaitDuration = 5 seconds
   implicit val timeout = akka.util.Timeout(defaultAwaitDuration)
 
-  it should "not freeze while generating candidate block with large amount of txs" in {
+  ignore should "not freeze while generating candidate block with large amount of txs" in {
     val defaultSettings: ErgoSettings = ErgoSettings.read(None)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 

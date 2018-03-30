@@ -1,13 +1,12 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HistoryModifierSerializer}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import scorex.core.consensus.History.ProgressInfo
-import scorex.crypto.encode.Base58
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
   * ADProof processor for node regime with DigestState
@@ -31,18 +30,6 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
     }
   }
 
-  override protected def validate(m: ADProofs): Try[Unit] = {
-    if (historyStorage.contains(m.id)) {
-      Failure(new Error(s"Modifier $m is already in history"))
-    } else {
-      historyStorage.modifierById(m.headerId) match {
-        case None =>
-          Failure(new Error(s"Header for modifier $m is no defined"))
-        case Some(header: Header) if !(header.ADProofsRoot sameElements m.digest) =>
-          Failure(new Error(s"Header ADProofs root ${Base58.encode(header.ADProofsRoot)} differs from $m digest"))
-        case Some(header: Header) =>
-          Success()
-      }
-    }
-  }
+  override protected def validate(m: ADProofs): Try[Unit] = modifierValidation(m, typedModifierById[Header](m.headerId))
+
 }

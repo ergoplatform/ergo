@@ -2,6 +2,7 @@ package org.ergoplatform.crypto
 
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.bouncycastle.util.encoders.Hex
+import org.ergoplatform.mining.PowSolution
 import org.scalatest.prop.{PropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
@@ -215,8 +216,8 @@ class EquihashSpecification extends PropSpec
           xx - yy
         }
       }
-      val solutions = Equihash.gbpBasic(digest, n.toChar, k.toChar).sorted
-      solutions shouldBe correctSolutions
+      val solutions = Equihash.gbpBasic(digest, n.toChar, k.toChar)
+      solutions should contain theSameElementsAs correctSolutions.map(PowSolution.apply)
     }
   }
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.mining.{DefaultFakePowScheme, PowSolution}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
@@ -76,13 +76,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
-    equihashSolutions <- genBytesList(Constants.ModifierIdSize)
+    powSolutions <- Gen.listOfN(PowSolution.length, Arbitrary.arbitrary[Int])
     height <- Gen.choose(1, Int.MaxValue)
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     votes <- genBytesList(5)
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, equihashSolutions)
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, PowSolution(powSolutions))
 
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {

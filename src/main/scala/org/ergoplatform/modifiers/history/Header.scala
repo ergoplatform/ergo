@@ -5,6 +5,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
+import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -17,7 +18,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -30,7 +31,7 @@ case class Header(version: Version,
                   height: Int,
                   votes: Array[Byte],
                   nonce: Long,
-                  equihashSolutions: Array[Byte]
+                  equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
@@ -45,10 +46,7 @@ case class Header(version: Version,
     val bytes = HeaderSerializer.bytesWithoutPow(this)
     digest.update(bytes, 0, bytes.length)
     Equihash.hashNonce(digest, nonce)
-    EquihashSolutionsSerializer.parseBytes(equihashSolutions) match {
-      case Success(solutions) => solutions.foreach(s => Equihash.hashXi(digest, s))
-      case Failure(f) => throw f
-    }
+    Equihash.hashSolution(digest, equihashSolution)
     val h = new Array[Byte](32)
     digest.doFinal(h, 0)
 
@@ -100,7 +98,7 @@ object Header {
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "nonce" -> h.nonce.asJson,
-      "equihashSolutions" -> Algos.encode(h.equihashSolutions).asJson,
+      "equihashSolutions" -> h.equihashSolution.asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
@@ -142,8 +140,8 @@ object HeaderSerializer extends Serializer[Header] {
   }
 
   def nonceAndSolutionBytes(h: Header): Array[Byte] = {
-    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolutions.length.toChar)
-    val equihashSolutionsBytes = h.equihashSolutions
+    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolution.byteLength.toChar)
+    val equihashSolutionsBytes = h.equihashSolution.bytes
 
     Bytes.concat(Longs.toByteArray(h.nonce), equihashSolutionsSize, equihashSolutionsBytes)
   }
@@ -186,9 +184,11 @@ object HeaderSerializer extends Serializer[Header] {
     val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
 
     val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
-    val equihashSolutions = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
+    val equihashSolutionsBytes = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
 
-    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce, equihashSolutions)
-  }
+    EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
+      Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+             nBits, height, votes, nonce, equihashSolution)
+    }
+  }.flatten
 }

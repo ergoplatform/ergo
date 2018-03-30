@@ -21,8 +21,6 @@ import scala.concurrent.Future
 case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte])
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
 
-  private val powScheme = ergoSettings.chainSettings.poWScheme
-
   override val route: Route = pathPrefix("blocks") {
     getBlocksR ~
       postBlocksR ~

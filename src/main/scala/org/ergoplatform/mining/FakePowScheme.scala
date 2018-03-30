@@ -1,6 +1,5 @@
 package org.ergoplatform.mining
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -12,7 +11,7 @@ import scorex.crypto.hash.Digest32
 import scala.math.BigInt
 import scala.util.Random
 
-class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
+class FakePowScheme(levelOpt: Option[Int]) extends PowScheme {
 
   val start = Long.MinValue
   val finish = Long.MaxValue
@@ -29,15 +28,16 @@ class FakePowScheme(levelOpt: Option[Int]) extends PoWScheme {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
+    val solution = EquihashSolution(level +: Seq.fill(EquihashSolution.length - 1)(Random.nextInt))
     Some(new Header(version, parentId, interlinks,
       adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, votes,
-      nonce = 0L, Ints.toByteArray(level)))
+      nonce = 0L, solution))
   }
 
   override def verify(header: Header): Boolean = true
 
   override def realDifficulty(header: Header): Difficulty =
-    Ints.fromByteArray(header.equihashSolutions) * header.requiredDifficulty
+    header.equihashSolution.headOption.getOrElse(0) * header.requiredDifficulty
 
   def prove(parentOpt: Option[Header],
             nBits: Long,

@@ -42,9 +42,8 @@ class EquihashPowSchemeSpecification extends PropSpec
 
   property("Valid block should be invalid by pow after equihash solutions modification") {
     val b = createValidBlock()
-    val invB = b.header.equihashSolutions.clone()
-    invB(0) = 1
-    powScheme.verify(b.copy(header = b.header.copy(equihashSolutions = invB)).header) shouldBe false
+    val invB = PowSolution(b.header.powSolution.ints.updated(0, 1))
+    powScheme.verify(b.copy(header = b.header.copy(powSolution = invB)).header) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {

@@ -4,8 +4,10 @@ import java.math.BigInteger
 
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.Blake2bDigest
+import org.ergoplatform.mining.PowSolution
 import org.slf4j.LoggerFactory
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
+
 import scala.collection.mutable.ArrayBuffer
 
 object Equihash {
@@ -17,6 +19,11 @@ object Equihash {
   def hashNonce[T <: Digest](digest: T, nonce: BigInt): T = {
     val arr = nonceToLeBytes(nonce)
     digest.update(arr, 0, arr.length)
+    digest
+  }
+
+  def hashSolution[T <: Digest](digest: T, solution: PowSolution): T = {
+    solution.ints map { hashXi(digest, _) }
     digest
   }
 
@@ -123,7 +130,7 @@ object Equihash {
   }
 
   // Implementation of Basic Wagner's algorithm for the GBP
-  def gbpBasic(digest: Blake2bDigest, n: Char, k: Char): Seq[Seq[Int]] = {
+  def gbpBasic(digest: Blake2bDigest, n: Char, k: Char): Seq[PowSolution] = {
     val collisionLength = n / (k + 1)
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
@@ -191,7 +198,7 @@ object Equihash {
 
     log.trace("- Finding collisions")
 
-    var solns = Vector.empty[Seq[Int]]
+    var solns = Vector.empty[PowSolution]
 
     while (X.nonEmpty) {
       val XSize = X.length
@@ -215,7 +222,7 @@ object Equihash {
           } else {
             X(XSize - 1 - m)._2 ++ X(XSize - 1 - l)._2
           }
-          solns = solns :+ p
+          solns = solns :+ PowSolution(p)
         }
       }
 

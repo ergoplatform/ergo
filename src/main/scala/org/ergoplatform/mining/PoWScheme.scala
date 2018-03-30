@@ -17,7 +17,6 @@ import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.math.BigInt
-import scala.util.control.NonFatal
 
 trait PoWScheme {
 
@@ -94,10 +93,6 @@ trait PoWScheme {
   }
 }
 
-object PoWScheme {
-  type Solution = Seq[Int]
-}
-
 class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   lazy val ergoPerson: Array[Byte] = "ERGOPoWT1234".getBytes("UTF-8") ++
     Chars.toByteArray(n) ++
@@ -125,7 +120,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce = 0L, null) // scalastyle:ignore
+      nBits, height, votes, nonce = 0L, PowSolution.empty)
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
@@ -137,7 +132,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
       Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
       val headerWithSuitableSolution = solutions.map(solution => {
-        h.copy(nonce = nonce, equihashSolutions = EquihashSolutionsSerializer.toBytes(solution))
+        h.copy(nonce = nonce, powSolution = solution)
       }).find(newHeader => {
         correctWorkDone(realDifficulty(newHeader), difficulty)
       })
@@ -153,19 +148,14 @@ class EquihashPowScheme(n: Char, k: Char) extends PoWScheme with ScorexLogging {
   }
 
   override def verify(header: Header): Boolean =
-    EquihashSolutionsSerializer.parseBytes(header.equihashSolutions).map { solutionIndices =>
-      Equihash.validateSolution(
-        n,
-        k,
-        ergoPerson,
-        HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
-        solutionIndices.toIndexedSeq
-      )
-    }.recover {
-      case NonFatal(e) =>
-        log.debug(s"Block ${header.id} is invalid due pow", e)
-        false
-    }.getOrElse(false)
+    Equihash.validateSolution(
+      n,
+      k,
+      ergoPerson,
+      HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
+      header.powSolution.indexedSeq
+    )
+
 
   override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
 

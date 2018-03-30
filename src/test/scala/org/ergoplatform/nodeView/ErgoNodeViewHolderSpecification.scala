@@ -72,7 +72,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
         verifyTransactions = c.verifyTransactions,
         PoPoWBootstrap = c.popowBootstrap
       ),
-      chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )
     val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
     ErgoNodeViewRef(settings, timeProvider)

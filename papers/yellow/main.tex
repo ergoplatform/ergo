@@ -8,7 +8,6 @@
 \usepackage{amsthm}
 \usepackage{amsmath}
 
-\usepackage{listings}
 
 \usepackage{hyperref}
 
@@ -49,24 +48,9 @@
 \definecolor{dkgreen}{rgb}{0,0.6,0}
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
 \definecolor{mauve}{rgb}{0.58,0,0.82}
-\lstdefinestyle{myScalastyle}{
-  frame=tb,
-  language=scala,
-  aboveskip=3mm,
-  belowskip=3mm,
-  showstringspaces=false,
-  columns=flexible,
-  basicstyle={\small\ttfamily},
-  numbers=none,
-  numberstyle=\tiny\color{gray},
-  keywordstyle=\color{blue},
-  commentstyle=\color{dkgreen},
-  stringstyle=\color{mauve},
-  frame=single,
-  breaklines=true,
-  breakatwhitespace=true,
-  tabsize=3,
-}
+
+
+
 \newtheorem{claim1}{Claim}
 \newtheorem{dfn}{Definition}
 \newtheorem{defn}{Definition}
@@ -116,34 +100,38 @@
 \newcommand{\ssal}{\textbf{$\Sigma$SAL}}
 
 
-\documentclass{article}
 \usepackage[utf8]{inputenc}
 
 \usepackage{minted}
 \usemintedstyle{manni}
-\usepackage{microtype }
+\usepackage{microtype}
  
 
 \begin{document}
 
-\title{The Ergo Yellowpaper}
-\author{Alexander Chepurnoy and Dmitry Meshkov}
-
+\title{The \ergo{} Yellowpaper}
+\author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
 \maketitle
+
+\newpage
+\tableofcontents
+
 \section{Introduction}
 \subsection{Multiple Modes}
-Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node mode, which is similar to Bitcoin fullnode, Ergo reference implementation will support Light-SPV, Light-Fullnode, Pruned-Fullnode modes.
+Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node
+mode, which is similar to Bitcoin fullnode, Ergo reference implementation supports Light-SPV, Light-Fullnode and Pruned-Fullnode modes.
+
 \subsection{Full-Node Mode}
 Like in Bitcoin, a full node is storing all the full blocks since genesis block. Full node checks proofs of work, linking structure correctness (parent block id, interlink elements), and all the transactions in all the blocks. A fullnode is storing all the full blocks forever. It is also holding full UTXO set to be able to validate an arbitrary transaction.
 The only optimization a fullnode is doing is that is is skipping downloading and checking AD-transformation block part (see below in the "Light-Fullnode" section).
-For full node regime, modifiers precessing workflow is as follows:
+For the full node regime, modifiers precessing workflow is as follows:
 \begin{enumerate}
    \item Send ErgoSyncInfo message to connected peers.
    \item Get response with INV message, containing ids of blocks, better than our best block.
    \item Request headers for all ids from 2.
    \item On receiving header:
    \begin{minted}{java}
-if(History.apply(header).isSuccess) {
+if(history.apply(header).isSuccess) {
     if(!isInitialBootstrapping) Broadcast INV for this header   
     Request transaction ids from this block
  } else {
@@ -151,10 +139,10 @@ if(History.apply(header).isSuccess) {
  }
 \end{minted} 
 \vspace{1em}
-   
+
+ % Mempool.apply(transactionIdsForHeader)
    \item On receiving transaction ids from header:
    \begin{minted}{java}
-   Mempool.apply(transactionIdsForHeader)
   transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
     request transaction with txId
   }
@@ -341,7 +329,7 @@ nonce: Int - field to iterate and generate valid PoW.
  \hline
  parentId &  32 &  id of parent block  \\
  \hline
- interlinkesRoot &  32 &  root hash of interlinks structure  \\
+ interlinksRoot &  32 &  root hash of interlinks structure  \\
  \hline
  ADProofsRoot &  32 &  hash of ADProofs for transactions in a block \\
  \hline
@@ -540,6 +528,22 @@ Two infinite loops in different threads with the following functions inside:
     3.4. (same as 3.2. from bootstrap)
   }
 \end{minted}
+
+
+
+\section{Components}
+\subsection{History}
+\subsection{State}
+\subsection{Memory Pool}
+
+\section{Transactional Language}
+
+\section{Protocol Updates}
+
+\section{Peer-to-Peer Network}
+
+
+
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

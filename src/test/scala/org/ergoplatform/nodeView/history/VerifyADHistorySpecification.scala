@@ -2,7 +2,8 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
-import scorex.core.consensus.ModifierSemanticValidity
+import org.ergoplatform.nodeView.state.StateType
+import scorex.core.consensus.{Absent, Invalid, Unknown, Valid}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Random, Try}
@@ -10,34 +11,61 @@ import scala.util.{Random, Try}
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
-  private def genHistory(height: Int = 0): ErgoHistory = {
-    val inHistory = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    if (height > 0) applyChain(inHistory, genChain(height, bestFullOptToSeq(inHistory)))
-    else inHistory
+  private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+    minFullHeight.foreach(h => inHistory.pruningProcessor.minimalFullBlockHeightVar = h)
+
+    if (height > 0) {
+      val chain = genChain(height, inHistory)
+      (applyChain(inHistory, chain), chain)
+    } else {
+      (inHistory, Seq.empty)
+    }
   }
 
-  property("missedModifiersForFullChain") {
-    var history = genHistory()
-    val chain = genChain(BlocksToKeep, Seq())
-    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+  property("should not be able to apply blocks older than blocksToKeep") {
+    var history = genHistory()._1
+    history.bestFullBlockOpt shouldBe None
 
-    val missed = history.missedModifiersForFullChain()
-    missed.filter(_._1 == BlockTransactions.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.blockTransactions.id)
-    missed.filter(_._1 == ADProofs.modifierTypeId).map(_._2) should contain theSameElementsAs chain.map(_.aDProofs.get.id)
+    val chain = genChain(BlocksToKeep * 2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.get shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    val fullBlocksToApply = chain.tail
+    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
+
+    history.applicable(chain.head.blockTransactions) shouldBe false
+
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history.bestFullBlockOpt shouldBe None
+    history = history.append(fullBlocksToApply.head.aDProofs.get).get._1
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
+
+    history.applicable(chain.head.blockTransactions) shouldBe false
+
+    fullBlocksToApply.tail.foreach { f =>
+      history = history.append(f.blockTransactions).get._1
+      history = history.append(f.aDProofs.get).get._1
+    }
+    history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.last.header
+
+    //block transactions should be already pruned
+    history.contains(fullBlocksToApply.head.blockTransactions) shouldBe false
+    //block transactions should not be able to apply since they are too far back in history
+    history.applicable(fullBlocksToApply.head.blockTransactions) shouldBe false
   }
 
   property("proofs and transactions application in random order with forks") {
     forAll(smallInt, positiveLongGen) { (chainHeight, seed) =>
       whenever(chainHeight > 0) {
-        var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
+        var (history, chain) = genHistory(1)
         val r = new Random(seed)
-        val genesis = genChain(1, Seq()).head
-        history.append(genesis.header) shouldBe 'success
-        history.append(genesis.blockTransactions) shouldBe 'success
-        history.append(genesis.aDProofs.get) shouldBe 'success
+        val genesis = chain.head
         history.bestFullBlockOpt shouldBe Some(genesis)
 
-        val chains = Seq(genChain(chainHeight, Seq(genesis)), genChain(chainHeight + 1, Seq(genesis))).map(_.tail)
+        val chains = Seq(genChain(chainHeight, genesis), genChain(chainHeight + 1, genesis)).map(_.tail)
         chains.foreach(chain => applyHeaderChain(history, HeaderChain(chain.map(_.header))))
         val indices: Seq[(Int, Int)] = chains.indices.flatMap { chainIndex =>
           val chain = chains(chainIndex)
@@ -80,15 +108,15 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("apply proofs that link incomplete chain") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    val chain = genChain(4, Seq())
+    var history = genHistory()._1
+    val chain = genChain(4)
 
     val block0 = chain.head
     val block1 = chain(1)
     val block2 = chain(2)
     val block3 = chain(3)
 
-    chain.foreach(f => history.append(f.header))
+    applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestFullBlockOpt shouldBe None
     history.bestHeaderOpt shouldBe Some(block3.header)
 
@@ -109,17 +137,16 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe Some(block3)
   }
 
-  //TODO fix this correctly
-  ignore("bootstrap from headers and last full blocks") {
-    var history = generateHistory(verifyTransactions = true, ADState = true, PoPoWBootstrap = false, BlocksToKeep)
-    //todo: reconsider history.bestHeaderOpt.get shouldBe ErgoFullBlock.genesis.header
+  property("bootstrap from headers and last full blocks") {
+    var history = genHistory()._1
     history.bestFullBlockOpt shouldBe None
 
-    val chain = genChain(BlocksToKeep * 2, Seq())
+    val chain = genChain(BlocksToKeep * 2)
 
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
+    history.pruningProcessor.updateBestFullBlock(chain.last.header)
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
 
@@ -130,22 +157,17 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("syncInfo()") {
-    var history = genHistory()
+    var (history, chain) = genHistory(BlocksInChain)
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-    history = applyChain(history, chain)
     val si = history.syncInfo
     si.lastHeaderIds.last shouldEqual chain.last.header.id
   }
 
   property("reportSemanticValidity(valid = true) when better header chain exists") {
-    var history = genHistory()
+    var history = genHistory(2)._1
 
-    val inChain = genChain(2, bestFullOptToSeq(history))
-    history = applyChain(history, inChain)
-
-    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
-    val fork2 = genChain(4, bestFullOptToSeq(history)).tail
+    val fork1 = genChain(3, history).tail
+    val fork2 = genChain(4, history).tail
     fork1.head.parentId shouldEqual fork2.head.parentId
 
     history = applyChain(history, fork1)
@@ -162,16 +184,19 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("reportSemanticValidity(valid = true) should set isSemanticallyValid() result") {
-    var history = genHistory()
+    var history = genHistory(1)._1
+    history.bestFullBlockOpt.isDefined shouldBe true
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
+    val chain = genChain(BlocksInChain, history).tail
+    chain.head.parentId shouldEqual history.bestFullBlockOpt.get.id
+
     chain.foreach { fullBlock =>
       history.bestHeaderOpt.foreach(b => b.id shouldEqual fullBlock.parentId)
       history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Absent
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Absent
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Absent
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Absent
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Absent
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Absent
 
       history = history.append(fullBlock.header).get._1
       history = history.append(fullBlock.aDProofs.get).get._1
@@ -180,51 +205,48 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
       history.reportSemanticValidity(fullBlock.header, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.aDProofs.get, valid = true, fullBlock.header.parentId)
       history.reportSemanticValidity(fullBlock.blockTransactions, valid = true, fullBlock.header.parentId)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Valid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Valid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Valid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Valid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Valid
     }
   }
 
   property("reportSemanticValidity(valid = false) should set isSemanticallyValid() result for all linked modifiers") {
-    var history = genHistory(1)
+    var history = genHistory(1)._1
 
     history.bestFullBlockOpt should not be None
 
-    val chain = genChain(BlocksInChain, Seq(history.bestFullBlockOpt.get)).tail
+    val chain = genChain(BlocksInChain, history.bestFullBlockOpt.get).tail
     (chain.head.header.parentId sameElements Header.GenesisParentId) shouldBe false
 
     history = applyChain(history, chain)
 
     chain.reverse.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Unknown
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Unknown
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
       history.reportSemanticValidity(fullBlock.header, valid = false, fullBlock.header.parentId)
 
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
 
   property("reportSemanticValidity(valid = false) should mark invalid all forks containing this header") {
-    var history = genHistory()
+    var (history, inChain) = genHistory(2)
 
-    val inChain = genChain(2, bestFullOptToSeq(history))
-    history = applyChain(history, inChain)
-
-    val fork1 = genChain(3, bestFullOptToSeq(history)).tail
-    val fork2 = genChain(3, bestFullOptToSeq(history)).tail
+    val fork1 = genChain(3, history).tail
+    val fork2 = genChain(3, history).tail
     fork1.head.parentId shouldEqual fork2.head.parentId
 
     history = applyChain(history, fork1)
@@ -233,24 +255,24 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.reportSemanticValidity(inChain.last.header, valid = false, inChain.last.parentId)
 
     fork1.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
 
     fork2.foreach { fullBlock =>
-      history.isSemanticallyValid(fullBlock.header.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe ModifierSemanticValidity.Invalid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+      history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
 
   property("reportSemanticValidity(valid = false) should return blocks to rollback and to process") {
-    var history = genHistory(3)
+    var history = genHistory(3)._1
     val common = history.bestFullBlockOpt.get
 
-    val fork1 = genChain(3, Seq(common)).tail
-    val fork2 = genChain(2, Seq(common)).tail
+    val fork1 = genChain(3, common).tail
+    val fork2 = genChain(2, common).tail
 
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
@@ -264,9 +286,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("reportSemanticValidity(valid = false) for non-last block in best chain without better forks") {
-    var history = genHistory()
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-    history = applyChain(history, chain)
+    var (history, chain) = genHistory(BlocksInChain)
 
     history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
     history.bestHeaderOpt.get shouldEqual chain.last.header
@@ -285,10 +305,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Report invalid for best full block") {
-    var history = genHistory()
-
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history))
-    history = applyChain(history, chain)
+    var (history, chain) = genHistory(BlocksInChain)
 
     chain.takeRight(BlocksToKeep - 2).reverse.foreach { fullBlock =>
       history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
@@ -308,10 +325,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
   property("prune old blocks test") {
     val blocksToPrune = 20
 
-    var history = genHistory()
-    val chain = genChain(BlocksToKeep + blocksToPrune + 1, Seq())
+    var (history, chain) = genHistory(BlocksToKeep + blocksToPrune + 1)
 
-    history = applyChain(history, chain)
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt.get.header shouldBe chain.last.header
 
@@ -328,10 +343,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from genesis") {
-    val genesis = genChain(1, Seq()).head
-    var history = applyChain(genHistory(), Seq(genesis))
-    val fork1 = genChain(1, Seq(history.bestFullBlockOpt.get)).tail
-    val fork2 = genChain(2, Seq(history.bestFullBlockOpt.get)).tail
+    var (history, c) = genHistory(1)
+    val genesis = c.head
+    val fork1 = genChain(1, history.bestFullBlockOpt.get).tail
+    val fork2 = genChain(2, history.bestFullBlockOpt.get).tail
 
     history = applyChain(history, fork1)
     history.bestHeaderOpt.get shouldBe fork1.last.header
@@ -352,14 +367,14 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("process fork from existing chain") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
+    var history = genHistory(BlocksInChain)._1
 
     history.bestFullBlockOpt.isDefined should not be None
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 0) {
         val branchPoint = history.bestFullBlockOpt.get
-        val fork1 = genChain(forkLength, Seq(branchPoint)).tail
-        val fork2 = genChain(forkLength + 1, Seq(branchPoint)).tail
+        val fork1 = genChain(forkLength, branchPoint).tail
+        val fork2 = genChain(forkLength + 1, branchPoint).tail
 
         history = applyChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last.header
@@ -382,9 +397,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
   property("Appended full blocks to best chain in full history") {
-    var history = applyChain(genHistory(), genChain(BlocksInChain, Seq()))
+    var history = genHistory(1)._1
+    history.bestFullBlockOpt.nonEmpty shouldBe true
 
-    val chain = genChain(BlocksInChain, bestFullOptToSeq(history)).tail
+    val chain = genChain(BlocksInChain, history).tail
     chain.foreach { fullBlock =>
       val startFullBlock = history.bestFullBlockOpt.get
       val header = fullBlock.header

@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, ActorSystem, Cancellable, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
 import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
@@ -9,8 +9,8 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.TestingSettings
-import scorex.core.LocalInterface.LocallyGeneratedTransaction
-import scorex.core.NodeViewHolder.GetDataFromCurrentView
+import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedTransaction
+import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -56,6 +56,15 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
 }
 
 object TransactionGenerator {
+
+  case object StartGeneration
+
+  case object FetchBoxes
+
+  case object StopGeneration
+}
+
+object TransactionGeneratorRef {
   def props(viewHolder: ActorRef, settings: TestingSettings): Props =
     Props(new TransactionGenerator(viewHolder, settings))
 
@@ -66,10 +75,4 @@ object TransactionGenerator {
   def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolder, settings), name)
-
-  case object StartGeneration
-
-  case object FetchBoxes
-
-  case object StopGeneration
 }

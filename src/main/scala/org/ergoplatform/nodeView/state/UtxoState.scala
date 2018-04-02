@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
-import scorex.core.LocalInterface.LocallyGeneratedModifier
+import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
@@ -23,8 +23,11 @@ import scala.util.{Failure, Success, Try}
   *
   * @param store - database where persistent UTXO set authenticated with the help of an AVL+ tree is residing
   */
-class UtxoState(override val version: VersionTag, val store: Store, nodeViewHolderRef: Option[ActorRef])
-  extends ErgoState[UtxoState] with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+class UtxoState(override val version: VersionTag,
+                override val store: Store,
+                nodeViewHolderRef: Option[ActorRef])
+  extends ErgoState[UtxoState]
+    with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
     with UtxoStateReader {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
@@ -74,7 +77,6 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
   }
 
   //todo: utxo snapshot could go here
-  //todo: dont' use assert
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
@@ -125,6 +127,7 @@ class UtxoState(override val version: VersionTag, val store: Store, nodeViewHold
     * @return proof for specified transactions and new state digest
     */
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+    log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
 
     def rollback(): Try[Unit] = persistentProver.rollback(rootHash)

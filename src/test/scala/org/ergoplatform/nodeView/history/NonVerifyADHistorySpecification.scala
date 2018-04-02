@@ -2,25 +2,19 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
-import scorex.core.consensus.History.HistoryComparisonResult
+import org.ergoplatform.utils.NoShrink
+import scorex.core.consensus.History.{Equal, HistoryComparisonResult, Unknown, Younger}
 import scorex.crypto.encode.Base58
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
-
-  property("missedModifiersForFullChain") {
-    var history = genHistory()
-    val chain = genChain(BlocksToKeep, Seq())
-    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-
-    history.missedModifiersForFullChain().isEmpty shouldBe true
-  }
 
   ignore("Should apply UTXOSnapshotChunks") {
     forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
@@ -35,12 +29,12 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     val epochLength = 3
     val useLastEpochs = 3
 
-    var history = generateHistory(verifyTransactions = false, ADState = true, PoPoWBootstrap = false, blocksToKeep = 0,
+    var history = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0,
       epochLength = epochLength, useLastEpochs = useLastEpochs)
-    val blocksBeforeRecalculate = epochLength * useLastEpochs + 1
+    val blocksBeforeRecalculate = epochLength + 1
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
-    history.requiredDifficultyAfter(history.bestHeaderOpt.get) should not be Constants.InitialDifficulty
+    history.requiredDifficultyAfter(history.bestHeaderOpt.get) shouldBe Constants.InitialDifficulty
   }
 
   property("lastHeaders() should return correct number of blocks") {
@@ -86,11 +80,11 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork1)) shouldBe HistoryComparisonResult.Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe HistoryComparisonResult.Younger
-    history.compare(getInfo(fork2.tail)) shouldBe HistoryComparisonResult.Unknown
+    history.compare(getInfo(fork2)) shouldBe Younger
+    history.compare(getInfo(fork1)) shouldBe Equal
+    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfo(fork2.tail)) shouldBe Unknown
   }
 
   property("continuationIds() on forks") {
@@ -193,19 +187,23 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
   }
 
-
   property("commonBlockThenSuffixes()") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)
 
     val forkDepth = BlocksInChain / 2
-    forAll(smallInt) { forkLength: Int =>
+    implicit val noShrink = NoShrink[Array[Byte]]
+    forAll(smallInt, genBytesList(5)) { (forkLength: Int, votes: Array[Byte]) =>
       whenever(forkLength > forkDepth) {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Seq(common))
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
+                                                            defaultDifficultyControl, votes)
+        val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
+        val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
+        (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty
 
         history = applyHeaderChain(history, fork1)
         history.bestHeaderOpt.get shouldBe fork1.last

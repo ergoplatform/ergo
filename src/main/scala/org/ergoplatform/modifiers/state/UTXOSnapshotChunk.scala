@@ -21,8 +21,6 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 
   override lazy val serializer: Serializer[UTXOSnapshotChunk] = ???
 
-  override lazy val json: Json = ???
-
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(stateElements.map(LeafData @@ _.bytes))
 }
 

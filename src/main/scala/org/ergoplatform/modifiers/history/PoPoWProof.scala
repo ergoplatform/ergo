@@ -1,8 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
-import io.circe.Json
-import org.ergoplatform.mining.PoWScheme
+import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -14,7 +13,7 @@ case class PoPoWProof(m: Byte,
                       k: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header])(implicit poWScheme: PoWScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      suffix: Seq[Header])(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -23,9 +22,7 @@ case class PoPoWProof(m: Byte,
 
   override type M = PoPoWProof
 
-  override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(poWScheme)
-
-  override lazy val json: Json = ???
+  override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
 
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
@@ -37,7 +34,7 @@ object PoPoWProof {
 }
 
 @SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
-class PoPoWProofUtils(poWScheme: PoWScheme) {
+class PoPoWProofUtils(powScheme: PowScheme) {
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
@@ -53,7 +50,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
       Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
     } else if (proof.innerchain.length < proof.m) {
       Failure(new Error(s"Innerchain length is not enough in $proof"))
-    } else if (!proof.innerchain.forall(h => poWScheme.realDifficulty(h) >= innerDifficulty)) {
+    } else if (!proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
       Failure(new Error(s"Innerchain difficulty is not enough in $proof"))
     } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId sameElements s.head.id)) {
       Failure(new Error(s"Suffix links are incorrect in $proof"))
@@ -66,7 +63,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
   }
 
   def isLevel(header: Header, level: Int): Boolean = {
-    val headerDiff = poWScheme.realDifficulty(header)
+    val headerDiff = powScheme.realDifficulty(header)
     val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
     headerDiff >= levelDiff
   }
@@ -99,7 +96,7 @@ class PoPoWProofUtils(poWScheme: PoWScheme) {
 }
 
 @SuppressWarnings(Array("TraversableHead"))
-class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] {
+class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
       val bytes = HeaderSerializer.bytesWithoutInterlinks(h)
@@ -131,7 +128,7 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
       } else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
-        val interlinks = new PoPoWProofUtils(poWScheme).constructInterlinkVector(acc.head)
+        val interlinks = new PoPoWProofUtils(powScheme).constructInterlinkVector(acc.head)
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
     }
@@ -145,6 +142,6 @@ class PoPoWProofSerializer(poWScheme: PoWScheme) extends Serializer[PoPoWProof] 
       index = index + 2 + l
       header
     }
-    PoPoWProof(m, k, i, innerchain, suffix)(poWScheme)
+    PoPoWProof(m, k, i, innerchain, suffix)(powScheme)
   }
 }

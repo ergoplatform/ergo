@@ -12,16 +12,17 @@ import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
-import scorex.core.LocalInterface.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
+import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.NodeViewHolder.EventType._
-import scorex.core.NodeViewHolder.{GetDataFromCurrentView, SyntacticallySuccessfulModifier}
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, Subscribe}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{ModifierId, NodeViewHolder}
+import scorex.core.ModifierId
 import scorex.testkit.utils.FileUtils
 
 import scala.reflect.ClassTag
@@ -34,15 +35,9 @@ class ErgoNodeViewHolderSpecification extends PropSpec
 
   implicit val system = ActorSystem("WithIsoFix")
 
-  case class NodeViewHolderConfig(adState: Boolean, verifyTransactions: Boolean, popowBootstrap: Boolean) {
+  case class NodeViewHolderConfig(stateType: StateType, verifyTransactions: Boolean, popowBootstrap: Boolean) {
     override def toString: String = {
-      val state = if (adState) {
-        "DigestState"
-      } else {
-        "UtxoState"
-      }
-
-      s"State: $state, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap"
+      s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap"
     }
   }
 
@@ -59,12 +54,12 @@ class ErgoNodeViewHolderSpecification extends PropSpec
   type C = NodeViewHolderConfig
 
   val allConfigs: List[NodeViewHolderConfig] = List(
-    NodeViewHolderConfig(adState = true, verifyTransactions = true, popowBootstrap = true),
-    NodeViewHolderConfig(adState = true, verifyTransactions = false, popowBootstrap = true),
-    NodeViewHolderConfig(adState = true, verifyTransactions = false, popowBootstrap = false),
-    NodeViewHolderConfig(adState = true, verifyTransactions = true, popowBootstrap = false),
-    NodeViewHolderConfig(adState = false, verifyTransactions = true, popowBootstrap = true),
-    NodeViewHolderConfig(adState = false, verifyTransactions = true, popowBootstrap = false),
+    NodeViewHolderConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = true),
+    NodeViewHolderConfig(StateType.Digest, verifyTransactions = false, popowBootstrap = true),
+    NodeViewHolderConfig(StateType.Digest, verifyTransactions = false, popowBootstrap = false),
+    NodeViewHolderConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = false),
+    NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true),
+    NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false),
     //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
@@ -73,18 +68,14 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
     val settings = defaultSettings.copy(
       nodeSettings = defaultSettings.nodeSettings.copy(
-        ADState = c.adState,
+        stateType = c.stateType,
         verifyTransactions = c.verifyTransactions,
         PoPoWBootstrap = c.popowBootstrap
       ),
-      chainSettings = defaultSettings.chainSettings.copy(poWScheme = DefaultFakePowScheme)
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )
     val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
-    if (c.adState) {
-      system.actorOf(Props(classOf[DigestErgoNodeViewHolder], settings, timeProvider))
-    } else {
-      system.actorOf(Props(classOf[UtxoErgoNodeViewHolder], settings, timeProvider))
-    }
+    ErgoNodeViewRef(settings, timeProvider)
   }
 
   def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
@@ -148,7 +139,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
 
     def run(test: NodeViewFixture => Unit) = try test(this) finally stop()
-    def stop() = { system.stop(nodeViewRef); system.stop(testProbe.ref) }
+    def stop() = { system.stop(nodeViewRef); system.stop(testProbe.testActor) }
   }
 
   val t1 = TestCase("check genesis state") { fixture =>
@@ -175,7 +166,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     //sending header
     nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
@@ -203,7 +194,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -212,13 +203,13 @@ class ErgoNodeViewHolderSpecification extends PropSpec
       nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
       nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
 
-      if (nodeViewConfig.adState) {
-        expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
-        expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
-      }
-      else {
-        expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
-        expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
+      nodeViewConfig.stateType match {
+        case StateType.Digest =>
+          expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
+          expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
+        case StateType.Utxo =>
+          expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
+          expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
       }
 
       nodeViewRef ! bestFullBlock(nodeViewConfig)
@@ -263,7 +254,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     import fixture._
     val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
-    nodeViewRef ! NodeViewHolder.Subscribe(Seq(FailedTransaction))
+    nodeViewRef ! Subscribe(Seq(FailedTransaction))
     nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
     expectNoMsg
     nodeViewRef ! poolSize(nodeViewConfig)
@@ -383,7 +374,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
 
   val t9 = TestCase("UTXO state should generate ADProofs and put them in history") { fixture =>
     import fixture._
-    if (!nodeViewConfig.adState) {
+    if (nodeViewConfig.stateType == StateType.Utxo) {
       val dir = createTempDir
       val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)

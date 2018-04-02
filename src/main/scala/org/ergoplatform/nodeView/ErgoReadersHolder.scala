@@ -5,8 +5,10 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import scorex.core.LocalInterface.ReceivableMessages._
 import scorex.core.NodeViewHolder
-import scorex.core.NodeViewHolder._
+import scorex.core.NodeViewHolder.ReceivableMessages._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.ScorexLogging
 
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
@@ -55,6 +57,16 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 }
 
 object ErgoReadersHolder {
+
+  case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
+
+  case object GetReaders
+
+  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
+
+}
+
+object ErgoReadersHolderRef {
   def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
 
   def apply(viewHolderRef: ActorRef)
@@ -65,11 +77,5 @@ object ErgoReadersHolder {
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolderRef), name)
-
-  case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
-
-  case object GetReaders
-
-  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
 
 }

@@ -19,7 +19,7 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
-                            val store: Store,
+                            override val store: Store,
                             settings: NodeConfigurationSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
@@ -28,30 +28,23 @@ class DigestState protected(override val version: VersionTag,
   store.lastVersionID
     .foreach(id => assert(version sameElements id.data, "version should always be equal to store.lastVersionID"))
 
-  override val maxRollbackDepth = 10
+  override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
-  @SuppressWarnings(Array("OptionGet"))
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock =>
-      Try {
-        //TODO: Code smells
-        if (!ADProofs.proofDigest(fb.aDProofs.get.proofBytes).sameElements(fb.header.ADProofsRoot)) {
-          throw new Error("Incorrect proofs digest")
-        }
-        val txs = fb.blockTransactions.txs
-        val declaredHash = fb.header.stateRoot
+    case fb: ErgoFullBlock if notInitialized => Success()
 
-        txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-          status.flatMap(_ => tx.semanticValidity)
-        }.flatMap(_ => fb.aDProofs.map(_.verify(boxChanges(txs), rootHash, declaredHash))
-          .getOrElse(Failure(new Error("Proofs are empty"))))
-      }.flatten match {
-        case s: Success[_] =>
-          log.info(s"Valid modifier applied to DigestState: ${fb.encodedId}")
-          s
-        case Failure(e) =>
-          log.warn(s"Modifier of type ${mod.modifierTypeId} with id ${mod.encodedId} is not valid: ${e.getMessage}")
-          Failure(e)
+    case fb: ErgoFullBlock =>
+      fb.aDProofs match {
+        case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
+          Failure(new Error("Incorrect proofs digest"))
+        case Some(proofs) =>
+          val txs = fb.blockTransactions.txs
+          val declaredHash = fb.header.stateRoot
+          txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
+            status.flatMap(_ => tx.semanticValidity)
+          }.map(_ => proofs.verify(boxChanges(txs), rootHash, declaredHash))
+        case None =>
+          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
     case h: Header => Success()
@@ -60,17 +53,16 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Error(s"Modifier not validated: $a"))
   }
 
-  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
-    val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
-    new DigestState(newVersion, newRootHash, store, settings)
-  }
-
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
     case fb: ErgoFullBlock if settings.verifyTransactions =>
-      log.info(s"Got new full block with id ${fb.encodedId} with root ${Algos.encoder.encode(fb.header.stateRoot)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot))
+      log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
+        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
+      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
+        case e =>
+          log.warn(s"Invalid block ${fb.encodedId}, reason ${e.getMessage}")
+          Failure(e)
+      }
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
       //TODO should not get this messages from node view holders
@@ -105,6 +97,15 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(VersionTag @@ _.data)
 
   def close(): Unit = store.close()
+
+  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
+    val wrappedVersion = ByteArrayWrapper(newVersion)
+    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
+    new DigestState(newVersion, newRootHash, store, settings)
+  }
+
+  // DigestState is not initialized yet. Waiting for first full block to apply without checks
+  private lazy val notInitialized = settings.blocksToKeep >= 0 && (version sameElements ErgoState.genesisStateVersion)
 
 }
 

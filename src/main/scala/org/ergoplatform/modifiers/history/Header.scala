@@ -1,23 +1,24 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.Json
+import io.circe.Encoder
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
+import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
+import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -30,7 +31,7 @@ case class Header(version: Version,
                   height: Int,
                   votes: Array[Byte],
                   nonce: Long,
-                  equihashSolutions: Array[Byte]
+                  equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
@@ -45,10 +46,7 @@ case class Header(version: Version,
     val bytes = HeaderSerializer.bytesWithoutPow(this)
     digest.update(bytes, 0, bytes.length)
     Equihash.hashNonce(digest, nonce)
-    EquihashSolutionsSerializer.parseBytes(equihashSolutions) match {
-      case Success(solutions) => solutions.foreach(s => Equihash.hashXi(digest, s))
-      case Failure(f) => throw f
-    }
+    Equihash.hashSolution(digest, equihashSolution)
     val h = new Array[Byte](32)
     digest.doFinal(h, 0)
 
@@ -67,35 +65,45 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId =
     ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  override lazy val json: Json = Map(
-    "id" -> Algos.encode(id).asJson,
-    "transactionsRoot" -> Algos.encode(transactionsRoot).asJson,
-    "interlinks" -> interlinks.map(i => Algos.encode(i).asJson).asJson,
-    "adProofsRoot" -> Algos.encode(ADProofsRoot).asJson,
-    "stateRoot" -> Algos.encode(stateRoot).asJson,
-    "parentId" -> Algos.encode(parentId).asJson,
-    "timestamp" -> timestamp.asJson,
-    "nonce" -> nonce.asJson,
-    "equihashSolutions" -> Algos.encode(equihashSolutions).asJson,
-    "nBits" -> nBits.asJson,
-    "height" -> height.asJson,
-    "difficulty" -> requiredDifficulty.toString.asJson,
-    "votes" -> Algos.encode(votes).asJson
-  ).asJson
-
-  override lazy val toString: String = s"Header(${json.noSpaces})"
+  override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
   override type M = Header
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
+
+  /**
+    * Checks, that modifier m corresponds t this header
+    */
+  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = m match {
+    case p: ADProofs => ADProofsRoot sameElements p.digest
+    case t: BlockTransactions => transactionsRoot sameElements t.digest
+    case _ => false
+  }
 }
 
 object Header {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
   lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
+
+  implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
+    Map(
+      "id" -> Algos.encode(h.id).asJson,
+      "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
+      "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
+      "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
+      "stateRoot" -> Algos.encode(h.stateRoot).asJson,
+      "parentId" -> Algos.encode(h.parentId).asJson,
+      "timestamp" -> h.timestamp.asJson,
+      "nonce" -> h.nonce.asJson,
+      "equihashSolutions" -> h.equihashSolution.asJson,
+      "nBits" -> h.nBits.asJson,
+      "height" -> h.height.asJson,
+      "difficulty" -> h.requiredDifficulty.toString.asJson,
+      "votes" -> Algos.encode(h.votes).asJson
+    ).asJson
 }
 
 
@@ -124,15 +132,16 @@ object HeaderSerializer extends Serializer[Header] {
         buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
       }
     }
+
     val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
     val interlinkBytesSize = Chars.toByteArray(interlinkBytes.length.toChar)
 
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def nonceAndSolutionBytes(h:Header): Array[Byte] = {
-    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolutions.length.toChar)
-    val equihashSolutionsBytes = h.equihashSolutions
+  def nonceAndSolutionBytes(h: Header): Array[Byte] = {
+    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolution.byteLength.toChar)
+    val equihashSolutionsBytes = h.equihashSolution.bytes
 
     Bytes.concat(Longs.toByteArray(h.nonce), equihashSolutionsSize, equihashSolutionsBytes)
   }
@@ -175,9 +184,11 @@ object HeaderSerializer extends Serializer[Header] {
     val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
 
     val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
-    val equihashSolutions = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
+    val equihashSolutionsBytes = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
 
-    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce, equihashSolutions)
-  }
+    EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
+      Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+             nBits, height, votes, nonce, equihashSolution)
+    }
+  }.flatten
 }

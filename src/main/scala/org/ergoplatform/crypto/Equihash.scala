@@ -4,8 +4,10 @@ import java.math.BigInteger
 
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.Blake2bDigest
+import org.ergoplatform.mining.EquihashSolution
 import org.slf4j.LoggerFactory
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
+
 import scala.collection.mutable.ArrayBuffer
 
 object Equihash {
@@ -17,6 +19,11 @@ object Equihash {
   def hashNonce[T <: Digest](digest: T, nonce: BigInt): T = {
     val arr = nonceToLeBytes(nonce)
     digest.update(arr, 0, arr.length)
+    digest
+  }
+
+  def hashSolution[T <: Digest](digest: T, solution: EquihashSolution): T = {
+    solution.ints map { hashXi(digest, _) }
     digest
   }
 
@@ -123,11 +130,11 @@ object Equihash {
   }
 
   // Implementation of Basic Wagner's algorithm for the GBP
-  def gbpBasic(digest: Blake2bDigest, n: Char, k: Char): Seq[Seq[Int]] = {
+  def gbpBasic(digest: Blake2bDigest, n: Char, k: Char): Seq[EquihashSolution] = {
     val collisionLength = n / (k + 1)
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
-    log.debug("Generating first list")
+    log.trace("Generating first list")
     //  1) Generate first list
     val tmpHash = new Array[Byte](digest.getDigestSize)
     var X = for {i <- (0 until Math.pow(2, collisionLength + 1).toInt).toVector} yield {
@@ -145,13 +152,13 @@ object Equihash {
 
     //  3) Repeat step 2 until 2n/(k+1) bits remain
     for (i <- 1 until k) {
-      log.debug(s"Round $i")
+      log.trace(s"Round $i")
 
       //  2a) Sort the list
-      log.debug("- Sorting list")
+      log.trace("- Sorting list")
       X = X.sortBy(_._1.toIterable)
 
-      log.debug("- Finding collisions")
+      log.trace("- Finding collisions")
       var Xc = Vector.empty[(Array[Byte], Seq[Int])]
       while (X.nonEmpty) {
         //  2b) Find next set of unordered pairs with collisions on first n/(k+1) bits
@@ -184,14 +191,14 @@ object Equihash {
     }
 
     //  k+1) Find a collision on last 2n(k+1) bits
-    log.debug("Final round:")
-    log.debug("- Sorting list")
+    log.trace("Final round:")
+    log.trace("- Sorting list")
 
     X = X.sortBy(_._1.toIterable)
 
-    log.debug("- Finding collisions")
+    log.trace("- Finding collisions")
 
-    var solns = Vector.empty[Seq[Int]]
+    var solns = Vector.empty[EquihashSolution]
 
     while (X.nonEmpty) {
       val XSize = X.length
@@ -215,7 +222,7 @@ object Equihash {
           } else {
             X(XSize - 1 - m)._2 ++ X(XSize - 1 - l)._2
           }
-          solns = solns :+ p
+          solns = solns :+ EquihashSolution(p)
         }
       }
 

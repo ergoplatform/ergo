@@ -1,23 +1,25 @@
 package org.ergoplatform
 
-import akka.actor.{ActorRef, Props}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import org.ergoplatform.api.routes._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoLocalInterface, ErgoMiner, TransactionGenerator}
+import org.ergoplatform.local._
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoReadersHolder}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
+import scorex.core.utils.ScorexLogging
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.duration._
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
@@ -33,25 +35,24 @@ class ErgoApp(args: Seq[String]) extends Application {
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewHolder.createActor(actorSystem, ergoSettings, timeProvider)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
-  val readersHolderRef: ActorRef = ErgoReadersHolder(nodeViewHolderRef)
+  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+
+  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings,
+    timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
-    InfoRoute(readersHolderRef, minerRef, peerManagerRef, ergoSettings, nodeId),
-    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId, ergoSettings.nodeSettings.ADState),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi, ergoSettings.nodeSettings.ADState))
+    InfoRoute(localInterface, settings.restApi, timeProvider),
+    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-
-  override val localInterface: ActorRef = actorSystem.actorOf(
-    Props(classOf[ErgoLocalInterface], nodeViewHolderRef)
-  )
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,
@@ -62,19 +63,34 @@ class ErgoApp(args: Seq[String]) extends Application {
   }
 
   if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGenerator(nodeViewHolderRef, ergoSettings.testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
     txGen ! StartGeneration
   }
 
+  val actorsToStop = Seq(minerRef,
+    peerManagerRef,
+    networkControllerRef,
+    readersHolderRef,
+    nodeViewSynchronizer,
+    localInterface,
+    nodeViewHolderRef
+  )
+  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
 }
 
-object ErgoApp {
+object ErgoApp extends ScorexLogging {
 
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
-  def forceStopApplication(code: Int = 1) = {
-    new Thread(() => System.exit(code), "ergo-platform-shutdown-thread").start()
-    throw new Error("Exit")
+  def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
+
+  def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
+    log.warn("Terminating Actors")
+    actors.foreach{ a => a ! PoisonPill }
+    log.warn("Terminating ActorSystem")
+    val termination = system.terminate()
+    Await.result(termination, 60 seconds)
+    log.warn("Application has been terminated.")
   }
 
 }

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.mining.PoWScheme
+import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -12,7 +12,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.settings._
 import scorex.core._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
@@ -50,6 +51,8 @@ trait ErgoHistory
 
   override type NVCT = ErgoHistory
 
+  def closeStorage(): Unit = historyStorage.close()
+
   /**
     * Append ErgoPersistentModifier to History if valid
     */
@@ -77,12 +80,14 @@ trait ErgoHistory
     */
   override def reportSemanticValidity(modifier: ErgoPersistentModifier,
                                       valid: Boolean,
-                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) =
+                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid = $valid")
     if (valid) {
       this -> markModifierValid(modifier)
     } else {
       this -> markModifierInvalid(modifier)
     }
+  }
 
   /**
     * Mark modifier and all modifiers in child chains as invalid
@@ -227,45 +232,45 @@ object ErgoHistory extends ScorexLogging {
     val db = new HistoryStorage(indexStore, objectsStore)
     val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.ADState, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
-      case (true, true, true) =>
+    val history: ErgoHistory = (nodeSettings.stateType, nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
+      case (StateType.Digest, true, true) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (true, true, false) =>
+      case (StateType.Digest, true, false) =>
         new ErgoHistory with ADStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (false, true, true) =>
+      case (StateType.Utxo, true, true) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-      case (false, true, false) =>
+      case (StateType.Utxo, true, false) =>
         new ErgoHistory with FullStateProofsProcessor
-          with FullnodeBlockTransactionsProcessor
+          with FullBlockTransactionsProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (_, false, true) =>
@@ -275,7 +280,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case (_, false, false) =>
@@ -285,12 +290,12 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected val historyStorage: HistoryStorage = db
-          override val powScheme: PoWScheme = chainSettings.poWScheme
+          override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
       case m =>
-        throw new Error(s"Unsupported settings combination ADState==${m._1}, verifyTransactions==${m._2}, " +
-          s"poPoWBootstrap==${m._1}")
+        throw new Error(s"Unsupported settings combination stateType==${m._1}, verifyTransactions==${m._2}, " +
+          s"poPoWBootstrap==${m._3}")
     }
     history
   }

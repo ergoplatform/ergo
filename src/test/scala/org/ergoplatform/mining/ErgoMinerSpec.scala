@@ -13,22 +13,26 @@ import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{FlatSpecLike, Matchers}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
+import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
 
-class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matchers with ErgoGenerators {
+class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matchers with ErgoGenerators with FileUtils {
 
   val defaultAwaitDuration = 5 seconds
   implicit val timeout = akka.util.Timeout(defaultAwaitDuration)
 
   it should "not freeze while generating candidate block with large amount of txs" in {
-    val defaultSettings: ErgoSettings = ErgoSettings.read(None)
+    val tmpDir = createTempDir
+
+    val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
-    val nodeSettings = defaultSettings.nodeSettings.copy(mining = true, stateType = StateType.Utxo, offlineGeneration = true)
+    val nodeSettings = defaultSettings.nodeSettings.copy(mining = true, stateType = StateType.Utxo, offlineGeneration = true, verifyTransactions = false)
     val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings)
-    val settings: ScorexSettings = ergoSettings.scorexSettings
+    val networkSettings = ergoSettings.scorexSettings.network.copy(knownPeers = Seq.empty)
+    val settings: ScorexSettings = ergoSettings.scorexSettings.copy(network = networkSettings)
     val timeProvider = new NetworkTimeProvider(settings.ntp)
 
     val nodeId = Array.fill(10)(1: Byte)

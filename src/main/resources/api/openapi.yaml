@@ -339,7 +339,6 @@ paths:
         '200':
           # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
           description: Array of header ids
-          example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
           content:
             application/json:
               schema:
@@ -348,6 +347,7 @@ paths:
                 items:
                   type: string
                   example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
         default:
           description: Error
           content:

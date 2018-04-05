@@ -747,7 +747,7 @@ paths:
                 type: array
                 items:
                   type: string
-                  descriptiom: Blacklisted node address
+                  description: Blacklisted node address
 
   /utils/seed:
     get:

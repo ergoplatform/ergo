@@ -75,7 +75,7 @@ components:
       type: object
       required:
         - header
-        - transactions
+        - blockTransactions
         - adProofs
       properties:
         header:
@@ -339,7 +339,6 @@ paths:
         '200':
           # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
           description: Array of header ids
-          example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
           content:
             application/json:
               schema:
@@ -348,6 +347,7 @@ paths:
                 items:
                   type: string
                   example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
         default:
           description: Error
           content:
@@ -375,9 +375,10 @@ paths:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                - invalid.block
+              schema:
+                type: string
+                enum:
+                  - invalid.block
 
   /blocks/at/{blockHeight}:
     get:
@@ -587,25 +588,23 @@ paths:
             application/json:
               schema:
                 description: ID of the new transaction
-                content:
-                  application/json:
-                    schema:
-                      $ref: '#/components/schemas/TransactionId'
+                $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                # Transaction signature doesn't match transaction data
-                - invalid.transaction.signature
-                # Provided timestamp is invalid
-                - invalid.transaction.timestamp
-                # Provided amount in invalid
-                - invalid.transaction.value
-                # Provided box nonce in invalid
-                - invalid.box.nonce
-                - invalid.json
+              schema:
+                type: string
+                enum:
+                  # Transaction signature doesn't match transaction data
+                  - invalid.transaction.signature
+                  # Provided timestamp is invalid
+                  - invalid.transaction.timestamp
+                  # Provided amount in invalid
+                  - invalid.transaction.value
+                  # Provided box nonce in invalid
+                  - invalid.box.nonce
+                  - invalid.json
 
   /transactions/{transactionId}:
     get:
@@ -625,7 +624,8 @@ paths:
           description: Anyone can spend transactions object
           content:
             application/json:
-              $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+              schema:
+                $ref: '#/components/schemas/AnyoneCanSpendTransaction'
         '404':
           description: Transaction with this id doesn't exist
         default:
@@ -748,7 +748,7 @@ paths:
                 type: array
                 items:
                   type: string
-                  descriptiom: Blacklisted node address
+                  description: Blacklisted node address
 
   /utils/seed:
     get:

@@ -587,10 +587,7 @@ paths:
             application/json:
               schema:
                 description: ID of the new transaction
-                content:
-                  application/json:
-                    schema:
-                      $ref: '#/components/schemas/TransactionId'
+                $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
           content:

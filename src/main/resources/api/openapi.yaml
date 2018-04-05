@@ -375,9 +375,10 @@ paths:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                - invalid.block
+              schema:
+                type: string
+                enum:
+                  - invalid.block
 
   /blocks/at/{blockHeight}:
     get:

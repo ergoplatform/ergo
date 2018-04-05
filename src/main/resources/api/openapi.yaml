@@ -75,7 +75,7 @@ components:
       type: object
       required:
         - header
-        - transactions
+        - blockTransactions
         - adProofs
       properties:
         header:

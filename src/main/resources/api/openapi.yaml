@@ -592,17 +592,18 @@ paths:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                # Transaction signature doesn't match transaction data
-                - invalid.transaction.signature
-                # Provided timestamp is invalid
-                - invalid.transaction.timestamp
-                # Provided amount in invalid
-                - invalid.transaction.value
-                # Provided box nonce in invalid
-                - invalid.box.nonce
-                - invalid.json
+              schema:
+                type: string
+                enum:
+                  # Transaction signature doesn't match transaction data
+                  - invalid.transaction.signature
+                  # Provided timestamp is invalid
+                  - invalid.transaction.timestamp
+                  # Provided amount in invalid
+                  - invalid.transaction.value
+                  # Provided box nonce in invalid
+                  - invalid.box.nonce
+                  - invalid.json
 
   /transactions/{transactionId}:
     get:

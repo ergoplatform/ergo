@@ -624,7 +624,8 @@ paths:
           description: Anyone can spend transactions object
           content:
             application/json:
-              $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+              schema:
+                $ref: '#/components/schemas/AnyoneCanSpendTransaction'
         '404':
           description: Transaction with this id doesn't exist
         default:

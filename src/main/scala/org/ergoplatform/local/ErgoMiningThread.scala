@@ -8,20 +8,28 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.utils.ScorexLogging
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class ErgoMiningThread(ergoSettings: ErgoSettings,
                        viewHolderRef: ActorRef,
                        startCandidate: CandidateBlock) extends Actor with ScorexLogging {
 
+  implicit val ec: ExecutionContext = context.dispatcher
+
   private val powScheme = ergoSettings.chainSettings.powScheme
   private var candidate: CandidateBlock = startCandidate
 
+  protected def mineCmd(nonce: Long): Unit =
+    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) { self ! MineBlock(nonce) }
+
 
   override def preStart(): Unit = {
-    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) (self ! MineBlock(Random.nextLong()))
+    log.debug(s"Starting miner thread: ${self.path.name}")
+    mineCmd(Random.nextLong())
   }
+
+  override def postStop(): Unit = log.debug(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
     case newCandidate: CandidateBlock =>
@@ -40,9 +48,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
               viewHolderRef ! LocallyGeneratedModifier(adp)
             }
           }
-          context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
-            self ! MineBlock(Random.nextLong())
-          }
+          mineCmd(Random.nextLong())
         case _ =>
           self ! MineBlock(nonce + 1)
       }
@@ -68,7 +74,5 @@ object ErgoMiningThread {
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, startCandidate), name)
 
-
   case class MineBlock(nonce: Long)
-
 }

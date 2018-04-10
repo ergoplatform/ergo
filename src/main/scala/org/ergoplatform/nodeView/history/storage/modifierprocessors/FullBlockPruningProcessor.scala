@@ -9,7 +9,11 @@ import org.ergoplatform.settings.NodeConfigurationSettings
   */
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
-  private[history] var minimalFullBlockHeightVar: Int = Int.MaxValue
+  private[history] var minimalFullBlockHeightVar: Int = if (config.blocksToKeep < 0 && config.verifyTransactions) {
+    0
+  } else {
+    Int.MaxValue
+  }
 
   /**
     * Start height to download full blocks.

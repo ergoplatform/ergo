@@ -39,7 +39,7 @@ object BenchRunner extends ScorexLogging {
     log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
+    val ergoSettings: ErgoSettings = ErgoSettings.read(Some("src/bench/resources/application.conf")).copy(
       directory =  userDir.getAbsolutePath,
       chainSettings = ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar))
     )

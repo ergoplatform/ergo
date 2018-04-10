@@ -29,6 +29,10 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
   override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
 
   override def toString: String = {
+    /**
+      * Somehow JVM hangs when trying to substitute all three values inside on string interpolation.
+      * Please keep them separated.
+      */
     val sId = Base58.encode(id)
     val sHeaderId = Base58.encode(headerId)
     val sProofBytes = Base58.encode(proofBytes)

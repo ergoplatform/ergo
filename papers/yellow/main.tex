@@ -99,6 +99,9 @@
 \newcommand{\ads}{\textbf{ADS}}
 \newcommand{\ssal}{\textbf{$\Sigma$SAL}}
 
+% as we do not know which term to use for a state element, we use a command for this
+\newcommand{\coin}{coin}
+\newcommand{\Coin}{Coin}
 
 \usepackage[utf8]{inputenc}
 
@@ -551,6 +554,18 @@ First, we are describing some preliminaries before providing rules for coins emi
 is $\Delta = 2$ minutes. We plan to issue all the tokens in about eight years, thus the number of blocks minting
 coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
 
+
+\section{Transaction Format}
+
+
+A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16}$ if block size limit allows that),
+and also creating at least one \coin{}. We use term "destroying", as everything contained in a \coin is going to disappear
+from the state: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin.
+
+A \coin{} is made of registers, we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
+and up to 16 registers in the \edata{} chain.
+
+Each \coin{} has a unique identifier to be defined deterministically from its contents.
 
 
 

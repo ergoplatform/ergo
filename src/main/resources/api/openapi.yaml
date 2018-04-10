@@ -75,7 +75,7 @@ components:
       type: object
       required:
         - header
-        - transactions
+        - blockTransactions
         - adProofs
       properties:
         header:
@@ -336,10 +336,9 @@ paths:
             format: int32
             default: 0
       responses:
-        200:
+        '200':
           # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
           description: Array of header ids
-          example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
           content:
             application/json:
               schema:
@@ -348,6 +347,7 @@ paths:
                 items:
                   type: string
                   example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
         default:
           description: Error
           content:
@@ -369,15 +369,16 @@ paths:
             schema:
               $ref: '#/components/schemas/FullBlock'
       responses:
-        200:
+        '200':
           description: Block is valid
         default:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                - invalid.block
+              schema:
+                type: string
+                enum:
+                  - invalid.block
 
   /blocks/at/{blockHeight}:
     get:
@@ -394,7 +395,7 @@ paths:
             type: integer
             format: int32
       responses:
-        200:
+        '200':
           description: Array of header ids
           content:
             application/json:
@@ -405,7 +406,7 @@ paths:
                 items:
                   type: string
                   example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
-        404:
+        '404':
           description: Blocks at this height doesn't exist
         default:
           description: Error
@@ -432,13 +433,13 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: Block object
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/FullBlock'
-        404:
+        '404':
           description: Block with this id doesn't exist
         default:
           description: Error
@@ -465,13 +466,13 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: Block header object
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockHeader'
-        404:
+        '404':
           description: Block with this id doesn't exist
         default:
           description: Error
@@ -498,13 +499,13 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: Block transaction object
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BlockTransactions'
-        404:
+        '404':
           description: Block with this id doesn't exist
         default:
           description: Error
@@ -523,7 +524,7 @@ paths:
       tags:
         - blocks
       responses:
-        200:
+        '200':
           description: Candidate Full Block object
           content:
             application/json:
@@ -545,7 +546,7 @@ paths:
           schema:
             type: number
       responses:
-        200:
+        '200':
           description: Array of block headers
           content:
             application/json:
@@ -561,7 +562,7 @@ paths:
       tags:
         - info
       responses:
-        200:
+        '200':
           description: Node info object
           content:
             application/json:
@@ -581,31 +582,29 @@ paths:
             schema:
               $ref: '#/components/schemas/AnyoneCanSpendTransaction'
       responses:
-        200:
+        '200':
           description: JSON with ID of the new transaction
           content:
             application/json:
               schema:
                 description: ID of the new transaction
-                content:
-                  application/json:
-                    schema:
-                      $ref: '#/components/schemas/TransactionId'
+                $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
           content:
             application/json:
-              type: string
-              enum:
-                # Transaction signature doesn't match transaction data
-                - invalid.transaction.signature
-                # Provided timestamp is invalid
-                - invalid.transaction.timestamp
-                # Provided amount in invalid
-                - invalid.transaction.value
-                # Provided box nonce in invalid
-                - invalid.box.nonce
-                - invalid.json
+              schema:
+                type: string
+                enum:
+                  # Transaction signature doesn't match transaction data
+                  - invalid.transaction.signature
+                  # Provided timestamp is invalid
+                  - invalid.transaction.timestamp
+                  # Provided amount in invalid
+                  - invalid.transaction.value
+                  # Provided box nonce in invalid
+                  - invalid.box.nonce
+                  - invalid.json
 
   /transactions/{transactionId}:
     get:
@@ -621,12 +620,13 @@ paths:
           schema:
             $ref: '#/components/schemas/TransactionId'
       responses:
-        200:
+        '200':
           description: Anyone can spend transactions object
           content:
             application/json:
-              $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-        404:
+              schema:
+                $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+        '404':
           description: Transaction with this id doesn't exist
         default:
           description: Error
@@ -666,7 +666,7 @@ paths:
       tags:
         - transactions
       responses:
-        200:
+        '200':
           description: Array with anyone can spend transactions objects
           content:
             application/json:
@@ -682,7 +682,7 @@ paths:
       tags:
         - peers
       responses:
-        200:
+        '200':
           description: Array of peer objects
           content:
             application/json:
@@ -698,7 +698,7 @@ paths:
       tags:
         - peers
       responses:
-        200:
+        '200':
           description: Array of peer objects
           content:
             application/json:
@@ -721,7 +721,7 @@ paths:
               type: string
               example: 127.0.0.1:5673
       responses:
-        200:
+        '200':
           description: Attempt to connect to the peer
         default:
           description: Error
@@ -740,7 +740,7 @@ paths:
       tags:
         - peers
       responses:
-        200:
+        '200':
           description: Array of the addresses
           content:
             application/json:
@@ -748,7 +748,7 @@ paths:
                 type: array
                 items:
                   type: string
-                  descriptiom: Blacklisted node address
+                  description: Blacklisted node address
 
   /utils/seed:
     get:
@@ -757,7 +757,7 @@ paths:
       tags:
         - utils
       responses:
-        200:
+        '200':
           description: Base58-encoded 32 byte seed
           content:
             text/plain:
@@ -779,7 +779,7 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: Base58-encoded N byte seed
           content:
             text/plain:
@@ -801,7 +801,7 @@ paths:
               type: string
               example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
       responses:
-        200:
+        '200':
           description: Base58-encoded 32 byte hash
           content:
             text/plain:

@@ -39,7 +39,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
       powScheme.proveBlock(candidate, nonce) match {
         case Some(newBlock) =>
-          //log.info("New block found: " + newBlock)
+          log.info("New block found: " + newBlock)
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)

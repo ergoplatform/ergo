@@ -555,18 +555,42 @@ is $\Delta = 2$ minutes. We plan to issue all the tokens in about eight years, t
 coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
 
 
-\section{Transaction Format}
+\section{Transactions}
 
 
 A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16}$ if block size limit allows that),
 and also creating at least one \coin{}. We use term "destroying", as everything contained in a \coin is going to disappear
 from the state: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin.
 
+\subsection{\Coin{} Format}
+
 A \coin{} is made of registers, we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
-and up to 16 registers in the \edata{} chain.
+and up to 16 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_15$.
+From these registers, some filled with mandatory values: $R_0$ contains monetary value of a \coin, $R_1$ contains
+serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
 
-Each \coin{} has a unique identifier to be defined deterministically from its contents.
+Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}.
 
+A \coin{} has a unique identifier to be defined deterministically from its contents.
+
+
+\subsection{Transaction Format}
+
+A transaction simply refers to a set of {\coin}s, by providing their repective identifiers and also proofs for
+the {\coin}s; the transaction also providing set of new {\coin}s.
+
+
+We require transaction to preserve overall monetary value:
+
+\knote{formula}
+
+\subsection{Transaction Identifier}
+
+A transaction has a unique identifier to be defined deterministically from its contents.
+
+
+
+\subsection{Transaction Malleability}
 
 
 \bibliographystyle{elsarticle-num}

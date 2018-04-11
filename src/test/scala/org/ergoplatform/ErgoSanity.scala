@@ -47,7 +47,8 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
   override val memPool: MPool = ErgoMemPool.empty
 
   //Generators
-  override val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
+  override lazy val transactionGenerator: Gen[AnyoneCanSpendTransaction] = invalidAnyoneCanSpendTransactionGen
+  override lazy val memPoolGenerator: Gen[MPool] = emptyMemPoolGen
 
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())

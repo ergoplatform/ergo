@@ -103,6 +103,8 @@
 \newcommand{\coin}{coin}
 \newcommand{\Coin}{Coin}
 
+\newcommand{\extract}[1]{$extract({#1})$}
+
 \usepackage[utf8]{inputenc}
 
 \usepackage{minted}
@@ -570,6 +572,9 @@ From these registers, some filled with mandatory values: $R_0$ contains monetary
 serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
 
 Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}.
+
+We introduce \extract{} function, which is reading contents of a register, for example, \extract{R_0} extracts monetary value
+of a \coin{}.
 
 A \coin{} has a unique identifier to be defined deterministically from its contents.
 

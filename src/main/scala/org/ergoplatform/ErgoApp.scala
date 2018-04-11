@@ -42,21 +42,20 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
 
-  override val localInterface: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings,
-    timeProvider)
+  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
-    InfoRoute(localInterface, settings.restApi, timeProvider),
+    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   override val nodeViewSynchronizer: ActorRef =
-    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, localInterface,
-      ErgoSyncInfoMessageSpec, settings.network, timeProvider)
+    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
+                             settings.network, timeProvider)
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -72,7 +71,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     networkControllerRef,
     readersHolderRef,
     nodeViewSynchronizer,
-    localInterface,
+    statsCollectorRef,
     nodeViewHolderRef
   )
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
@@ -89,7 +88,7 @@ object ErgoApp extends ScorexLogging {
     actors.foreach{ a => a ! PoisonPill }
     log.warn("Terminating ActorSystem")
     val termination = system.terminate()
-    Await.result(termination, 60 seconds)
+    Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
   }
 

@@ -573,8 +573,8 @@ serialized guard script, $R_2$ contains unique identifier of transaction and als
 
 Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}.
 
-We introduce \extract{} function, which is reading contents of a register, for example, \extract{R_0} extracts monetary value
-of a \coin{}.
+We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
+from the \coin{} $c$.
 
 A \coin{} has a unique identifier to be defined deterministically from its contents.
 
@@ -584,10 +584,13 @@ A \coin{} has a unique identifier to be defined deterministically from its conte
 A transaction simply refers to a set of {\coin}s, by providing their repective identifiers and also proofs for
 the {\coin}s; the transaction also providing set of new {\coin}s.
 
+We introduce two functions to exctract {\coin}s which a transaction is trying to spend, $in()$ and $out()$. For
+example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
 
-We require transaction to preserve overall monetary value:
+We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
+to preserve overall monetary value:
 
-\knote{formula}
+$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{i=0}^{c_o - 1}$ \extract{out(tx,i), R_0}
 
 \subsection{Transaction Identifier and Its Malleability}
 

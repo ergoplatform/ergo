@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, Transactio
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
@@ -168,4 +169,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     txs <- invalidBlockTransactionsGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
+
+  lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
+    Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
 }

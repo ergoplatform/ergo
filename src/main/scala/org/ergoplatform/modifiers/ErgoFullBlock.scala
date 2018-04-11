@@ -37,6 +37,6 @@ object ErgoFullBlock {
     Map(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adPoofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
     ).asJson
 }

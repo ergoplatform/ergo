@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -39,7 +38,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   override def preStart(): Unit = {
-    viewHolderRef ! Subscribe(Seq(NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier))
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
 
   override def postStop(): Unit = killAllThreads

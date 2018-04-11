@@ -13,22 +13,20 @@ import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, NetworkC
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import org.asynchttpclient.Dsl._
+import org.scalatest.Matchers
 import scorex.core.utils.ScorexLogging
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 
-case class NodeInfo(
-                     hostRestApiPort: Int,
-                     hostNetworkPort: Int,
-                     containerNetworkPort: Int,
-                     apiIpAddress: String,
-                     networkIpAddress: String,
-                     containerId: String)
+
 
 class Docker(suiteConfig: Config = ConfigFactory.empty,
              tag: String = "") extends AutoCloseable with ScorexLogging {
 
   import Docker._
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   private val http = asyncHttpClient(config()
     .setMaxConnections(50)
@@ -52,6 +50,24 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   private val innerNetwork = client.createNetwork(NetworkConfig.builder().driver("bridge").name(networkName).build())
 
+  def startNodes(nodeConfigs: Seq[Config]): Seq[Node] = {
+    log.trace(s"Starting ${nodeConfigs.size} containers")
+    val nodes = nodeConfigs.map(startNode)
+
+    log.debug("Waiting for nodes to start")
+    Await.result(Future.traverse(nodes)(_.status), 1.minute)
+
+    log.debug("Connecting nodes together")
+    Await.result(Future.traverse(nodes)(connectToAll), 10.seconds)
+
+    log.debug("Waiting for nodes to connect")
+    val requiredPeersCount = nodeConfigs.size - 1
+    val peersCounts = Await.result(Future.traverse(nodes)(_.waitForPeers(requiredPeersCount)), 2.minutes)
+    peersCounts.foreach(c => log.info(s"Connected peers: $c"))
+    Matchers.all(peersCounts.map(_.length)) shouldEqual requiredPeersCount
+    nodes
+  }
+
   def startNode(nodeConfig: Config): Node = {
     val configOverrides = s"$knownPeers ${renderProperties(asProperties(nodeConfig.withFallback(suiteConfig)))}"
     val actualConfig = nodeConfig
@@ -71,6 +87,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val hostConfig = HostConfig.builder()
       .portBindings(portBindings)
+      .memory(1024L * 1024 * 1024)
       .build()
 
     val containerConfig = ContainerConfig.builder()
@@ -101,6 +118,16 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
     nodes += containerId -> node
     node
+  }
+
+  private def connectToAll(node: Node): Future[Unit] = {
+    val nodesToConnect = nodes.values.filterNot(_.nodeName == node.nodeName).map(_.containerNetworkAddress)
+    log.info(s"Connecting from ${node.nodeName} to $nodesToConnect")
+    if (nodesToConnect.isEmpty) {
+      Future.successful(())
+    } else {
+      Future.traverse(nodesToConnect)(node.connect).map(_ => ())
+    }
   }
 
   def stopNode(containerId: String): Unit = {

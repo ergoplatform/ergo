@@ -27,4 +27,6 @@ class Node(config: Config, val nodeInfo: NodeInfo, override val client: AsyncHtt
   override val nodeRestPort: Int = nodeInfo.hostRestApiPort
   override val networkPort: Int = nodeInfo.hostNetworkPort
   override val blockDelay: FiniteDuration = settings.chainSettings.blockInterval
+
+  def containerNetworkAddress: String = s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}"
 }

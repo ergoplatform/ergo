@@ -5,8 +5,6 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
-import scorex.core.LocalInterface.ReceivableMessages._
-import scorex.core.NodeViewHolder
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.ScorexLogging
@@ -14,13 +12,7 @@ import scorex.core.utils.ScorexLogging
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
-    val vhEvents = Seq(
-      NodeViewHolder.EventType.HistoryChanged,
-      NodeViewHolder.EventType.StateChanged,
-      NodeViewHolder.EventType.MempoolChanged,
-      NodeViewHolder.EventType.VaultChanged,
-    )
-    viewHolderRef ! Subscribe(vhEvents)
+    context.system.eventStream.subscribe(self, classOf[NodeViewChange])
     viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = true, mempool = true)
   }
 
@@ -29,7 +21,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
 
   @SuppressWarnings(Array("IsInstanceOf"))
-  override def receive = {
+  override def receive: Receive = {
     case ChangedHistory(reader: ErgoHistoryReader@unchecked) if reader.isInstanceOf[ErgoHistoryReader] =>
       historyReaderOpt = Some(reader)
 
@@ -43,12 +35,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
       sender ! Readers(historyReaderOpt, stateReaderOpt, mempoolReaderOpt)
 
     case GetDataFromHistory(f) =>
-      historyReaderOpt match {
-        case Some(historyReader) =>
-          sender() ! f(historyReader)
-        case None =>
-          log.warn("Trying to get data from undefined history reader")
-      }
+      historyReaderOpt.map(sender ! f(_)).getOrElse(log.warn("Trying to get data from undefined history reader"))
 
     case _ =>
     //Do nothing for now. Implement when needed

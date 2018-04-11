@@ -74,12 +74,18 @@ trait NodeApi {
     ergoJsonAnswerAs[Seq[BlacklistedPeer]](r.getResponseBody)
   }
 
-  def connect(host: String, port: Int): Future[Unit] = postJson("/peers/connect", ConnectReq(host, port)).map(_ => ())
+  def connect(addressAndPort: String): Future[Unit] = post("/peers/connect", addressAndPort).map(_ => ())
 
   def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
 
-  def height: Future[Int] = get("/info").map(r =>
-    ergoJsonAnswerAs[Json](r.getResponseBody).hcursor.downField("fullHeight").as[Int].right.get)
+  def height: Future[Int] = get("/info") flatMap { r =>
+    val response = ergoJsonAnswerAs[Json](r.getResponseBody)
+    val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
+    eitherHeight.fold[Future[Int]](
+      e => Future.failed(new Exception(s"Error getting `fullHeight` from /info response: $e\n$response", e)),
+      maybeHeight => Future.successful(maybeHeight.getOrElse(0))
+    )
+  }
 
   def waitForHeight(expectedHeight: Int): Future[Int] = waitFor[Int](_.height, h => h >= expectedHeight, 1.second)
 
@@ -128,8 +134,6 @@ object NodeApi extends ScorexLogging {
   case class Peer(address: String, name: String)
 
   case class BlacklistedPeer(hostname: String, timestamp: Long, reason: String)
-
-  case class ConnectReq(host: String, port: Int)
 
   case class Block(signature: String, height: Int, timestamp: Long, generator: String, transactions: Seq[Transaction],
                    fee: Long)

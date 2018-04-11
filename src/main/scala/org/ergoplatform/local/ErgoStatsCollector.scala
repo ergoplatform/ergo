@@ -1,23 +1,19 @@
 package org.ergoplatform.local
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import io.circe.syntax._
 import io.circe.{Encoder, JsonNumber}
 import org.ergoplatform.Version
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.Handshake
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{LocalInterface, ModifierId, NodeViewHolder}
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.encode.Base58
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -26,19 +22,16 @@ import scala.concurrent.duration._
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
-class ErgoStatsCollector(override val viewHolderRef: ActorRef,
+class ErgoStatsCollector(viewHolderRef: ActorRef,
                          peerManager: ActorRef,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
-  extends LocalInterface[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
+  extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
-    val events = Seq(
-      NodeViewHolder.EventType.SuccessfulSemanticallyValidModifier,
-      NodeViewHolder.EventType.HistoryChanged,
-      NodeViewHolder.EventType.MempoolChanged
-    )
-    viewHolderRef ! Subscribe(events)
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
   }
 
@@ -50,7 +43,7 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
-    onHistoryChanged orElse super.receive
+    onHistoryChanged orElse onSemanticallySuccessfulModification
 
   private def getNodeInfo: Receive = {
     case GetNodeInfo => sender ! nodeInfo
@@ -72,32 +65,12 @@ class ErgoStatsCollector(override val viewHolderRef: ActorRef,
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 
-  //TODO move default empty implementations to Scorex
-  override protected def onStartingPersistentModifierApplication(pmod: ErgoPersistentModifier): Unit = {}
-
-  override protected def onFailedTransaction(tx: AnyoneCanSpendTransaction): Unit = {}
-
-  override protected def onSuccessfulTransaction(tx: AnyoneCanSpendTransaction): Unit = {}
-
-  override protected def onNoBetterNeighbour(): Unit = {}
-
-  override protected def onBetterNeighbourAppeared(): Unit = {}
-
-  override protected def onSyntacticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = {}
-
-  override protected def onSyntacticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
-
-  override protected def onSemanticallySuccessfulModification(mod: ErgoPersistentModifier): Unit = mod match {
-    case fb: ErgoFullBlock =>
-      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)), stateVersion = Some(fb.encodedId))
-    case _ =>
+  def onSemanticallySuccessfulModification: Receive = {
+    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
+      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)),
+                               stateVersion = Some(fb.encodedId))
   }
 
-  override protected def onSemanticallyFailedModification(mod: ErgoPersistentModifier): Unit = {}
-
-  override protected def onNewSurface(newSurface: Seq[ModifierId]): Unit = {}
-
-  override protected def onRollbackFailed(): Unit = {}
 }
 
 object ErgoStatsCollector {

@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.testkit.TestKit
+import akka.util.Timeout
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
@@ -12,8 +13,6 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{FlatSpecLike, Matchers}
-import scorex.core.NodeViewHolder.EventType
-import scorex.core.NodeViewHolder.ReceivableMessages.Subscribe
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -24,8 +23,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matchers with ErgoGenerators with FileUtils {
 
-  val defaultAwaitDuration = 5 seconds
-  implicit val timeout = akka.util.Timeout(defaultAwaitDuration)
+  val defaultAwaitDuration: FiniteDuration = 5.seconds
+  implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
@@ -39,7 +38,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
       stateType = StateType.Utxo,
       offlineGeneration = true,
       verifyTransactions = true)
-    val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2 seconds)
+    val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
     val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
     val networkSettings = ergoSettings.scorexSettings.network.copy(knownPeers = Seq.empty)
     val settings: ScorexSettings = ergoSettings.scorexSettings.copy(network = networkSettings)
@@ -51,13 +50,13 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
     val listener = system.actorOf(Props(new Listener))
-    listener ! Sub(nodeViewHolderRef)
 
-    val testingSettings = TestingSettings(true, 500)
+    val testingSettings = TestingSettings(transactionGeneration = true, 500)
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, testingSettings)
     txGen ! StartGeneration
+
     minerRef ! StartMining
-    expectNoMessage(20 seconds)
+    expectNoMessage(20.seconds)
 
     //check that miner actor is still alive
     noException should be thrownBy {
@@ -76,14 +75,16 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
 class Listener extends Actor {
   var generatedBlocks: Int = 0
 
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+  }
+
   override def receive: Receive = {
-    case Sub(ref) => ref ! Subscribe(Seq(EventType.SuccessfulSemanticallyValidModifier))
     case SemanticallySuccessfulModifier(_) => generatedBlocks += 1
     case Status => sender ! generatedBlocks
   }
 }
 
 object Listener {
-  case class Sub(ref: ActorRef)
   case object Status
 }

@@ -584,15 +584,10 @@ We require transaction to preserve overall monetary value:
 
 \knote{formula}
 
-\subsection{Transaction Identifier}
+\subsection{Transaction Identifier and Its Malleability}
 
 A transaction has a unique identifier to be defined deterministically from its contents.
 
-
-\subsection{Signing Transactions}
-
-
-\subsection{Transaction Malleability}
 
 There are different ways to produce semantically the same transaction with different identifiers. We are interesting
 to prevent {\em unauthorized malleability}. We define unauthorized malleability as a way to change transaction
@@ -601,6 +596,10 @@ malleability, which is common for most popular digital signature schemes.
 
 To prevent transaction malleability, we do not put spending proofs under hash function when we calculate a transaction
 identifier.
+
+\subsection{Signing Transactions}
+
+
 
 
 \bibliographystyle{elsarticle-num}

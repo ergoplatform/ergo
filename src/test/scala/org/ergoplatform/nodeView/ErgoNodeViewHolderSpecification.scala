@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.DefaultFakePowScheme
@@ -17,14 +17,13 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
-import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.{LocallyGeneratedModifier, LocallyGeneratedTransaction}
-import scorex.core.NodeViewHolder.EventType._
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, Subscribe}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.ModifierId
 import scorex.testkit.utils.FileUtils
 
+import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
 class ErgoNodeViewHolderSpecification extends PropSpec
@@ -33,7 +32,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
   with FileUtils
   with BeforeAndAfterAll {
 
-  implicit val system = ActorSystem("WithIsoFix")
+  implicit val system: ActorSystem = ActorSystem("WithIsoFix")
 
   case class NodeViewHolderConfig(stateType: StateType, verifyTransactions: Boolean, popowBootstrap: Boolean) {
     override def toString: String = {
@@ -41,7 +40,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
   }
 
-  override def afterAll() = {
+  override def afterAll(): Unit = {
     system.terminate()
   }
 
@@ -63,7 +62,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
-  def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
+  private def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
     val dir: File = dirOpt.getOrElse(createTempDir)
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
     val settings = defaultSettings.copy(
@@ -78,39 +77,39 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     ErgoNodeViewRef(settings, timeProvider)
   }
 
-  def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
+  private def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
     v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
   }
 
-  def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
+  private def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)
 
-  def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.headersHeight)
+  private def historyHeight(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.history.headersHeight)
 
-  def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
+  private def heightOf(id: ModifierId, c: C) = GetDataFromCurrentView[H, S, W, P, Option[Int]](v => v.history.heightOf(id))
 
-  def lastHeadersLength(count: Int, c: C) =
+  private def lastHeadersLength(count: Int, c: C) =
     GetDataFromCurrentView[H, S, W, P, Int](v => v.history.lastHeaders(count).size)
 
 
-  def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ByteArrayWrapper]] { v =>
+  private def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ByteArrayWrapper]] { v =>
     v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
   }
 
-  def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
+  private def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>
     v.history.bestFullBlockOpt
   }
 
-  def modifierById(id: ModifierId) = GetDataFromCurrentView[H, S, W, P, Option[ErgoPersistentModifier]] { v =>
+  private def modifierById(id: ModifierId) = GetDataFromCurrentView[H, S, W, P, Option[ErgoPersistentModifier]] { v =>
     v.history.modifierById(id)
   }
 
-  def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
+  private def bestFullBlockEncodedId(c: C) = GetDataFromCurrentView[H, S, W, P, Option[String]] { v =>
     v.history.bestFullBlockOpt.map(_.header.encodedId)
   }
 
-  def poolSize(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.pool.size)
+  private def poolSize(c: C) = GetDataFromCurrentView[H, S, W, P, Int](v => v.pool.size)
 
-  def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, String](v => Algos.encode(v.state.rootHash))
+  private def rootHash(c: C) = GetDataFromCurrentView[H, S, W, P, String](v => Algos.encode(v.state.rootHash))
 
   case class TestCase(name: String)(test: NodeViewFixture => Unit) {
     def run(c: NodeViewHolderConfig): Unit = new NodeViewFixture(c).run(test)
@@ -120,7 +119,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     * To make TestProbe work `defaultSender` implicit should be imported
     */
   class NodeViewFixture(val nodeViewConfig: NodeViewHolderConfig) {
-    val nodeViewDir = createTempDir
+    val nodeViewDir: java.io.File = createTempDir
     val nodeViewRef: ActorRef = actorRef(nodeViewConfig, Option(nodeViewDir))
     val testProbe = new TestProbe(system)
 
@@ -128,33 +127,34 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     implicit val defaultSender: ActorRef = testProbe.testActor
 
     @inline def send(msg: Any): Unit = testProbe.send(nodeViewRef, msg)
-    @inline def defaultTimeout = testProbe.remainingOrDefault
-    @inline def expectMsg[T](obj: T) = testProbe.expectMsg(obj)
-    @inline def expectMsgType[T](implicit t: ClassTag[T]) = testProbe.expectMsgType
-    @inline def expectNoMsg = testProbe.expectNoMessage(defaultTimeout)
+    @inline def defaultTimeout: FiniteDuration = testProbe.remainingOrDefault
+    @inline def expectMsg[T](obj: T): T = testProbe.expectMsg(obj)
+    @inline def expectMsgType[T](implicit t: ClassTag[T]): T = testProbe.expectMsgType
+    @inline def expectNoMsg(): Unit = testProbe.expectNoMessage(defaultTimeout)
+    def subscribeEvents(eventClass: Class[_]): Boolean = system.eventStream.subscribe(testProbe.ref, eventClass)
 
-    def withRecoveredNodeViewRef(test: ActorRef => Unit) = {
+    def withRecoveredNodeViewRef(test: ActorRef => Unit): Unit = {
       val a = actorRef(nodeViewConfig, Option(nodeViewDir))
       try test(a) finally system.stop(a)
     }
 
-    def run(test: NodeViewFixture => Unit) = try test(this) finally stop()
-    def stop() = { system.stop(nodeViewRef); system.stop(testProbe.testActor) }
+    def run(test: NodeViewFixture => Unit): Unit = try test(this) finally stop()
+    def stop(): Unit = { system.stop(nodeViewRef); system.stop(testProbe.testActor) }
   }
 
-  val t1 = TestCase("check genesis state") { fixture =>
+  private val t1 = TestCase("check genesis state") { fixture =>
     import fixture._
     nodeViewRef ! checkAfterGenesisState(nodeViewConfig)
     expectMsg(true)
   }
 
-  val t2 = TestCase("check history after genesis") { fixture =>
+  private val t2 = TestCase("check history after genesis") { fixture =>
     import fixture._
     nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(None)
   }
 
-  val t3 = TestCase("apply valid block header") { fixture =>
+  private val t3 = TestCase("apply valid block header") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
@@ -166,7 +166,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     //sending header
     nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
@@ -188,13 +188,13 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     expectMsg(Some(block.header))
   }
 
-  val t4 = TestCase("apply valid block as genesis") { fixture =>
+  private val t4 = TestCase("apply valid block as genesis") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    nodeViewRef ! Subscribe(Seq(SuccessfulSyntacticallyValidModifier))
+    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -217,7 +217,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
   }
 
-  val t5 = TestCase("apply full blocks after genesis") { fixture =>
+  private val t5 = TestCase("apply full blocks after genesis") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
@@ -250,18 +250,18 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     expectMsg(2)
   }
 
-  val t6 = TestCase("add transaction to memory pool") { fixture =>
+  private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
     val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
-    nodeViewRef ! Subscribe(Seq(FailedTransaction))
+    fixture.subscribeEvents(classOf[FailedTransaction[_, _]])
     nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
-    expectNoMsg
+    expectNoMsg()
     nodeViewRef ! poolSize(nodeViewConfig)
     expectMsg(1)
   }
 
-  val t7 = TestCase("apply invalid full block") { fixture =>
+  private val t7 = TestCase("apply invalid full block") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
@@ -305,7 +305,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     expectMsg(Some(brokenBlock.header))
   }
 
-  val t8 = TestCase("switching for a better chain") { fixture =>
+  private val t8 = TestCase("switching for a better chain") { fixture =>
     import fixture._
     val dir = createTempDir
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
@@ -372,7 +372,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
 
   }
 
-  val t9 = TestCase("UTXO state should generate ADProofs and put them in history") { fixture =>
+  private val t9 = TestCase("UTXO state should generate ADProofs and put them in history") { fixture =>
     import fixture._
     if (nodeViewConfig.stateType == StateType.Utxo) {
       val dir = createTempDir
@@ -391,7 +391,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
   }
 
-  val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
+  private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
     if (nodeViewConfig.verifyTransactions) {
 

@@ -6,7 +6,7 @@ import java.net.URL
 import akka.actor.{ActorRef, ActorSystem}
 import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
-import org.ergoplatform.bench.protocol.{Start, SubTo}
+import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
@@ -17,9 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
-import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.NodeViewHolder.EventType
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -92,7 +90,7 @@ object BenchRunner extends ScorexLogging {
         counter += 1
         if (counter % 100 == 0) { log.error(s"Already read $counter blocks.")}
         val mod = ModifierWriter.read(is)
-        if (mod.map{ m => m.modifierTypeId == Header.modifierTypeId}.getOrElse(false)) { headers += 1}
+        if (mod.exists(_.modifierTypeId == Header.modifierTypeId)) { headers += 1}
         mod
       }
       .takeWhile(m => (headers <= threshold) && m.isDefined)
@@ -105,7 +103,6 @@ object BenchRunner extends ScorexLogging {
   }
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ErgoPersistentModifier]): Unit = {
-    benchRef ! SubTo(nodeRef, Seq(EventType.SuccessfulSemanticallyValidModifier))
     benchRef ! Start
     modifiers.foreach { m => nodeRef ! LocallyGeneratedModifier(m) }
   }

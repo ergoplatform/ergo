@@ -29,14 +29,14 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
   override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
 
   override def toString: String = {
+    val sId = Algos.encode(id)
+    val sHeaderId = Algos.encode(headerId)
     /**
-      * Somehow JVM hangs when trying to substitute all three values inside on string interpolation.
-      * Please keep them separated.
+      * Sometimes proofBytes could have length about 350 000 elements, it's useless to convert them into string.
+      * So decisin here is to not render them in toString method.
       */
-    val sId = Base58.encode(id)
-    val sHeaderId = Base58.encode(headerId)
-    val sProofBytes = Base58.encode(proofBytes)
-    s"ADProofs($sId,$sHeaderId,$sProofBytes)"
+    //val sProofBytes = Algos.encode(proofBytes)
+    s"ADProofs(Id:$sId,HeaderId:$sHeaderId)"
   }
 
   /**

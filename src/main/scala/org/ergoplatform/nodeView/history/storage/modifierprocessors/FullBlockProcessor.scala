@@ -60,7 +60,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
                                   newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
     logStatus(Seq(), Seq(fullBlock), fullBlock, None)
     updateStorage(newModRow, newBestAfterThis.id)
-    ProgressInfo(None, Seq.empty, Some(fullBlock), Seq.empty)
+    ProgressInfo(None, Seq.empty, Seq(fullBlock), Seq.empty)
   }
 
   private def processIfBetterChain(fullBlock: ErgoFullBlock,
@@ -102,7 +102,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         val diff = bestHeight - prevBest.header.height
         pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
       }
-      ProgressInfo(branchPoint, toRemove, toApply.headOption, Seq.empty)
+      ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
     }
   }
 
@@ -111,7 +111,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     //Orphaned block or full chain is not initialized yet
     logStatus(Seq(), Seq(), fullBlock, None)
     historyStorage.insert(storageVersion(newModRow), Seq.empty, Seq(newModRow))
-    ProgressInfo(None, Seq.empty, None, Seq.empty)
+    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
   private def calculateNewModRow(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ErgoPersistentModifier = {

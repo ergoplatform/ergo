@@ -9,12 +9,13 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Algos.HF
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
@@ -130,10 +131,6 @@ class UtxoState(override val version: VersionTag,
     log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
 
-    def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
-      .ensuring(persistentProver.digest.sameElements(rootHash), "Incorrect digest after rollback:" +
-        s" ${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
-
     Try {
       require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
       require(persistentProver.digest.sameElements(rootHash), "Incorrect persistent proover: " +
@@ -145,23 +142,12 @@ class UtxoState(override val version: VersionTag,
       //persistentProver.checkTree(true)
 
       val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-      //todo .get
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-        t.flatMap(_ => {
-          val opRes = persistentProver.performOneOperation(m)
-          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
-          opRes
-        })
-      }.get
 
-      val proof = persistentProver.generateProofAndUpdateStorage()
+      val proof = persistentProver.avlProver.generateProofForOperations(mods).get
 
       val digest = persistentProver.digest
 
       proof -> digest
-    } match {
-      case Success(res) => rollback().map(_ => res)
-      case Failure(e) => rollback().flatMap(_ => Failure(e))
     }
   }
 
@@ -186,7 +172,7 @@ object UtxoState {
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings

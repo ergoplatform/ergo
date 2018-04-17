@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}
@@ -10,7 +11,7 @@ import scorex.core.ModifierId
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.TestkitHelpers
 
 class AdProofSpec extends PropSpec
@@ -33,7 +34,7 @@ class AdProofSpec extends PropSpec
   private def createEnv(howMany: Int = 10):
   (Seq[Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]], PrevDigest, NewDigest, Proof) = {
 
-    val prover = new BatchAVLProver[Digest32, Blake2b256Unsafe](KL, Some(ErgoState.BoxSize))
+    val prover = new BatchAVLProver[Digest32, HF](KL, Some(ErgoState.BoxSize))
     val zeroBox = AnyoneCanSpendNoncedBox(0, 0L)
     prover.performOneOperation(Insert(zeroBox.id, zeroBox.bytes))
     prover.generateProof()

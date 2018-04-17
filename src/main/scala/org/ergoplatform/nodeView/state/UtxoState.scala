@@ -121,8 +121,6 @@ class UtxoState(override val version: VersionTag,
 
   /**
     * Generate proofs for specified transactions if applied to current state
-    * TODO not efficient at all
-    * TODO do not modify state during proofs generation
     *
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
@@ -130,24 +128,12 @@ class UtxoState(override val version: VersionTag,
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
     log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
-
-    Try {
-      require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
-      require(persistentProver.digest.sameElements(rootHash), "Incorrect persistent proover: " +
-        s"${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
-      require(storage.version.get.sameElements(rootHash), "Incorrect storage: " +
-        s"${Algos.encode(storage.version.get)} != ${Algos.encode(rootHash)}")
-
-      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
-      //persistentProver.checkTree(true)
-
-      val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-
-      val proof = persistentProver.avlProver.generateProofForOperations(mods).get
-
-      val digest = persistentProver.digest
-
-      proof -> digest
+    if (txs.isEmpty) {
+      Failure(new Error("Trying to generate proof for empty transaction sequence"))
+    } else if (!storage.version.exists(_.sameElements(rootHash))) {
+      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}"))
+    } else {
+      persistentProver.avlProver.generateProofForOperations(boxChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
 

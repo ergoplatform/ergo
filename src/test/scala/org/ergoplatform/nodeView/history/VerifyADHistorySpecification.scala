@@ -13,6 +13,8 @@ import scala.util.Random
 
 class VerifyADHistorySpecification extends HistorySpecification {
 
+  type PM = ErgoPersistentModifier
+
   private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach(h => inHistory.pruningProcessor.minimalFullBlockHeightVar = h)
@@ -26,8 +28,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
   }
 
 
-  private def progressInfo(modifierId: ModifierId): ProgressInfo[ErgoPersistentModifier] =
-    ProgressInfo(Option(modifierId), Seq.empty, Seq.empty, Seq.empty)
+  private def noProgress: ProgressInfo[PM] =
+    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
 
   property("should not be able to apply blocks older than blocksToKeep") {
     var history = genHistory()._1
@@ -184,6 +186,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     fork1.indices.foreach { i =>
       val fullBlock = fork1(i)
       history.reportModifierIsValid(fullBlock)
+      //todo: We may want to enable these checks
 //      val nextBlock = Try(fork1(i + 1)).toOption
 //      progressInfo._2.toApply shouldBe Seq(nextBlock)
     }
@@ -240,7 +243,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
-      history.reportModifierIsInvalid(fullBlock.header, progressInfo(fullBlock.header.parentId))
+      history.reportModifierIsInvalid(fullBlock.header, noProgress) //fullBlock.header.parentId
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
@@ -258,7 +261,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
-    history.reportModifierIsInvalid(inChain.last.header, progressInfo(inChain.last.parentId))
+    history.reportModifierIsInvalid(inChain.last.header, noProgress) //inChain.last.parentId
 
     fork1.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
@@ -285,7 +288,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history.bestHeaderOpt.get shouldBe fork1.last.header
 
-    history.reportModifierIsInvalid(fork1.head.header, progressInfo(common.parentId))
+    history.reportModifierIsInvalid(fork1.head.header, noProgress) //common.parentId
 
     history.bestHeaderOpt.get shouldBe fork2.last.header
     history.bestFullBlockOpt.get shouldBe fork2.last
@@ -299,7 +302,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     val invalidChain = chain.takeRight(2)
 
-    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo(invalidChain.head.header.id))
+    val report = history.reportModifierIsInvalid(invalidChain.head.header, noProgress) //invalidChain.head.header.id
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
@@ -321,8 +324,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.contains(parentHeader.transactionsId) shouldBe true
       history.contains(parentHeader.ADProofsId) shouldBe true
 
-      //todo: why parentHeader.id?
-      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo(parentHeader.id))
+
+      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, noProgress) //parentHeader.id?
       repHistory.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       repHistory.bestHeaderOpt.get shouldBe parentHeader
     }
@@ -368,7 +371,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val processInfo = changes._2
     processInfo.branchPoint.get shouldEqual genesis.id
     processInfo.toRemove should contain theSameElementsAs fork1
-    processInfo.toApply should contain theSameElementsAs fork2
+    processInfo.toApply should contain theSameElementsAs fork2.take(1)
 
   }
 
@@ -396,7 +399,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
         val processInfo = changes._2
         processInfo.branchPoint.get shouldEqual branchPoint.id
         processInfo.toRemove should contain theSameElementsAs fork1
-        processInfo.toApply should contain theSameElementsAs fork2
+        processInfo.toApply should contain theSameElementsAs fork2.take(1)
       }
     }
   }

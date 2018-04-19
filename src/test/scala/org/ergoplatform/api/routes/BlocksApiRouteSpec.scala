@@ -94,12 +94,18 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val expected = history
+
+      val maybeBlock = history
         .typedModifierById[Header](headerIdBytes)
         .flatMap(history.getFullBlock)
-        .map(_.transactions.map(_.asJson).asJson)
-        .get
+
+      maybeBlock should not be empty
+
+      val expected = maybeBlock.get
+        .blockTransactions
+        .asJson
         .toString
+
       responseAs[String] shouldEqual expected
     }
   }

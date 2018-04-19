@@ -194,6 +194,11 @@ components:
           type: integer
           format: int64
           example: 1514194867
+        connectionType:
+          type: string
+          enum:
+            - Incoming
+            - Outgoing
 
     NodeInfo:
       type: object

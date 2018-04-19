@@ -204,7 +204,7 @@ components:
       type: object
       required:
         - name
-        - version
+        - appVersion
         - fullHeight
         - headersHeight
         - bestFullHeaderId
@@ -221,7 +221,7 @@ components:
         name:
           type: string
           example: my-node-1
-        version:
+        appVersion:
           type: string
           example: 0.0.1
         fullHeight:

@@ -217,6 +217,8 @@ components:
         - peersCount
         - unconfirmedCount
         - difficulty
+        - currentTime
+        - launchTime
       properties:
         name:
           type: string
@@ -278,6 +280,16 @@ components:
           minimum: 0
           maximum: 10000
           example: 327
+        currentTime:
+          description: Current internal node time
+          type: integer
+          format: int32
+          example: 1524143059077
+        launchTime:
+          description: Time when the node was started
+          type: integer
+          format: int32
+          example: 1524136091376
 
     TransactionId:
       description: Base16-encoded transaction id bytes

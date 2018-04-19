@@ -101,6 +101,8 @@ components:
         - nonce
         - equihashSolutions
         - height
+        - difficulty
+        - parentId
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -146,6 +148,13 @@ components:
           format: int32
           minimum: 0
           example: 667
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 62
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
       type: object

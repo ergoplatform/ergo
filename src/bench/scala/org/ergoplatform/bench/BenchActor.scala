@@ -1,9 +1,9 @@
 package org.ergoplatform.bench
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import org.ergoplatform.bench.protocol.{Start, SubTo}
-import scorex.core.NodeViewHolder.ReceivableMessages.Subscribe
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ModificationOutcome
+import org.ergoplatform.bench.protocol.Start
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.ExecutionContext
@@ -21,15 +21,17 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 
   val fileName = "target/bench/result"
 
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoPersistentModifier]])
+    context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
+
+  }
+
   override def receive: Receive = {
-    case SubTo(ref, events) =>
-      log.trace(s"Bench actor is subscribig to ${events.mkString(" ")}")
-      ref ! Subscribe(events)
-      context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
     case Start =>
       start = System.currentTimeMillis()
       log.info(s"start is $start")
-    case _: ModificationOutcome => self ! "increase"
+    case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] => self ! "increase"
     case "increase" =>
       counter += 1
       if (counter % 100 == 0 ) {log.error(s"counter is $counter")}

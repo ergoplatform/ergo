@@ -30,6 +30,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.58",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
   "org.rudogma" % "supertagged_2.12" % "1.4",
+  "org.scala-lang.modules" % "scala-async_2.12" % "0.9.7",
   "org.scala-lang.modules" % "scala-java8-compat_2.12" % "0.8.0",
   "org.scala-lang.modules" % "scala-parser-combinators_2.12" % "1.0.4",
   "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.5",
@@ -37,7 +38,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.12",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "d603843c-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "ebdf660f-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.0.5",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.11.0",
@@ -48,4 +49,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 416fc352464b7accfaadc721cdb588f7ce719b1e
+// LIBRARY_DEPENDENCIES_HASH aad4189c017769300cc75f5925fae4ffdfc2eede

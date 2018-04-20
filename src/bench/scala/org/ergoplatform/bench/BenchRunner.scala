@@ -6,14 +6,18 @@ import java.net.URL
 import akka.actor.{ActorRef, ActorSystem}
 import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
-import org.ergoplatform.bench.protocol.{Start, SubTo}
+import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoNodeViewRef
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
-import scorex.core.LocallyGeneratedModifiersMessages.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.NodeViewHolder.EventType
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -53,6 +57,21 @@ object BenchRunner extends ScorexLogging {
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
+    /**
+      * It's a hack to set minimalFullBlockHeightVar to 0, cause in our case we are considering
+      * only locally pre-generated modifiers.
+      */
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit]{ v =>
+      import scala.reflect.runtime.{universe => ru}
+      val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
+      val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])
+      val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
+      val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
+      val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+      runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+      ()
+    }
+
     log.info("Starting to read modifiers.")
     val modifiers = readModifiers(fileName, threshold)
     log.info("Finished read modifiers, starting to bench.")
@@ -71,7 +90,7 @@ object BenchRunner extends ScorexLogging {
         counter += 1
         if (counter % 100 == 0) { log.error(s"Already read $counter blocks.")}
         val mod = ModifierWriter.read(is)
-        if (mod.map{ m => m.modifierTypeId == Header.modifierTypeId}.getOrElse(false)) { headers += 1}
+        if (mod.exists(_.modifierTypeId == Header.modifierTypeId)) { headers += 1}
         mod
       }
       .takeWhile(m => (headers <= threshold) && m.isDefined)
@@ -84,7 +103,6 @@ object BenchRunner extends ScorexLogging {
   }
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ErgoPersistentModifier]): Unit = {
-    benchRef ! SubTo(nodeRef, Seq(EventType.SuccessfulSemanticallyValidModifier))
     benchRef ! Start
     modifiers.foreach { m => nodeRef ! LocallyGeneratedModifier(m) }
   }

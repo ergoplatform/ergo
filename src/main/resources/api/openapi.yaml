@@ -93,7 +93,6 @@ components:
       required:
         - id
         - timestamp
-        - reference
         - version
         - interlinks
         - adProofsRoot
@@ -113,8 +112,6 @@ components:
           type: integer
           format: int32
           example: 1501505945003
-        reference:
-          $ref: '#/components/schemas/ModifierId'
         version:
            type: integer
            format: int32

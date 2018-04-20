@@ -27,10 +27,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
-
-  private def noProgress: ProgressInfo[PM] =
-    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
-
   property("should not be able to apply blocks older than blocksToKeep") {
     var history = genHistory()._1
     history.bestFullBlockOpt shouldBe None
@@ -243,7 +239,9 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
-      history.reportModifierIsInvalid(fullBlock.header, noProgress) //fullBlock.header.parentId
+
+      val progressInfo = ProgressInfo[PM](Option(fullBlock.header.parentId), Seq(fullBlock) , Seq.empty, Seq.empty)
+      history.reportModifierIsInvalid(fullBlock.header, progressInfo)
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
@@ -261,7 +259,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
-    history.reportModifierIsInvalid(inChain.last.header, noProgress) //inChain.last.parentId
+    val progressInfo = ProgressInfo[PM](Some(inChain.last.parentId), fork2, Seq.empty, Seq.empty)
+    history.reportModifierIsInvalid(inChain.last.header, progressInfo)
 
     fork1.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
@@ -288,7 +287,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history.bestHeaderOpt.get shouldBe fork1.last.header
 
-    history.reportModifierIsInvalid(fork1.head.header, noProgress) //common.parentId
+    val progressInfo = ProgressInfo[PM](Some(common.parentId), fork1, Seq.empty, Seq.empty)
+    history.reportModifierIsInvalid(fork1.head.header, progressInfo)
 
     history.bestHeaderOpt.get shouldBe fork2.last.header
     history.bestFullBlockOpt.get shouldBe fork2.last
@@ -302,7 +302,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     val invalidChain = chain.takeRight(2)
 
-    val report = history.reportModifierIsInvalid(invalidChain.head.header, noProgress) //invalidChain.head.header.id
+    val progressInfo = ProgressInfo[PM](Some(invalidChain.head.parentId), invalidChain, Seq.empty, Seq.empty)
+    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo)
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
@@ -324,8 +325,8 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.contains(parentHeader.transactionsId) shouldBe true
       history.contains(parentHeader.ADProofsId) shouldBe true
 
-
-      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, noProgress) //parentHeader.id?
+      val progressInfo = ProgressInfo[PM](Some(parentHeader.id), Seq(fullBlock), Seq.empty, Seq.empty)
+      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo)
       repHistory.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       repHistory.bestHeaderOpt.get shouldBe parentHeader
     }
@@ -371,7 +372,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     val processInfo = changes._2
     processInfo.branchPoint.get shouldEqual genesis.id
     processInfo.toRemove should contain theSameElementsAs fork1
-    processInfo.toApply should contain theSameElementsAs fork2.take(1)
+    processInfo.toApply should contain theSameElementsAs fork2
 
   }
 
@@ -399,7 +400,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
         val processInfo = changes._2
         processInfo.branchPoint.get shouldEqual branchPoint.id
         processInfo.toRemove should contain theSameElementsAs fork1
-        processInfo.toApply should contain theSameElementsAs fork2.take(1)
+        processInfo.toApply should contain theSameElementsAs fork2
       }
     }
   }

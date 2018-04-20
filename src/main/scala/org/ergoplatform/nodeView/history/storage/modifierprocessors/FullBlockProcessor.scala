@@ -102,7 +102,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         val diff = bestHeight - prevBest.header.height
         pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
       }
-      ProgressInfo(branchPoint, toRemove, toApply.take(1), Seq.empty)
+      ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
     }
   }
 

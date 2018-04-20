@@ -30,6 +30,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.58",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
   "org.rudogma" % "supertagged_2.12" % "1.4",
+  "org.scala-lang.modules" % "scala-async_2.12" % "0.9.7",
   "org.scala-lang.modules" % "scala-java8-compat_2.12" % "0.8.0",
   "org.scala-lang.modules" % "scala-parser-combinators_2.12" % "1.0.4",
   "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.5",
@@ -48,4 +49,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH 00d3320e7fb1cf00e0c6767cd2c30771dade533a
+// LIBRARY_DEPENDENCIES_HASH aad4189c017769300cc75f5925fae4ffdfc2eede

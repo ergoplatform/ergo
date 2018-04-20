@@ -141,7 +141,7 @@ trait ErgoHistory
               val toInsert = validityRow ++ changedLinks
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
-                                                   validChain.tail.take(1), Seq.empty)
+                                                   validChain.tail, Seq.empty)
             }
         }
       case None =>

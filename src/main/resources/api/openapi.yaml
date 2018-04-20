@@ -241,38 +241,54 @@ components:
         fullHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         headersHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         bestFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no header applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
-          description: Can be 'null' if state is empty
+          nullable: true
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         difficulty:
           type: integer
           format: int32
           minimum: 0
+          nullable: true
           example: 667
+          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         stateType:
           type: string
           enum:
             - digest
             - utxo
         stateVersion:
+          description: Can be 'null' if no full block is applied since node launch
           type: string
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          nullable: true
         isMining:
           type: boolean
           example: true

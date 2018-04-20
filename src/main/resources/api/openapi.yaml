@@ -23,7 +23,7 @@ components:
         - signature
       properties:
         id:
-          $ref: '#/components/schemas/TransactionId'
+          $ref: '#/components/schemas/TransactionBoxId'
         nonce:
           description: Index of a output in transaction
           type: integer
@@ -37,9 +37,12 @@ components:
     AnyoneCanSpendTransactionOutput:
       type: object
       required:
+        - id
         - value
         - script
       properties:
+        id:
+          $ref: '#/components/schemas/TransactionBoxId'
         value:
           description: Amount of Ergo token
           type: number
@@ -299,6 +302,11 @@ components:
           type: integer
           format: int32
           example: 1524136091376
+
+    TransactionBoxId:
+      description: Base58-encoded transaction box id bytes
+      type: string
+      example: 36fnCvcr1ZWnUjHQ2rHBaA4AvdLDx2y5dhWL4MWnxox1
 
     TransactionId:
       description: Base16-encoded transaction id bytes

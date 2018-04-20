@@ -57,7 +57,6 @@ class BlocksApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val res = Map(
         "isMining" -> false.asJson,
-        "votes" -> Algos.encode(Array.empty).asJson,
         "candidateBlock" -> "None".asJson
       ).asJson
       res.toString shouldEqual responseAs[String]

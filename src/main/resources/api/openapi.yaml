@@ -576,7 +576,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FullBlock'
+                type: object
+                properties:
+                  isMining:
+                    type: boolean
+                  candidateBlock:
+                    $ref: '#/components/schemas/FullBlock'
 
   /blocks/lastHeaders/{count}:
     get:

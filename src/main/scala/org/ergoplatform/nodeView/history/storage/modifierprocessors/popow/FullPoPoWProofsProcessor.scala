@@ -49,7 +49,7 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
     val bestHeaderRow = (BestHeaderKey, ByteArrayWrapper(bestHeader.id))
     historyStorage.insert(ByteArrayWrapper(bestHeader.id), bestHeaderRow +: headersIndexes, headers)
 
-    ProgressInfo(None, toRemove = Seq.empty, toApply = Some(m.suffix.last), toDownload = Seq.empty)
+    ProgressInfo(None, toRemove = Seq.empty, toApply = Seq(m.suffix.last), toDownload = Seq.empty)
   }
 }
 

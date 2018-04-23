@@ -1,4 +1,4 @@
-openapi: "3.0.0"
+openapi: "3.0.1"
 
 info:
   version: "0.1"
@@ -23,7 +23,7 @@ components:
         - signature
       properties:
         id:
-          $ref: '#/components/schemas/TransactionId'
+          $ref: '#/components/schemas/TransactionBoxId'
         nonce:
           description: Index of a output in transaction
           type: integer
@@ -37,9 +37,12 @@ components:
     AnyoneCanSpendTransactionOutput:
       type: object
       required:
+        - id
         - value
         - script
       properties:
+        id:
+          $ref: '#/components/schemas/TransactionBoxId'
         value:
           description: Amount of Ergo token
           type: number
@@ -90,7 +93,6 @@ components:
       required:
         - id
         - timestamp
-        - reference
         - version
         - interlinks
         - adProofsRoot
@@ -110,8 +112,6 @@ components:
           type: integer
           format: int32
           example: 1501505945003
-        reference:
-          $ref: '#/components/schemas/ModifierId'
         version:
            type: integer
            format: int32
@@ -238,38 +238,54 @@ components:
         fullHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         headersHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         bestFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          description: Can be 'null' if no header applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
-          description: Can be 'null' if state is empty
+          nullable: true
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
         difficulty:
           type: integer
           format: int32
           minimum: 0
+          nullable: true
           example: 667
+          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         stateType:
           type: string
           enum:
             - digest
             - utxo
         stateVersion:
+          description: Can be 'null' if no full block is applied since node launch
           type: string
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          nullable: true
         isMining:
           type: boolean
           example: true
@@ -299,6 +315,11 @@ components:
           type: integer
           format: int32
           example: 1524136091376
+
+    TransactionBoxId:
+      description: Base58-encoded transaction box id bytes
+      type: string
+      example: 36fnCvcr1ZWnUjHQ2rHBaA4AvdLDx2y5dhWL4MWnxox1
 
     TransactionId:
       description: Base16-encoded transaction id bytes

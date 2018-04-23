@@ -692,38 +692,6 @@ paths:
                   - invalid.box.nonce
                   - invalid.json
 
-  /transactions/{transactionId}:
-    get:
-      summary: Get the details of a given transaction, its status and the height of block it belongs to
-      operationId: getTransactionById
-      tags:
-        - transactions
-      parameters:
-        - in: path
-          name: transactionId
-          required: true
-          description: ID of a wanted transaction
-          schema:
-            $ref: '#/components/schemas/TransactionId'
-      responses:
-        '200':
-          description: Anyone can spend transactions object
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-        '404':
-          description: Transaction with this id doesn't exist
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                type: string
-                enum:
-                  # Provided transaction ID is invalid
-                  - invalid.transaction.id
-
   /transactions/unconfirmed:
     parameters:
       # useless, varies dynamically

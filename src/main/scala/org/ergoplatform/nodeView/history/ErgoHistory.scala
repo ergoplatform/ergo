@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{Empty
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
-import scorex.core._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -74,19 +73,20 @@ trait ErgoHistory
     }
   }
 
+  override def reportModifierIsValid(modifier: ErgoPersistentModifier): ErgoHistory = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
+    markModifierValid(modifier)
+    this
+  }
 
   /**
     * Report some modifier as valid or invalid semantically
     */
-  override def reportSemanticValidity(modifier: ErgoPersistentModifier,
-                                      valid: Boolean,
-                                      unusedParam: ModifierId): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid = $valid")
-    if (valid) {
-      this -> markModifierValid(modifier)
-    } else {
-      this -> markModifierInvalid(modifier)
-    }
+  override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
+                                       progressInfo: ProgressInfo[ErgoPersistentModifier],
+                                      ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
+    this -> markModifierInvalid(modifier)
   }
 
   /**
@@ -109,7 +109,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityKey(modifier.id), validityRow, Seq.empty)
-            ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
+            ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedHeaders.exists(_.id sameElements id))
@@ -121,7 +121,7 @@ trait ErgoHistory
               historyStorage.insert(validityKey(modifier.id),
                 Seq(BestHeaderKey -> ByteArrayWrapper(newBestHeader.id)),
                 Seq.empty)
-              ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
+              ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedHeaders.contains(h)).headers)
@@ -141,7 +141,7 @@ trait ErgoHistory
               val toInsert = validityRow ++ changedLinks
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
-                validChain.tail.headOption, Seq.empty)
+                                                   validChain.tail, Seq.empty)
             }
         }
       case None =>
@@ -149,7 +149,7 @@ trait ErgoHistory
         historyStorage.insert(validityKey(modifier.id),
           Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))),
           Seq.empty)
-        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
+        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
     }
   }
 
@@ -173,7 +173,7 @@ trait ErgoHistory
         }
         if (bestFullBlockOpt.contains(fb)) {
           //applied best header to history
-          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
+          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
         } else {
           //Marked non-best full block as valid. Should have more blocks to apply to sync state and history.
           val bestFullHeader = bestFullBlockOpt.get.header
@@ -185,18 +185,17 @@ trait ErgoHistory
             .ensuring(_.isDefined, s"Should be able to get full block for header ${chainBack.headOption}")
             .ensuring(_.get.header.parentId sameElements fb.header.id,
               s"Block to appy should link to current block. Failed for ${chainBack.headOption} and ${fb.header}")
-          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, toApply, Seq.empty)
+          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, toApply.toSeq, Seq.empty)
         }
       case _ =>
         historyStorage.insert(validityKey(modifier.id),
           Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
           Seq.empty)
-        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, None, Seq.empty)
+        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
     }
   }
 
   /**
-    * @param modifier
     * @return header, that corresponds to modifier
     */
   protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {

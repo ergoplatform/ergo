@@ -844,7 +844,7 @@ paths:
         '200':
           description: Base58-encoded 32 byte seed
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
@@ -866,7 +866,7 @@ paths:
         '200':
           description: Base58-encoded N byte seed
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV

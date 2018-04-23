@@ -12,20 +12,21 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class SyncronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
   with Matchers with ScorexLogging {
 
-  val cnt = 30
+  val blocksCount = 10
+  val forkDepth = 7
 
-  s"Generate $cnt blocks" in {
+  s"Generate $blocksCount blocks" in {
     val headerIdsAtSameHeight = result(for {
-      b <- traverse(nodes)(_.height).map(_.min)
-      _ <- traverse(nodes)(_.waitForHeight(b + cnt))
-      headers <- traverse(nodes)(_.headerIdsByHeight(b + cnt - 1))
+      b <- traverse(nodes)(_.height).map(_.max)
+      _ <- traverse(nodes)(_.waitForHeight(b + blocksCount))
+      headers <- traverse(nodes)(_.headerIdsByHeight(b + blocksCount - forkDepth))
     } yield {
-      log.debug(s"Headers at height ${b + cnt - 1}: ${headers.mkString(",")}")
-      headers
+      log.debug(s"Headers at height ${b + blocksCount - forkDepth}: ${headers.mkString(",")}")
+      headers.flatten
     }, 10.minutes)
 
-    val someHeaderId = headerIdsAtSameHeight.head.head
-    all(headerIdsAtSameHeight) should contain(someHeaderId)
+    val sample = headerIdsAtSameHeight.head
+    headerIdsAtSameHeight should contain only sample
   }
 }
 

@@ -165,10 +165,7 @@ components:
         headerId:
           $ref: '#/components/schemas/ModifierId'
         transactions:
-          description: Anyone can spend transaction objects
-          type: array
-          items:
-            $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+          $ref: '#/components/schemas/Transactions'
 
     BlockADProofs:
       type: object
@@ -183,6 +180,37 @@ components:
           $ref: '#/components/schemas/SerializedAdProof'
         digest:
           $ref: '#/components/schemas/Digest32'
+
+    CandidateBlock:
+      type: object
+      required:
+        - votes
+        - parentId
+      properties:
+        transactionsNumber:
+          type: integer
+          format: int32
+          example: 2
+        votes:
+          $ref: '#/components/schemas/Votes'
+        timestamp:
+          type: integer
+          format: int32
+          example: 1501505945003
+        stateRoot:
+          type: string
+          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+        nBits:
+          # todo actually it is unsigned int?
+          type: integer
+          format: int64
+          example: 19857408
+        adProofBytes:
+          $ref: '#/components/schemas/SerializedAdProof'
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          $ref: '#/components/schemas/Transactions'
 
     Peer:
       type: object
@@ -325,6 +353,12 @@ components:
       description: Base16-encoded transaction id bytes
       type: string
       example: 141cef0ed1e1cbd3bdf2da2d39fb9a0e697b8777012b169609eb76313506ef66
+
+    Transactions:
+      description: Anyone can spend transaction objects
+      type: array
+      items:
+        $ref: '#/components/schemas/AnyoneCanSpendTransaction'
 
     ModifierId:
       description: Base58-encoded 32 byte modifier id
@@ -581,7 +615,7 @@ paths:
                   isMining:
                     type: boolean
                   candidateBlock:
-                    $ref: '#/components/schemas/FullBlock'
+                    $ref: '#/components/schemas/CandidateBlock'
 
   /blocks/lastHeaders/{count}:
     get:

@@ -109,9 +109,7 @@ components:
         id:
           $ref: '#/components/schemas/ModifierId'
         timestamp:
-          type: integer
-          format: int32
-          example: 1501505945003
+          $ref: '#/components/schemas/Timestamp'
         version:
            type: integer
            format: int32
@@ -339,14 +337,10 @@ components:
           description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         currentTime:
           description: Current internal node time
-          type: integer
-          format: int32
-          example: 1524143059077
+          $ref: '#/components/schemas/Timestamp'
         launchTime:
           description: Time when the node was started
-          type: integer
-          format: int32
-          example: 1524136091376
+          $ref: '#/components/schemas/Timestamp'
 
     TransactionBoxId:
       description: Base58-encoded transaction box id bytes
@@ -393,6 +387,12 @@ components:
       description: Base58-encoded block signature
       type: string
       example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
+
+    Timestamp:
+      description: Basic timestamp definition
+      type: integer
+      format: int32
+      example: 1524143059077
 
 paths:
   /blocks:

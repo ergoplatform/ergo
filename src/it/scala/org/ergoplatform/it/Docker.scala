@@ -60,7 +60,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     log.trace(s"Starting ${nodeConfigs.size} containers")
     val nodes = nodeConfigs.map(startNode)
     log.debug("Waiting for nodes to start")
-    blocking(Thread.sleep(15.seconds.toMillis))
+    blocking(Thread.sleep(nodes.size * 5000))
     val nodeStatusFuture = Future.traverse(nodes)(_.status)
     Await.result(nodeStatusFuture, 3.minutes)
     nodes
@@ -123,7 +123,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val hostConfig = HostConfig.builder()
       .portBindings(portBindings)
-      .memory(1024L * 1024 * 1024)
+      .memory(1L << 30) //limit memory to 1G
       .build()
 
     val networkingConfig = ContainerConfig.NetworkingConfig

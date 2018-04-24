@@ -245,10 +245,11 @@ components:
         - fullHeight
         - headersHeight
         - bestFullHeaderId
+        - previousFullHeaderId
+        - bestHeaderId
         - stateRoot
         - stateType
         - stateVersion
-        - previousFullHeaderId
         - isMining
         - votes
         - peersCount
@@ -297,13 +298,6 @@ components:
           nullable: true
           description: Can be 'null' if state is empty (no full block is applied since node launch)
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
-        difficulty:
-          type: integer
-          format: int32
-          minimum: 0
-          nullable: true
-          example: 667
-          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         stateType:
           type: string
           enum:
@@ -333,6 +327,13 @@ components:
           minimum: 0
           maximum: 10000
           example: 327
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          example: 667
+          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         currentTime:
           description: Current internal node time
           type: integer

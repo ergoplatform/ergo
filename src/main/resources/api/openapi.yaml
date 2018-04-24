@@ -192,9 +192,7 @@ components:
         votes:
           $ref: '#/components/schemas/Votes'
         timestamp:
-          type: integer
-          format: int32
-          example: 1501505945003
+          $ref: '#/components/schemas/Timestamp'
         stateRoot:
           type: string
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4

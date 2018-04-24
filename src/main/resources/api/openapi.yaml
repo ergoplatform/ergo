@@ -279,16 +279,19 @@ components:
           example: 667
           nullable: true
         bestFullHeaderId:
+          type: string
           description: Can be 'null' if no full block is applied since node launch
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
+          type: string
           description: Can be 'null' if no full block is applied since node launch
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
+          type: string
           description: Can be 'null' if no header applied since node launch
           nullable: true
           allOf:

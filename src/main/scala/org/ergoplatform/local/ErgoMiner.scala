@@ -205,7 +205,7 @@ object ErgoMiner extends ScorexLogging {
   implicit val jsonEncoder: Encoder[MiningStatusResponse] = (r: MiningStatusResponse) =>
     Map(
       "isMining" -> r.isMining.asJson,
-      "candidateBlock" -> r.candidateBlock.map(_.asJson).getOrElse("None".asJson)
+      "candidateBlock" -> r.candidateBlock.asJson
     ).asJson
 
 }

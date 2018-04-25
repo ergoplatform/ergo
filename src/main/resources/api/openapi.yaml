@@ -181,6 +181,8 @@ components:
 
     CandidateBlock:
       type: object
+      nullable: true
+      description: Can be null if node is not mining or candidate block is not ready
       required:
         - votes
         - parentId

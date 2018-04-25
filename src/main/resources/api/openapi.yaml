@@ -313,7 +313,6 @@ components:
           type: boolean
           example: true
         votes:
-          type: string
           $ref: '#/components/schemas/Votes'
         peersCount:
           type: integer
@@ -336,11 +335,15 @@ components:
           example: 667
           description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
         currentTime:
+          type: integer
           description: Current internal node time
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
         launchTime:
+          type: integer
           description: Time when the node was started
-          $ref: '#/components/schemas/Timestamp'
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
 
     TransactionBoxId:
       description: Base58-encoded transaction box id bytes
@@ -677,7 +680,6 @@ paths:
           content:
             application/json:
               schema:
-                description: ID of the new transaction
                 $ref: '#/components/schemas/TransactionId'
         default:
           description: Error

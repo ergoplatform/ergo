@@ -36,7 +36,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   //TODO alternative DDoS protection
   protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
 
-  //Maximum time in future block header main contain
+  //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,

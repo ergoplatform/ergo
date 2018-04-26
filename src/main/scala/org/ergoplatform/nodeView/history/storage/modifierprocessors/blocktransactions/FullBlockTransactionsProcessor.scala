@@ -37,7 +37,7 @@ trait FullBlockTransactionsProcessor extends BlockTransactionsProcessor with Ful
 
   private def justPutToHistory(txs: BlockTransactions): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(ByteArrayWrapper(txs.id), Seq.empty, Seq(txs))
-    ProgressInfo(None, Seq.empty, None, Seq.empty)
+    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
   override protected def validate(m: BlockTransactions): Try[Unit] =

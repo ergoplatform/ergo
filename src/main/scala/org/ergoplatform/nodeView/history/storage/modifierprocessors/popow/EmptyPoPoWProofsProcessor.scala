@@ -13,6 +13,6 @@ trait EmptyPoPoWProofsProcessor extends PoPoWProofsProcessor {
 
   def validate(m: PoPoWProof): Try[Unit] = Failure(new Error("Regime that do not process PoPoWProof"))
 
-  def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq.empty, None, Seq.empty)
+  def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
 }
 

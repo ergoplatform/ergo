@@ -36,7 +36,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
 
     val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
-      miningDelay = defaultAwaitDuration * 2,
+      miningDelay = defaultAwaitDuration,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)

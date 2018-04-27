@@ -1,6 +1,5 @@
 package org.ergoplatform.local
 
-import akka.pattern.ask
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -11,17 +10,17 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
@@ -65,10 +64,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       log.info("Starting Mining")
       isMining = true
-      miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get)(context)
+      miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get, timeProvider)(context)
       miningThreads.foreach(_ ! candidateOpt.get)
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate
+      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -119,7 +119,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def procCandidateBlock(c: CandidateBlock): Unit = {
     log.debug(s"Got candidate block $c")
     candidateOpt = Some(c)
-    if (!isMining) self ! StartMining
     miningThreads.foreach(_ ! c)
   }
 

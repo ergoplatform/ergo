@@ -9,11 +9,11 @@ import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class SyncronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
+class SynchronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
   with Matchers with ScorexLogging {
 
-  val blocksCount = 10
-  val forkDepth = 7
+  val blocksCount = 5
+  val forkDepth = blocksCount
 
   s"Generate $blocksCount blocks" in {
     val headerIdsAtSameHeight = result(for {

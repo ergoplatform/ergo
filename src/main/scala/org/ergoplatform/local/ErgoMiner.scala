@@ -104,7 +104,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case SemanticallySuccessfulModifier =>
   }
 
-   override def receive: Receive = receiveSemanticallySuccessfulModifier orElse
+  override def receive: Receive = receiveSemanticallySuccessfulModifier orElse
     miningStatus orElse
     startMining orElse
     onReaders orElse
@@ -117,7 +117,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {
-    log.debug(s"Got candidate block $c")
+    log.debug(s"Got candidate block at height ${c.parentOpt.map(_.height).getOrElse(-1) + 1}" +
+      s" with ${c.transactions.size} transactions")
     candidateOpt = Some(c)
     miningThreads.foreach(_ ! c)
   }

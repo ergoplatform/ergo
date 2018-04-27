@@ -45,7 +45,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val txs = chain.head.transactions
 
   lazy val memPool = ErgoMemPool.empty.put(txs).get
-  lazy val readers = Readers(Some(history), Some(state), Some(memPool))
+  lazy val readers = Readers(history, state, memPool)
 
 
   val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)

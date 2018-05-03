@@ -11,6 +11,8 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.VersionTag
 
+import scala.util.Random
+
 
 class UtxoStateSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
@@ -68,13 +70,26 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
+  property("applyModifier() - special case") {
+
+    val r = new Random(54)
+    val initialBoxes = (0 until 100) map (s => AnyoneCanSpendNoncedBox(r.nextLong(), Math.abs(r.nextLong())))
+    val bh = BoxHolder(initialBoxes)
+
+    val us = createUtxoState(bh)
+    bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
+    val block = validFullBlock(parentOpt = None, us, bh, rnd = r)
+
+    us.applyModifier(block).get
+  }
+
   property("applyModifier() - valid full block") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val block = validFullBlock(parentOpt = None, us, bh)
-      us.applyModifier(block).isSuccess shouldBe true
+      us.applyModifier(block).get
     }
   }
 

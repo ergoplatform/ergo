@@ -20,6 +20,8 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 
+import scala.util.Random
+
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
@@ -85,10 +87,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, EquihashSolution(equihashSolutions))
 
 
-  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) =
+    validTransactionsFromBoxHolder(boxHolder, new Random)
+
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder, rnd: Random): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
     val num = 10
 
-    val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(10) + 1)
+    val spentBoxesCounts = (1 to num).map(_ => rnd.nextInt(10) + 1)
 
     val (boxes, bs) = boxHolder.take(spentBoxesCounts.sum)
 
@@ -121,9 +126,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     txs
   }
 
+  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
+    validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, new Random)
 
-  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock = {
-    val (transactions, _) = validTransactionsFromBoxHolder(boxHolder)
+
+  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
+    val (transactions, _) = validTransactionsFromBoxHolder(boxHolder, rnd)
     validFullBlock(parentOpt, utxoState, transactions)
   }
 

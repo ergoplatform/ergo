@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
 import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
@@ -93,10 +93,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       requestDownload(modifierTypeId, Seq(modifierId))
   }
 
+  def onChangedVault: Receive = {
+    case _: ChangedVault =>
+  }
+
   override protected def viewHolderEvents: Receive =
     onSyntacticallySuccessfulModifier orElse
       onDownloadRequest orElse
       onCheckModifiersToDownload orElse
+      onChangedVault orElse
       super.viewHolderEvents
 }
 
@@ -107,7 +112,7 @@ object ErgoNodeViewSynchronizer {
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
-                                       timeProvider))
+      timeProvider))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

@@ -101,7 +101,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     /**
       * Just ignore all other modifiers.
       */
-    case SemanticallySuccessfulModifier =>
+    case SemanticallySuccessfulModifier(_) =>
   }
 
   override def receive: Receive = receiveSemanticallySuccessfulModifier orElse

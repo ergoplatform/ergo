@@ -51,12 +51,11 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep)
-       if (isValidFirstFullBlock(fullBlock.header)) =>
+       if isValidFirstFullBlock(fullBlock.header) =>
 
       logStatus(Seq(), Seq(fullBlock), fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
       ProgressInfo(None, Seq.empty, Seq(fullBlock), Seq.empty)
-
   }
 
   private def processBetterChain: BlockProcessing = {
@@ -64,7 +63,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
         if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
 
       val prevBest = bestFullBlockOpt.get
-      val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, fullBlock.header)
+      val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestAfterThis)
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
         .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))

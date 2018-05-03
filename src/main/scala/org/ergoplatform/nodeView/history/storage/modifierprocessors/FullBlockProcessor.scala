@@ -35,9 +35,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val newModRow = calculateNewModRow(fullBlock, txsAreNew)
-    val bestFullChain = calculateBestFullChain(fullBlock.header)
-    val newBestAfterThis = bestFullChain.last
-    processing(ToProcess(fullBlock, newModRow, newBestAfterThis, config.blocksToKeep))
+    val bestFullChain = calculateBestFullChain(fullBlock)
+    val newBestAfterThis = bestFullChain.last.header
+    processing(ToProcess(fullBlock, newModRow, newBestAfterThis, config.blocksToKeep, bestFullChain))
   }
 
   private def processing: BlockProcessing =
@@ -50,16 +50,16 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   private def processValidFirstBlock: BlockProcessing = {
-    case ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep)
+    case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
        if isValidFirstFullBlock(fullBlock.header) =>
 
-      logStatus(Seq(), Seq(fullBlock), fullBlock, None)
+      logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
-      ProgressInfo(None, Seq.empty, Seq(fullBlock), Seq.empty)
+      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {
-    case toProcess @ ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep)
+    case toProcess @ ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep, _)
         if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
 
       val prevBest = bestFullBlockOpt.get
@@ -115,10 +115,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
   }
 
-  private def calculateBestFullChain(header: Header) = {
-    val continuations = continuationHeaderChains(header, h => getFullBlock(h).nonEmpty).map(_.tail)
-    val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
-    chains.map(c => header +: c).maxBy(c => scoreOf(c.last.id))
+  private def calculateBestFullChain(fb: ErgoFullBlock): Seq[ErgoFullBlock] = {
+    val continuations = continuationHeaderChains(fb.header, h => getFullBlock(h).nonEmpty).map(_.tail)
+    val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten)
+    chains.map(c => fb +: c).maxBy(c => scoreOf(c.last.id))
   }
 
   private def logStatus(toRemove: Seq[ErgoFullBlock],
@@ -190,6 +190,7 @@ object FullBlockProcessor {
     fullBlock: ErgoFullBlock,
     newModRow: ErgoPersistentModifier,
     newBestAfterThis: Header,
-    blocksToKeep: Int
+    blocksToKeep: Int,
+    bestFullChain: Seq[ErgoFullBlock]
   )
 }

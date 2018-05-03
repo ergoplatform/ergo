@@ -24,16 +24,15 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     history = history.append(chain.tail.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
-    val r = history.append(chain.head.blockTransactions).get
-    history = r._1
+    val pi1 =  history.append(chain.head.blockTransactions).get._2
     history.bestFullBlockOpt.get shouldBe chain.tail.head
-    r._2.toApply.length shouldBe 2
+    pi1.toApply.length shouldBe 2
 
-    chain.tail.tail.foreach(c => history.append(c.blockTransactions))
-    history.bestFullBlockOpt.get shouldBe chain.head
+    chain.tail.tail.tail.foreach(c => history.append(c.blockTransactions))
+    history.bestFullBlockOpt.get.header.height shouldBe chain.tail.head.header.height
 
-    val pi = history.append(chain.tail.head.blockTransactions).get._2
-    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(1,2,3,4,5)
+    val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
+    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2,3,4,5)
   }
 
   property("bootstrap from headers and last full blocks") {

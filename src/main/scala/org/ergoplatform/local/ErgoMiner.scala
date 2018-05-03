@@ -97,7 +97,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     /**
       * Just ignore all other modifiers.
       */
-    case SemanticallySuccessfulModifier =>
+    case SemanticallySuccessfulModifier(_) =>
   }
 
   private def receiverCandidateBlock: Receive = {

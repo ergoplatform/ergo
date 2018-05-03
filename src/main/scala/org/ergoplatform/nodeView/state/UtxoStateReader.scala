@@ -3,24 +3,26 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.Store
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendProposition}
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADKey
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
 trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
 
-  implicit val hf = new Blake2b256Unsafe
+  protected implicit val hf = Algos.hash
 
   val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = Some(ErgoState.BoxSize), labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
-  protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, Blake2b256Unsafe] = {
-    val bp = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+  protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+    val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     PersistentBatchAVLProver.create(bp, storage).get
   }
 

@@ -6,6 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.state.{BoxStateChangeOperation, BoxStateChanges, Insertion, Removal}
@@ -13,7 +14,7 @@ import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.encode.Base58
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
@@ -31,6 +32,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
   override def toString: String = {
     val sId = Algos.encode(id)
     val sHeaderId = Algos.encode(headerId)
+
     /**
       * Sometimes proofBytes could have length about 350 000 elements, it's useless to convert them into string.
       * So decisin here is to not render them in toString method.
@@ -51,7 +53,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
              previousHash: ADDigest,
              expectedHash: ADDigest): Try[Unit] = {
 
-    def applyChanges(verifier: BatchAVLVerifier[Digest32, Blake2b256Unsafe],
+    def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
                      changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]) =
       changes.operations.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
@@ -59,7 +61,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
         })
       }
 
-    val verifier = new BatchAVLVerifier[Digest32, Blake2b256Unsafe](previousHash, proofBytes, ADProofs.KL,
+    val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
       Some(ErgoState.BoxSize), maxNumOperations = Some(changes.operations.size))
 
     applyChanges(verifier, changes).flatMap { _ =>

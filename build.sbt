@@ -17,11 +17,12 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
 val scorexVersion = "6de0d647-SNAPSHOT"
 
 libraryDependencies ++= Seq(
+  "org.scorexfoundation" %% "scrypto" % "2.1.1",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
+  "org.scorexfoundation" %% "avl-iodb" % "0.2.13",
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.+",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
 

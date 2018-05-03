@@ -63,7 +63,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
       val result = await((minerRef ? MiningStatusRequest).mapTo[MiningStatusResponse])
       result.isMining shouldBe true
       result.candidateBlock shouldBe defined
-      result.votes.sameElements(nodeId) shouldBe true
+      result.candidateBlock.get.votes.sameElements(nodeId) shouldBe true
       val height = result.candidateBlock.get.parentOpt.get.height
       val blocksGenerated = await((listener ? Status).mapTo[Int])
       blocksGenerated should be > 1

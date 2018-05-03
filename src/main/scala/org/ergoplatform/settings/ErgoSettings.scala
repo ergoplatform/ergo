@@ -5,6 +5,7 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoApp, Version}
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.core.utils.ScorexLogging
@@ -35,6 +36,11 @@ object ErgoSettings extends ScorexLogging
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
+
+    if (nodeSettings.stateType == Digest && nodeSettings.mining) {
+      log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
+      ErgoApp.forceStopApplication()
+    }
 
     ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings)
   }

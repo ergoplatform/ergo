@@ -79,7 +79,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props() = Props(new PeersManagerStub)
   }
 
-  val minerInfo = MiningStatusResponse(isMining = false, votes = Array.empty, candidateBlock = None)
+  val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
 
   class MinerStub extends Actor {
     def receive = { case MiningStatusRequest => sender() ! minerInfo }

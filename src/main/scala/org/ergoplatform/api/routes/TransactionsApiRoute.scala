@@ -21,7 +21,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with FailFastCirceSupport {
 
   override val route: Route = pathPrefix("transactions") {
-    getUnconfirmedTransactionsR ~ sendTransactionR ~ getTransactionByIdR
+    getUnconfirmedTransactionsR ~ sendTransactionR
   }
 
   override val settings: RESTApiSettings = restApiSettings
@@ -38,10 +38,6 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     nodeViewActorRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
     complete(StatusCodes.OK)
   }
-
-  // todo tx id validation
-  // todo how to get tx by id?
-  def getTransactionByIdR: Route = (path(Segment) & get) { id => ??? }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_ , limit) =>
     // todo offset

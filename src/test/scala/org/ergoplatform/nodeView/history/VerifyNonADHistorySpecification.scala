@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import scorex.crypto.encode.Base58
@@ -12,6 +13,27 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+
+  property("proofs and transactions application in incorrect order") {
+    var history = genHistory()
+    val chain = genChain(6, history)
+    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    }
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+
+    history = history.append(chain.tail.head.blockTransactions).get._1
+    history.bestFullBlockOpt shouldBe None
+    val pi1 =  history.append(chain.head.blockTransactions).get._2
+    history.bestFullBlockOpt.get shouldBe chain.tail.head
+    pi1.toApply.length shouldBe 2
+
+    chain.tail.tail.tail.foreach(c => history.append(c.blockTransactions))
+    history.bestFullBlockOpt.get.header.height shouldBe chain.tail.head.header.height
+
+    val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
+    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2,3,4,5)
+  }
 
   property("bootstrap from headers and last full blocks") {
     var history = genHistory()

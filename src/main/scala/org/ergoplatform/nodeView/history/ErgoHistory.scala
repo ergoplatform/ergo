@@ -73,20 +73,27 @@ trait ErgoHistory
     }
   }
 
+  /**
+    * Mark modifier as valid
+    */
   override def reportModifierIsValid(modifier: ErgoPersistentModifier): ErgoHistory = {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
-    markModifierValid(modifier)
-    this
-  }
+    modifier match {
+      case fb: ErgoFullBlock =>
+        val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
+          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
-  /**
-    * Report some modifier as valid or invalid semantically
-    */
-  override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
-                                       progressInfo: ProgressInfo[ErgoPersistentModifier],
-                                      ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
-    this -> markModifierInvalid(modifier)
+        if (nonMarkedIds.nonEmpty) {
+          historyStorage.insert(validityKey(nonMarkedIds.head),
+            nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))),
+            Seq.empty)
+        }
+      case _ =>
+        historyStorage.insert(validityKey(modifier.id),
+          Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
+          Seq.empty)
+    }
+    this
   }
 
   /**
@@ -96,7 +103,10 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  private def markModifierInvalid(modifier: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
+  override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
+                                       progressInfo: ProgressInfo[ErgoPersistentModifier],
+                                      ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
+    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
@@ -109,7 +119,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityKey(modifier.id), validityRow, Seq.empty)
-            ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedHeaders.exists(_.id sameElements id))
@@ -121,7 +131,7 @@ trait ErgoHistory
               historyStorage.insert(validityKey(modifier.id),
                 Seq(BestHeaderKey -> ByteArrayWrapper(newBestHeader.id)),
                 Seq.empty)
-              ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedHeaders.contains(h)).headers)
@@ -140,8 +150,8 @@ trait ErgoHistory
                 BestHeaderKey -> ByteArrayWrapper(newBestHeader.id))
               val toInsert = validityRow ++ changedLinks
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
-              ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
-                                                   validChain.tail, Seq.empty)
+              this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
+                validChain.tail, Seq.empty)
             }
         }
       case None =>
@@ -149,49 +159,7 @@ trait ErgoHistory
         historyStorage.insert(validityKey(modifier.id),
           Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))),
           Seq.empty)
-        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
-    }
-  }
-
-  /**
-    * Mark modifier as valid
-    *
-    * @param modifier that is invalid from State point of view
-    * @return ProgressInfo with next modifier to try to apply
-    */
-  //TODO rework option.get and traversable.head
-  private def markModifierValid(modifier: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
-    modifier match {
-      case fb: ErgoFullBlock =>
-        val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
-          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
-
-        if (nonMarkedIds.nonEmpty) {
-          historyStorage.insert(validityKey(nonMarkedIds.head),
-            nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))),
-            Seq.empty)
-        }
-        if (bestFullBlockOpt.contains(fb)) {
-          //applied best header to history
-          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
-        } else {
-          //Marked non-best full block as valid. Should have more blocks to apply to sync state and history.
-          val bestFullHeader = bestFullBlockOpt.get.header
-          val limit = bestFullHeader.height - fb.header.height
-          val chainBack = headerChainBack(limit, bestFullHeader, h => h.parentId sameElements fb.header.id)
-            .ensuring(_.headOption.isDefined, s"Should have next block to apply, failed for ${fb.header}")
-          //block in the best chain that link to this header
-          val toApply = chainBack.headOption.flatMap(opt => getFullBlock(opt))
-            .ensuring(_.isDefined, s"Should be able to get full block for header ${chainBack.headOption}")
-            .ensuring(_.get.header.parentId sameElements fb.header.id,
-              s"Block to appy should link to current block. Failed for ${chainBack.headOption} and ${fb.header}")
-          ProgressInfo[ErgoPersistentModifier](None, Seq.empty, toApply.toSeq, Seq.empty)
-        }
-      case _ =>
-        historyStorage.insert(validityKey(modifier.id),
-          Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
-          Seq.empty)
-        ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
     }
   }
 

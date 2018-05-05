@@ -9,12 +9,13 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Algos.HF
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256Unsafe, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
@@ -120,8 +121,6 @@ class UtxoState(override val version: VersionTag,
 
   /**
     * Generate proofs for specified transactions if applied to current state
-    * TODO not efficient at all
-    * TODO do not modify state during proofs generation
     *
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
@@ -129,39 +128,12 @@ class UtxoState(override val version: VersionTag,
   def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
     log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
-
-    def rollback(): Try[Unit] = persistentProver.rollback(rootHash)
-      .ensuring(persistentProver.digest.sameElements(rootHash), "Incorrect digest after rollback:" +
-        s" ${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
-
-    Try {
-      require(txs.nonEmpty, "Trying to generate proof for empty transaction sequence")
-      require(persistentProver.digest.sameElements(rootHash), "Incorrect persistent proover: " +
-        s"${Algos.encode(persistentProver.digest)} != ${Algos.encode(rootHash)}")
-      require(storage.version.get.sameElements(rootHash), "Incorrect storage: " +
-        s"${Algos.encode(storage.version.get)} != ${Algos.encode(rootHash)}")
-
-      //todo: make a special config flag, "paranoid mode", and use it for checks like one commented below
-      //persistentProver.checkTree(true)
-
-      val mods = boxChanges(txs).operations.map(ADProofs.changeToMod)
-      //todo .get
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-        t.flatMap(_ => {
-          val opRes = persistentProver.performOneOperation(m)
-          if (opRes.isFailure) log.warn(s"modification: $m, failure $opRes")
-          opRes
-        })
-      }.get
-
-      val proof = persistentProver.generateProofAndUpdateStorage()
-
-      val digest = persistentProver.digest
-
-      proof -> digest
-    } match {
-      case Success(res) => rollback().map(_ => res)
-      case Failure(e) => rollback().flatMap(_ => Failure(e))
+    if (txs.isEmpty) {
+      Failure(new Error("Trying to generate proof for empty transaction sequence"))
+    } else if (!storage.version.exists(_.sameElements(rootHash))) {
+      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}"))
+    } else {
+      persistentProver.avlProver.generateProofForOperations(boxChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
 
@@ -186,7 +158,7 @@ object UtxoState {
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val p = new BatchAVLProver[Digest32, Blake2b256Unsafe](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings

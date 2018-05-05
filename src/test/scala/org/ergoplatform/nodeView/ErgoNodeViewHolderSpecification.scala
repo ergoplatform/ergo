@@ -426,7 +426,48 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+  private val t11 = TestCase("apply blocks in incorrect order") { fixture =>
+    import fixture._
+    val dir = createTempDir
+    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+
+    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
+    }
+
+    nodeViewRef ! rootHash(nodeViewConfig)
+    expectMsg(Algos.encode(wusAfterGenesis.rootHash))
+
+    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+
+    nodeViewRef ! LocallyGeneratedModifier(chain2block1.header)
+    nodeViewRef ! LocallyGeneratedModifier(chain2block2.header)
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(Some(chain2block2.header))
+
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(chain2block2.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(chain2block2.aDProofs.get)
+      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
+      expectMsg(Some(genesis.header.encodedId))
+
+    }
+
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(chain2block1.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(chain2block1.aDProofs.get)
+      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
+      expectMsg(Some(chain2block2.header.encodedId))
+    }
+  }
+
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>

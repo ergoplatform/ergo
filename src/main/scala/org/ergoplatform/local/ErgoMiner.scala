@@ -56,7 +56,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def miningStatus: Receive = {
     case MiningStatusRequest =>
-      sender ! MiningStatusResponse(isMining, votes, candidateOpt)
+      sender ! MiningStatusResponse(isMining, candidateOpt)
   }
 
   private def startMining: Receive = {
@@ -97,7 +97,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     /**
       * Just ignore all other modifiers.
       */
-    case SemanticallySuccessfulModifier =>
+    case SemanticallySuccessfulModifier(_) =>
   }
 
   private def receiverCandidateBlock: Receive = {
@@ -192,7 +192,7 @@ object ErgoMiner extends ScorexLogging {
 
   case object MiningStatusRequest
 
-  case class MiningStatusResponse(isMining: Boolean, votes: Array[Byte], candidateBlock: Option[CandidateBlock])
+  case class MiningStatusResponse(isMining: Boolean, candidateBlock: Option[CandidateBlock])
 
   case class CandidateEnvelope(c: Option[CandidateBlock])
 
@@ -205,8 +205,7 @@ object ErgoMiner extends ScorexLogging {
   implicit val jsonEncoder: Encoder[MiningStatusResponse] = (r: MiningStatusResponse) =>
     Map(
       "isMining" -> r.isMining.asJson,
-      "votes" -> Algos.encode(r.votes).asJson,
-      "candidateBlock" -> r.candidateBlock.map(_.asJson).getOrElse("None".asJson)
+      "candidateBlock" -> r.candidateBlock.asJson
     ).asJson
 
 }

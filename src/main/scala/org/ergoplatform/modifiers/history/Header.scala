@@ -102,7 +102,8 @@ object Header {
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
-      "votes" -> Algos.encode(h.votes).asJson
+      "votes" -> Algos.encode(h.votes).asJson,
+      "version" -> h.version.asJson
     ).asJson
 }
 

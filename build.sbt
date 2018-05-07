@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "6de0d647-SNAPSHOT"
+val scorexVersion = "7af9c0d4-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.1",

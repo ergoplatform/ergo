@@ -6,7 +6,7 @@ branches:
     - master
     - /^\d\.\d+$/
 jdk:
-- oraclejdk8
+- oraclejdk9
 scala:
 - 2.12.3
 script:

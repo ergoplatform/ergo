@@ -16,9 +16,8 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpen
   override def put(tx: AnyoneCanSpendTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
   override def put(txs: Iterable[AnyoneCanSpendTransaction]): Try[ErgoMemPool] = Try {
-    txs.foreach(tx => require(!unconfirmed.contains(key(tx.id))))
     //todo check validity
-    putWithoutCheck(txs)
+    putWithoutCheck(txs.filterNot(tx => unconfirmed.contains(key(tx.id))))
   }
 
   override def putWithoutCheck(txs: Iterable[AnyoneCanSpendTransaction]): ErgoMemPool = {

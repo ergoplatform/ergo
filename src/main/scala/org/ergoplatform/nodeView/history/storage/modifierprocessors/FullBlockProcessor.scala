@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexLogging
@@ -34,84 +35,75 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
     val newModRow = calculateNewModRow(fullBlock, txsAreNew)
-    val bestFullChain = calculateBestFullChain(fullBlock.header)
-    val newBestAfterThis = bestFullChain.last
-    processIfValidFirstBlock(fullBlock, newModRow, newBestAfterThis).
-      orElse(processIfBetterChain(fullBlock, newModRow, newBestAfterThis)).
-      getOrElse(nonBestBlock(fullBlock, newModRow))
+    val bestFullChain = calculateBestFullChain(fullBlock)
+    val newBestAfterThis = bestFullChain.last.header
+    processing(ToProcess(fullBlock, newModRow, newBestAfterThis, config.blocksToKeep, bestFullChain))
   }
+
+  private def processing: BlockProcessing =
+    processValidFirstBlock orElse
+      processBetterChain orElse
+      nonBestBlock
 
   protected def isValidFirstFullBlock(header: Header): Boolean = {
     header.height == pruningProcessor.minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
   }
 
-  private def processIfValidFirstBlock(fullBlock: ErgoFullBlock,
-                                       newModRow: ErgoPersistentModifier,
-                                       newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
-    if (isValidFirstFullBlock(fullBlock.header)) {
-      Some(applyFirstFullBlock(fullBlock, newModRow, newBestAfterThis))
-    } else {
-      None
-    }
+  private def processValidFirstBlock: BlockProcessing = {
+    case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
+       if isValidFirstFullBlock(fullBlock.header) =>
+
+      logStatus(Seq(), toApply, fullBlock, None)
+      updateStorage(newModRow, newBestAfterThis.id)
+      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
   }
 
-  private def applyFirstFullBlock(fullBlock: ErgoFullBlock,
-                                  newModRow: ErgoPersistentModifier,
-                                  newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
-    logStatus(Seq(), Seq(fullBlock), fullBlock, None)
-    updateStorage(newModRow, newBestAfterThis.id)
-    ProgressInfo(None, Seq.empty, Some(fullBlock), Seq.empty)
+  private def processBetterChain: BlockProcessing = {
+    case toProcess @ ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep, _)
+        if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
+
+      val prevBest = bestFullBlockOpt.get
+      val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestAfterThis)
+      val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
+      val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
+        .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
+
+      if (toApply.lengthCompare(newChain.length - 1) != 0) {
+        //block have higher score but is not linkable to full chain
+        nonBestBlock(toProcess)
+      } else {
+        //application of this block leads to full chain with higher score
+        logStatus(toRemove, toApply, fullBlock, Some(prevBest))
+        val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
+
+        updateStorage(newModRow, newBestAfterThis.id)
+
+        if (blocksToKeep >= 0) {
+          val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
+          val bestHeight: Int = newBestAfterThis.height
+          val diff = bestHeight - prevBest.header.height
+          pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
+        }
+        ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
+      }
   }
 
-  private def processIfBetterChain(fullBlock: ErgoFullBlock,
-                                   newModRow: ErgoPersistentModifier,
-                                   newBestAfterThis: Header): Option[ProgressInfo[ErgoPersistentModifier]] = {
-    for {
-      prevBestFullBlock <- bestFullBlockOpt
+  private def isBetterChain(id: ModifierId): Boolean = {
+    val isBetter = for {
       bestFullBlockId <- bestFullBlockIdOpt
       prevBestScore <- scoreOf(bestFullBlockId)
-      score <- scoreOf(newBestAfterThis.id)
-      if score > prevBestScore
+      score <- scoreOf(id)
       //TODO currentScore == prevBestScore
-    } yield applyBetterChain(fullBlock, newModRow, prevBestFullBlock, newBestAfterThis)
+    } yield score > prevBestScore
+
+    isBetter getOrElse false
   }
 
-
-  private def applyBetterChain(fullBlock: ErgoFullBlock,
-                               newModRow: ErgoPersistentModifier,
-                               prevBest: ErgoFullBlock,
-                               newBestAfterThis: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, fullBlock.header)
-    val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
-    val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
-      .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
-
-    if (toApply.lengthCompare(newChain.length - 1) != 0) {
-      //block have higher score but is not linkable to full chain
-      nonBestBlock(fullBlock, newModRow)
-    } else {
-      //application of this block leads to full chain with higher score
-      logStatus(toRemove, toApply, fullBlock, Some(prevBest))
-      val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
-
-      updateStorage(newModRow, newBestAfterThis.id)
-
-      if (config.blocksToKeep >= 0) {
-        val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
-        val bestHeight: Int = newBestAfterThis.height
-        val diff = bestHeight - prevBest.header.height
-        pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
-      }
-      ProgressInfo(branchPoint, toRemove, toApply.headOption, Seq.empty)
-    }
-  }
-
-  private def nonBestBlock(fullBlock: ErgoFullBlock,
-                           newModRow: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
+  private def nonBestBlock: BlockProcessing = { case params =>
     //Orphaned block or full chain is not initialized yet
-    logStatus(Seq(), Seq(), fullBlock, None)
-    historyStorage.insert(storageVersion(newModRow), Seq.empty, Seq(newModRow))
-    ProgressInfo(None, Seq.empty, None, Seq.empty)
+    logStatus(Seq(), Seq(), params.fullBlock, None)
+    historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
+    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
   private def calculateNewModRow(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ErgoPersistentModifier = {
@@ -123,10 +115,10 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
   }
 
-  private def calculateBestFullChain(header: Header) = {
-    val continuations = continuationHeaderChains(header, h => getFullBlock(h).nonEmpty).map(_.tail)
-    val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten.map(_.header))
-    chains.map(c => header +: c).maxBy(c => scoreOf(c.last.id))
+  private def calculateBestFullChain(fb: ErgoFullBlock): Seq[ErgoFullBlock] = {
+    val continuations = continuationHeaderChains(fb.header, h => getFullBlock(h).nonEmpty).map(_.tail)
+    val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten)
+    chains.map(c => fb +: c).maxBy(c => scoreOf(c.last.id))
   }
 
   private def logStatus(toRemove: Seq[ErgoFullBlock],
@@ -145,9 +137,9 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   //Not used so far
-  private def pruneOnNewBestBlock(header: Header): Unit = {
-    heightOf(header.id).filter(h => h > config.blocksToKeep)
-      .foreach(h => pruneBlockDataAt(Seq(h - config.blocksToKeep)))
+  private def pruneOnNewBestBlock(header: Header, blocksToKeep: Int): Unit = {
+    heightOf(header.id).filter(h => h > blocksToKeep)
+      .foreach(h => pruneBlockDataAt(Seq(h - blocksToKeep)))
   }
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
@@ -188,4 +180,17 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     }
   }
 
+}
+
+object FullBlockProcessor {
+
+  type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
+
+  case class ToProcess(
+    fullBlock: ErgoFullBlock,
+    newModRow: ErgoPersistentModifier,
+    newBestAfterThis: Header,
+    blocksToKeep: Int,
+    bestFullChain: Seq[ErgoFullBlock]
+  )
 }

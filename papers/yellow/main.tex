@@ -560,15 +560,16 @@ coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
 \section{Transactions}
 
 
-A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16}$ if block size limit allows that),
-and also creating at least one \coin{}. We use term "destroying", as everything contained in a \coin is going to disappear
-from the state: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin.
+A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16} - 1$ if block size
+limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
+in a \coin{} is disappearing
+from the state during transaction application: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
 
-A \coin{} is made of registers, we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
-and up to 16 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_15$.
-From these registers, some filled with mandatory values: $R_0$ contains monetary value of a \coin, $R_1$ contains
+A \coin{} is made of registers, we allow every \coin{} in the system to have up to 10 registers in the \ecash{} chain,
+and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_15$.
+From these registers, some filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
 serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
 
 Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}.

@@ -88,7 +88,7 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
   }
 
   def getBlockTransactionsByHeaderIdR: Route = (headerId & pathPrefix("transactions") & get) { id =>
-    getFullBlockByHeaderId(id).map(_.map(_.transactions.map(_.asJson).asJson)).okJson()
+    getFullBlockByHeaderId(id).map(_.map(_.blockTransactions.asJson)).okJson()
   }
 
   def candidateBlockR: Route = (path("candidateBlock") & pathEndOrSingleSlash & get) {

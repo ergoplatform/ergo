@@ -1,4 +1,4 @@
-openapi: "3.0.0"
+openapi: "3.0.1"
 
 info:
   version: "0.1"
@@ -23,7 +23,7 @@ components:
         - signature
       properties:
         id:
-          $ref: '#/components/schemas/TransactionId'
+          $ref: '#/components/schemas/TransactionBoxId'
         nonce:
           description: Index of a output in transaction
           type: integer
@@ -37,9 +37,12 @@ components:
     AnyoneCanSpendTransactionOutput:
       type: object
       required:
+        - id
         - value
         - script
       properties:
+        id:
+          $ref: '#/components/schemas/TransactionBoxId'
         value:
           description: Amount of Ergo token
           type: number
@@ -90,7 +93,6 @@ components:
       required:
         - id
         - timestamp
-        - reference
         - version
         - interlinks
         - adProofsRoot
@@ -101,15 +103,13 @@ components:
         - nonce
         - equihashSolutions
         - height
+        - difficulty
+        - parentId
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
         timestamp:
-          type: integer
-          format: int32
-          example: 1501505945003
-        reference:
-          $ref: '#/components/schemas/ModifierId'
+          $ref: '#/components/schemas/Timestamp'
         version:
            type: integer
            format: int32
@@ -146,6 +146,13 @@ components:
           format: int32
           minimum: 0
           example: 667
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 62
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
       type: object
@@ -156,10 +163,7 @@ components:
         headerId:
           $ref: '#/components/schemas/ModifierId'
         transactions:
-          description: Anyone can spend transaction objects
-          type: array
-          items:
-            $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+          $ref: '#/components/schemas/Transactions'
 
     BlockADProofs:
       type: object
@@ -174,6 +178,37 @@ components:
           $ref: '#/components/schemas/SerializedAdProof'
         digest:
           $ref: '#/components/schemas/Digest32'
+
+    CandidateBlock:
+      type: object
+      nullable: true
+      description: Can be null if node is not mining or candidate block is not ready
+      required:
+        - votes
+        - parentId
+      properties:
+        transactionsNumber:
+          type: integer
+          format: int32
+          example: 2
+        votes:
+          $ref: '#/components/schemas/Votes'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        stateRoot:
+          type: string
+          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+        nBits:
+          # todo actually it is unsigned int?
+          type: integer
+          format: int64
+          example: 19857408
+        adProofBytes:
+          $ref: '#/components/schemas/SerializedAdProof'
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          $ref: '#/components/schemas/Transactions'
 
     Peer:
       type: object
@@ -194,71 +229,90 @@ components:
           type: integer
           format: int64
           example: 1514194867
+        connectionType:
+          type: string
+          enum:
+            - Incoming
+            - Outgoing
 
     NodeInfo:
       type: object
       required:
         - name
-        - version
+        - appVersion
         - fullHeight
         - headersHeight
         - bestFullHeaderId
+        - previousFullHeaderId
+        - bestHeaderId
         - stateRoot
         - stateType
         - stateVersion
-        - previousFullHeaderId
         - isMining
         - votes
         - peersCount
         - unconfirmedCount
         - difficulty
+        - currentTime
+        - launchTime
       properties:
         name:
           type: string
           example: my-node-1
-        version:
+        appVersion:
           type: string
           example: 0.0.1
         fullHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         headersHeight:
           type: integer
           format: int32
-          description: Can be 0 if state is empty
+          description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
         bestFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          type: string
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          type: string
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
-          $ref: '#/components/schemas/ModifierId'
+          type: string
+          description: Can be 'null' if no header applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
-          description: Can be 'null' if state is empty
+          nullable: true
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
-        difficulty:
-          type: integer
-          format: int32
-          minimum: 0
-          example: 667
         stateType:
           type: string
           enum:
             - digest
             - utxo
         stateVersion:
+          description: Can be 'null' if no full block is applied since node launch
           type: string
           example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          nullable: true
         isMining:
           type: boolean
           example: true
         votes:
-          type: string
           $ref: '#/components/schemas/Votes'
         peersCount:
           type: integer
@@ -273,11 +327,39 @@ components:
           minimum: 0
           maximum: 10000
           example: 327
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          example: 667
+          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+        currentTime:
+          type: integer
+          description: Current internal node time
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+        launchTime:
+          type: integer
+          description: Time when the node was started
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+
+    TransactionBoxId:
+      description: Base58-encoded transaction box id bytes
+      type: string
+      example: 36fnCvcr1ZWnUjHQ2rHBaA4AvdLDx2y5dhWL4MWnxox1
 
     TransactionId:
       description: Base16-encoded transaction id bytes
       type: string
       example: 141cef0ed1e1cbd3bdf2da2d39fb9a0e697b8777012b169609eb76313506ef66
+
+    Transactions:
+      description: Anyone can spend transaction objects
+      type: array
+      items:
+        $ref: '#/components/schemas/AnyoneCanSpendTransaction'
 
     ModifierId:
       description: Base58-encoded 32 byte modifier id
@@ -308,6 +390,12 @@ components:
       description: Base58-encoded block signature
       type: string
       example: 3b2QWFpkTAP94ydewvRc6CyxRtcc7q6DpvYVFFfGERyy5sjD3pAVHdPCCDXi7XKDZePxHD35nJJroaQWUy6EZcmz
+
+    Timestamp:
+      description: Basic timestamp definition
+      type: integer
+      format: int32
+      example: 1524143059077
 
 paths:
   /blocks:
@@ -529,7 +617,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FullBlock'
+                type: object
+                properties:
+                  isMining:
+                    type: boolean
+                  candidateBlock:
+                    $ref: '#/components/schemas/CandidateBlock'
 
   /blocks/lastHeaders/{count}:
     get:
@@ -587,7 +680,6 @@ paths:
           content:
             application/json:
               schema:
-                description: ID of the new transaction
                 $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
@@ -605,38 +697,6 @@ paths:
                   # Provided box nonce in invalid
                   - invalid.box.nonce
                   - invalid.json
-
-  /transactions/{transactionId}:
-    get:
-      summary: Get the details of a given transaction, its status and the height of block it belongs to
-      operationId: getTransactionById
-      tags:
-        - transactions
-      parameters:
-        - in: path
-          name: transactionId
-          required: true
-          description: ID of a wanted transaction
-          schema:
-            $ref: '#/components/schemas/TransactionId'
-      responses:
-        '200':
-          description: Anyone can spend transactions object
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnyoneCanSpendTransaction'
-        '404':
-          description: Transaction with this id doesn't exist
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                type: string
-                enum:
-                  # Provided transaction ID is invalid
-                  - invalid.transaction.id
 
   /transactions/unconfirmed:
     parameters:
@@ -671,9 +731,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AnyoneCanSpendTransaction'
+                $ref: '#/components/schemas/Transactions'
 
   /peers/all:
     get:
@@ -760,7 +818,7 @@ paths:
         '200':
           description: Base58-encoded 32 byte seed
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
@@ -782,7 +840,7 @@ paths:
         '200':
           description: Base58-encoded N byte seed
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
@@ -796,7 +854,7 @@ paths:
       requestBody:
         required: true
         content:
-          text/plain:
+          application/json:
             schema:
               type: string
               example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
@@ -804,7 +862,7 @@ paths:
         '200':
           description: Base58-encoded 32 byte hash
           content:
-            text/plain:
+            application/json:
               schema:
                 type: string
                 example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ

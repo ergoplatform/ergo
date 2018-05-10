@@ -23,7 +23,7 @@ trait FullProofsProcessor extends ADProofsProcessor with FullBlockProcessor {
             processFullBlock(ErgoFullBlock(header, txs, Some(m)), txsAreNew = false)
           case _ =>
             historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, Seq(m))
-            ProgressInfo(None, Seq.empty, None, Seq.empty)
+            ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
         }
       case _ =>
         throw new Error(s"Header for modifier $m is no defined")

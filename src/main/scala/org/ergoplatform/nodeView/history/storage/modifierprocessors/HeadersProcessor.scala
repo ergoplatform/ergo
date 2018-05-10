@@ -36,7 +36,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   //TODO alternative DDoS protection
   protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
 
-  //Maximum time in future block header main contain
+  //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
@@ -100,7 +100,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
       case Some(bestHeaderId) =>
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (config.verifyTransactions || !(bestHeaderId sameElements h.id)) None else Some(h)
+        val toProcess = if (config.verifyTransactions || !(bestHeaderId sameElements h.id)) Seq.empty else Seq(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")

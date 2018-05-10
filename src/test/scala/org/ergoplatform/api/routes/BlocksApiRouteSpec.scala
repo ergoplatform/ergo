@@ -7,6 +7,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.OptionValues._
 import scorex.core.ModifierId
 import scorex.crypto.encode.Base58
 
@@ -56,8 +57,7 @@ class BlocksApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val res = Map(
         "isMining" -> false.asJson,
-        "votes" -> Algos.encode(Array.empty).asJson,
-        "candidateBlock" -> "None".asJson
+        "candidateBlock" -> None.asJson
       ).asJson
       res.toString shouldEqual responseAs[String]
     }
@@ -94,12 +94,10 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val expected = history
-        .typedModifierById[Header](headerIdBytes)
-        .flatMap(history.getFullBlock)
-        .map(_.transactions.map(_.asJson).asJson)
-        .get
-        .toString
+      val header = history.typedModifierById[Header](headerIdBytes).value
+      val fullBlock = history.getFullBlock(header).value
+      val blockTransactions = fullBlock.blockTransactions
+      val expected = fullBlock.blockTransactions.asJson.toString
       responseAs[String] shouldEqual expected
     }
   }

@@ -9,6 +9,7 @@ import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
+import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -64,10 +65,11 @@ object AnyoneCanSpendTransaction {
           "signature" -> "".asJson
         ).asJson
       }.asJson,
-      "outputs" -> tx.to.map { s =>
+      "outputs" -> tx.newBoxes.toSeq.map { b =>
         Map(
+          "id" -> Base58.encode(b.id).asJson,
           "script" -> "".asJson,
-          "value" -> s.asJson
+          "value" -> b.value.asJson
         ).asJson
       }.asJson
     ).asJson

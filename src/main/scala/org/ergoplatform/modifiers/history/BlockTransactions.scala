@@ -31,7 +31,17 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
 
   override lazy val serializer: Serializer[BlockTransactions] = BlockTransactionsSerializer
 
-  override def toString: String = s"BlockTransactions(${Base58.encode(id)},${Base58.encode(headerId)},$txs)"
+  override def toString: String = {
+    val idStr = Algos.encode(id)
+    val headerIdStr = Algos.encode(headerId)
+    /**
+      * Artificial limit to show only first 10 txs.
+      */
+    val txsStr = txs.take(10).map(_.toString).mkString(",")
+    val txsSuffix = if (txs.length > 10) ", ..." else ""
+
+    s"BlockTransactions(Id:$idStr,HeaderId:$headerIdStr,Txs:$txsStr$txsSuffix)"
+  }
 
   override lazy val transactions: Seq[AnyoneCanSpendTransaction] = txs
 }

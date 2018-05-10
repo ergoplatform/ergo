@@ -20,7 +20,7 @@ trait UTXOSnapshotChunkProcessor {
     //TODO
     val toInsert = ???
     historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, toInsert)
-    ProgressInfo(None, Seq.empty, Some(m), Seq.empty)
+    ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
   }
 
   def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {

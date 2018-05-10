@@ -572,12 +572,24 @@ and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_
 From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
 serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
 
-Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}.
+Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}. The value should
+be evaluated~(i.e. be a constant value).
 
 We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
 from the \coin{} $c$.
 
-A \coin{} has a unique identifier to be defined deterministically from its contents.
+
+\subsection{\Coin{} template}
+
+Here we describe difference between a \coin{} and a \coin{} template. A \coin{} has a unique identifier to be defined
+deterministically from its contents. Thus we need to have different identifiers for \coin{}s of the same meaning, even
+if they are created by the same transaction. We also require a \coin{} to have an identifier which is derived solely
+from \coin{} contents, thus we can not use {\em (transaction\_id, output\_id)} pair as Bitcoin Core implementation is
+doing.
+
+To solve the issue we split concepts of a \coin{} and a \coin{} template. A \coin{} template is defining semantics of
+the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_2$ which is set to
+$null$.
 
 
 \subsection{Transaction Format}
@@ -611,6 +623,7 @@ identifier.
 \subsection{Signing Transactions}
 
 
+\subsection{Unified Transactions}
 
 
 \bibliographystyle{elsarticle-num}

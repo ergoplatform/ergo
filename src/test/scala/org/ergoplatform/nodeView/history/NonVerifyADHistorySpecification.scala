@@ -7,6 +7,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.NoShrink
 import scorex.core.consensus.History.{Equal, HistoryComparisonResult, Unknown, Younger}
 import scorex.crypto.encode.Base58
+import scorex.crypto.hash.Digest32
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
 
@@ -194,13 +195,13 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     val forkDepth = BlocksInChain / 2
     implicit val noShrink = NoShrink[Array[Byte]]
-    forAll(smallInt, genBytesList(5)) { (forkLength: Int, votes: Array[Byte]) =>
+    forAll(smallInt, digest32Gen) { (forkLength: Int, extensionHash: Digest32) =>
       whenever(forkLength > forkDepth) {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
-                                                            defaultDifficultyControl, votes)
+                                                            defaultDifficultyControl, extensionHash)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
         (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty

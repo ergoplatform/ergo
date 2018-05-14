@@ -22,7 +22,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
   private var candidate: CandidateBlock = startCandidate
 
   protected def mineCmd(nonce: Long): Unit =
-    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) { self ! MineBlock(nonce) }
+    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) { self ! MineBlock }
 
 
   override def preStart(): Unit = {
@@ -36,10 +36,12 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
     case newCandidate: CandidateBlock =>
       candidate = newCandidate
 
-    case MineBlock(nonce) =>
-      candidate = candidate.copy(timestamp = timeProvider.time())
-      log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
-      powScheme.proveBlock(candidate, nonce) match {
+    case MineBlock =>
+      // timestamp is increased for at least 1 as a role of a nonce
+      val newTimestamp = Math.max(candidate.timestamp + 1, timeProvider.time())
+      candidate = candidate.copy(timestamp = newTimestamp)
+      log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)}")
+      powScheme.proveBlock(candidate) match {
         case Some(newBlock) =>
           log.info("New block found: " + newBlock)
 
@@ -52,7 +54,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           }
           mineCmd(Random.nextLong())
         case _ =>
-          self ! MineBlock(nonce + 1)
+          self ! MineBlock
       }
   }
 }
@@ -79,5 +81,5 @@ object ErgoMiningThread {
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, startCandidate, timeProvider), name)
 
-  case class MineBlock(nonce: Long)
+  case object MineBlock
 }

@@ -182,12 +182,12 @@ class EquihashSpecification extends PropSpec
 
   private def zcashPerson(n: Int, k: Int): Array[Byte] = "ZcashPoW".getBytes ++ leIntToByteArray(n) ++ leIntToByteArray(k)
 
-  private def createDigest(n: Int, k: Int, I: Array[Byte], nonce: BigInt): Blake2bDigest = {
+  private def createDigest(n: Int, k: Int, I: Array[Byte]): Blake2bDigest = {
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, zcashPerson(n, k))
     digest.update(I, 0, I.length)
-    Equihash.hashNonce(digest, nonce)
+    digest
   }
 
   property("zcashPerson") {
@@ -203,13 +203,13 @@ class EquihashSpecification extends PropSpec
 
   property("createDigest") {
     val out = new Array[Byte](60)
-    createDigest(n, k, "block header".getBytes, BigInt(0)).doFinal(out, 0)
+    createDigest(n, k, "block header".getBytes).doFinal(out, 0)
     out shouldBe Array(30, -25, -102, -25, -110, 4, -19, -79, -95, -21, 73, 95, 107, 122, -65, -15, 121, 126, 113, -91, -112, -41, 89, -97, -110, 42, 73, 127, 89, 55, 112, -56, 21, 117, 80, 39, 66, -103, -36, -93, 21, 24, 76, 23, -91, -44, 36, -128, -73, 123, 65, -57, -39, -52, 38, 81, 74, -61, -31, -41).map(_.toByte)
   }
 
   property("Equihash should solve gbp") {
-    forAll(tasksAndSolutions) { (n: Int, k: Int, I: Array[Byte], nonce: BigInt, correctSolutions: Seq[Seq[Int]]) =>
-      val digest = createDigest(n, k, I, nonce)
+    forAll(tasksAndSolutions) { (n: Int, k: Int, I: Array[Byte], _, correctSolutions: Seq[Seq[Int]]) =>
+      val digest = createDigest(n, k, I)
       implicit val ord = new Ordering[Seq[Int]] {
         override def compare(x: Seq[Int], y: Seq[Int]): Int = {
           val (xx, yy) = x.zip(y).find { case (f, s) => f != s }.getOrElse((0, 0))

@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -30,9 +30,7 @@ class EquihashPowSchemeSpecification extends PropSpec
       SerializedAdProof @@ Array.emptyByteArray,
       Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))),
       1L,
-      Array.emptyByteArray,
-      Long.MinValue,
-      Long.MaxValue
+      Algos.hash(Array.emptyByteArray),
     ).get
 
   property("Miner should generate valid block") {

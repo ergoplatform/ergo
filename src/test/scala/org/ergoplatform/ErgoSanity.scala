@@ -60,8 +60,8 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Array.fill(5)(0.toByte)
-    )
+      Digest32 @@ Array.fill(hashLength)(0.toByte)
+    ).get
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =

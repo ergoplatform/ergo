@@ -29,8 +29,7 @@ case class Header(version: Version,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
-                  votes: Array[Byte],
-                  nonce: Long,
+                  extensionHash: Digest32,
                   equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
@@ -45,7 +44,6 @@ case class Header(version: Version,
     val digest = new SHA256Digest()
     val bytes = HeaderSerializer.bytesWithoutPow(this)
     digest.update(bytes, 0, bytes.length)
-    Equihash.hashNonce(digest, nonce)
     Equihash.hashSolution(digest, equihashSolution)
     val h = new Array[Byte](32)
     digest.doFinal(h, 0)
@@ -97,12 +95,11 @@ object Header {
       "stateRoot" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
-      "nonce" -> h.nonce.asJson,
+      "extensionHash" -> Algos.encode(h.extensionHash).asJson,
       "equihashSolutions" -> h.equihashSolution.asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
-      "votes" -> Algos.encode(h.votes).asJson,
       "version" -> h.version.asJson
     ).asJson
 }
@@ -118,7 +115,7 @@ object HeaderSerializer extends Serializer[Header] {
       h.transactionsRoot,
       h.stateRoot,
       Longs.toByteArray(h.timestamp),
-      h.votes,
+      h.extensionHash,
       RequiredDifficulty.toBytes(h.nBits),
       Ints.toByteArray(h.height))
 
@@ -140,22 +137,22 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def nonceAndSolutionBytes(h: Header): Array[Byte] = {
+  def solutionBytes(h: Header): Array[Byte] = {
     val equihashSolutionsSize = Chars.toByteArray(h.equihashSolution.byteLength.toChar)
     val equihashSolutionsBytes = h.equihashSolution.bytes
 
-    Bytes.concat(Longs.toByteArray(h.nonce), equihashSolutionsSize, equihashSolutionsBytes)
+    Bytes.concat(equihashSolutionsSize, equihashSolutionsBytes)
   }
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
     Bytes.concat(
       bytesWithoutInterlinksAndPow(h),
       Chars.toByteArray(0),
-      nonceAndSolutionBytes(h)
+      solutionBytes(h)
     )
 
   override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutPow(h), nonceAndSolutionBytes(h))
+    Bytes.concat(bytesWithoutPow(h), solutionBytes(h))
 
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
@@ -165,9 +162,9 @@ object HeaderSerializer extends Serializer[Header] {
     val transactionsRoot = Digest32 @@ bytes.slice(65, 97)
     val stateRoot = ADDigest @@ bytes.slice(97, 130)
     val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
-    val votes = bytes.slice(138, 143)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(143, 147)).get
-    val height = Ints.fromByteArray(bytes.slice(147, 151))
+    val extensionHash = Digest32 @@ bytes.slice(138, 160)
+    val nBits = RequiredDifficulty.parseBytes(bytes.slice(160, 164)).get
+    val height = Ints.fromByteArray(bytes.slice(164, 168))
 
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
@@ -179,17 +176,15 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinksSize = Chars.fromByteArray(bytes.slice(151, 153))
-    val interlinks = parseInterlinks(153, 153 + interlinksSize, Seq.empty)
+    val interlinksSize = Chars.fromByteArray(bytes.slice(168, 170))
+    val interlinks = parseInterlinks(170, 170 + interlinksSize, Seq.empty)
 
-    val nonce = Longs.fromByteArray(bytes.slice(153 + interlinksSize, 161 + interlinksSize))
-
-    val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(161 + interlinksSize, 163 + interlinksSize))
-    val equihashSolutionsBytes = bytes.slice(163 + interlinksSize, 163 + interlinksSize + equihashSolutionsBytesSize)
+    val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(170 + interlinksSize, 172 + interlinksSize))
+    val equihashSolutionsBytes = bytes.slice(172 + interlinksSize, 172 + interlinksSize + equihashSolutionsBytesSize)
 
     EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-             nBits, height, votes, nonce, equihashSolution)
+        nBits, height, extensionHash, equihashSolution)
     }
   }.flatten
 }

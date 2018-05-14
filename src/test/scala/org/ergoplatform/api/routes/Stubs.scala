@@ -166,7 +166,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Array.fill(5)(0.toByte)
-    )
+      Digest32 @@ Array.fill(hashLength)(0.toByte)
+    ).get
   }
 }

@@ -154,7 +154,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
+    //TODO real extension should be there
+    val extensionHash = Algos.hash(nodeId)
+
+    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
   }
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders

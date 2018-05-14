@@ -76,15 +76,14 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     stateRoot <- stateRootGen
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
-    nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     equihashSolutions <- Gen.listOfN(EquihashSolution.length, Arbitrary.arbitrary[Int])
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
-    votes <- genBytesList(5)
+    extensionHash <- digest32Gen
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, EquihashSolution(equihashSolutions))
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash,  EquihashSolution(equihashSolutions))
 
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) =
@@ -154,7 +153,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     val time = System.currentTimeMillis()
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, Array.fill(5)(0.toByte))
+      transactions, time, digest32Gen.sample.get).get
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {

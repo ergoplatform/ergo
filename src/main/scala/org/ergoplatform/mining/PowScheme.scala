@@ -19,9 +19,7 @@ trait PowScheme {
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            votes: Array[Byte],
-            startingNonce: Long,
-            finishingNonce: Long
+            extensionHash: Digest32
            ): Option[Header]
 
   def proveBlock(parentOpt: Option[Header],
@@ -30,22 +28,19 @@ trait PowScheme {
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[AnyoneCanSpendTransaction],
                  timestamp: Timestamp,
-                 votes: Array[Byte],
-                 startingNonce: Long,
-                 finishingNonce: Long): Option[ErgoFullBlock] = {
+                 extensionHash: Digest32): Option[ErgoFullBlock] = {
 
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, votes, startingNonce, finishingNonce).map { h =>
+      timestamp, extensionHash).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }
   }
 
-  def proveBlock(candidateBlock: CandidateBlock,
-                 nonce: Long): Option[ErgoFullBlock] = {
+  def proveBlock(candidateBlock: CandidateBlock): Option[ErgoFullBlock] = {
 
     val parentOpt: Option[Header] = candidateBlock.parentOpt
     val nBits: Long = candidateBlock.nBits
@@ -53,12 +48,12 @@ trait PowScheme {
     val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
     val transactions: Seq[AnyoneCanSpendTransaction] = candidateBlock.transactions
     val timestamp: Timestamp = candidateBlock.timestamp
-    val votes: Array[Byte] = candidateBlock.votes
+    val extensionHash: Digest32 = candidateBlock.extensionHash
 
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, votes, nonce, nonce).map { h =>
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionHash).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
     }

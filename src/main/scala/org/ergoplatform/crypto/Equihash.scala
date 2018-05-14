@@ -16,6 +16,13 @@ object Equihash {
     (for (i <- 0 to 7) yield leIntToByteArray((nonce >> 32 * i).intValue())).reduce(_ ++ _)
   }
 
+  // is not used in ergo, implemented to test compatibility with original EquiHash algorithm
+  def hashNonce[T <: Digest](digest: T, nonce: BigInt): T = {
+    val arr = nonceToLeBytes(nonce)
+    digest.update(arr, 0, arr.length)
+    digest
+  }
+
   def hashSolution[T <: Digest](digest: T, solution: EquihashSolution): T = {
     solution.ints map { hashXi(digest, _) }
     digest

@@ -25,6 +25,7 @@ class SerializationTests extends PropSpec
   property("Header serialization") {
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>
+      println(b)
       val recovered = serializer.parseBytes(b.bytes)
       recovered.get shouldBe b
     }

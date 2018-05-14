@@ -119,24 +119,6 @@ class UtxoState(override val version: VersionTag,
     VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data
   }
 
-  /**
-    * Generate proofs for specified transactions if applied to current state
-    *
-    * @param txs - transactions to generate proofs
-    * @return proof for specified transactions and new state digest
-    */
-  def proofsForTransactions(txs: Seq[AnyoneCanSpendTransaction]): Try[(SerializedAdProof, ADDigest)] = {
-    log.debug(s"Going to create proof for ${txs.length} transactions")
-    val rootHash = persistentProver.digest
-    if (txs.isEmpty) {
-      Failure(new Error("Trying to generate proof for empty transaction sequence"))
-    } else if (!storage.version.exists(_.sameElements(rootHash))) {
-      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}"))
-    } else {
-      persistentProver.avlProver.generateProofForOperations(boxChanges(txs).operations.map(ADProofs.changeToMod))
-    }
-  }
-
 }
 
 object UtxoState {

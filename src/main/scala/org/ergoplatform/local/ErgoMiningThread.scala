@@ -6,14 +6,15 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class ErgoMiningThread(ergoSettings: ErgoSettings,
                        viewHolderRef: ActorRef,
-                       startCandidate: CandidateBlock) extends Actor with ScorexLogging {
+                       startCandidate: CandidateBlock,
+                       timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
 
   implicit val ec: ExecutionContext = context.dispatcher
 
@@ -36,6 +37,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       candidate = newCandidate
 
     case MineBlock(nonce) =>
+      candidate = candidate.copy(timestamp = timeProvider.time())
       log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and nonce $nonce")
       powScheme.proveBlock(candidate, nonce) match {
         case Some(newBlock) =>
@@ -58,21 +60,24 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 object ErgoMiningThread {
   def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
-            startCandidate: CandidateBlock): Props =
-    Props(new ErgoMiningThread(ergoSettings, viewHolderRef, startCandidate))
-
-  def apply(ergoSettings: ErgoSettings,
-            viewHolderRef: ActorRef,
-            startCandidate: CandidateBlock)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate))
+            startCandidate: CandidateBlock,
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoMiningThread(ergoSettings, viewHolderRef, startCandidate, timeProvider))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             startCandidate: CandidateBlock,
+            timeProvider: NetworkTimeProvider)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate, timeProvider))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            startCandidate: CandidateBlock,
+            timeProvider: NetworkTimeProvider,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate), name)
+    context.actorOf(props(ergoSettings, viewHolderRef, startCandidate, timeProvider), name)
 
   case class MineBlock(nonce: Long)
 }

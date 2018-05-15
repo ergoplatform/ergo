@@ -32,7 +32,10 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
       mempoolReaderOpt = Some(reader)
 
     case GetReaders =>
-      sender ! Readers(historyReaderOpt, stateReaderOpt, mempoolReaderOpt)
+      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt) match {
+        case (Some(h), Some(s), Some(m)) => sender ! Readers(h, s, m)
+        case _ =>
+      }
 
     case GetDataFromHistory(f) =>
       historyReaderOpt.map(sender ! f(_)).getOrElse(log.warn("Trying to get data from undefined history reader"))
@@ -49,7 +52,7 @@ object ErgoReadersHolder {
 
   case object GetReaders
 
-  case class Readers(h: Option[ErgoHistoryReader], s: Option[ErgoStateReader], m: Option[ErgoMemPoolReader])
+  case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader)
 
 }
 

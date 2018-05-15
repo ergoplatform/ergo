@@ -96,7 +96,7 @@ object Header {
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "extensionHash" -> Algos.encode(h.extensionHash).asJson,
-      "equihashSolutions" -> h.equihashSolution.asJson,
+      "equihashSolutions" -> Algos.encode(h.equihashSolution.bytes).asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,

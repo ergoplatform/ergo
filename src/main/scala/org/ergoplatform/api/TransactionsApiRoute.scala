@@ -27,10 +27,10 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   override val settings: RESTApiSettings = restApiSettings
 
-  private def getMemPool: Future[Option[ErgoMemPoolReader]] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
+  private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
-  private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map {
-    _.map {_.take(limit).toSeq }.map(_.map(_.asJson).asJson).getOrElse(Json.Null)
+  private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map { p =>
+    p.take(limit).toSeq.map(_.asJson).asJson
   }
 
   def sendTransactionR: Route = (post & entity(as[TransactionView])) { proto =>

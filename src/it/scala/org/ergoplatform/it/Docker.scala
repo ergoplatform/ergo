@@ -79,8 +79,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val containerConfig: ContainerConfig = buildContainerConfig(nodeConfig, ip, restApiPort, networkPort)
     val containerId = Try {
       client.createContainer(containerConfig, configuredNodeName + "-" + hashString)
-    }.recoverWith { case e: ImageNotFoundException =>
-      Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it."))
+    }.recoverWith {
+      case e: ImageNotFoundException =>
+        Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it."))
+      case e => Failure(e)
     }.get.id()
 
     val attachedNetwork = connectToNetwork(containerId, ip)

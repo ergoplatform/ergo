@@ -11,6 +11,7 @@ import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
 import com.google.common.primitives.Ints
 import com.spotify.docker.client.DockerClient.RemoveContainerParam
+import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
@@ -24,8 +25,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future, blocking}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-
-import scala.util.Random
+import scala.util.{Failure, Random, Try}
 import scala.util.control.NonFatal
 
 class Docker(suiteConfig: Config = ConfigFactory.empty,
@@ -77,7 +77,11 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
 
     val containerConfig: ContainerConfig = buildContainerConfig(nodeConfig, ip, restApiPort, networkPort)
-    val containerId = client.createContainer(containerConfig, configuredNodeName + "-" + hashString).id()
+    val containerId = Try {
+      client.createContainer(containerConfig, configuredNodeName + "-" + hashString)
+    }.recoverWith { case e: ImageNotFoundException =>
+      Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it."))
+    }.get.id()
 
     val attachedNetwork = connectToNetwork(containerId, ip)
     client.startContainer(containerId)

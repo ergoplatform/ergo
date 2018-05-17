@@ -4,10 +4,10 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
+import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.settings.Algos
-import org.scalatest.{FlatSpec, Matchers}
 import org.scalatest.OptionValues._
+import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.ModifierId
 import scorex.crypto.encode.Base58
 

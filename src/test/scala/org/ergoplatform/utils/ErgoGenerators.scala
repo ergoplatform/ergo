@@ -21,7 +21,7 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 
 import scala.annotation.tailrec
-import scala.util.Random
+import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
@@ -98,10 +98,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
              selfBoxes: Seq[AnyoneCanSpendNoncedBox],
              acc: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = {
       if (txRemain > 1) {
-        val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(rnd.nextInt(stateBoxes.size))
-        val newBoxes = consumedBoxesFromState.map(_.value).toIndexedSeq
-        val tx = new AnyoneCanSpendTransaction(consumedBoxesFromState.map(_.nonce).toIndexedSeq, newBoxes)
-        loop(txRemain - 1, remainedBoxes, selfBoxes ++ tx.newBoxes, tx +: acc)
+        val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size)).getOrElse(0))
+        val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size)).getOrElse(0))
+        val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.nonce).toIndexedSeq
+        val outputs = (consumedSelfBoxes ++  consumedBoxesFromState).map(_.value).toIndexedSeq
+        val tx = new AnyoneCanSpendTransaction(inputs, outputs)
+        loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.newBoxes, tx +: acc)
       } else {
         // take all remaining boxes from state and return transactions set
         val newBoxes = stateBoxes.map(_.value).toIndexedSeq

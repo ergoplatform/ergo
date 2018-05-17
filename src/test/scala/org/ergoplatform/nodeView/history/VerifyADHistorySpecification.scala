@@ -1,11 +1,10 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.StateType
-import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.{Absent, Invalid, Unknown, Valid}
+import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random

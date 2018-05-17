@@ -6,6 +6,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.Version
+import org.ergoplatform.api.InfoRoute
 import org.ergoplatform.local.ErgoStatsCollector.NodeInfo
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.settings.Algos

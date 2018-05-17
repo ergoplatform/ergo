@@ -1,7 +1,7 @@
 package org.ergoplatform.bench
 
 import akka.actor.{ActorRef, Props}
-import org.ergoplatform.api.routes.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
+import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.bench.misc.CrawlerConfig
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
 import org.ergoplatform.modifiers.ErgoPersistentModifier

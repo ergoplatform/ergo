@@ -81,7 +81,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       client.createContainer(containerConfig, configuredNodeName + "-" + hashString)
     }.recoverWith {
       case e: ImageNotFoundException =>
-        Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it."))
+        Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it.", e))
       case e => Failure(e)
     }.get.id()
 

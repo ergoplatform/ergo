@@ -11,6 +11,7 @@ import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
 import com.google.common.primitives.Ints
 import com.spotify.docker.client.DockerClient.{ListContainersParam, ListNetworksParam, RemoveContainerParam}
+import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
@@ -76,14 +77,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
 
     val containerConfig: ContainerConfig = buildContainerConfig(nodeConfig, ip, restApiPort, networkPort)
+    val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
     val containerId = Try {
-      client.createContainer(containerConfig, configuredNodeName + "-" + hashString)
+      client.createContainer(containerConfig, containerName)
     }.recoverWith {
       case e: ImageNotFoundException =>
         Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it.", e))
     }.get.id()
-    val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
-    val containerId = client.createContainer(containerConfig, containerName).id()
 
     val attachedNetwork = connectToNetwork(containerId, ip)
     client.startContainer(containerId)

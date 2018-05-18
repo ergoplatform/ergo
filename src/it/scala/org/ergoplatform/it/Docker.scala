@@ -10,9 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
 import com.google.common.primitives.Ints
-import com.spotify.docker.client.DockerClient.RemoveContainerParam
-import com.spotify.docker.client.exceptions.ImageNotFoundException
-import com.spotify.docker.client.DockerClient.{ListContainersParam, RemoveContainerParam}
+import com.spotify.docker.client.DockerClient.{ListContainersParam, ListNetworksParam, RemoveContainerParam}
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
@@ -305,11 +303,13 @@ object Docker {
 
   def cleanUpResources(): Unit = {
     val client = DefaultDockerClient.fromEnv().build()
-    val slashNetworkNamePrefix = "/" + networkNamePrefix
+    // remove containers
     client.listContainers(ListContainersParam.allContainers()).asScala
-      .filter(_.names.asScala.head.startsWith(slashNetworkNamePrefix))
-      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill()))
-
-    // todo remove networks
+      .filter(_.names.asScala.head.startsWith("/" + networkNamePrefix))
+      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill))
+    // removes networks
+    client.listNetworks(ListNetworksParam.customNetworks).asScala
+      .filter(_.name().startsWith(networkNamePrefix))
+      .foreach(n => client.removeNetwork(n.id))
   }
 }

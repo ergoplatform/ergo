@@ -4,7 +4,7 @@ import java.io.FileOutputStream
 import java.net.InetAddress
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.{Collections, Properties, List => JList, Map => JMap}
+import java.util.{Collections, Properties, UUID, List => JList, Map => JMap}
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
@@ -49,12 +49,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     close()
   }
 
-  private def hashString: String = this.##.toLong.toHexString
+  private def uuidShort: String = UUID.randomUUID().hashCode().toHexString
 
-  private val networkName = "inner-" + hashString
+  private val networkName = "ergo-itest-" + uuidShort
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
-  private val innerNetwork: Network =  createNetwork(3)
+  private val innerNetwork: Network = createNetwork(3)
 
   def startNodes(nodeConfigs: Seq[Config]): Seq[Node] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
@@ -83,6 +83,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       case e: ImageNotFoundException =>
         Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it.", e))
     }.get.id()
+    val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
+    val containerId = client.createContainer(containerConfig, containerName).id()
 
     val attachedNetwork = connectToNetwork(containerId, ip)
     client.startContainer(containerId)
@@ -91,12 +93,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val ports = containerInfo.networkSettings().ports()
 
     val nodeInfo = NodeInfo(
-      extractHostPort(ports, restApiPort),
-      extractHostPort(ports, networkPort),
-      networkPort,
-      containerInfo.networkSettings().ipAddress(),
-      attachedNetwork.ipAddress(),
-      containerId)
+      hostRestApiPort = extractHostPort(ports, restApiPort),
+      hostNetworkPort = extractHostPort(ports, networkPort),
+      containerNetworkPort = networkPort,
+      apiIpAddress = containerInfo.networkSettings().ipAddress(),
+      networkIpAddress = attachedNetwork.ipAddress(),
+      containerId = containerId)
 
     log.info(s"Started node: $nodeInfo")
     val node = new Node(settings, nodeInfo, http)

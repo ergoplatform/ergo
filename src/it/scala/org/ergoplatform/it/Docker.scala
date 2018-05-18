@@ -12,6 +12,7 @@ import com.google.common.collect.ImmutableMap
 import com.google.common.primitives.Ints
 import com.spotify.docker.client.DockerClient.RemoveContainerParam
 import com.spotify.docker.client.exceptions.ImageNotFoundException
+import com.spotify.docker.client.DockerClient.{ListContainersParam, RemoveContainerParam}
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
@@ -51,7 +52,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   private def uuidShort: String = UUID.randomUUID().hashCode().toHexString
 
-  private val networkName = "ergo-itest-" + uuidShort
+  private val networkName = Docker.networkNamePrefix + uuidShort
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
@@ -299,4 +300,16 @@ object Docker {
 
   val DefaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
   val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf")
+
+  val networkNamePrefix: String = "ergo-itest-"
+
+  def cleanUpResources(): Unit = {
+    val client = DefaultDockerClient.fromEnv().build()
+    val slashNetworkNamePrefix = "/" + networkNamePrefix
+    client.listContainers(ListContainersParam.allContainers()).asScala
+      .filter(_.names.asScala.head.startsWith(slashNetworkNamePrefix))
+      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill()))
+
+    // todo remove networks
+  }
 }

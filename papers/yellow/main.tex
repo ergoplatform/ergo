@@ -607,6 +607,19 @@ to preserve overall monetary value:
 
 $ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{i=0}^{c_o - 1}$ \extract{out(tx,i), R_0}
 
+\subsection{Transaction Merkle Tree}
+
+Like a miner in the Bitcoin protocol is building a Merkle tree of block transactions, as well as a Merkle tree of
+transaction witnesses~(after the Segwit upgrade), in Ergo, a miner should build a Merkle tree~(and include a correct
+ root hash of the tree into a block header), which is in case of Ergo combines both transactions and their respective
+ spending proofs.
+
+This tree is to be constructed as follows. A data block under a leaf of the tree could be 1-byte or 64 bytes in length.
+A block of 64 bytes contains identifier of the transaction(256-bits digest of transaction bytes without spending proofs)
+and 256 bits of a digest of all the spending proofs combined. A leaf of 1 bytes means that it contains
+$null$~(so does not contain any transaction).
+
+
 \subsection{Transaction Identifier and Its Malleability}
 
 A transaction has a unique identifier to be defined deterministically from its contents.

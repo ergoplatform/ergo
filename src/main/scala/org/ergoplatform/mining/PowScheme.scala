@@ -69,7 +69,7 @@ trait PowScheme {
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
 
-    val version = 0: Byte
+    val version = Header.CurrentVersion
 
     val parentId: ModifierId = ModifierId @@ parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 

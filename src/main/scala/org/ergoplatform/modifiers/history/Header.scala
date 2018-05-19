@@ -82,6 +82,9 @@ case class Header(version: Version,
 }
 
 object Header {
+
+  val CurrentVersion: Byte = 1
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
   lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
@@ -103,7 +106,6 @@ object Header {
       "version" -> h.version.asJson
     ).asJson
 }
-
 
 object HeaderSerializer extends Serializer[Header] {
 
@@ -157,6 +159,7 @@ object HeaderSerializer extends Serializer[Header] {
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
+    // TODO check version here?
     val parentId = ModifierId @@ bytes.slice(1, 33)
     val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
     val transactionsRoot = Digest32 @@ bytes.slice(65, 97)

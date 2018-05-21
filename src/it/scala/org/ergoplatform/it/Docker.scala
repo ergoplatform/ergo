@@ -18,6 +18,7 @@ import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import org.asynchttpclient.Dsl._
 import org.ergoplatform.settings.ErgoSettings
+import org.slf4j.LoggerFactory
 import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
@@ -302,6 +303,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 }
 
 object Docker {
+  private val log = LoggerFactory.getLogger(classOf[Docker])
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
@@ -318,8 +320,29 @@ object Docker {
     m.get(s"$containerPort/tcp").get(0).hostPort().toInt
 
   val DefaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
-  val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf")
+  val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
 
   val networkNamePrefix: String = "ergo-itest-"
+
+  def cleanupResources(): Unit = {
+    log.debug("Cleaning up Docker resources")
+    val client = DefaultDockerClient.fromEnv().build()
+    // remove containers
+    client.listContainers(ListContainersParam.allContainers()).asScala
+      .filter(_.names.asScala.head.startsWith("/" + networkNamePrefix))
+      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill))
+    // removes networks
+    client.listNetworks(ListNetworksParam.customNetworks).asScala
+      .filter(_.name().startsWith(networkNamePrefix))
+      .foreach(n => client.removeNetwork(n.id))
+  }
+
+  def cleanupResourcesIfNeeded(): Unit =
+    Try { Docker.NodeConfigs.getBoolean("testing.integration.cleanupDocker") }
+      .map { shouldCleanup =>
+        if (shouldCleanup) {
+          Docker.cleanupResources()
+        }
+      }
 
 }

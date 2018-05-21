@@ -622,9 +622,11 @@ This tree is to be constructed as follows. A data block under a leaf of the tree
 Data of 64 bytes contains identifier of the transaction~(256-bits digest of transaction bytes without spending proofs)
 and 256 bits of a digest of all the spending proofs for the transaction combined. Data for $i-th$ transaction
 in the block~(starting from 0) is authenticated by the $i-th$ leaf.
-A leaf is $hash((pos +1) || data)$, if the $data$ is not empty
-~(we do add $pos + 1$ prefix for domain separation), or $null$ otherwise. For internal nodes, a node is
-$hash(0 || left\_child || right\_child)$, if either left child or right child of the node is not $null$, $null$ othewise.
+A leaf is $hash(0 || pos || data)$, if the $data$ is not empty
+~(we do add prefix for domain separation), or $null$ otherwise. Here, $pos$ is a position of the transaction in the block.
+ For internal nodes, a node is $hash(1 || left\_child || right\_child)$, if either left child or right child of the
+ node is not $null$, $null$ othewise. If root hash is $null$, we are writing all zeros~(of hash function output length)
+ instead of it.
 
 
 \subsection{Transaction Identifier and Its Malleability}

@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWP
 import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History._
-import scorex.core.consensus.{Unknown => _, _}
+import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
@@ -279,13 +279,13 @@ trait ErgoHistoryReader
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.data.headOption.contains(1.toByte) => Valid
-      case Some(b) if b.data.headOption.contains(0.toByte) => Invalid
-      case None if contains(modifierId) => scorex.core.consensus.Unknown
-      case None => Absent
+      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
+      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case None if contains(modifierId) => ModifierSemanticValidity.Unknown
+      case None => ModifierSemanticValidity.Absent
       case m =>
         log.error(s"Incorrect validity status: $m")
-        Absent
+        ModifierSemanticValidity.Absent
     }
   }
 }

@@ -1,4 +1,4 @@
-package org.ergoplatform.api.routes
+package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route

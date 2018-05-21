@@ -566,8 +566,9 @@ in a \coin{} is disappearing
 from the state during transaction application: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
+\label{coin-format}
 
-A \coin{} is made of registers, we allow every \coin{} in the system to have up to 10 registers in the \ecash{} chain,
+A \coin{} is made of registers, we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
 From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
 serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
@@ -580,6 +581,7 @@ from the \coin{} $c$.
 
 
 \subsection{\Coin{} template}
+\label{coin-template}
 
 Here we describe difference between a \coin{} and a \coin{} template. A \coin{} has a unique identifier to be defined
 deterministically from its contents. Thus we need to have different identifiers for \coin{}s of the same meaning, even
@@ -593,6 +595,7 @@ $null$.
 
 
 \subsection{Transaction Format}
+\label{tx-format}
 
 A transaction simply refers to a set of \coin{}s, by providing their identifiers and also authorization proofs for
 them; the transaction also providing set of new \coin{} templates. A \coin{} template becomes a \coin{} in result of
@@ -608,22 +611,26 @@ to preserve overall monetary value:
 $ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{i=0}^{c_o - 1}$ \extract{out(tx,i), R_0}
 
 \subsection{Transaction Merkle Tree}
+\label{tx-tree}
 
 Like a miner in the Bitcoin protocol is building a Merkle tree of block transactions, as well as a Merkle tree of
 transaction witnesses~(after the Segwit upgrade), in Ergo, a miner should build a Merkle tree~(and include a correct
  root hash of the tree into a block header), which is in case of Ergo combines both transactions and their respective
  spending proofs.
 
-This tree is to be constructed as follows. A data block under a leaf of the tree could be 1-byte or 64 bytes in length.
-A block of 64 bytes contains identifier of the transaction(256-bits digest of transaction bytes without spending proofs)
-and 256 bits of a digest of all the spending proofs combined. A leaf of 1 bytes means that it contains
-$null$~(so does not contain any transaction).
+This tree is to be constructed as follows. A data block under a leaf of the tree could be empty or 64 bytes in length.
+Data of 64 bytes contains identifier of the transaction~(256-bits digest of transaction bytes without spending proofs)
+and 256 bits of a digest of all the spending proofs for the transaction combined. Data for $i-th$ transaction
+in the block~(starting from 0) is authenticated by the $i-th$ leaf.
+A leaf is $hash((pos +1) || data)$, if the $data$ is not empty
+~(we do add $pos + 1$ prefix for domain separation), or $null$ otherwise. For internal nodes, a node is
+$hash(0 || left\_child || right\_child)$, if either left child or right child of the node is not $null$, $null$ othewise.
 
 
 \subsection{Transaction Identifier and Its Malleability}
+\label{tx-identifier}
 
 A transaction has a unique identifier to be defined deterministically from its contents.
-
 
 There are different ways to produce semantically the same transaction with different identifiers. We are interesting
 to prevent {\em unauthorized malleability}. We define unauthorized malleability as a way to change transaction

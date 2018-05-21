@@ -45,25 +45,30 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   private var seedAddress = Option.empty[String]
   private val isStopped = new AtomicBoolean(false)
 
-  sys.addShutdownHook {
-    close()
-  }
+  // This should be called after client is ready but before network created.
+  // This allows resource cleanup for the network if we are running out of them
+  initBeforeStart()
 
   private def uuidShort: String = UUID.randomUUID().hashCode().toHexString
-
   private val networkName = Docker.networkNamePrefix + uuidShort
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
 
+  def initBeforeStart(): Unit = {
+    cleanupDanglingIfNeeded()
+    sys.addShutdownHook {
+      close()
+    }
+  }
+
   def startNodes(nodeConfigs: Seq[Config]): Future[Seq[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
     val tryNodes: Seq[Try[Node]] = nodeConfigs.map(startNode)
-    val futureNodes = tryNodes.map(Future.fromTry(_))
     log.debug("Waiting for nodes to start")
-    blocking(Thread.sleep(futureNodes.size * 5000))
-    futureNodes map { futureNode =>
-      futureNode.map(_.status).flatMap(_ => futureNode)
+    blocking(Thread.sleep(tryNodes.size * 5000))
+    val futureNodes = tryNodes map { tryNode =>
+      Future.fromTry(tryNode.map(node => node.waitForStartup)).flatten
     }
     Future.sequence(futureNodes)
   }
@@ -249,8 +254,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
       nodes.keys.foreach(id => client.removeContainer(id, RemoveContainerParam.forceKill()))
       client.removeNetwork(innerNetwork.id())
-
-      cleanupDanglingIfNeeded()
       client.close()
     }
   }

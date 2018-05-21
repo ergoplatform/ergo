@@ -115,6 +115,7 @@ dockerfile in docker := {
 
   new Dockerfile {
     from("anapsix/alpine-java:8_server-jre")
+    label("ergo", "ergo")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configTemplate, startErgo), "/opt/ergo/")
     run("chmod", "+x", "/opt/ergo/start-ergo.sh")

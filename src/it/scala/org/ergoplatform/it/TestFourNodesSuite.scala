@@ -17,8 +17,7 @@ class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with ScorexLogg
   )
 
   private val docker: Docker = {
-    log.debug("Cleaning up Docker resources")
-    Docker.cleanUpResources()
+    Docker.cleanupResourcesIfNeeded()
     Docker(getClass)
   }
   private val nodesCount = 4

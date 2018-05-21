@@ -97,7 +97,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
         networkIpAddress = attachedNetwork.ipAddress(),
         containerId = containerId)
 
-      log.info(s"Started node: $nodeInfo with miningDelay: ${settings.nodeSettings.miningDelay}")
+      log.info(s"Started node: $nodeInfo")
       val node = new Node(settings, nodeInfo, http)
 
       if (seedAddress.isEmpty) {
@@ -250,7 +250,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       nodes.keys.foreach(id => client.removeContainer(id, RemoveContainerParam.forceKill()))
       client.removeNetwork(innerNetwork.id())
 
-      cleanUpDanglingResources()
+      cleanupDanglingIfNeeded()
       client.close()
     }
   }
@@ -284,6 +284,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId, node.nodeInfo.networkIpAddress)
 
   def cleanUpDanglingResources(): Unit = {
+    log.debug("Cleaning up Docker resources")
 
     // remove containers
     client.listContainers(ListContainersParam.allContainers()).asScala
@@ -295,10 +296,19 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .filter(_.name().startsWith(networkNamePrefix))
       .foreach(n => client.removeNetwork(n.id))
 
+
     //remove images
     client.listImages(ListImagesParam.danglingImages()).asScala
       .filter(img => Option(img.labels()).exists(_.containsKey("ergo")))
       .foreach(img => client.removeImage(img.id()))
+  }
+
+  def cleanupDanglingIfNeeded(): Unit = {
+    import net.ceedubs.ficus.Ficus._
+    val shouldCleanup = Docker.NodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
+    if (shouldCleanup) {
+      cleanUpDanglingResources()
+    }
   }
 }
 
@@ -323,26 +333,5 @@ object Docker {
   val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
 
   val networkNamePrefix: String = "ergo-itest-"
-
-  def cleanupResources(): Unit = {
-    log.debug("Cleaning up Docker resources")
-    val client = DefaultDockerClient.fromEnv().build()
-    // remove containers
-    client.listContainers(ListContainersParam.allContainers()).asScala
-      .filter(_.names.asScala.head.startsWith("/" + networkNamePrefix))
-      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill))
-    // removes networks
-    client.listNetworks(ListNetworksParam.customNetworks).asScala
-      .filter(_.name().startsWith(networkNamePrefix))
-      .foreach(n => client.removeNetwork(n.id))
-  }
-
-  def cleanupResourcesIfNeeded(): Unit =
-    Try { Docker.NodeConfigs.getBoolean("testing.integration.cleanupDocker") }
-      .map { shouldCleanup =>
-        if (shouldCleanup) {
-          Docker.cleanupResources()
-        }
-      }
 
 }

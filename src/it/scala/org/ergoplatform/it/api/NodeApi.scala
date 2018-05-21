@@ -89,6 +89,8 @@ trait NodeApi {
 
   def waitForHeight(expectedHeight: Int): Future[Int] = waitFor[Int](_.height, h => h >= expectedHeight, 1.second)
 
+  def waitForStartup: Future[this.type] = get("/info").map(_ => this)
+
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 
   def headerIdsByHeight(h: Int): Future[Seq[String]] = get(s"/blocks/at/$h").map(j => ergoJsonAnswerAs[Seq[String]](j.getResponseBody))

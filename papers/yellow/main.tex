@@ -97,13 +97,12 @@
 \newcommand{\sse}{\textbf{Space-Scarce Economy}}
 \newcommand{\popow}{\textbf{PoPoW}}
 \newcommand{\ads}{\textbf{ADS}}
-\newcommand{\ssal}{\textbf{$\Sigma$SAL}}
 
 % as we do not know which term to use for a state element, we use a command for this
 \newcommand{\coin}{coin}
 \newcommand{\Coin}{Coin}
 
-\newcommand{\sigma}{sigma}
+\newcommand{\sigm}{sigma}
 
 \newcommand{\extract}[1]{$extract({#1})$}
 
@@ -577,7 +576,7 @@ From these registers, some are filled with mandatory values: $R_0$ contains mone
 serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
 the coin in the transaction.
 
-Each register is an expression in \sigma language. Thus the registers are typed: every register contains a value of
+Each register is an expression in \sigm language. Thus the registers are typed: every register contains a value of
 some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
 
 We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
@@ -590,17 +589,17 @@ are to be formed as follows:
     \item{\em monetary value. } We use 64 bits long {\em signed} integer value to store monetary value of the \coin{}
     (we use the signed integer to make processing easier on platforms with no unsigned integers, such as JVM platform).
     This value to be represented as register R0 by wrapping it as a constant of integer type.
-    \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to sigma language expressions
+    \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
     \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.
     \item{\em additional registers. } Extra registers are serialized without any delimiters. Each register is
-    serialized as a \sigma expression.
+    serialized as a \sigm expression.
     \item{\em transaction identifier and index of a transaction output. } Identifier of a transaction which created
     the \coin{}, 32-bytes long, as well as index of the \coin in the transaction outputs, 2-bytes long. These values
-    are to be concatenated into a single array of 34 bytes and wrapped into \sigma language constant stored in the
+    are to be concatenated into a single array of 34 bytes and wrapped into \sigm language constant stored in the
     register $R2$.
 \end{itemize}
 
@@ -680,10 +679,42 @@ as follows. We concatenate the following fields:
     \ref{coin-format} for details).
     \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
     transaction can not create more than 65,536 \coin{}s).
-    \item{\em transaction outputs.}
+    \item{\em transaction outputs.} In this section we store serialized \coin{} templates, with no delimiters. A \coin{}
+    template is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
+    identifier and index of the \coin{} in transaction outputs).
 \end{itemize}
 
-\subsection{Signing Transactions}
+Denoting the binary serialization procedure for a transaction $tx$ explained above as $bytes(tx)$, we can derive
+transaction identifier $ident(tx)$ from it as:
+    $$ident(tx) = hash(bytes(tx))$$
+
+\subsection{Signing A Transaction}
+
+To spend a \coin{} a spending transaction $tx$ has as an input, one needs to use $bytes(tx)$~(note that different inputs
+can be signed in parallel, however, the coins being spent are to be specified before signing), as well as current state
+of the blockchain, or $context$. To avoid any I/O operations, this context is small. In details, it consists of current
+height, last block's state root digest, and the spending transaction along with \coin{}s it spends. The signer also can
+extend the context by putting values there.
+
+By having this data, a signer~(or a prover) of an input first reduces the guarding proposition for the input \coin{} by
+evaluating, it using the context. Possible results of the reduction are:
+
+\begin{itemize}
+    \item{abort} if estimated upper-bound cost of evaluation~(and verification) is too high.
+    \item{true} means that the \coin{} is spendable by anyone
+    \item{false} means that the \coin{} is not spendable at all~(at least according to the current context)
+    \item{expression still containing predicates over the context. } That means context is not enough to evaluate
+    some predicates over it. Prover can look into its own not revealed yet secrets in order to extend context. If the
+    secrets are found, prover is reducing the expression further and doing the next step, if there is nothing more to
+    evaluate. Otherwise the prover aborts.
+    \item{expression containing only expressions over secret information provable via $\Sigma$-protocols. } This is the
+    most common case, and we are going to explain it in details further.
+\end{itemize}
+
+
+
+\subsection{Verifying A Transaction}
+
 
 
 \subsection{Unified Transactions}

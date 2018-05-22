@@ -645,6 +645,20 @@ malleability, which is common for most popular digital signature schemes.
 To prevent unauthorized transaction malleability, we do not put spending proofs under hash function when we calculate a
 transaction identifier.
 
+In details, we are constructing bytes to get the transaction identifier~(and in the follow-up section, also a signature)
+as follows. We concatenate the following fields:
+
+\begin{itemize}
+    \item{\em number of inputs.} Unsigned 2-bytes integer giving a number of \coin{}s the transaction is spending. Thus
+    the transaction can not spend more than 65536 \coin{}s.
+    \item{\em input identifiers.} Given the number $c_{ins}$ of \coin{}s to spend from the previous field, we form
+    $32 * c_{ins}$ bytes, where $i$-th chunk of 32 bytes represents an identifier of $i$-th \coin{} to spend~(see Section
+    \ref{coin-format} for details).
+    \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
+    transaction can not create more than 65,536 \coin{}s).
+    \item{\em transaction outputs.}
+\end{itemize}
+
 \subsection{Signing Transactions}
 
 

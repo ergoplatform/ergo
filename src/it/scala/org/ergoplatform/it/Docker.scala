@@ -16,9 +16,9 @@ import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
+import net.ceedubs.ficus.Ficus._
 import org.asynchttpclient.Dsl._
 import org.ergoplatform.settings.ErgoSettings
-import org.slf4j.LoggerFactory
 import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
@@ -67,7 +67,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val tryNodes: Seq[Try[Node]] = nodeConfigs.map(startNode)
     log.debug("Waiting for nodes to start")
     blocking(Thread.sleep(tryNodes.size * 5000))
-    val futureNodes = tryNodes map { tryNode =>
+    val futureNodes: Seq[Future[Node]] = tryNodes map { tryNode =>
       Future.fromTry(tryNode.map(node => node.waitForStartup)).flatten
     }
     Future.sequence(futureNodes)
@@ -112,14 +112,25 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       node
     } recoverWith {
       case e: ImageNotFoundException =>
-        Failure(new Exception(s"Error: docker image is missing ($e)\nRun 'sbt it:test' to generate it.", e))
+        Failure(new Exception(s"Error: docker image is missing. Run 'sbt it:test' to generate it.", e))
     }
   }
+
+  private def asProperties(config: Config): Properties = {
+    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
+    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
+  }
+
+  private def renderProperties(props: Properties): String =
+    props.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
+
+  private def extractHostPort(portBindingMap: JMap[String, JList[PortBinding]], containerPort: Int): Int =
+    portBindingMap.get(s"$containerPort/tcp").get(0).hostPort().toInt
 
   private def buildErgoSettings(nodeConfig: Config) = {
     val actualConfig = nodeConfig
       .withFallback(suiteConfig)
-      .withFallback(DefaultConfigTemplate)
+      .withFallback(defaultConfigTemplate)
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
@@ -299,16 +310,14 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .filter(_.name().startsWith(networkNamePrefix))
       .foreach(n => client.removeNetwork(n.id))
 
-
     //remove images
     client.listImages(ListImagesParam.danglingImages()).asScala
-      .filter(img => Option(img.labels()).exists(_.containsKey("ergo")))
+      .filter(img => Option(img.labels()).exists(_.containsKey(dockerImageLabel)))
       .foreach(img => client.removeImage(img.id()))
   }
 
   def cleanupDanglingIfNeeded(): Unit = {
-    import net.ceedubs.ficus.Ficus._
-    val shouldCleanup = Docker.NodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
+    val shouldCleanup = nodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
     if (shouldCleanup) {
       cleanUpDanglingResources()
     }
@@ -316,25 +325,16 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 }
 
 object Docker {
-  private val log = LoggerFactory.getLogger(classOf[Docker])
+
+  val dockerImageLabel = "ergo-integration-tests"
+  val networkNamePrefix: String = "ergo-itest-"
+
+  val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
+  val nodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
+
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
   def apply(owner: Class[_]): Docker = new Docker(tag = owner.getSimpleName)
-
-  private def asProperties(config: Config): Properties = {
-    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
-    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
-  }
-
-  private def renderProperties(p: Properties) = p.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
-
-  private def extractHostPort(m: JMap[String, JList[PortBinding]], containerPort: Int) =
-    m.get(s"$containerPort/tcp").get(0).hostPort().toInt
-
-  val DefaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
-  val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
-
-  val networkNamePrefix: String = "ergo-itest-"
 
 }

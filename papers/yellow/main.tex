@@ -103,6 +103,8 @@
 \newcommand{\coin}{coin}
 \newcommand{\Coin}{Coin}
 
+\newcommand{\sigma}{sigma}
+
 \newcommand{\extract}[1]{$extract({#1})$}
 
 \usepackage[utf8]{inputenc}
@@ -575,11 +577,33 @@ From these registers, some are filled with mandatory values: $R_0$ contains mone
 serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
 the coin in the transaction.
 
-Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}. The value should
-be evaluated~(i.e. be a constant value).
+Each register is an expression in \sigma language. Thus the registers are typed: every register contains a value of
+some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
 
 We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
 from the \coin{} $c$.
+
+\Coin{} bytes to be used to get the \coin{} identifier, build authenticated tree for the state, and build a transaction,
+are to be formed as follows:
+
+\begin{itemize}
+    \item{\em monetary value. } We use 64 bits long {\em signed} integer value to store monetary value of the \coin{}
+    (we use the signed integer to make processing easier on platforms with no unsigned integers, such as JVM platform).
+    This value to be represented as register R0 by wrapping it as a constant of integer type.
+    \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to sigma language expressions
+    serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
+    bytes.
+    \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
+    represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
+    zero, next field is missed.
+    \item{\em additional registers. } Extra registers are serialized without any delimiters. Each register is
+    serialized as a \sigma expression.
+    \item{\em transaction identifier and index of a transaction output. } Identifier of a transaction which created
+    the \coin{}, 32-bytes long, as well as index of the \coin in the transaction outputs, 2-bytes long. These values
+    are to be concatenated into a single array of 34 bytes and wrapped into \sigma language constant stored in the
+    register $R2$.
+\end{itemize}
+
 
 
 \subsection{\Coin{} template}

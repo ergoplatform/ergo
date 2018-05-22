@@ -563,15 +563,17 @@ coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
 A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16} - 1$ if block size
 limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
 in a \coin{} is disappearing
-from the state during transaction application: monetary value, guard script, contents of all the registers, all the bytes and identifier of the \coin{}.
+from the state during transaction application: monetary value, guard script, contents of all the registers,
+all the bytes and also an identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
 \label{coin-format}
 
-A \coin{} is made of registers, we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
+A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
 From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
-serialized guard script, $R_2$ contains unique identifier of transaction and also an index.
+serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
+the coin in the transaction.
 
 Registers are typed: every register contains a value of some type. Types are defined in \knote{ref}. The value should
 be evaluated~(i.e. be a constant value).
@@ -597,9 +599,10 @@ $null$.
 \subsection{Transaction Format}
 \label{tx-format}
 
-A transaction simply refers to a set of \coin{}s, by providing their identifiers and also authorization proofs for
+A transaction simply refers to a set of \coin{}s, by providing their identifiers and also spending proofs for
 them; the transaction also providing set of new \coin{} templates. A \coin{} template becomes a \coin{} in result of
-transaction processing.
+transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
+coin is also known before the application).
 
 We now introduce two functions to extract a \coin{} or a \coin{} template which a transaction is trying to spend.
  In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
@@ -608,7 +611,7 @@ We now introduce two functions to extract a \coin{} or a \coin{} template which 
 We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
 to preserve overall monetary value:
 
-$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{i=0}^{c_o - 1}$ \extract{out(tx,i), R_0}
+$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{j=0}^{c_o - 1}$ \extract{out(tx,j), R_0}
 
 \subsection{Transaction Merkle Tree}
 \label{tx-tree}
@@ -639,8 +642,8 @@ to prevent {\em unauthorized malleability}. We define unauthorized malleability 
 identifier without re-signing the transaction. One particular way to malleate a transaction is to use signature
 malleability, which is common for most popular digital signature schemes.
 
-To prevent transaction malleability, we do not put spending proofs under hash function when we calculate a transaction
-identifier.
+To prevent unauthorized transaction malleability, we do not put spending proofs under hash function when we calculate a
+transaction identifier.
 
 \subsection{Signing Transactions}
 

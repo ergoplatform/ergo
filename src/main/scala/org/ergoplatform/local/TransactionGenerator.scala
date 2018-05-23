@@ -12,7 +12,6 @@ import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.utils.ScorexLogging
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -25,7 +24,7 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
   override def receive: Receive = {
     case StartGeneration =>
       if (!isStarted) {
-        context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)
+        context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
 
     case FetchBoxes =>

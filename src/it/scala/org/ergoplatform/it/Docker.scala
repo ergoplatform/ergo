@@ -23,7 +23,7 @@ import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.{Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}

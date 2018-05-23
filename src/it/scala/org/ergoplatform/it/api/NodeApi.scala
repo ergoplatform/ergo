@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
 import scorex.core.utils.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration._
 

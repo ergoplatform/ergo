@@ -11,7 +11,7 @@ import org.ergoplatform.mining.Listener._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{FlatSpecLike, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.settings.ScorexSettings
@@ -21,7 +21,7 @@ import scorex.testkit.utils.FileUtils
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matchers with ErgoGenerators with FileUtils {
+class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTestHelpers {
 
   val defaultAwaitDuration: FiniteDuration = 5.seconds
   implicit val timeout: Timeout = Timeout(defaultAwaitDuration)

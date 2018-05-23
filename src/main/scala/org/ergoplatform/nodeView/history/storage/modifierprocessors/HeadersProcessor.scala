@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.ErgoApp
+import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
@@ -13,12 +13,13 @@ import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.{Invalid, ModifierSemanticValidity}
+import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexLogging
+import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
   * Contains all functions required by History to process Headers.
@@ -205,10 +206,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
   }
 
   /** Validates given header
-    *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header)
+  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
 
@@ -297,63 +297,66 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     }
   }
 
-  class HeaderValidator {
-
-    type ValidationResult = Try[Unit]
+  class HeaderValidator extends ModifierValidator {
 
     def validate(header: Header): ValidationResult = {
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
       } else {
-        validateChildBlockHeader(header)
-      }
-    }
-
-    private def validateGenesisBlockHeader(header: Header): ValidationResult = {
-      if (!(header.parentId sameElements Header.GenesisParentId)) {
-        fatal(s"Genesis block should have genesis parent id ${Algos.encode(Header.GenesisParentId)}." +
-          s"Found: ${Algos.encode(header.parentId)}")
-      } else if (bestHeaderIdOpt.nonEmpty) {
-        fatal("Trying to append genesis block to non-empty history")
-      } else if (header.height != GenesisHeight) {
-        fatal(s"Height of genesis block $header is incorrect")
-      } else {
-        success
-      }
-    }
-
-    private def validateChildBlockHeader(header: Header): ValidationResult = {
-      val parentOpt = typedModifierById[Header](header.parentId)
-      parentOpt.fold(error(s"Parent header with id ${Algos.encode(header.parentId)} not defined")) { parent =>
-        if (header.timestamp - timeProvider.time() > MaxTimeDrift) {
-          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
-        } else if (header.timestamp <= parent.timestamp) {
-          fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
-        } else if (header.height != parent.height + 1) {
-          fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height + 1}")
-        } else if (historyStorage.contains(header.id)) {
-          fatal("Header is already in history")
-        } else if (realDifficulty(header) < header.requiredDifficulty) {
-          fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
-        } else if (header.requiredDifficulty != requiredDifficultyAfter(parent)) {
-          fatal(s"Incorrect difficulty: ${header.requiredDifficulty} != ${requiredDifficultyAfter(parent)}")
-        } else if (!heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
-          fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
-        } else if (!powScheme.verify(header)) {
-          fatal(s"Wrong proof-of-work solution for $header")
-        } else if (isSemanticallyValid(header.parentId) == Invalid) {
-          fatal("Parent header is marked as semantically invalid")
-        } else {
-          success
+        val parentOpt = typedModifierById[Header](header.parentId)
+        parentOpt map { parent =>
+          validateChildBlockHeader(header, parent)
+        } getOrElse {
+          fatal(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
         }
       }
     }
 
-    def fatal(message: String): ValidationResult = Failure(MalformedModifierError(message))
+    private def validateGenesisBlockHeader(header: Header): ValidationResult = {
+      accumulateErrors
+        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
+          fatal(s"Genesis block should have genesis parent id. $detail")
+        }
+        .validate(bestHeaderIdOpt.isEmpty) {
+          fatal("Trying to append genesis block to non-empty history")
+        }
+        .validate(header.height == GenesisHeight) {
+          fatal(s"Height of genesis block $header is incorrect")
+        }
+        .result
+    }
 
-    def error(message: String): ValidationResult = Failure(RecoverableModifierError(message))
+    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult = {
+      failFast
+        .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
+          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
+        }
+        .validate(header.timestamp > parent.timestamp) {
+          fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
+        }
+        .validate(header.height == parent.height + 1) {
+          fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height}")
+        }
+        .validateNot(historyStorage.contains(header.id)) {
+          fatal("Header is already in history")
+        }
+        .validate(realDifficulty(header) >= header.requiredDifficulty) {
+          fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
+        }
+        .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
+          fatal(s"Incorrect required difficulty. $detail")
+        }
+        .validate(heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
+          fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
+        }
+        .validate(powScheme.verify(header)) {
+          fatal(s"Wrong proof-of-work solution for $header")
+        }
+        .validateSemantics(isSemanticallyValid(header.parentId)) {
+          fatal("Parent header is marked as semantically invalid")
+        }
+        .result
+    }
 
-    def success: ValidationResult = Success(())
   }
-
 }

@@ -3,13 +3,13 @@ package org.ergoplatform.modifiers.mempool
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Encoder
 import io.circe.syntax._
+import org.ergoplatform.api.TransactionView
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction._
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -55,24 +55,8 @@ object AnyoneCanSpendTransaction {
 
   def nonceFromDigest(digest: Array[Byte]): Nonce = Longs.fromByteArray(digest.take(8))
 
-  implicit val jsonEncoder: Encoder[AnyoneCanSpendTransaction] = (tx: AnyoneCanSpendTransaction) =>
-    Map(
-      "id" -> tx.encodedId.asJson,
-      "inputs" -> (tx.from zip tx.boxIdsToOpen).map { case (nonce, id) =>
-        Map(
-          "id" -> Algos.encode(id).asJson,
-          "nonce" -> nonce.asJson,
-          "signature" -> "".asJson
-        ).asJson
-      }.asJson,
-      "outputs" -> tx.newBoxes.toSeq.map { b =>
-        Map(
-          "id" -> Base58.encode(b.id).asJson,
-          "script" -> "".asJson,
-          "value" -> b.value.asJson
-        ).asJson
-      }.asJson
-    ).asJson
+  implicit val jsonEncoder: Encoder[AnyoneCanSpendTransaction] = TransactionView(_).asJson
+
 }
 
 object AnyoneCanSpendTransactionSerializer extends Serializer[AnyoneCanSpendTransaction] {

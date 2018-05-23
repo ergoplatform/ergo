@@ -3,6 +3,7 @@ language: scala
 sudo: false
 branches:
   only:
+    - testnet1
     - master
     - /^\d\.\d+$/
 jdk:

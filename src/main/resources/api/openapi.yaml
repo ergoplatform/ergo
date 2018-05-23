@@ -18,7 +18,6 @@ components:
     AnyoneCanSpendTransactionInput:
       type: object
       required:
-        - id
         - nonce
         - signature
       properties:
@@ -27,7 +26,7 @@ components:
         nonce:
           description: Index of a output in transaction
           type: integer
-          format: int32
+          format: int64
           minimum: 0
           example: 667
         signature:
@@ -37,7 +36,6 @@ components:
     AnyoneCanSpendTransactionOutput:
       type: object
       required:
-        - id
         - value
         - script
       properties:
@@ -45,9 +43,10 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         value:
           description: Amount of Ergo token
-          type: number
+          type: integer
+          format: int64
           minimum: 0
-          example: 14.7
+          example: 147
         script:
           description: The script which should be successfully executed for the waste of this output
           type: string
@@ -56,7 +55,6 @@ components:
       type: object
       description: Transaction without any lockers and unlockers
       required:
-        - id
         - inputs
         - outputs
       properties:
@@ -99,8 +97,7 @@ components:
         - stateRoot
         - transactionsRoot
         - nBits
-        - votes
-        - nonce
+        - extensionHash
         - equihashSolutions
         - height
         - difficulty
@@ -131,12 +128,8 @@ components:
           type: integer
           format: int64
           example: 19857408
-        votes:
-          $ref: '#/components/schemas/Votes'
-        nonce:
-          type: integer
-          format: int32
-          example: 324573
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
         equihashSolutions:
           description: Base58-encoded equihash solutions
           type: string
@@ -184,15 +177,15 @@ components:
       nullable: true
       description: Can be null if node is not mining or candidate block is not ready
       required:
-        - votes
+        - extensionHash
         - parentId
       properties:
         transactionsNumber:
           type: integer
           format: int32
           example: 2
-        votes:
-          $ref: '#/components/schemas/Votes'
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
         timestamp:
           $ref: '#/components/schemas/Timestamp'
         stateRoot:
@@ -249,7 +242,6 @@ components:
         - stateType
         - stateVersion
         - isMining
-        - votes
         - peersCount
         - unconfirmedCount
         - difficulty
@@ -312,8 +304,6 @@ components:
         isMining:
           type: boolean
           example: true
-        votes:
-          $ref: '#/components/schemas/Votes'
         peersCount:
           type: integer
           description: Number of connected peers
@@ -380,11 +370,6 @@ components:
       description: Base58-encoded ad proofs
       type: string
       example: DpvhNdDszrCDm1qmwFXmxaiz4bgEG19dGVhBaYsofV93BwmFofbnFQ7kNwnDSvptb1NGBmi6GtrFyacj8hBWNueRHVCyctAJE2sSoNxVQiSJEqRaa5NFp3DACG16RPvDDgbG8qZ1kNdfZhK9S6q77LwYhPbzYL2s2x7uzScQdccw4HR68mogEgBXomAXuisJyy4indYfCdEZmFHPELn9Md9F4SGu9BpAKYMUjEwkRKt7Ype8M6MHKFuxiVCTTq2fLC8FVUeSJLDM7BVaZtLctaeuZ3LR3sx1tog7daXTAjsXWYZXvqUVs1qynXvJZnFuAN5wLoynnN7YVahHRGQk9sUQaxtPbt7L5qzBzooXedE9LFssvU9zV3KNM2PkbpaHdAu7tJHWoTNyCzZuR2JqSfnpSDkXhZCQhRB7m7vbGzokZ7DcGwtNUxBr7HdEdEUQLRmpHbLqjL82zZuYvykUyPZwCnphaKku7RW3f3BDk3DReCeFBPZkYkoEJFHe9mCAAM5WD44vtTeNokuMrtUbvUgnUFpBnyJsQf7WHAiFsBbRjZwjgoyUYKJCSLSqp3QwoGW5sSXmGvwG9peFFB3yb6gGdDLJqTx2zTqh3znPpK9S5ePGPdCcmbnNKh1pxqnARhDB8xC7eG6Edvhwh7Nx1sSDHXo8xp3hWUdFT4APK16Wr8KNa4xEKuh9mkb31AQhCuD8GsyRaW9oGdJKtZnwrYeBWGrDQ9c99PG2yyA7JzDcvdALdH7Z7T4pd57KFn4VTdJrT6tqwJPh3wERgQFUUEQ2grpxBg8ZMZy1YEzLu1MnJJVvvx66efK1GPytK4n1hKs3pogMW2Fxi5zbLean7k9Fj6VGcbFKGbJPqzhTr3TW6ywNsBmh7ntSmrV3k45RxWb4KWJByiy25xkQg57qyij71F2vzZgTs3kRVVMS4asE8r3qLiA4w8QKfay7JWC9XVuRJQwMPPeVNRfJP7kK1giZhZahzbCFKLcuP6ShzxBzZmTzhRGuF3HtsbtWawv21czEANc6cV6ymyrics3jtMizGwwAcUcasToNuBih34HhspF65HnR5gKZqqHwkbugeDCpDYieAQzwTLzd52ocdJp98dvHU1SWAGdKaeqhF75FiijZebKb3mQiPMTFj2PMwSTjttarPwpEdEwRLxGPezvCUdq7rJAoZJbszaCBnTDjHjqsv5UiyLXr7gM9uyzMX9GMwTnrWYrEwYAD2Yih4b9mvtMdDeZ1mfJsT9r47xLPqgyxbd232U8pu28JbUrrfpZ2mZARTsXzYsuFQusnbzCo72PWNUvceTXh5f5TFhMbmCydcrfCyM3JFV2FrxwNKFKdFvdppAGXGKwhk5cB4
-
-    Votes:
-      description: Base58-encoded votes array
-      type: string
-      example: AcRpicD
 
     BlockSignature:
       description: Base58-encoded block signature

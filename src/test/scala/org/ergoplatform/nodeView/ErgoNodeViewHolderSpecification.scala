@@ -23,6 +23,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.core.ModifierId
 import scorex.testkit.utils.FileUtils
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
@@ -33,6 +34,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
   with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
 
   case class NodeViewHolderConfig(stateType: StateType, verifyTransactions: Boolean, popowBootstrap: Boolean) {
     override def toString: String = {

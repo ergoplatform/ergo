@@ -22,6 +22,7 @@ import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
+import scala.concurrent.ExecutionContext.Implicits.global
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI, HT]
@@ -60,8 +61,8 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI,
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Array.fill(5)(0.toByte)
-    )
+      Digest32 @@ Array.fill(hashLength)(0.toByte)
+    ).get
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =

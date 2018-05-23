@@ -32,7 +32,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
-    implicit val ec: ExecutionContext = system.dispatcher
+    implicit val ec: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
 
     val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
@@ -64,7 +64,6 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
       val result = await((minerRef ? MiningStatusRequest).mapTo[MiningStatusResponse])
       result.isMining shouldBe true
       result.candidateBlock shouldBe defined
-      result.candidateBlock.get.votes.sameElements(nodeId) shouldBe true
       val height = result.candidateBlock.get.parentOpt.get.height
       val blocksGenerated = await((listener ? Status).mapTo[Int])
       blocksGenerated should be > 1

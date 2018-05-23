@@ -6,22 +6,19 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Constants, ErgoSettings}
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
 
 import scala.concurrent.duration._
 import scala.util.Random
-import scala.concurrent.ExecutionContext.Implicits.global
 
-trait ChainGenerator {
+trait ChainGenerator extends ErgoTestHelpers {
 
   val powScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
-  val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
@@ -81,9 +78,10 @@ trait ChainGenerator {
 
   protected def blockStream(prefix: Option[ErgoFullBlock]): Stream[ErgoFullBlock] = {
     def txs(i: Long) = Seq(AnyoneCanSpendTransaction(IndexedSeq(i), IndexedSeq(1L)))
+
     lazy val blocks: Stream[ErgoFullBlock] =
       nextBlock(prefix, txs(1)) #::
-      blocks.zip(Stream.from(2)).map({case (prev, i) => nextBlock(Option(prev), txs(i))})
+        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i)) })
     prefix ++: blocks
   }
 

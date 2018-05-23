@@ -22,6 +22,7 @@ import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
+import scala.concurrent.ExecutionContext.Implicits.global
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI, HT]

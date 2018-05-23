@@ -20,11 +20,12 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 
-import scala.util.Random
+import scala.annotation.tailrec
+import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
-  lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
+  lazy val smallPositiveInt         : Gen[Int]                         = Gen.choose(1, 5)
   lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
@@ -91,19 +92,29 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder, rnd: Random): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
-    val num = 10
-
-    val spentBoxesCounts = (1 to num).map(_ => rnd.nextInt(10) + 1)
-
-    val (boxes, bs) = boxHolder.take(spentBoxesCounts.sum)
-
-    val (_, txs) = spentBoxesCounts.foldLeft((boxes, Seq[AnyoneCanSpendTransaction]())) { case ((bxs, ts), fromBoxes) =>
-      val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
-      val newBoxes = bxsFrom.map(_.value)
-      val tx = new AnyoneCanSpendTransaction(bxsFrom.map(_.nonce).toIndexedSeq, newBoxes.toIndexedSeq)
-      (remainder, tx +: ts)
+    @tailrec
+    def loop(txRemain: Int,
+             stateBoxes: Seq[AnyoneCanSpendNoncedBox],
+             selfBoxes: Seq[AnyoneCanSpendNoncedBox],
+             acc: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = {
+      if (txRemain > 1) {
+        val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size)).getOrElse(0))
+        val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size)).getOrElse(0))
+        val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.nonce).toIndexedSeq
+        val outputs = (consumedSelfBoxes ++  consumedBoxesFromState).map(_.value).toIndexedSeq
+        val tx = new AnyoneCanSpendTransaction(inputs, outputs)
+        loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.newBoxes, tx +: acc)
+      } else {
+        // take all remaining boxes from state and return transactions set
+        val newBoxes = stateBoxes.map(_.value).toIndexedSeq
+        val tx = new AnyoneCanSpendTransaction(stateBoxes.map(_.nonce).toIndexedSeq, newBoxes)
+        tx +: acc
+      }
     }
-    txs -> bs
+
+    val (boxes, bs) = boxHolder.take(rnd.nextInt(100) + 1)
+    val txCount = rnd.nextInt(10) + 1
+    loop(txCount, boxes, Seq.empty, Seq.empty) -> bs
   }
 
 

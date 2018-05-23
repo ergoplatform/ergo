@@ -55,13 +55,15 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("checkTransactions()") {
+  property("applyTransactions()") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
-      val boxIds = txs.flatMap(_.boxIdsToOpen)
-      boxIds.foreach(id => bh.get(ByteArrayWrapper(id)) should not be None)
+      val created = txs.flatMap(_.newBoxes.map(_.id)).map(ByteArrayWrapper.apply)
+      val boxIds = txs.flatMap(_.boxIdsToOpen).map(ByteArrayWrapper.apply)
       boxIds.distinct.size shouldBe boxIds.size
+      val toRemove = boxIds.filterNot(id => created.contains(id))
+      toRemove.foreach(id => bh.get(id) should not be None)
 
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)

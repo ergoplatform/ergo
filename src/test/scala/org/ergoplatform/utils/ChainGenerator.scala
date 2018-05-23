@@ -14,6 +14,7 @@ import scorex.crypto.hash._
 
 import scala.concurrent.duration._
 import scala.util.Random
+import scala.concurrent.ExecutionContext.Implicits.global
 
 trait ChainGenerator {
 
@@ -109,7 +110,8 @@ trait ChainGenerator {
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
     blocks.foldLeft(historyIn) { (history, block) =>
-      val historyWithTxs = history.append(block.header).get._1.append(block.blockTransactions).get._1
+      val historyWithBlockHeader = history.append(block.header).get._1
+      val historyWithTxs = historyWithBlockHeader.append(block.blockTransactions).get._1
         .ensuring(_.contains(block.blockTransactions.id))
       block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
     }

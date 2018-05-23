@@ -28,14 +28,15 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  ignore should "not freeze while generating candidate block with large amount of txs" in {
+  it should "not freeze while generating candidate block with large amount of txs" in {
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
-    implicit val ec: ExecutionContext = system.dispatcher
+    implicit val ec: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
 
     val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
+      miningDelay = defaultAwaitDuration,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)

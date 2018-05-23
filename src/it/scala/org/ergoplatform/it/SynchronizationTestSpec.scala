@@ -7,7 +7,7 @@ import scorex.core.utils.ScorexLogging
 import scala.concurrent.Await.result
 import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 
 class SynchronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
   with Matchers with ScorexLogging {

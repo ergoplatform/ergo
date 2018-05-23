@@ -11,19 +11,16 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.core.transaction.state.MinimalState
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
-
-import scala.concurrent.ExecutionContext.Implicits.global
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[P, TX, PM, SI, HT]

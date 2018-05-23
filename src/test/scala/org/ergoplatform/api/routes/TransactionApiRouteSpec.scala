@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
+import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings

@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
@@ -22,18 +22,20 @@ class EquihashPowSchemeSpecification extends PropSpec
   val powScheme = new EquihashPowScheme(nDefault, kDefault)
 
   @SuppressWarnings(Array("TryGet"))
-  private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = powScheme
-    .proveBlock(
-      None,
-      RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
-      ADDigest @@ Array.fill(33)(0: Byte),
-      SerializedAdProof @@ Array.emptyByteArray,
-      Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))),
-      1L,
-      Array.emptyByteArray,
-      Long.MinValue,
-      Long.MaxValue
-    ).get
+  private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = {
+    def loop(ts: Long): ErgoFullBlock = {
+      powScheme.proveBlock(
+        None,
+        RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
+        ADDigest @@ Array.fill(33)(0: Byte),
+        SerializedAdProof @@ Array.emptyByteArray,
+        Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))),
+        ts,
+        Algos.hash(Array.emptyByteArray)
+      ).getOrElse(loop(ts + 1))
+    }
+    loop(0)
+  }
 
   property("Miner should generate valid block") {
     val h = createValidBlock().header

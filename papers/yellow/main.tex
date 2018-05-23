@@ -123,8 +123,8 @@ mode, which is similar to Bitcoin fullnode, Ergo reference implementation suppor
 
 \subsection{Full-Node Mode}
 Like in Bitcoin, a full node is storing all the full blocks since genesis block. Full node checks proofs of work, linking structure correctness (parent block id, interlink elements), and all the transactions in all the blocks. A fullnode is storing all the full blocks forever. It is also holding full UTXO set to be able to validate an arbitrary transaction.
-The only optimization a fullnode is doing is that is is skipping downloading and checking AD-transformation block part (see below in the "Light-Fullnode" section).
-For the full node regime, modifiers precessing workflow is as follows:
+The only optimization a fullnode is doing is that is skipping downloading and checking AD-transformation block part (see below in the "Light-Fullnode" section).
+For the full node regime, modifiers processing workflow is as follows:
 \begin{enumerate}
    \item Send ErgoSyncInfo message to connected peers.
    \item Get response with INV message, containing ids of blocks, better than our best block.
@@ -165,7 +165,7 @@ if(history.apply(header).isSuccess) {
      and generate ADProofs for them.
      TODO requires different interface from scorex-core,
      because it should return ADProofs
-     TODO when mininal state apply Progress info,
+     TODO when minimal state apply Progress info,
      it may also create UTXOSnapshot
      (e.g. every 30000 blocks like in Ethereum).
      This UTXOSnapshot should be required for mining by Rollerchain*/
@@ -235,7 +235,7 @@ History.headersStartingFromId(State.headerId).foreach { header =>
 \end{enumerate}
 
 \subsection{Light Full-Node Mode}
-This mode is based on an idea to use a 2-party authenticated dynamic dictionary built on top of UTXO set. A light-fullnode holds only a root digest of a dictionary. It check all the full blocks, or some suffix of the full blockchain, depending on setting, thus starting from a trusted pre-genesis digest or some digest in the blockchain. A light-fullnode is using AD-transformations (authenticated dictionary transformations) block section containing batch-proof for UTXO transformations to get a new digest from an old one. It also checks all the transactions, but doesn’t store anything but a single digest for that. Details can be found in the paper https://eprint.iacr.org/2016/994. \par
+This mode is based on an idea to use a 2-party authenticated dynamic dictionary built on top of UTXO set. A light-fullnode holds only a root digest of a dictionary. It checks all the full blocks, or some suffix of the full blockchain, depending on setting, thus starting from a trusted pre-genesis digest or some digest in the blockchain. A light-fullnode is using AD-transformations (authenticated dictionary transformations) block section containing batch-proof for UTXO transformations to get a new digest from an old one. It also checks all the transactions, but doesn’t store anything but a single digest for that. Details can be found in the paper https://eprint.iacr.org/2016/994. \par
 Additional settings : "depth" - from which block in the past to check transactions (if 0, then go from genesis). \par
 "additional-checks" - light-fullnode trusts previous digest and checks current digest validity by using the previous one as well as AD-transformations. \par
 "additional-depth" - depth to start additional checks from.
@@ -283,7 +283,7 @@ Light-SPV mode is intended to be useful for mobile phones and low-end hardware.
 \subsubsection{Bootstrap}
 \begin{enumerate}
 \item Send GetPoPoWProof for all connections.
-\item On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better, than it's current best header chain).
+\item On receive PoPoWProof apply it to History (History should be able to determine, whether this PoPoWProof is better than it's current best header chain).
 \item GOTO regular regime.
 \end{enumerate}
 \subsubsection{Regular}
@@ -462,7 +462,7 @@ or "BlocksToKeep + N" blocks back?
 /*Just update State rootshash to best header in history*/
     State.setBestHeader(History.bestHeader)
   } else {
-/*we have headers chain better then full block */        
+/*we have headers chain better than full block */
     3.1. 
       assert(history contains header chain from State.bestHeader to History.bestHeaders)
       History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 

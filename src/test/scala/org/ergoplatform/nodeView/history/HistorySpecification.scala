@@ -63,8 +63,6 @@ trait HistorySpecification extends PropSpec
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
       nodeSettings, scorexSettings)
 
-    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
-
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
 }

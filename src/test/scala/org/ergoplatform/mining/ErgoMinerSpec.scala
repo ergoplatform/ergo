@@ -43,7 +43,6 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
     val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
     val networkSettings = ergoSettings.scorexSettings.network.copy(knownPeers = Seq.empty)
     val settings: ScorexSettings = ergoSettings.scorexSettings.copy(network = networkSettings)
-    val timeProvider = new NetworkTimeProvider(settings.ntp)
 
     val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 

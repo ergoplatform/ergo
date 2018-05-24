@@ -168,7 +168,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     //sending header
     nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
@@ -196,7 +196,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -256,7 +256,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     import fixture._
     val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
 
-    fixture.subscribeEvents(classOf[FailedTransaction[_, _]])
+    subscribeEvents(classOf[FailedTransaction[_, _]])
     nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
     expectNoMsg()
     nodeViewRef ! poolSize(nodeViewConfig)

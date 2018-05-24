@@ -297,7 +297,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId, node.nodeInfo.networkIpAddress)
 
-  def cleanUpDanglingResources(): Unit = {
+  def cleanupDanglingResources(): Unit = {
     log.debug("Cleaning up Docker resources")
 
     // remove containers
@@ -319,7 +319,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def cleanupDanglingIfNeeded(): Unit = {
     val shouldCleanup = nodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
     if (shouldCleanup) {
-      cleanUpDanglingResources()
+      cleanupDanglingResources()
     }
   }
 }

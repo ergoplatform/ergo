@@ -20,7 +20,7 @@
     <logger name="io.swagger" level="OFF"/>
 
     <root level="DEBUG">
-        <appender-ref ref="${ergo.it.logging.appender:-STDOUT}"/>
-        <appender-ref ref="FILE"/> <!-- temporary added, to be replaced with setting -Dergo.it.logging.appender=FILE -->
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
     </root>
 </configuration>

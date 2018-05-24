@@ -1,9 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -30,23 +29,23 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
 
     case FetchBoxes =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool,
-        Seq[AnyoneCanSpendTransaction]] { v =>
+        Seq[ErgoTransaction]] { v =>
         if (v.pool.size < settings.keepPoolSize) {
           (0 until settings.keepPoolSize - v.pool.size).map { _ =>
             val txBoxes = (1 to Random.nextInt(10) + 1).flatMap(_ => v.state.randomBox())
             val txInputs = txBoxes.map(_.nonce)
             val values = txBoxes.map(_.value)
             val txOutputs = if (values.head % 2 == 0) IndexedSeq.fill(2)(values.head / 2) ++ values.tail else values
-            AnyoneCanSpendTransaction(txInputs, txOutputs)
+            ErgoTransaction(txInputs, txOutputs)
           }
         } else {
           Seq.empty
         }
       }
 
-    case txs: Seq[AnyoneCanSpendTransaction] =>
+    case txs: Seq[ErgoTransaction] =>
       txs.foreach { tx =>
-        viewHolder ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+        viewHolder ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, ErgoTransaction](tx)
       }
 
     case StopGeneration =>

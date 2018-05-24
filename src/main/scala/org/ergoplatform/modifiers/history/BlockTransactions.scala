@@ -3,8 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
@@ -16,9 +15,9 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction])
+case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, ErgoTransaction]
   with ModifierWithDigest {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
@@ -43,7 +42,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
     s"BlockTransactions(Id:$idStr,HeaderId:$headerIdStr,Txs:$txsStr$txsSuffix)"
   }
 
-  override lazy val transactions: Seq[AnyoneCanSpendTransaction] = txs
+  override lazy val transactions: Seq[ErgoTransaction] = txs
 }
 
 object BlockTransactions {
@@ -61,20 +60,20 @@ object BlockTransactions {
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
   override def toBytes(obj: BlockTransactions): Array[Byte] = {
     val txsBytes = concatBytes(obj.txs.map{tx =>
-      assert(tx.bytes.length.toShort % 8 == 0)
-      Bytes.concat(Shorts.toByteArray(tx.bytes.length.toShort), tx.bytes)})
+      val txBytes = ErgoTransaction.serializer.toBytes(tx)
+      Bytes.concat(Shorts.toByteArray(txBytes.length.toShort), txBytes)}) //todo: short is wrong
     Bytes.concat(obj.headerId, txsBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[BlockTransactions] = Try {
     val headerId: ModifierId = ModifierId @@ bytes.slice(0, Constants.ModifierIdSize)
 
-    def parseTransactions(index: Int, acc: Seq[AnyoneCanSpendTransaction]): BlockTransactions = {
+    def parseTransactions(index: Int, acc: Seq[ErgoTransaction]): BlockTransactions = {
       if (index == bytes.length) {
         BlockTransactions(headerId, acc)
       } else {
         val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2)).ensuring(_ % 8 == 0)
-        val tx = AnyoneCanSpendTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
+        val tx = ErgoTransaction.serializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f
         }

@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+/*
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -13,6 +14,7 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
+
 
 /**
   * Transaction without any lockers and unlockers
@@ -91,3 +93,4 @@ object AnyoneCanSpendTransactionSerializer extends Serializer[AnyoneCanSpendTran
     AnyoneCanSpendTransaction(from, to)
   }
 }
+*/

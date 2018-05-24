@@ -1,8 +1,8 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
@@ -53,7 +53,7 @@ class FakePowScheme(levelOpt: Option[Int]) extends PowScheme {
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
-                 transactions: Seq[AnyoneCanSpendTransaction],
+                 transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  votes: Array[Byte]): ErgoFullBlock = {
     proveBlock(parentOpt, nBits, stateRoot, adProofBytes, transactions, timestamp, votes, start, finish).get

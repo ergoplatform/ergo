@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool.proposition
 
+/*
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.box.proposition.ProofOfKnowledgeProposition
 
@@ -21,5 +22,5 @@ object AnyoneCanSpendPropositionSerializer extends Serializer[AnyoneCanSpendProp
     case b if b sameElements ByteValue => Success(AnyoneCanSpendProposition)
     case l => Failure(new Error(s"Incorrect proposition ${l.headOption}"))
   }
-}
+} */
 

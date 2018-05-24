@@ -1,11 +1,9 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.{ErgoApp, ErgoTransaction}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
@@ -21,7 +19,7 @@ import scala.util.Try
 
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings, timeProvider: NetworkTimeProvider)
-  extends NodeViewHolder[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier] {
+  extends NodeViewHolder[AnyoneCanSpendProposition.type, ErgoTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
 
@@ -35,7 +33,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
-      Transaction.ModifierTypeId -> AnyoneCanSpendTransactionSerializer)
+      Transaction.ModifierTypeId -> ErgoTransaction.serializer)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -45,7 +43,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
-    history().closeStorage
+    history().closeStorage()
     minimalState().closeStorage
   }
 

@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
-import org.ergoplatform.api.{TransactionInputView, TransactionOutputView, TransactionView}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 object TransactionValidator extends ModifierValidator {

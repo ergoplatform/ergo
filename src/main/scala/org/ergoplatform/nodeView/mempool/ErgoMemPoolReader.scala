@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool._
 import scorex.core.ModifierId
 import scorex.core.transaction.MempoolReader
@@ -10,9 +10,9 @@ import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Success
 
-trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
+trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-  val unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction]
+  val unconfirmed: TrieMap[TxKey, ErgoTransaction]
 
   /**
     * Map stores current state of waiting for query building
@@ -23,19 +23,19 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
 
   protected def key(id: ModifierId): TxKey = new mutable.WrappedArray.ofByte(id)
 
-  override def getById(id: ModifierId): Option[AnyoneCanSpendTransaction] = unconfirmed.get(key(id))
+  override def getById(id: ModifierId): Option[ErgoTransaction] = unconfirmed.get(key(id))
 
   override def contains(id: ModifierId): Boolean = unconfirmed.contains(key(id))
 
-  override def getAll(ids: Seq[ModifierId]): Seq[AnyoneCanSpendTransaction] = ids.flatMap(getById)
+  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(getById)
 
   override def size: Int = unconfirmed.size
 
-  def take(limit: Int): Iterable[AnyoneCanSpendTransaction] =
+  def take(limit: Int): Iterable[ErgoTransaction] =
     unconfirmed.values.toSeq.take(limit)
 
   //TODO rework option.get
-  protected def completeAssembly(txs: Iterable[AnyoneCanSpendTransaction]): Unit = synchronized {
+  protected def completeAssembly(txs: Iterable[ErgoTransaction]): Unit = synchronized {
     val txsIds = txs.map(tx => key(tx.id))
     val newMap = waitedForAssembly.flatMap(p => {
       val ids = p._1
@@ -53,7 +53,7 @@ trait ErgoMemPoolReader extends MempoolReader[AnyoneCanSpendTransaction] {
   }
 
   def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = synchronized {
-    val promise = Promise[Seq[AnyoneCanSpendTransaction]]
+    val promise = Promise[Seq[ErgoTransaction]]
     waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
     promise.future
   }

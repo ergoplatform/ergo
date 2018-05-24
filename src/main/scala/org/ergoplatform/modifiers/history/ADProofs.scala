@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Bytes
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Algos.HF
@@ -49,12 +49,12 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
     * @param expectedHash - expected (declared by miner) hash. A hash after applying proof must be the same.
     * @return Success, if verification passed
     */
-  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox],
+  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition.type, ErgoBox],
              previousHash: ADDigest,
              expectedHash: ADDigest): Try[Unit] = {
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
-                     changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]) =
+                     changes: BoxStateChanges[AnyoneCanSpendProposition.type, ErgoBox]) =
       changes.operations.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, o) =>
         t.flatMap(_ => {
           verifier.performOneOperation(ADProofs.changeToMod(o))
@@ -62,7 +62,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
       }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
-      Some(ErgoState.BoxSize), maxNumOperations = Some(changes.operations.size))
+      None, maxNumOperations = Some(changes.operations.size))
 
     applyChanges(verifier, changes).flatMap { _ =>
       verifier.digest match {
@@ -92,11 +92,11 @@ object ADProofs {
     * @param change - operation over a box
     * @return AVL+ tree modification
     */
-  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]): Modification =
+  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition.type, ErgoBox]): Modification =
     change match {
-      case i: Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
+      case i: Insertion[AnyoneCanSpendProposition.type, ErgoBox] =>
         Insert(i.box.id, ADValue @@ i.box.bytes)
-      case r: Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
+      case r: Removal[AnyoneCanSpendProposition.type, ErgoBox] =>
         Remove(r.boxId)
     }
 

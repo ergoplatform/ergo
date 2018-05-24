@@ -4,11 +4,11 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -123,9 +123,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  private def createCoinbase(state: UtxoStateReader, height: Int): AnyoneCanSpendTransaction = {
+  private def createCoinbase(state: UtxoStateReader, height: Int): ErgoTransaction = {
     val txBoxes = state.anyoneCanSpendBoxesAtHeight(height)
-    AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+    ErgoTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
   }
 
   private def createCandidate(history: ErgoHistoryReader,
@@ -159,8 +159,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
 
-  private def fixTxsConflicts(txs: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = txs
-    .foldLeft((Seq.empty[AnyoneCanSpendTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
+  private def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
+    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
       val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
       if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
         (s :+ tx) -> (keys ++ bxsBaw)

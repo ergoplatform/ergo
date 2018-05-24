@@ -1,8 +1,8 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.ModifierId
 import scorex.core.block.Block.Timestamp
@@ -28,7 +28,7 @@ trait PowScheme {
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
-                 transactions: Seq[AnyoneCanSpendTransaction],
+                 transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  votes: Array[Byte],
                  startingNonce: Long,
@@ -51,7 +51,7 @@ trait PowScheme {
     val nBits: Long = candidateBlock.nBits
     val stateRoot: ADDigest = candidateBlock.stateRoot
     val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
-    val transactions: Seq[AnyoneCanSpendTransaction] = candidateBlock.transactions
+    val transactions: Seq[ErgoTransaction] = candidateBlock.transactions
     val timestamp: Timestamp = candidateBlock.timestamp
     val votes: Array[Byte] = candidateBlock.votes
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool._
 import scorex.core.ModifierId
 import scorex.core.transaction.MemoryPool
@@ -8,31 +8,31 @@ import scorex.core.transaction.MemoryPool
 import scala.collection.concurrent.TrieMap
 import scala.util.Try
 
-class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, AnyoneCanSpendTransaction])
-  extends MemoryPool[AnyoneCanSpendTransaction, ErgoMemPool] with ErgoMemPoolReader {
+class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransaction])
+  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   override type NVCT = ErgoMemPool
 
-  override def put(tx: AnyoneCanSpendTransaction): Try[ErgoMemPool] = put(Seq(tx))
+  override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
-  override def put(txs: Iterable[AnyoneCanSpendTransaction]): Try[ErgoMemPool] = Try {
+  override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
     //todo check validity
     putWithoutCheck(txs.filterNot(tx => unconfirmed.contains(key(tx.id))))
   }
 
-  override def putWithoutCheck(txs: Iterable[AnyoneCanSpendTransaction]): ErgoMemPool = {
+  override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
     completeAssembly(txs)
     //todo cleanup?
     this
   }
 
-  override def remove(tx: AnyoneCanSpendTransaction): ErgoMemPool = {
+  override def remove(tx: ErgoTransaction): ErgoMemPool = {
     unconfirmed.remove(key(tx.id))
     this
   }
 
-  override def filter(condition: (AnyoneCanSpendTransaction) => Boolean): ErgoMemPool = {
+  override def filter(condition: (ErgoTransaction) => Boolean): ErgoMemPool = {
     unconfirmed.retain { (k, v) =>
       condition(v)
     }
@@ -46,7 +46,7 @@ object ErgoMemPool {
 
   type MemPoolRequest = Seq[ModifierId]
 
-  type MemPoolResponse = Seq[AnyoneCanSpendTransaction]
+  type MemPoolResponse = Seq[ErgoTransaction]
 
   def empty: ErgoMemPool = new ErgoMemPool(TrieMap.empty)
 }

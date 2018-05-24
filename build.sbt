@@ -5,9 +5,9 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "0.2.4"
+version := "1.0.0-SNAPSHOT"
 
-scalaVersion := "2.12.3"
+scalaVersion := "2.12.6"
 
 resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
   "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -18,6 +18,7 @@ val scorexVersion = "e77cc239-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.1",
+  "org.scorexfoundation" %% "sigma-state" % "0.9.0",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.13",
   "org.scorexfoundation" %% "iodb" % "0.3.2",

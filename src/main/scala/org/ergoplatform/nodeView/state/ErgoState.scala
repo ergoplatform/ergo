@@ -4,8 +4,8 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.Store
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
@@ -49,8 +49,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
 object ErgoState extends ScorexLogging {
 
-  val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
-
   //TODO move to settings?
   val KeepVersions = 200
 
@@ -62,8 +60,8 @@ object ErgoState extends ScorexLogging {
     lazy val rndGen = new scala.util.Random(genesisSeed)
     lazy val initialBoxesNumber = 10000
 
-    lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
-      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
+    lazy val initialBoxes: Seq[ErgoBox] =
+      (1 to initialBoxesNumber).map(_ => ErgoBox(nonce = rndGen.nextLong(), value = 10000))
 
     val bh = BoxHolder(initialBoxes)
 

@@ -1,8 +1,7 @@
 package org.ergoplatform.modifiers.state
 
-import io.circe.Json
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -25,7 +24,7 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 }
 
 object UTXOSnapshotChunk {
-  type StateElement = AnyoneCanSpendNoncedBox
+  type StateElement = ErgoTransaction
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (107: Byte)
 }

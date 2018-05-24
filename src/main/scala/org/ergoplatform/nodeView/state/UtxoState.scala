@@ -4,9 +4,8 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -28,7 +27,7 @@ class UtxoState(override val version: VersionTag,
                 override val store: Store,
                 nodeViewHolderRef: Option[ActorRef])
   extends ErgoState[UtxoState]
-    with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+    with TransactionValidation[AnyoneCanSpendProposition.type, ErgoTransaction]
     with UtxoStateReader {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
@@ -60,7 +59,7 @@ class UtxoState(override val version: VersionTag,
   }
 
   @SuppressWarnings(Array("TryGet"))
-  private[state] def applyTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
+  private[state] def applyTransactions(transactions: Seq[ErgoTransaction], expectedDigest: ADDigest) = Try {
 
     transactions.foreach(tx => tx.semanticValidity.get)
 

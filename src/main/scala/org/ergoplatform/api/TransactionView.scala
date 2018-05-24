@@ -1,5 +1,6 @@
 package org.ergoplatform.api
 
+/*
 import io.circe._
 import io.circe.generic.semiauto._
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
@@ -55,3 +56,4 @@ object TransactionOutputView {
   def idFromBox(box: AnyoneCanSpendNoncedBox): String = Base58.encode(box.id)
 
 }
+*/

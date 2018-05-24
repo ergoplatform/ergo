@@ -1,19 +1,10 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.EquihashSolution
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.hash.Blake2b256
-import scorex.testkit.TestkitHelpers
 
-class HeadersSpec extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with TestkitHelpers
-  with ChainGenerator {
+class HeadersSpec extends ErgoPropertyTest {
 
   val chain = genHeaderChain(50)
   val genesisId = chain.head.id

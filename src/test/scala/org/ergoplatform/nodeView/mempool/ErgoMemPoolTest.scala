@@ -1,17 +1,11 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ErgoMemPoolTest extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators {
+class ErgoMemPoolTest extends ErgoPropertyTest {
   property("wait for the appearance of transactions") {
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
       val memPool = ErgoMemPool.empty

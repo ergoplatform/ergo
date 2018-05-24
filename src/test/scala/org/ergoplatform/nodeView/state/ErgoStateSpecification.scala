@@ -1,11 +1,10 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.ErgoTestHelpers
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 
 
-class ErgoStateSpecification extends PropSpec with Matchers with ErgoTestHelpers {
+class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettings.read(None)

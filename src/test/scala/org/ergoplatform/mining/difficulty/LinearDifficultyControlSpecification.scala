@@ -1,20 +1,13 @@
 package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.utils.{ErgoGenerators, NoShrink}
+import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.{Matchers, PropSpec}
 
 import scala.concurrent.duration._
 import scala.util.Try
 
-class LinearDifficultyControlSpecification extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with NoShrink {
+class LinearDifficultyControlSpecification extends ErgoPropertyTest {
 
   val precision = 0.0001
   val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()

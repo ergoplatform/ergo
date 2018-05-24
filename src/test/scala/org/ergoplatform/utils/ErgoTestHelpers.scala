@@ -4,6 +4,7 @@ import java.util.concurrent.Executors
 
 import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
+import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -12,7 +13,7 @@ import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.ExecutionContext
 
-trait ErgoTestHelpers extends TestkitHelpers with FileUtils with ErgoGenerators {
+trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with ChainGenerator {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 

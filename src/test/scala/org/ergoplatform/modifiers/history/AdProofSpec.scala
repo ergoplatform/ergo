@@ -3,24 +3,15 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import org.scalatest.{Matchers, PropSpec}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import scorex.core.ModifierId
 import scorex.core.transaction.state.{BoxStateChanges, Insertion}
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.testkit.TestkitHelpers
+import scorex.crypto.hash.Digest32
 
-class AdProofSpec extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with TestkitHelpers
-  with ChainGenerator {
+class AdProofSpec extends ErgoPropertyTest {
   val KL = 32
 
   type Digest = ADDigest

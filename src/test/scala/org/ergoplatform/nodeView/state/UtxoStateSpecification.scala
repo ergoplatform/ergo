@@ -6,19 +6,13 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
 
 import scala.util.Random
 
 
-class UtxoStateSpecification extends PropSpec
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with ErgoTestHelpers {
+class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("fromBoxHolder") {
     forAll(boxesHolderGen) { bh =>

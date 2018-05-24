@@ -1,18 +1,17 @@
 package org.ergoplatform.it
 
 import com.typesafe.config.ConfigFactory
-import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers, Suite}
-import scorex.core.utils.ScorexLogging
+import org.ergoplatform.it.util.IntegrationTest
+import org.scalatest.{BeforeAndAfterAll, FreeSpec, Suite}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.IndexedSeq
-import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 import scala.util.control.NonFatal
 
-class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with ScorexLogging with Matchers {
+class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with IntegrationTest {
 
   private val nonGeneratingPeerConfig = ConfigFactory.parseString(
     """

@@ -23,13 +23,12 @@ import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
-import scala.concurrent.{Future, blocking}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
-class Docker(suiteConfig: Config = ConfigFactory.empty,
-             tag: String = "") extends AutoCloseable with ScorexLogging {
+class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
+            (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
 
@@ -335,6 +334,6 @@ object Docker {
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  def apply(owner: Class[_]): Docker = new Docker(tag = owner.getSimpleName)
+  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName)
 
 }

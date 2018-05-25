@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "3084288d-SNAPSHOT"
+val scorexVersion = "e77cc239-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.1",
@@ -115,6 +115,7 @@ dockerfile in docker := {
 
   new Dockerfile {
     from("anapsix/alpine-java:8_server-jre")
+    label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configTemplate, startErgo), "/opt/ergo/")
     run("chmod", "+x", "/opt/ergo/start-ergo.sh")

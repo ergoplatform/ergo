@@ -32,7 +32,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with Matche
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
-    implicit val ec: ExecutionContext = system.dispatcher
+    implicit val ec: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
 
     val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,

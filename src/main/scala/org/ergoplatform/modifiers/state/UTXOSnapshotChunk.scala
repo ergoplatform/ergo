@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.state
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
@@ -24,7 +25,7 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
 }
 
 object UTXOSnapshotChunk {
-  type StateElement = ErgoTransaction
+  type StateElement = ErgoBox
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (107: Byte)
 }

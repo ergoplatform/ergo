@@ -7,8 +7,7 @@ import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -252,10 +251,10 @@ class ErgoNodeViewHolderSpecification extends PropSpec
 
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
-    val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
+    val tx = ErgoTransaction(IndexedSeq(), IndexedSeq())
 
-    fixture.subscribeEvents(classOf[FailedTransaction[_, _]])
-    nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+    fixture.subscribeEvents(classOf[FailedTransaction[_]])
+    nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
     expectNoMsg()
     nodeViewRef ! poolSize(nodeViewConfig)
     expectMsg(1)

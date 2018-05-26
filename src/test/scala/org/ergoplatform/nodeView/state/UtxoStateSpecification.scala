@@ -1,15 +1,16 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.VersionTag
+import sigmastate.Values.TrueLeaf
 
 import scala.util.Random
 
@@ -33,7 +34,8 @@ class UtxoStateSpecification extends PropSpec
     var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
     forAll(invalidHeaderGen) { header =>
       val boxes = us.anyoneCanSpendBoxesAtHeight(header.height)
-      val txs = Seq(AnyoneCanSpendTransaction(boxes.map(_.nonce).toIndexedSeq, IndexedSeq(boxes.map(_.value).sum)))
+      val inputs = boxes.map(_.id).map(noProofInput).toIndexedSeq
+      val txs = Seq(ErgoTransaction(inputs, IndexedSeq(new ErgoBoxCandidate(boxes.map(_.value).sum, TrueLeaf))))
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
@@ -59,8 +61,8 @@ class UtxoStateSpecification extends PropSpec
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
-      val created = txs.flatMap(_.newBoxes.map(_.id)).map(ByteArrayWrapper.apply)
-      val boxIds = txs.flatMap(_.boxIdsToOpen).map(ByteArrayWrapper.apply)
+      val created = txs.flatMap(_.outputs.map(_.id)).map(ByteArrayWrapper.apply)
+      val boxIds = txs.flatMap(_.inputs.map(_.boxId)).map(ByteArrayWrapper.apply)
       boxIds.distinct.size shouldBe boxIds.size
       val toRemove = boxIds.filterNot(id => created.contains(id))
       toRemove.foreach(id => bh.get(id) should not be None)
@@ -75,7 +77,7 @@ class UtxoStateSpecification extends PropSpec
   property("applyModifier() - special case") {
 
     val r = new Random(54)
-    val initialBoxes = (0 until 100) map (s => AnyoneCanSpendNoncedBox(r.nextLong(), Math.abs(r.nextLong())))
+    val initialBoxes = (0 until 100) map (_ => ErgoBox(Math.abs(r.nextLong()), TrueLeaf))
     val bh = BoxHolder(initialBoxes)
 
     val us = createUtxoState(bh)
@@ -111,8 +113,8 @@ class UtxoStateSpecification extends PropSpec
       lazy val genesisSeed = Long.MaxValue
       lazy val rndGen = new scala.util.Random(genesisSeed)
 
-      lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
-        (1 to 1).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
+      lazy val initialBoxes: Seq[ErgoBox] =
+        (1 to 1).map(_ => ErgoBox(value = 10000, TrueLeaf))
 
       val bh = BoxHolder(initialBoxes)
 

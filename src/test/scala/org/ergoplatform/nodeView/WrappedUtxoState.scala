@@ -5,9 +5,9 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState, VersionedInMemoryBoxHolder}
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag}
 
@@ -21,11 +21,11 @@ class WrappedUtxoState(override val version: VersionTag,
   extends UtxoState(version, store, nodeViewHolderRef) {
 
   private type TCPMOD =
-    TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+    TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction]
 
   def size: Int = versionedBoxHolder.size
 
-  def takeBoxes(count: Int): Seq[AnyoneCanSpendNoncedBox] = versionedBoxHolder.take(count)._1
+  def takeBoxes(count: Int): Seq[ErgoBox] = versionedBoxHolder.take(count)._1
 
   override def rollbackTo(version: VersionTag): Try[WrappedUtxoState] = super.rollbackTo(version) match {
     case Success(us) =>

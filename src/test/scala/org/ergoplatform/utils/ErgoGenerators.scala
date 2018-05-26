@@ -1,12 +1,13 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, TransactionIdsForHeader}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
+import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -15,35 +16,52 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scorex.core.ModifierId
-import scorex.core.transaction.state.{BoxStateChanges, Insertion}
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
+import sigmastate.SBoolean
+import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.annotation.tailrec
 import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
-  lazy val smallPositiveInt         : Gen[Int]                         = Gen.choose(1, 5)
-  lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
+  lazy val smallPositiveInt         : Gen[Int]    = Gen.choose(1, 5)
 
-  lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
-    from: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i + 1, positiveLongGen).map(_.toIndexedSeq))
-    to: IndexedSeq[Long] <- smallInt.flatMap(i => Gen.listOfN(i, positiveLongGen).map(_.toIndexedSeq))
-  } yield AnyoneCanSpendTransaction(from, to)
+  lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
+
+  lazy val noProofGen: Gen[SerializedProverResult] =
+    Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
+
+  lazy val ergoBoxGen: Gen[ErgoBox] = for {
+    prop <- trueLeafGen
+    value <- positiveIntGen
+  } yield ErgoBox(value, prop)
+
+  lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
+    prop <- trueLeafGen
+    value <- positiveIntGen
+  } yield new ErgoBoxCandidate(value, prop)
+
+  lazy val inputGen: Gen[Input] = for {
+    boxId <- boxIdGen
+    spendingProof <- noProofGen
+  } yield Input(boxId, spendingProof)
+
+  lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
+    from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i, ergoBoxCandidateGen).map(_.toIndexedSeq))
+  } yield ErgoTransaction(from, to)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  lazy val anyoneCanSpendBoxGen: Gen[AnyoneCanSpendNoncedBox] = for {
-    nonce <- positiveLongGen
-    value <- positiveIntGen
-  } yield AnyoneCanSpendNoncedBox(nonce, value)
 
-  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, anyoneCanSpendBoxGen).map(l => BoxHolder(l))
+  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGen).map(l => BoxHolder(l))
 
-  lazy val stateChangesGen: Gen[BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = anyoneCanSpendBoxGen
-    .map(b => BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox](Seq(Insertion(b))))
+  lazy val stateChangesGen: Gen[StateChanges] = ergoBoxGen
+    .map(b => StateChanges(Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
@@ -58,6 +76,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytesList(32)
+    x
+  }
+
+  lazy val boxIdGen: Gen[BoxId] = {
+    val x = ADKey @@ genBytesList(Constants.ModifierIdSize)
     x
   }
 
@@ -86,27 +109,32 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
     RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash,  EquihashSolution(equihashSolutions))
 
+  def noProofInput(id: ErgoBox.BoxId): Input =
+    Input(id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) =
+  def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, TrueLeaf)
+
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
-  def validTransactionsFromBoxHolder(boxHolder: BoxHolder, rnd: Random): (Seq[AnyoneCanSpendTransaction], BoxHolder) = {
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder, rnd: Random): (Seq[ErgoTransaction], BoxHolder) = {
     @tailrec
     def loop(txRemain: Int,
-             stateBoxes: Seq[AnyoneCanSpendNoncedBox],
-             selfBoxes: Seq[AnyoneCanSpendNoncedBox],
-             acc: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = {
+             stateBoxes: Seq[ErgoBox],
+             selfBoxes: Seq[ErgoBox],
+             acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
       if (txRemain > 1) {
         val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size)).getOrElse(0))
         val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size)).getOrElse(0))
-        val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.nonce).toIndexedSeq
-        val outputs = (consumedSelfBoxes ++  consumedBoxesFromState).map(_.value).toIndexedSeq
-        val tx = new AnyoneCanSpendTransaction(inputs, outputs)
-        loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.newBoxes, tx +: acc)
+        val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
+        val outputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).map(outputForAnyone).toIndexedSeq
+        val tx = new ErgoTransaction(inputs, outputs)
+        loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc)
       } else {
         // take all remaining boxes from state and return transactions set
-        val newBoxes = stateBoxes.map(_.value).toIndexedSeq
-        val tx = new AnyoneCanSpendTransaction(stateBoxes.map(_.nonce).toIndexedSeq, newBoxes)
+        val inputs = stateBoxes.map(_.id).map(noProofInput).toIndexedSeq
+        val outputs = stateBoxes.map(_.value).map(outputForAnyone).toIndexedSeq
+        val tx = new ErgoTransaction(inputs, outputs)
         tx +: acc
       }
     }
@@ -117,7 +145,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   }
 
 
-  def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[AnyoneCanSpendTransaction] = {
+  def validTransactionsFromUtxoState(wus: WrappedUtxoState): Seq[ErgoTransaction] = {
     val num = 10
 
     val spentBoxesCounts = (1 to num).map(_ => scala.util.Random.nextInt(20) + 1)
@@ -126,11 +154,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
     boxes.foreach(b => wus.boxById(b.id) should not be None)
 
-    val (_, txs) = spentBoxesCounts.foldLeft(boxes -> Seq[AnyoneCanSpendTransaction]()) { case ((bxs, ts), fromBoxes) =>
+    val (_, txs) = spentBoxesCounts.foldLeft(boxes -> Seq[ErgoTransaction]()) { case ((bxs, ts), fromBoxes) =>
       val (bxsFrom, remainder) = bxs.splitAt(fromBoxes)
-      val spentBoxNonces = bxsFrom.map(_.nonce).toIndexedSeq
-      val newBoxes = bxsFrom.map(_.value).toIndexedSeq
-      val tx = new AnyoneCanSpendTransaction(spentBoxNonces, newBoxes)
+      val inputs = bxsFrom.map(_.id).map(noProofInput).toIndexedSeq
+      val outputs = bxsFrom.map(_.value).map(outputForAnyone).toIndexedSeq
+      val tx = new ErgoTransaction(inputs, outputs)
       (remainder, tx +: ts)
     }
     txs
@@ -148,13 +176,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
     val transactions = validTransactionsFromUtxoState(utxoState)
-    transactions.flatMap(_.boxIdsToOpen).foreach(bid => utxoState.boxById(bid) should not be None)
+    transactions.flatMap(_.inputs.map(_.boxId)).foreach(bid => utxoState.boxById(bid) should not be None)
     validFullBlock(parentOpt, utxoState, transactions)
   }
 
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
-                     transactions: Seq[AnyoneCanSpendTransaction],
+                     transactions: Seq[ErgoTransaction],
                      n: Char = 48,
                      k: Char = 5
                     ): ErgoFullBlock = {
@@ -169,7 +197,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
-    txs <- Gen.nonEmptyListOf(invalidAnyoneCanSpendTransactionGen)
+    txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {
@@ -179,7 +207,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: Seq[AnyoneCanSpendNoncedBox] <- Gen.listOf(anyoneCanSpendBoxGen)
+    stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGen)
   } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {

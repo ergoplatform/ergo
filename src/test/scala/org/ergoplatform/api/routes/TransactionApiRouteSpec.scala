@@ -6,10 +6,16 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.api.TransactionsApiRoute
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
+import scorex.crypto.authds.ADKey
+import sigmastate.Values.TrueLeaf
+import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import supertagged._
 
 import scala.concurrent.duration._
 
@@ -24,7 +30,12 @@ class TransactionApiRouteSpec extends FlatSpec
   val prefix = "/transactions"
   val route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
-  val tx = AnyoneCanSpendTransaction(IndexedSeq(1L,2L), IndexedSeq(3L, 4L))
+  val input = Input(
+    ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
+    SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
+
+  val output = new ErgoBoxCandidate(0, TrueLeaf)
+  val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
 
   //TODO: Not fully implemented yet. There is no codec for tx.
   ignore should "post transaction" in {

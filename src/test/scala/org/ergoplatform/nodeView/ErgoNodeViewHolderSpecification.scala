@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
 import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
@@ -28,9 +28,8 @@ import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
 class ErgoNodeViewHolderSpecification extends PropSpec
-  with ErgoGenerators
+  with ErgoTestHelpers
   with Matchers
-  with FileUtils
   with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
@@ -75,7 +74,6 @@ class ErgoNodeViewHolderSpecification extends PropSpec
       ),
       chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )
-    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp)
     ErgoNodeViewRef(settings, timeProvider)
   }
 

@@ -4,14 +4,12 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
+import org.scalameter.picklers.Implicits._
+import scorex.core.ModifierId
 
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.Random
-import scala.concurrent.ExecutionContext.Implicits.global
-import org.scalameter.picklers.Implicits._
-import scorex.core.{ModifierId, NodeViewModifier}
-
 import scala.util.{Random => Rng}
 
 object ErgoMemPoolBenchmark

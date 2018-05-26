@@ -1,14 +1,14 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions
 
+import org.ergoplatform.api.{TransactionInputView, TransactionOutputView, TransactionView}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.crypto.encode.Base16
 
 object TransactionValidator extends ModifierValidator {
 
-  def validateProto(proto: TransactionView, tx: AnyoneCanSpendTransaction): ValidationResult = {
-    validateId(proto.id, tx.encodedId, "Transaction Id") ++
-      validateIdSeq(proto.inputs.map(_.id), tx.boxIdsToOpen.map(TransactionInputView.idFromADKey), "Input") ++
-      validateIdSeq(proto.outputs.map(_.id), tx.newBoxes.map(TransactionOutputView.idFromBox).toSeq, "Output")
-  }
+  //todo: testnet1 - fix!
+  def validateProto(proto: TransactionView, tx: ErgoTransaction): ValidationResult = ???
 
   private def validateIdSeq(given: Seq[Option[String]], expected: Seq[String],
                             description: String): ValidationResult = {
@@ -34,5 +34,4 @@ object TransactionValidator extends ModifierValidator {
         .result
     }
   }
-
 }

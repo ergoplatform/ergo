@@ -1,9 +1,9 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -18,14 +18,14 @@ import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)
-  extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, ErgoTransaction,
+                               timeProvider: NetworkTimeProvider)(implicit ex: ExecutionContext)
+  extends NodeViewSynchronizer[ErgoTransaction,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
 
@@ -109,7 +109,8 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider): Props =
+            timeProvider: NetworkTimeProvider)
+           (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
       timeProvider))
 
@@ -118,7 +119,7 @@ object ErgoNodeViewSynchronizer {
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider)
-           (implicit context: ActorRefFactory): ActorRef =
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
 
   def apply(networkControllerRef: ActorRef,
@@ -127,10 +128,9 @@ object ErgoNodeViewSynchronizer {
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider,
             name: String)
-           (implicit context: ActorRefFactory): ActorRef =
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
 
 
   case object CheckModifiersToDownload
-
 }

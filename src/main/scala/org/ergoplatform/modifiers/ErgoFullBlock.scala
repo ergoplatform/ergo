@@ -2,8 +2,8 @@ package org.ergoplatform.modifiers
 
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
@@ -12,7 +12,7 @@ case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          aDProofs: Option[ADProofs])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, ErgoTransaction] {
+    with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
   lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
 

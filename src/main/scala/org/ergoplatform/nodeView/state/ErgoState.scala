@@ -60,8 +60,9 @@ object ErgoState extends ScorexLogging {
     lazy val rndGen = new scala.util.Random(genesisSeed)
     lazy val initialBoxesNumber = 10000
 
+    //todo: testnet1 - fix
     lazy val initialBoxes: Seq[ErgoBox] =
-      (1 to initialBoxesNumber).map(_ => ErgoBox(nonce = rndGen.nextLong(), value = 10000))
+      (1 to initialBoxesNumber).map(_ => ???)
 
     val bh = BoxHolder(initialBoxes)
 

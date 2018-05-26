@@ -1,8 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
@@ -11,7 +11,6 @@ import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.utils.ScorexLogging
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -24,7 +23,7 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
   override def receive: Receive = {
     case StartGeneration =>
       if (!isStarted) {
-        context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)
+        context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
 
     case FetchBoxes =>
@@ -33,10 +32,12 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
         if (v.pool.size < settings.keepPoolSize) {
           (0 until settings.keepPoolSize - v.pool.size).map { _ =>
             val txBoxes = (1 to Random.nextInt(10) + 1).flatMap(_ => v.state.randomBox())
-            val txInputs = txBoxes.map(_.nonce)
+            val txInputs = txBoxes.map(_.boxId)
             val values = txBoxes.map(_.value)
             val txOutputs = if (values.head % 2 == 0) IndexedSeq.fill(2)(values.head / 2) ++ values.tail else values
-            ErgoTransaction(txInputs, txOutputs)
+
+            //todo: testnet1 - fix
+            ??? //ErgoTransaction(txInputs, txOutputs)
           }
         } else {
           Seq.empty
@@ -45,7 +46,7 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
 
     case txs: Seq[ErgoTransaction] =>
       txs.foreach { tx =>
-        viewHolder ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, ErgoTransaction](tx)
+        viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
 
     case StopGeneration =>

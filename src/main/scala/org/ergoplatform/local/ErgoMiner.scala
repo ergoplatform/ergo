@@ -4,11 +4,11 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -19,7 +19,6 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -68,7 +67,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       miningThreads.foreach(_ ! candidateOpt.get)
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate
-      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)
+      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -125,7 +124,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def createCoinbase(state: UtxoStateReader, height: Int): ErgoTransaction = {
     val txBoxes = state.anyoneCanSpendBoxesAtHeight(height)
-    ErgoTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
+    //todo: testnet1 - fix
+    ErgoTransaction(???, txBoxes.map(_.toCandidate))
   }
 
   private def createCandidate(history: ErgoHistoryReader,
@@ -154,14 +154,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
+    //TODO real extension should be there
+    val extensionHash = Algos.hash(nodeId)
+
+    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
   }
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
 
   private def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
     .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
-      val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
       if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
         (s :+ tx) -> (keys ++ bxsBaw)
       } else {

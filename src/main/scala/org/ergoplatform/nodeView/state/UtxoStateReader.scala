@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.Store
-import org.ergoplatform.{ErgoBox, ErgoTransaction}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
@@ -13,7 +14,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[AnyoneCanSpendProposition.type, ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[ErgoTransaction] {
 
   protected implicit val hf = Algos.hash
 

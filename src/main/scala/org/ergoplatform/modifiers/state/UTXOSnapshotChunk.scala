@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.state
 
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, ModifierTypeId}

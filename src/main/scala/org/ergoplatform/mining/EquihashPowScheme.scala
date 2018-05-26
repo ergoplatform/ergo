@@ -27,11 +27,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
-                     votes: Array[Byte],
-                     startingNonce: Long,
-                     finishingNonce: Long
+                     extensionHash: Digest32
                     ): Option[Header] = {
-    require(finishingNonce >= startingNonce)
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -42,28 +39,24 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, votes, nonce = 0L, EquihashSolution.empty)
+      nBits, height, extensionHash,  EquihashSolution.empty)
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
 
-    @tailrec
-    def generateHeader(nonce: Long): Option[Header] = {
-      log.debug("Trying nonce: " + nonce)
+    def generateHeader(): Option[Header] = {
       val currentDigest = new Blake2bDigest(digest)
-      Equihash.hashNonce(currentDigest, nonce)
       val solutions = Equihash.gbpBasic(currentDigest, n, k)
       val headerWithSuitableSolution = solutions
-        .map { solution => h.copy(nonce = nonce, equihashSolution = solution) }
+        .map { solution => h.copy(equihashSolution = solution) }
         .find { newHeader => correctWorkDone(realDifficulty(newHeader), difficulty) }
       headerWithSuitableSolution match {
         case headerWithFoundSolution @ Some(_) => headerWithFoundSolution
-        case None if nonce + 1 < finishingNonce => generateHeader(nonce + 1)
         case _ => None
       }
     }
 
-    generateHeader(startingNonce)
+    generateHeader()
   }
 
   override def verify(header: Header): Boolean =
@@ -71,7 +64,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
       n,
       k,
       ergoPerson,
-      HeaderSerializer.bytesWithoutPow(header) ++ Equihash.nonceToLeBytes(header.nonce),
+      HeaderSerializer.bytesWithoutPow(header),
       header.equihashSolution.indexedSeq
     )
 

@@ -6,7 +6,7 @@ import scorex.core.utils.ScorexLogging
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.IndexedSeq
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random

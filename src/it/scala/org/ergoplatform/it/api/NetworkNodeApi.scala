@@ -3,7 +3,7 @@ package org.ergoplatform.it.api
 import java.net.InetSocketAddress
 
 import org.ergoplatform.it.network.NetworkSender
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 import scala.concurrent.Future
 
 trait NetworkNodeApi {

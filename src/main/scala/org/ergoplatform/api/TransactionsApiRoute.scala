@@ -7,8 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.generic.auto._
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.TransactionValidator
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -37,7 +36,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     // todo not only id validation?
     val tx = proto.toTransaction
     TransactionValidator.validateProto(proto, tx) toApi {
-      nodeViewActorRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
+      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       ApiResponse.OK
     }
   }

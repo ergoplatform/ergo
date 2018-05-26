@@ -1,9 +1,10 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.{ErgoApp, ErgoTransaction}
+import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
@@ -19,7 +20,7 @@ import scala.util.Try
 
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings, timeProvider: NetworkTimeProvider)
-  extends NodeViewHolder[AnyoneCanSpendProposition.type, ErgoTransaction, ErgoPersistentModifier] {
+  extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
   override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
 

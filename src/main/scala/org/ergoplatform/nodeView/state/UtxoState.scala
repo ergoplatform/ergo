@@ -4,8 +4,8 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.ErgoTransaction
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -27,7 +27,7 @@ class UtxoState(override val version: VersionTag,
                 override val store: Store,
                 nodeViewHolderRef: Option[ActorRef])
   extends ErgoState[UtxoState]
-    with TransactionValidation[AnyoneCanSpendProposition.type, ErgoTransaction]
+    with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
@@ -139,7 +139,7 @@ object UtxoState {
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings

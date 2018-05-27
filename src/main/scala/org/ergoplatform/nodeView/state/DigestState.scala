@@ -41,7 +41,7 @@ class DigestState protected(override val version: VersionTag,
           val txs = fb.blockTransactions.txs
           val declaredHash = fb.header.stateRoot
           txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-            status.flatMap(_ => tx.semanticValidity)
+            status.flatMap(_ => tx.statelessValidity)
           }.map(_ => proofs.verify(boxChanges(txs), rootHash, declaredHash))
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))

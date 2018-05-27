@@ -27,13 +27,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     PersistentBatchAVLProver.create(bp, storage).get
   }
 
-  override def validate(tx: ErgoTransaction): Try[Unit] = if (tx.inputs.map(_.boxId).forall { k =>
-    persistentProver.unauthenticatedLookup(k).isDefined
-  }) {
-    Success()
-  } else {
-    Failure(new Exception(s"Not all boxes of the transaction $tx are in the state"))
-  }
+  override def validate(tx: ErgoTransaction): Try[Unit] = ???
 
   /**
     * @return boxes, that miner (or any user) can take to himself when he creates a new block

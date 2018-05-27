@@ -4,8 +4,10 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.{BlockchainState, ErgoBox}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -15,6 +17,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import sigmastate.AvlTreeData
 
 import scala.util.{Failure, Success, Try}
 
@@ -59,13 +62,24 @@ class UtxoState(override val version: VersionTag,
   }
 
   @SuppressWarnings(Array("TryGet"))
-  private[state] def applyTransactions(transactions: Seq[ErgoTransaction], expectedDigest: ADDigest) = Try {
+  private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       expectedDigest: ADDigest,
+                                       height: Height) = Try {
 
-    transactions.foreach(tx => tx.semanticValidity.get)
+    val blockchainState = ErgoBlockchainState(height, persistentProver.digest)
+
+    val totalCost = transactions.map{tx =>
+      tx.statelessValidity.get
+      val boxesToSpend = tx.inputs.map(_.boxId).map(boxById).map(_.get)
+      tx.statefulValidity(boxesToSpend, blockchainState).get
+    }.sum
+
+    assert(totalCost <= 1000000) //todo: externalize the number
 
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
+        println(m)
         persistentProver.performOneOperation(m)
       })
     }.get
@@ -79,10 +93,12 @@ class UtxoState(override val version: VersionTag,
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
+      val height = fb.header.height
+
+      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height " +
         s"to UtxoState with root hash ${Algos.encode(rootHash)}")
 
-      val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
+      val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
         val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)

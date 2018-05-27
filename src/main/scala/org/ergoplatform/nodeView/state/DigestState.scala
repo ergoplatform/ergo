@@ -3,13 +3,18 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.mempool.ErgoBlockchainState
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, ADValue}
+import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,16 +43,43 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
+          val blockchainState = ErgoBlockchainState(fb.header.height, rootHash)
+
           val txs = fb.blockTransactions.txs
-          val declaredHash = fb.header.stateRoot
-          txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-            status.flatMap(_ => tx.statelessValidity)
-          }.map(_ => proofs.verify(boxChanges(txs), rootHash, declaredHash))
+
+          val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
+
+          val verifier = new BatchAVLVerifier[Digest32, HF](rootHash, proofs.proofBytes, ADProofs.KL,
+            None, maxNumOperations = Some(maxOps))
+
+          val totalCostTry = txs.foldLeft[Try[Long]](Success(0)) { case (status, tx) =>
+            status
+              .flatMap(c => tx.statelessValidity.map(_ => c))
+              .flatMap { c =>
+                val idsToRemove = tx.inputs.map(_.boxId)
+
+                Try(idsToRemove.map { id =>
+                  val boxBytes = verifier.performOneOperation(Remove(id)).get.get
+                  ErgoBox.serializer.parseBytes(boxBytes).get
+                }).flatMap(boxesToSpend => tx.statefulValidity(boxesToSpend, blockchainState).map(_ + c))
+              }.flatMap { c =>
+              Try(
+                tx.outputs.map { out =>
+                  verifier.performOneOperation(Insert(out.id, ADValue @@ out.bytes)).get
+                }).map(_ => c)
+            }
+
+          }
+
+          Try {
+            assert(totalCostTry.get <= 1000000) //todo: externalize
+            assert(fb.header.stateRoot sameElements verifier.digest)
+          }
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
-    case h: Header => Success()
+    case _: Header => Success()
 
     case a: Any =>
       Failure(new Error(s"Modifier not validated: $a"))

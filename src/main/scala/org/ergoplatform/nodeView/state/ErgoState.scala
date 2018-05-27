@@ -11,6 +11,7 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import sigmastate.Values.TrueLeaf
 
 import scala.util.Try
 
@@ -62,7 +63,7 @@ object ErgoState extends ScorexLogging {
 
     //todo: testnet1 - fix
     lazy val initialBoxes: Seq[ErgoBox] =
-      (1 to initialBoxesNumber).map(_ => ???)
+      (1 to initialBoxesNumber).map(i => ErgoBox(100, TrueLeaf, boxId = i.toShort))
 
     val bh = BoxHolder(initialBoxes)
 

@@ -72,7 +72,7 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
       if (index == bytes.length) {
         BlockTransactions(headerId, acc)
       } else {
-        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2)).ensuring(_ % 8 == 0)
+        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val tx = ErgoTransaction.serializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f

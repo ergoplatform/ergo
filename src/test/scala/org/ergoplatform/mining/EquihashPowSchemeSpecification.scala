@@ -5,23 +5,17 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.{Matchers, PropSpec}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash._
 import sigmastate.Values.TrueLeaf
 
-class EquihashPowSchemeSpecification extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators {
+class EquihashPowSchemeSpecification extends ErgoPropertyTest {
 
   private val nDefault = 48: Char
   private val kDefault = 5: Char
 
-  val powScheme = new EquihashPowScheme(nDefault, kDefault)
+  override val powScheme = new EquihashPowScheme(nDefault, kDefault)
 
   @SuppressWarnings(Array("TryGet"))
   private def createValidBlock(n: Char = nDefault, k: Char = kDefault): ErgoFullBlock = {
@@ -36,6 +30,7 @@ class EquihashPowSchemeSpecification extends PropSpec
         Algos.hash(Array.emptyByteArray)
       ).getOrElse(loop(ts + 1))
     }
+
     loop(0)
   }
 

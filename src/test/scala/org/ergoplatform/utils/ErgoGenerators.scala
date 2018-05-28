@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
@@ -28,9 +29,9 @@ import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
-  lazy val smallPositiveInt         : Gen[Int]    = Gen.choose(1, 5)
-
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
+  lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
+  lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val noProofGen: Gen[SerializedProverResult] =
     Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
@@ -107,7 +108,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash,  EquihashSolution(equihashSolutions))
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash, EquihashSolution(equihashSolutions))
 
   def noProofInput(id: ErgoBox.BoxId): Input =
     Input(id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty))

@@ -1,22 +1,25 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
+import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
 
 import scala.concurrent.duration._
 import scala.util.Random
 
-trait ChainGenerator extends ErgoTestHelpers {
+trait ChainGenerator {
 
-  val powScheme = DefaultFakePowScheme
+  val timeProvider: NetworkTimeProvider
+
+  val powScheme: PowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)

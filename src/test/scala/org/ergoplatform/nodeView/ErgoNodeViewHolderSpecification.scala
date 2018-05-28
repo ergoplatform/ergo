@@ -14,22 +14,17 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
-import org.scalatest.{BeforeAndAfterAll, Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.scalatest.BeforeAndAfterAll
+import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.ModifierId
-import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-class ErgoNodeViewHolderSpecification extends PropSpec
-  with ErgoTestHelpers
-  with Matchers
-  with BeforeAndAfterAll {
+class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
@@ -126,10 +121,15 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     implicit val defaultSender: ActorRef = testProbe.testActor
 
     @inline def send(msg: Any): Unit = testProbe.send(nodeViewRef, msg)
+
     @inline def defaultTimeout: FiniteDuration = testProbe.remainingOrDefault
+
     @inline def expectMsg[T](obj: T): T = testProbe.expectMsg(obj)
+
     @inline def expectMsgType[T](implicit t: ClassTag[T]): T = testProbe.expectMsgType
+
     @inline def expectNoMsg(): Unit = testProbe.expectNoMessage(defaultTimeout)
+
     def subscribeEvents(eventClass: Class[_]): Boolean = system.eventStream.subscribe(testProbe.ref, eventClass)
 
     def withRecoveredNodeViewRef(test: ActorRef => Unit): Unit = {
@@ -138,7 +138,10 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     }
 
     def run(test: NodeViewFixture => Unit): Unit = try test(this) finally stop()
-    def stop(): Unit = { system.stop(nodeViewRef); system.stop(testProbe.testActor) }
+
+    def stop(): Unit = {
+      system.stop(nodeViewRef); system.stop(testProbe.testActor)
+    }
   }
 
   private val t1 = TestCase("check genesis state") { fixture =>
@@ -165,7 +168,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     nodeViewRef ! historyHeight(nodeViewConfig)
     expectMsg(-1)
 
-    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     //sending header
     nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
@@ -193,7 +196,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
-    fixture.subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
@@ -253,7 +256,7 @@ class ErgoNodeViewHolderSpecification extends PropSpec
     import fixture._
     val tx = ErgoTransaction(IndexedSeq(), IndexedSeq())
 
-    fixture.subscribeEvents(classOf[FailedTransaction[_]])
+    subscribeEvents(classOf[FailedTransaction[_]])
     nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
     expectNoMsg()
     nodeViewRef ! poolSize(nodeViewConfig)

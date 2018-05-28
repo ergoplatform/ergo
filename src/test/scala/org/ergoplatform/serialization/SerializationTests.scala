@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeaderSerializer}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 
@@ -23,9 +23,8 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     }
   }
 
-  //todo: after testnet1 - fix
-  ignore("AnyoneCanSpendBoxGen serialization") {
-    //checkSerializationRoundtrip(ergoBoxGen, ErgoBox.serializer)
+  property("ErgoBox serialization") {
+    checkSerializationRoundtrip(ergoBoxGen, ErgoBoxSerializer)
   }
 
   property("ErgoTransactionGen serialization") {

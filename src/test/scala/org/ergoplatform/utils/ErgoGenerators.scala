@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryIdentifier, R3}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
@@ -19,8 +19,8 @@ import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.SBoolean
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.{SBoolean, SType}
+import sigmastate.Values.{EvaluatedValue, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.annotation.tailrec
@@ -37,7 +37,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
-  } yield ErgoBox(value, prop)
+    reg <- positiveIntGen
+    transactionId: Array[Byte] <- genBytesList(Constants.ModifierIdSize)
+    boxId: Short <- Arbitrary.arbitrary[Short]
+  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen

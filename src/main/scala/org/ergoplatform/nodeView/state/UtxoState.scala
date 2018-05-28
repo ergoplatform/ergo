@@ -70,7 +70,12 @@ class UtxoState(override val version: VersionTag,
 
     val totalCost = transactions.map{tx =>
       tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map(boxById).map(_.get)
+      val boxesToSpend = tx.inputs.map(_.boxId).map{id =>
+        boxById(id) match {
+          case Some(box) => box
+          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+        }
+      }
       tx.statefulValidity(boxesToSpend, blockchainState).get
     }.sum
 

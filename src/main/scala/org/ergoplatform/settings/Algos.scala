@@ -2,7 +2,7 @@ package org.ergoplatform.settings
 
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.{Base16, Base58}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.Try

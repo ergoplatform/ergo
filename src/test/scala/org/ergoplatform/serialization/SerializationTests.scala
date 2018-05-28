@@ -1,10 +1,7 @@
 package org.ergoplatform.serialization
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeaderSerializer}
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBoxSerializer, AnyoneCanSpendPropositionSerializer}
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransactionSerializer, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 

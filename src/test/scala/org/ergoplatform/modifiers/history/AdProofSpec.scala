@@ -8,8 +8,7 @@ import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.testkit.TestkitHelpers
+import scorex.crypto.hash.Digest32
 import sigmastate.Values.TrueLeaf
 
 class AdProofSpec extends ErgoPropertyTest {
@@ -21,7 +20,7 @@ class AdProofSpec extends ErgoPropertyTest {
   type PrevDigest = Digest
   type NewDigest = Digest
 
-  val emptyModifierId = ModifierId @@ Array.fill(32)(0.toByte)
+  val emptyModifierId: ModifierId = ModifierId @@ Array.fill(32)(0.toByte)
 
   private def createEnv(howMany: Int = 10):
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {

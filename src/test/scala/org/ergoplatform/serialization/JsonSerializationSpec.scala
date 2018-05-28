@@ -1,16 +1,14 @@
 package org.ergoplatform.serialization
 
 import io.circe.parser._
-import io.circe.syntax._
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.core.ModifierId
-import sigmastate.Values.TrueLeaf
 import scorex.crypto.encode.Base58
+import sigmastate.Values.TrueLeaf
 
 class JsonSerializationSpec extends ErgoPropertyTest {
 

@@ -2,7 +2,6 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
-import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -31,7 +30,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
-  lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val noProofGen: Gen[SerializedProverResult] =
     Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))

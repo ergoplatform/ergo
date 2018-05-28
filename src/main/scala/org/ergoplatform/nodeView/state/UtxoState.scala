@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.{BlockchainState, ErgoBox}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoTransaction}
@@ -15,9 +14,8 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import sigmastate.AvlTreeData
+import scorex.crypto.authds.{ADDigest, ADValue}
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -68,10 +66,11 @@ class UtxoState(override val version: VersionTag,
 
     val blockchainState = ErgoBlockchainState(height, persistentProver.digest)
 
-    val totalCost = transactions.map{tx =>
+    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map{id =>
-        boxById(id) match {
+      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
           case Some(box) => box
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }

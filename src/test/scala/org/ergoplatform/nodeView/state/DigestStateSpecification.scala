@@ -1,17 +1,11 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADDigest
 
-class DigestStateSpecification extends PropSpec
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with ErgoTestHelpers {
+class DigestStateSpecification extends ErgoPropertyTest {
 
   private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)

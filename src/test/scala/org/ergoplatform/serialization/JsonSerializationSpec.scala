@@ -1,20 +1,18 @@
 package org.ergoplatform.serialization
 
-import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
-import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.encode.Base58
 import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
+import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
+import org.ergoplatform.settings.Constants
+import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 import sigmastate.Values.TrueLeaf
+import scorex.crypto.encode.Base58
 
-class JsonSerializationSpec extends PropSpec with ErgoGenerators with Matchers {
-
-  import org.ergoplatform.utils.JsonSerialization._
+class JsonSerializationSpec extends ErgoPropertyTest {
 
   property("TransactionIdsForHeader should be converted into json correctly") {
     val modifierId = genBytesList(Constants.ModifierIdSize).sample.get

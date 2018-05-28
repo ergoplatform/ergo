@@ -1,17 +1,11 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.ErgoGenerators
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 
 import scala.concurrent.duration._
 
-class ErgoSettingsSpecification extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators with scorex.testkit.SerializationTests {
+class ErgoSettingsSpecification extends ErgoPropertyTest {
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read(None)

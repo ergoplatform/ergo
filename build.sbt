@@ -33,9 +33,9 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "it",
-  "com.spotify" % "docker-client" % "8.11.0" % "it" classifier "shaded",
-  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "it"
+  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "test",
+  "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
+  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
 )
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
@@ -102,7 +102,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest)
+configs(IntegrationTest extend(Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,

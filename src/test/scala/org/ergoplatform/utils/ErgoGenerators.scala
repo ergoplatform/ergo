@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
@@ -25,7 +25,7 @@ import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
-  lazy val smallPositiveInt         : Gen[Int]                         = Gen.choose(1, 5)
+  lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
   lazy val anyoneCanSpendProposition: Gen[AnyoneCanSpendProposition.M] = Gen.const(AnyoneCanSpendProposition)
 
   lazy val invalidAnyoneCanSpendTransactionGen: Gen[AnyoneCanSpendTransaction] = for {
@@ -77,15 +77,14 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     stateRoot <- stateRootGen
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
-    nonce <- Arbitrary.arbitrary[Int]
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     equihashSolutions <- Gen.listOfN(EquihashSolution.length, Arbitrary.arbitrary[Int])
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
-    votes <- genBytesList(5)
+    extensionHash <- digest32Gen
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, votes, nonce, EquihashSolution(equihashSolutions))
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash, EquihashSolution(equihashSolutions))
 
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[AnyoneCanSpendTransaction], BoxHolder) =
@@ -101,7 +100,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
         val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size)).getOrElse(0))
         val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size)).getOrElse(0))
         val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.nonce).toIndexedSeq
-        val outputs = (consumedSelfBoxes ++  consumedBoxesFromState).map(_.value).toIndexedSeq
+        val outputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).toIndexedSeq
         val tx = new AnyoneCanSpendTransaction(inputs, outputs)
         loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.newBoxes, tx +: acc)
       } else {
@@ -165,7 +164,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     val time = System.currentTimeMillis()
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, Array.fill(5)(0.toByte))
+      transactions, time, digest32Gen.sample.get).get
   }
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {

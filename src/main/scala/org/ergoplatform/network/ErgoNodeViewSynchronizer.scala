@@ -19,13 +19,13 @@ import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)
+                               timeProvider: NetworkTimeProvider)(implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
@@ -110,7 +110,8 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider): Props =
+            timeProvider: NetworkTimeProvider)
+           (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
       timeProvider))
 
@@ -119,7 +120,7 @@ object ErgoNodeViewSynchronizer {
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider)
-           (implicit context: ActorRefFactory): ActorRef =
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
 
   def apply(networkControllerRef: ActorRef,
@@ -128,7 +129,7 @@ object ErgoNodeViewSynchronizer {
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider,
             name: String)
-           (implicit context: ActorRefFactory): ActorRef =
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
 
 

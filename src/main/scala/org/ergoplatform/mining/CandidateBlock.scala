@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
 import org.ergoplatform.settings.Algos
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 case class CandidateBlock(parentOpt: Option[Header],
                           nBits: Long,
@@ -14,7 +15,7 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[AnyoneCanSpendTransaction],
                           timestamp: Timestamp,
-                          votes: Array[Byte]) {
+                          extensionHash: Digest32) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
 }
@@ -29,7 +30,7 @@ object CandidateBlock {
       "timestamp" -> c.timestamp.asJson,
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
-      "votes" -> Algos.encode(c.votes).asJson
+      "extensionHash" -> Algos.encode(c.extensionHash).asJson
     ).asJson
 
 }

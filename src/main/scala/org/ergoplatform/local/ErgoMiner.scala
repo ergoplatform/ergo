@@ -19,7 +19,6 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -68,7 +67,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       miningThreads.foreach(_ ! candidateOpt.get)
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate
-      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)
+      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -154,7 +153,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, nodeId)
+    //TODO real extension should be there
+    val extensionHash = Algos.hash(nodeId)
+
+    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
   }
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders

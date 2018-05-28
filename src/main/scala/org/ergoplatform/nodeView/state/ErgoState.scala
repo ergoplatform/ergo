@@ -4,14 +4,17 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.Store
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import sigmastate.Values.TrueLeaf
+import sigmastate._
+import sigmastate.Values.{IntConstant, TrueLeaf}
+import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 
 import scala.util.Try
 
@@ -57,18 +60,26 @@ object ErgoState extends ScorexLogging {
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
-    lazy val genesisSeed = Long.MaxValue
-    lazy val rndGen = new scala.util.Random(genesisSeed)
-    lazy val initialBoxesNumber = 10000
+    // TODO check that this corresponds to ChainSettings.blockInterval
+    val fixedRate = 7500000000L
+    val fixedRatePeriod = 460800
+    val rewardReductionPeriod = 64800
+    val decreasingEpochs = 25
 
-    //todo: testnet1 - fix
-    lazy val initialBoxes: Seq[ErgoBox] =
-      (1 to initialBoxesNumber).map(i => ErgoBox(100, TrueLeaf, boxId = i.toShort))
-
-    val bh = BoxHolder(initialBoxes)
+    val reduction = Multiply(fixedRate, Modulo(Modulo(Minus(Height, fixedRatePeriod), rewardReductionPeriod),
+      decreasingEpochs))
+    val coinsToIssue = If(LE(Height, fixedRatePeriod), fixedRate, Minus(fixedRate, reduction))
+    val out = ByIndex(Outputs, 0)
+    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
+    val heightCorrect = EQ(ExtractRegisterAs[SInt.type](out, R4), Height)
+    val heightIncreased = GT(ExtractRegisterAs[SInt.type](out, R4), ExtractRegisterAs[SInt.type](Self, R4))
+    val correctCoinsConsumed = EQ(ExtractAmount(out), Minus(ExtractAmount(Self), coinsToIssue))
+    val prop = AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect)
+    val initialBoxCandidate: ErgoBox = ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
+    val bh = BoxHolder(Seq(initialBoxCandidate))
 
     UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
-      log.info("Genesis UTXO state generated")
+      log.info(s"Genesis UTXO state generated with digest ${Algos.encode(us.rootHash)}")
       us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
@@ -79,7 +90,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
   //33 bytes in Base58 encoding
-  val afterGenesisStateDigestHex: String = "2Ex5aoUXVCg47AYAsGwRBKarv5PEdig5ZuJwdzkvoxqu6o"
+  val afterGenesisStateDigestHex: String = "crUg83Je5HXh79QxHud4zjJU526t4WDBKbYPheTML6Net"
   //TODO rework try.get
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Algos.decode(afterGenesisStateDigestHex).get
 

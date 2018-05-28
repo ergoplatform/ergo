@@ -12,6 +12,7 @@ import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.encode.Base16
 import sigmastate._
 import sigmastate.Values.{IntConstant, TrueLeaf}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
@@ -79,7 +80,7 @@ object ErgoState extends ScorexLogging {
     val bh = BoxHolder(Seq(initialBoxCandidate))
 
     UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
-      log.info(s"Genesis UTXO state generated with digest ${Algos.encode(us.rootHash)}")
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
@@ -89,10 +90,10 @@ object ErgoState extends ScorexLogging {
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-  //33 bytes in Base58 encoding
-  val afterGenesisStateDigestHex: String = "crUg83Je5HXh79QxHud4zjJU526t4WDBKbYPheTML6Net"
+  //33 bytes in Base16 encoding
+  val afterGenesisStateDigestHex: String = "78b130095239561ecf5449a7794c0615326d1fd007cc79dcc286e46e4beb1d3f01"
   //TODO rework try.get
-  val afterGenesisStateDigest: ADDigest = ADDigest @@ Algos.decode(afterGenesisStateDigestHex).get
+  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
 

@@ -23,7 +23,7 @@ class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with Integratio
 
   private val nodesCount = 4
   private val dockerConfigs = Random.shuffle(Docker.nodeConfigs.getConfigList("nodes").asScala).take(nodesCount)
-  private val nodeConfigs = nonGeneratingPeerConfig.withFallback(dockerConfigs.head) +: dockerConfigs.tail
+  private val nodeConfigs = dockerConfigs.head +: dockerConfigs.tail.map(nonGeneratingPeerConfig.withFallback)
   private val futureNodes: Future[Seq[Node]] = docker.startNodes(nodeConfigs)
 
   override protected def beforeAll(): Unit = {

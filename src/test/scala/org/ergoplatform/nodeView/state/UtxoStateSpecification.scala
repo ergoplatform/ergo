@@ -1,10 +1,9 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
@@ -24,12 +23,14 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
+  ignore("anyoneCanSpendBoxesAtHeight()") {
+    //TODO
+  }
+
   property("proofsForTransactions") {
-    var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var (us: UtxoState, bh) = createUtxoState
     forAll(invalidHeaderGen) { header =>
-      val boxes = us.anyoneCanSpendBoxesAtHeight(header.height)
-      val inputs = boxes.map(_.id).map(noProofInput).toIndexedSeq
-      val txs = Seq(ErgoTransaction(inputs, IndexedSeq(new ErgoBoxCandidate(boxes.map(_.value).sum, TrueLeaf))))
+      val txs = validTransactionsFromBoxHolder(bh)._1
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
@@ -93,7 +94,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createUtxoState
+      val state = createUtxoState._1
       state.applyModifier(b).isFailure shouldBe true
     }
   }

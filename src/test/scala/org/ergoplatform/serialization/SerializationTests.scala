@@ -24,7 +24,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoBox serialization") {
-    checkSerializationRoundtrip(ergoBoxGen, ErgoBoxSerializer)
+    checkSerializationRoundtrip(ergoBoxGenNoProp, ErgoBoxSerializer)
   }
 
   property("ErgoTransactionGen serialization") {

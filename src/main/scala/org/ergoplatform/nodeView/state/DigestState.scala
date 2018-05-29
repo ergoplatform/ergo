@@ -5,7 +5,7 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.ErgoBlockchainState
+import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
@@ -60,7 +60,7 @@ class DigestState protected(override val version: VersionTag,
 
                 Try(idsToRemove.map { id =>
                   val boxBytes = verifier.performOneOperation(Remove(id)).get.get
-                  ErgoBox.serializer.parseBytes(boxBytes).get
+                  ErgoBoxSerializer.parseBytes(boxBytes).get
                 }).flatMap(boxesToSpend => tx.statefulValidity(boxesToSpend, blockchainState).map(_ + c))
               }.flatMap { c =>
               Try(

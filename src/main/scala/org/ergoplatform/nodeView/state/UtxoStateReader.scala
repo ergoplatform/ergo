@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.Store
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.ADProofs
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
@@ -40,7 +40,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver
       .unauthenticatedLookup(id)
-      .map(ErgoBox.serializer.parseBytes)
+      .map(ErgoBoxSerializer.parseBytes)
       .flatMap(_.toOption)
 
   def randomBox(): Option[ErgoBox] =

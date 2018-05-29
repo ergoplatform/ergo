@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -136,12 +136,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
         loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc)
       } else {
         // take all remaining boxes from state and return transactions set
-        val stateInputs = stateBoxes.map(_.id).map(noProofInput).toIndexedSeq
-        val inputs = (selfBoxes.take(1) ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
+        val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
+        val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
         assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
         val outputs = stateBoxes.map(_.value).map(outputForAnyone).toIndexedSeq
         val tx = new ErgoTransaction(inputs, outputs)
-        (tx +: acc , selfBoxes)
+        (tx +: acc , remainedSelfBoxes)
       }
     }
 

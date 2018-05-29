@@ -96,13 +96,13 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createUtxoState._1
+      val state = createUtxoState()._1
       state.applyModifier(b).isFailure shouldBe true
     }
   }
 
   property("applyModifier() - valid full block after invalid one") {
-    val (us, bh) = createUtxoState
+    val (us, bh) = createUtxoState()
     val validBlock = validFullBlock(parentOpt = None, us, bh)
 
     //Different state

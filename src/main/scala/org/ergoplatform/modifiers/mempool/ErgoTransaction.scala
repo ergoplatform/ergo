@@ -38,6 +38,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statelessValidity: Try[Unit] =
     Try {
+      require(inputs.nonEmpty)
       require(inputs.size <= Short.MaxValue)
       require(outputCandidates.size <= Short.MaxValue)
     }

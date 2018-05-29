@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import java.util.concurrent.Executors
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.Matchers
@@ -10,6 +11,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
+import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
 
@@ -17,9 +19,10 @@ trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with C
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
-  def createUtxoState: (UtxoState, BoxHolder) = {
-    val bh = boxesHolderGen.sample.get
-    (createUtxoState(bh), bh)
+  def createUtxoState(): (UtxoState, BoxHolder) = {
+    val boxes = (0 until 200).map(i => ErgoBox(i * 100000000L, TrueLeaf))
+    val bh = BoxHolder(boxes)
+    (UtxoState.fromBoxHolder(bh, createTempDir, None), bh)
   }
 
   def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir, None)

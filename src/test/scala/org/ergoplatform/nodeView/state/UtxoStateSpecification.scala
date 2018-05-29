@@ -30,7 +30,9 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState
     forAll(invalidHeaderGen) { header =>
-      val txs = validTransactionsFromBoxHolder(bh)._1
+      val t = validTransactionsFromBoxHolder(bh)
+      val txs = t._1
+      bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
       val adProofs = ADProofs(realHeader.id, adProofBytes)

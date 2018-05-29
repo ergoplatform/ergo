@@ -38,9 +38,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statelessValidity: Try[Unit] =
     Try {
-      require(inputs.nonEmpty)
-      require(inputs.size <= Short.MaxValue)
-      require(outputCandidates.size <= Short.MaxValue)
+      require(inputs.nonEmpty, s"No inputs in transaction $toString")
+      require(inputs.size <= Short.MaxValue, s"Too much inputs in transaction $toString")
+      require(outputCandidates.size <= Short.MaxValue, s"Too much outputCandidates in transaction $toString")
     }
 
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoBlockchainState): Try[Long] = Try {

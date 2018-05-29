@@ -1,7 +1,6 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryIdentifier, R3}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.ErgoBox.{BoxId, R3}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -13,14 +12,15 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.{SBoolean, SType}
-import sigmastate.Values.{EvaluatedValue, IntConstant, TrueLeaf, Value}
+import sigmastate.SBoolean
+import sigmastate.Values.{IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.annotation.tailrec

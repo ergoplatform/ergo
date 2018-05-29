@@ -21,7 +21,7 @@ object Algos {
   }
 
   val hash:HF = Blake2b256
-  val encoder = Base58
+  val encoder = Base16
 
   val initialDifficulty = 1
 

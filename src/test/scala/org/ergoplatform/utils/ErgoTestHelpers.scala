@@ -13,11 +13,14 @@ import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.ExecutionContext
 
-trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with ChainGenerator {
+trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoGenerators {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
-  def createUtxoState: UtxoState = UtxoState.create(createTempDir, None)
+  def createUtxoState: (UtxoState, BoxHolder) = {
+    val bh = boxesHolderGen.sample.get
+    (createUtxoState(bh), bh)
+  }
 
   def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir, None)
 

@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import java.util.concurrent.Executors
 
+import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
@@ -19,13 +20,14 @@ trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with C
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
-  def createUtxoState(): (UtxoState, BoxHolder) = {
+  def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val boxes = (0 until 200).map(i => ErgoBox(i * 100000000L, TrueLeaf))
     val bh = BoxHolder(boxes)
-    (UtxoState.fromBoxHolder(bh, createTempDir, None), bh)
+    (UtxoState.fromBoxHolder(bh, createTempDir, nodeViewHolderRef), bh)
   }
 
-  def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir, None)
+  def createUtxoState(bh: BoxHolder): UtxoState =
+    UtxoState.fromBoxHolder(bh, createTempDir, None)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None).nodeSettings)

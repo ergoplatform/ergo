@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R3}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
@@ -124,7 +125,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     def loop(txRemain: Int,
              stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
-             acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+             acc: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[ErgoBox])  = {
       if (txRemain > 1) {
         val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size)).getOrElse(0))
         val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size)).getOrElse(0))
@@ -137,14 +138,15 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
         val inputs = stateBoxes.map(_.id).map(noProofInput).toIndexedSeq
         val outputs = stateBoxes.map(_.value).map(outputForAnyone).toIndexedSeq
         val tx = new ErgoTransaction(inputs, outputs)
-        tx +: acc
+        (tx +: acc , selfBoxes)
       }
     }
 
-    val (boxes, bs) = boxHolder.take(rnd.nextInt(100) + 1)
+    val (boxes, drainedBh) = boxHolder.take(rnd.nextInt(100) + 1)
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
-    val txCount = rnd.nextInt(10) + 1
-    loop(txCount, boxes, Seq.empty, Seq.empty) -> bs
+    val (txs, createdBoxes) = loop(rnd.nextInt(10) + 1, boxes, Seq.empty, Seq.empty)
+    val bs = new BoxHolder(drainedBh.boxes ++ createdBoxes.map(b => ByteArrayWrapper(b.id) -> b))
+    txs -> bs
   }
 
 

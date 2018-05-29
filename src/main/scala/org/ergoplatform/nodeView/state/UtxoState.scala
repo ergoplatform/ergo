@@ -104,6 +104,7 @@ class UtxoState(override val version: VersionTag,
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
         val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))

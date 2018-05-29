@@ -28,9 +28,9 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("proofsForTransactions") {
-    var (us: UtxoState, bh) = createUtxoState
+    var (us: UtxoState, bh) = createUtxoState()
     forAll(invalidHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh)
+      val t = validTransactionsFromBoxHolder(bh, new Random(12))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
@@ -102,7 +102,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyModifier() - valid full block after invalid one") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us, bh) = createUtxoState
     val validBlock = validFullBlock(parentOpt = None, us, bh)
 
     //Different state
@@ -125,14 +125,14 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
 
   property("2 forks switching") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us, bh) = createUtxoState
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
     val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1).get
     val chain1block2 = validFullBlock(Some(chain1block1.header), wusChain1Block1)
 
-    val (us2, bh2) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us2, bh2) = createUtxoState
     val wus2AfterGenesis = WrappedUtxoState(us2, bh2, None).applyModifier(genesis).get
     val chain2block1 = validFullBlock(Some(genesis.header), wus2AfterGenesis)
     val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1).get

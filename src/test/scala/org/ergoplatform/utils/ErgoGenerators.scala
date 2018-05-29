@@ -142,6 +142,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     }
 
     val (boxes, bs) = boxHolder.take(rnd.nextInt(100) + 1)
+    assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val txCount = rnd.nextInt(10) + 1
     loop(txCount, boxes, Seq.empty, Seq.empty) -> bs
   }

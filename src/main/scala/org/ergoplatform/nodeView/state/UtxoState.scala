@@ -83,7 +83,6 @@ class UtxoState(override val version: VersionTag,
     val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
-        println(m)
         persistentProver.performOneOperation(m)
       })
     }.get

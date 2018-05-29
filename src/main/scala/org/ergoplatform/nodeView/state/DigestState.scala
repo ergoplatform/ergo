@@ -92,7 +92,7 @@ class DigestState protected(override val version: VersionTag,
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
         case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason ${e.getMessage}")
+          log.warn(s"Invalid block ${fb.encodedId}, reason: ${e.getMessage}")
           Failure(e)
       }
 

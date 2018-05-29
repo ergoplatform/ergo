@@ -44,7 +44,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
 
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoBlockchainState): Try[Long] = Try {
-    require(boxesToSpend.size == inputs.size)
+    require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 
     val lastUtxoDigest = AvlTreeData(blockchainState.lastUtxoDigest, ErgoBox.BoxId.size)
 

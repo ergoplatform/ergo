@@ -27,6 +27,9 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
       }
 
     case FetchBoxes =>
+      /*
+      //todo: testnet1 - fix
+
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool,
         Seq[ErgoTransaction]] { v =>
         if (v.pool.size < settings.keepPoolSize) {
@@ -36,13 +39,12 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
             val values = txBoxes.map(_.value)
             val txOutputs = if (values.head % 2 == 0) IndexedSeq.fill(2)(values.head / 2) ++ values.tail else values
 
-            //todo: testnet1 - fix
             ??? //ErgoTransaction(txInputs, txOutputs)
           }
         } else {
           Seq.empty
         }
-      }
+      }*/
 
     case txs: Seq[ErgoTransaction] =>
       txs.foreach { tx =>

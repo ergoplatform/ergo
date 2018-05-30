@@ -126,10 +126,21 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   @tailrec
   private def validTransactionsFromBoxes(txRemain: Int,
-                                 stateBoxes: Seq[ErgoBox],
-                                 selfBoxes: Seq[ErgoBox],
-                                 acc: Seq[ErgoTransaction],
-                                 rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                         stateBoxes: Seq[ErgoBox],
+                                         selfBoxes: Seq[ErgoBox],
+                                         acc: Seq[ErgoTransaction],
+                                         rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+    def genOuts(remainingAmount: Long,
+                acc: IndexedSeq[ErgoBoxCandidate],
+                limit: Int): IndexedSeq[ErgoBoxCandidate] = {
+      val newAmount = rnd.nextLong() % (remainingAmount + acc.map(_.value).sum)
+      if (newAmount >= remainingAmount || limit <= 1) {
+        acc :+ outputForAnyone(remainingAmount)
+      } else {
+        genOuts(remainingAmount - newAmount, acc :+ outputForAnyone(newAmount), limit - 1)
+      }
+    }
+
     stateBoxes.find(_ == ErgoState.genesisEmissionBox) match {
       case Some(emissionBox) if txRemain > 0 =>
         // Extract money to anyoneCanSpend output and forget about emission box for tests
@@ -144,7 +155,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
           val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
           val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
           assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-          val outputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).map(outputForAnyone).toIndexedSeq
+          val totalAmount = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).sum
+          val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(10) + 1)
           val tx = new ErgoTransaction(inputs, outputs)
           validTransactionsFromBoxes(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
         } else {
@@ -152,7 +164,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
           val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
           val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
           assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-          val outputs = (consumedSelfBoxes ++ stateBoxes).map(_.value).map(outputForAnyone).toIndexedSeq
+          val totalAmount = (consumedSelfBoxes ++ stateBoxes).map(_.value).sum
+          val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(10) + 1)
           val tx = new ErgoTransaction(inputs, outputs)
           ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs)
         }
@@ -174,7 +187,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
     val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == TrueLeaf)
-    val boxes = if(anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
+    val boxes = if (anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
 
     validTransactionsFromBoxes(num, boxes, Seq.empty, Seq.empty, rnd)._1
   }
@@ -184,22 +197,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
-    val (transactions, _) = validTransactionsFromBoxHolder(boxHolder, rnd)
-    transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions).operations.foreach{
-      case Removal(boxId: ADKey) => assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
-      case _ =>
-    }
-    validFullBlock(parentOpt, utxoState, transactions)
+    validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
-    val transactions = validTransactionsFromUtxoState(utxoState)
-    transactions.foreach(_.statelessValidity shouldBe 'success)
-    // TODO check boxChanges are not trying to spend any boxes that are not from state
-    //    transactions.flatMap(_.inputs.map(_.boxId)).foreach(bid => utxoState.boxById(bid) should not be None)
-    validFullBlock(parentOpt, utxoState, transactions)
+    validFullBlock(parentOpt, utxoState, validTransactionsFromUtxoState(utxoState))
   }
 
   def validFullBlock(parentOpt: Option[Header],
@@ -208,6 +211,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                      n: Char = 48,
                      k: Char = 5
                     ): ErgoFullBlock = {
+    transactions.foreach(_.statelessValidity shouldBe 'success)
+    transactions.nonEmpty shouldBe true
+    ErgoState.boxChanges(transactions).operations.foreach {
+      case Removal(boxId: ADKey) => assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
+      case _ =>
+    }
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 

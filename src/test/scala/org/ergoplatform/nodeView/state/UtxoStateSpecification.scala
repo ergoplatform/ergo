@@ -26,10 +26,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-  ignore("anyoneCanSpendBoxesAtHeight()") {
-    //TODO
-  }
-
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState()
     forAll(invalidHeaderGen) { header =>

@@ -14,7 +14,7 @@ import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base16
 import sigmastate.{SLong, _}
-import sigmastate.Values.{IntConstant, TrueLeaf}
+import sigmastate.Values.{ByteConstant, IntConstant, LongConstant, TrueLeaf}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 
 import scala.util.Try
@@ -62,21 +62,21 @@ object ErgoState extends ScorexLogging {
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
     // TODO check that this corresponds to ChainSettings.blockInterval
-    val fixedRate = 7500000000L
-    val fixedRatePeriod = 460800
-    val rewardReductionPeriod = 64800
-    val decreasingEpochs = 25
-    val blocksTotal = 2102400
+    val fixedRate = LongConstant(7500000000L)
+    val fixedRatePeriod = LongConstant(460800)
+    val rewardReductionPeriod = LongConstant(64800)
+    val decreasingEpochs = LongConstant(25)
+    val blocksTotal = LongConstant(2102400)
 
     val register = R3
     val red = Modulo(Multiply(fixedRate, Modulo(Minus(Height, fixedRatePeriod), rewardReductionPeriod)), decreasingEpochs)
     val coinsToIssue = If(LE(Height, fixedRatePeriod), fixedRate, Minus(fixedRate, red))
     val out = ByIndex(Outputs, 0)
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs(out, register), Height)
-    val heightIncreased = GT(ExtractRegisterAs(out, register), ExtractRegisterAs(Self, register))
+    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
+    val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), GE(Height, blocksTotal))
+    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
     val initialBoxCandidate: ErgoBox = ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
     val bh = BoxHolder(Seq(initialBoxCandidate))
 

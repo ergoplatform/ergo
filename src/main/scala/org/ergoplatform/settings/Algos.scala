@@ -2,7 +2,7 @@ package org.ergoplatform.settings
 
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
-import scorex.crypto.encode.{Base16, Base58}
+import scorex.crypto.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.Try
@@ -20,7 +20,7 @@ object Algos {
     Constants.MaxTarget / blockTarget
   }
 
-  val hash:HF = Blake2b256
+  val hash: HF = Blake2b256
   val encoder = Base16
 
   val initialDifficulty = 1

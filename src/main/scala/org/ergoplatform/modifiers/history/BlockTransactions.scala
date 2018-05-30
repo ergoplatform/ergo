@@ -1,8 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
+import io.circe.Encoder
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
@@ -10,7 +10,6 @@ import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.crypto.authds.LeafData
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
@@ -18,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction]
-  with ModifierWithDigest {
+    with ModifierWithDigest {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
@@ -52,16 +51,17 @@ object BlockTransactions {
 
   implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
     Map(
-      "headerId" -> Base58.encode(bt.headerId).asJson,
+      "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson
     ).asJson
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
   override def toBytes(obj: BlockTransactions): Array[Byte] = {
-    val txsBytes = concatBytes(obj.txs.map{tx =>
+    val txsBytes = concatBytes(obj.txs.map { tx =>
       val txBytes = ErgoTransaction.serializer.toBytes(tx)
-      Bytes.concat(Shorts.toByteArray(txBytes.length.toShort), txBytes)}) //todo: short is wrong
+      Bytes.concat(Shorts.toByteArray(txBytes.length.toShort), txBytes)
+    }) //todo: short is wrong
     Bytes.concat(obj.headerId, txsBytes)
   }
 
@@ -80,6 +80,7 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
         parseTransactions(index + 2 + txLength, acc :+ tx)
       }
     }
+
     parseTransactions(Constants.ModifierIdSize, Seq.empty)
   }
 }

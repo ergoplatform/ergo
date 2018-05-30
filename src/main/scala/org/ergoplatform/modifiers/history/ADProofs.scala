@@ -11,7 +11,6 @@ import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
@@ -65,7 +64,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
           if (digest sameElements expectedHash) {
             Success(oldValues)
           } else {
-            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
+            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))
           }
         case None =>
           Failure(new IllegalStateException("Digest is undefined"))
@@ -97,9 +96,9 @@ object ADProofs {
 
   implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
     Map(
-      "headerId" -> Base58.encode(proof.headerId).asJson,
-      "proofBytes" -> Base58.encode(proof.proofBytes).asJson,
-      "digest" -> Base58.encode(proof.digest).asJson
+      "headerId" -> Algos.encode(proof.headerId).asJson,
+      "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
+      "digest" -> Algos.encode(proof.digest).asJson
     ).asJson
 }
 

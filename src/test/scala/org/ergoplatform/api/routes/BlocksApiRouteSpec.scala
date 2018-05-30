@@ -6,10 +6,10 @@ import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.settings.Algos
 import org.scalatest.OptionValues._
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.ModifierId
-import scorex.crypto.encode.Base58
 
 import scala.concurrent.duration._
 
@@ -27,7 +27,7 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(50, 0).map(Base58.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAt(50, 0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -48,7 +48,7 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get block at height" in {
     Get(prefix + "/at/0") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAtHeight(0).map(Base58.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAtHeight(0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -64,7 +64,7 @@ class BlocksApiRouteSpec extends FlatSpec
   }
 
   val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
-  val headerIdString: String = Base58.encode(headerIdBytes)
+  val headerIdString: String = Algos.encode(headerIdBytes)
 
   it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {

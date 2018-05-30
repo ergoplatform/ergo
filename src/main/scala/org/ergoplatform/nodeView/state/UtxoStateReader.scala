@@ -2,7 +2,8 @@ package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.Store
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -22,6 +23,18 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
   protected var emissionBoxOpt: Option[ErgoBox] = None
+
+  /**
+    * Extract emission box from transactions and save it to emissionBoxOpt
+    * @param fb - ergo full block
+    */
+  protected def extractEmissionBox(fb: ErgoFullBlock): Unit = {
+    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
+      .find(o => o.proposition == ErgoState.emissionBoxProposition) match {
+      case Some(newEmissionBox) => emissionBoxOpt = Some(newEmissionBox)
+      case _ => log.warn(s"Emission box not found in block ${fb.encodedId}")
+    }
+  }
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
     val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)

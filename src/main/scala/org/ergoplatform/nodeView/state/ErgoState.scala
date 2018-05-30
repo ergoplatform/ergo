@@ -14,7 +14,7 @@ import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base16
 import sigmastate.{SLong, _}
-import sigmastate.Values.{ByteConstant, IntConstant, LongConstant, TrueLeaf}
+import sigmastate.Values.{ByteConstant, IntConstant, LongConstant, TrueLeaf, Value}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 
 import scala.util.Try
@@ -59,8 +59,7 @@ object ErgoState extends ScorexLogging {
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
-  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
-    log.info("Generating genesis UTXO state")
+  lazy val emissionBoxProposition: Value[SBoolean.type] = {
     // TODO check that this corresponds to ChainSettings.blockInterval
     val fixedRate = LongConstant(7500000000L)
     val fixedRatePeriod = LongConstant(460800)
@@ -76,7 +75,12 @@ object ErgoState extends ScorexLogging {
     val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
     val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
+    OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
+  }
+
+  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+    log.info("Generating genesis UTXO state")
+    val prop = emissionBoxProposition
     val initialBoxCandidate: ErgoBox = ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
     val bh = BoxHolder(Seq(initialBoxCandidate))
 
@@ -104,7 +108,7 @@ object ErgoState extends ScorexLogging {
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings.nodeSettings)
-      case StateType.Utxo  if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
       case _ => ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
     }
   }

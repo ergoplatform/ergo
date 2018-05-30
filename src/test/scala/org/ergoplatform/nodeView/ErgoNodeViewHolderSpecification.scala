@@ -12,6 +12,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -258,13 +259,15 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
-    val tx = ErgoTransaction(IndexedSeq(), IndexedSeq())
-
-    subscribeEvents(classOf[FailedTransaction[_]])
-    nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-    expectNoMsg()
-    nodeViewRef ! poolSize(nodeViewConfig)
-    expectMsg(1)
+    if (nodeViewConfig.stateType == Utxo) {
+      val (_, bh) = createUtxoState(Some(nodeViewRef))
+      val tx = validTransactionsFromBoxHolder(bh)._1.head
+      subscribeEvents(classOf[FailedTransaction[_]])
+      nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      expectNoMsg()
+      nodeViewRef ! poolSize(nodeViewConfig)
+      expectMsg(1)
+    }
   }
 
   private val t7 = TestCase("apply invalid full block") { fixture =>

@@ -154,7 +154,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
           assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
           val outputs = (consumedSelfBoxes ++ stateBoxes).map(_.value).map(outputForAnyone).toIndexedSeq
           val tx = new ErgoTransaction(inputs, outputs)
-          (tx +: acc, remainedSelfBoxes ++ tx.outputs)
+          ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs)
         }
     }
   }

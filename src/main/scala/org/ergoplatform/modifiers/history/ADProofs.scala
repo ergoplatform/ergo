@@ -49,24 +49,21 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
     */
   def verify(changes: StateChanges,
              previousHash: ADDigest,
-             expectedHash: ADDigest): Try[Unit] = {
+             expectedHash: ADDigest): Try[Seq[ADValue]] = {
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
-                     changes: StateChanges) =
-      changes.operations.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, o) =>
-        t.flatMap(_ => {
-          verifier.performOneOperation(ADProofs.changeToMod(o))
-        })
-      }
+                     changes: StateChanges): Try[Seq[ADValue]] = Try {
+      changes.operations.flatMap(o => verifier.performOneOperation(ADProofs.changeToMod(o)).get)
+    }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
       None, maxNumOperations = Some(changes.operations.size))
 
-    applyChanges(verifier, changes).flatMap { _ =>
+    applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
           if (digest sameElements expectedHash) {
-            Success()
+            Success(oldValues)
           } else {
             Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
           }

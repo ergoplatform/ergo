@@ -44,6 +44,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       require(outputCandidates.size <= Short.MaxValue, s"Too much outputCandidates in transaction $toString")
     }
 
+  /**
+    *
+    * @param boxesToSpend
+    * @param blockchainState
+    * @return total coimputation cost
+    */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoBlockchainState): Try[Long] = Try {
     require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 

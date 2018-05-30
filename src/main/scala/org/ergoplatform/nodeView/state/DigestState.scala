@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
@@ -43,37 +43,33 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          val blockchainState = ErgoBlockchainState(fb.header.height, rootHash)
-
-          val txs = fb.blockTransactions.txs
-
-          val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
-
-          val verifier = new BatchAVLVerifier[Digest32, HF](rootHash, proofs.proofBytes, ADProofs.KL,
-            None, maxNumOperations = Some(maxOps))
-
-          val totalCostTry = txs.foldLeft[Try[Long]](Success(0)) { case (status, tx) =>
-            status
-              .flatMap(c => tx.statelessValidity.map(_ => c))
-              .flatMap { c =>
-                val idsToRemove = tx.inputs.map(_.boxId)
-
-                Try(idsToRemove.map { id =>
-                  val boxBytes = verifier.performOneOperation(Remove(id)).get.get
-                  ErgoBoxSerializer.parseBytes(boxBytes).get
-                }).flatMap(boxesToSpend => tx.statefulValidity(boxesToSpend, blockchainState).map(_ + c))
-              }.flatMap { c =>
-              Try(
-                tx.outputs.map { out =>
-                  verifier.performOneOperation(Insert(out.id, ADValue @@ out.bytes)).get
-                }).map(_ => c)
-            }
-
-          }
-
           Try {
-            assert(totalCostTry.get <= 1000000) //todo: externalize
-            assert(fb.header.stateRoot sameElements verifier.digest)
+            val blockchainState = ErgoBlockchainState(fb.header.height, rootHash)
+
+            val txs = fb.blockTransactions.txs
+
+            val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
+
+            val verifier = new BatchAVLVerifier[Digest32, HF](rootHash, proofs.proofBytes, ADProofs.KL,
+              None, maxNumOperations = Some(maxOps))
+
+            val declaredHash = fb.header.stateRoot
+            // Check modifications, returning sequence of old values
+            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.boxChanges(txs), rootHash, declaredHash)
+              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+            val totalCost = txs.map { tx =>
+              tx.statelessValidity.get
+              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+                knownBoxes.get(ByteArrayWrapper(id)) match {
+                  case Some(box) => box
+                  case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+                }
+              }
+              tx.statefulValidity(boxesToSpend, blockchainState).get
+            }.sum
+            if (totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
           }
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
@@ -92,7 +88,7 @@ class DigestState protected(override val version: VersionTag,
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
         case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason: ${e.getMessage}")
+          log.warn(s"Invalid block ${fb.encodedId}, reason: ", e)
           Failure(e)
       }
 

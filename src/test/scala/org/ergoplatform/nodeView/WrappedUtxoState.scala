@@ -38,7 +38,7 @@ class WrappedUtxoState(override val version: VersionTag,
     case Success(us) =>
       mod match {
         case ct: TCPMOD =>
-          val changes = boxChanges(ct.transactions)
+          val changes = ErgoState.boxChanges(ct.transactions)
           val updHolder = versionedBoxHolder.applyChanges(
             ByteArrayWrapper(us.version),
             changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),

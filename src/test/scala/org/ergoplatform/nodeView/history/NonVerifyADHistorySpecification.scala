@@ -3,10 +3,9 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.NoShrink
-import scorex.core.consensus.History.{Equal, HistoryComparisonResult, Unknown, Younger}
-import scorex.crypto.encode.Base58
+import scorex.core.consensus.History.{Equal, Unknown, Younger}
 import scorex.crypto.hash.Digest32
 
 class NonVerifyADHistorySpecification extends HistorySpecification {
@@ -121,15 +120,15 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     val smallerLimit = 2
     val ci0 = history.continuationIds(ErgoSyncInfo(Seq()), smallerLimit).get
-    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Base58.encode(c._2))
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Algos.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
     val ci1 = history.continuationIds(ErgoSyncInfo(Seq()), biggerLimit).get
-    chain.headers.map(_.encodedId) should contain theSameElementsAs ci1.map(c => Base58.encode(c._2))
+    chain.headers.map(_.encodedId) should contain theSameElementsAs ci1.map(c => Algos.encode(c._2))
 
     val ci = history.continuationIds(ErgoSyncInfo(Seq()), BlocksInChain).get
     ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
-    chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Base58.encode(c._2))
+    chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Algos.encode(c._2))
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {
@@ -201,7 +200,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
-                                                            defaultDifficultyControl, extensionHash)
+          defaultDifficultyControl, extensionHash)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
         (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty

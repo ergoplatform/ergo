@@ -4,7 +4,7 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
@@ -80,7 +80,7 @@ trait ChainGenerator {
   }
 
   protected def blockStream(prefix: Option[ErgoFullBlock]): Stream[ErgoFullBlock] = {
-    def txs(i: Long) = Seq(AnyoneCanSpendTransaction(IndexedSeq(i), IndexedSeq(1L)))
+    def txs(i: Long) = Seq(ErgoTransaction(IndexedSeq(), IndexedSeq()))
 
     lazy val blocks: Stream[ErgoFullBlock] =
       nextBlock(prefix, txs(1)) #::
@@ -88,7 +88,7 @@ trait ChainGenerator {
     prefix ++: blocks
   }
 
-  def nextBlock(prev: Option[ErgoFullBlock], txs: Seq[AnyoneCanSpendTransaction],
+  def nextBlock(prev: Option[ErgoFullBlock], txs: Seq[ErgoTransaction],
                 extensionHash: Digest32 = EmptyDigest32): ErgoFullBlock =
     powScheme.proveBlock(
       prev.map(_.header),

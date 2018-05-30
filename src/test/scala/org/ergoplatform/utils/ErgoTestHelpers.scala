@@ -2,6 +2,8 @@ package org.ergoplatform.utils
 
 import java.util.concurrent.Executors
 
+import akka.actor.ActorRef
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.Matchers
@@ -10,16 +12,22 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
+import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
 
-trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with ChainGenerator {
+trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoGenerators {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
-  def createUtxoState: UtxoState = UtxoState.create(createTempDir, None)
+  def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
+    val boxes = (0 until 200).map(i => ErgoBox(i * 100000000L, TrueLeaf))
+    val bh = BoxHolder(boxes)
+    (UtxoState.fromBoxHolder(bh, createTempDir, nodeViewHolderRef), bh)
+  }
 
-  def createUtxoState(bh: BoxHolder): UtxoState = UtxoState.fromBoxHolder(bh, createTempDir, None)
+  def createUtxoState(bh: BoxHolder): UtxoState =
+    UtxoState.fromBoxHolder(bh, createTempDir, None)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None).nodeSettings)

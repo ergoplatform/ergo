@@ -4,20 +4,26 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox.R3
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import sigmastate.{NoProof, SBoolean, SigSerializer}
+import sigmastate.Values.{LongConstant, TrueLeaf, Value}
+import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
-import scala.collection._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
@@ -36,6 +42,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
+
+  // TODO extract from wallet or settings
+  private val minerProp = TrueLeaf
+  private val emission = new CoinsEmission()
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -122,21 +132,19 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  private def createCoinbase(state: UtxoStateReader, height: Int): AnyoneCanSpendTransaction = {
-    val txBoxes = state.anyoneCanSpendBoxesAtHeight(height)
-    AnyoneCanSpendTransaction(txBoxes.map(_.nonce), txBoxes.map(_.value))
-  }
-
   private def createCandidate(history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): CandidateBlock = {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val height = bestHeaderOpt.map(_.height + 1).getOrElse(0)
-    val coinbase = createCoinbase(state, height)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    //todo: move magic number to testnet settings
-    val txs = coinbase +: state.filterValid(pool.unconfirmed.values.toSeq)
+    // todo: move magic number to testnet settings
+    val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).take(10)
+    // TODO extract boxes with TrueLeaf proposition
+    val feeBoxes: Seq[ErgoBox] = Seq.empty
+    val coinbase = ErgoMiner.createCoinbase(state, height, feeBoxes, minerProp, emission)
+    val txs = externalTransactions :+ coinbase
 
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
     //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
@@ -161,9 +169,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
 
-  private def fixTxsConflicts(txs: Seq[AnyoneCanSpendTransaction]): Seq[AnyoneCanSpendTransaction] = txs
-    .foldLeft((Seq.empty[AnyoneCanSpendTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
-      val bxsBaw = tx.boxIdsToOpen.map(ByteArrayWrapper.apply)
+  private def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
+    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
+      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
       if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
         (s :+ tx) -> (keys ++ bxsBaw)
       } else {
@@ -174,6 +182,38 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  def createCoinbase(state: UtxoStateReader,
+                     height: Int,
+                     feeBoxes: Seq[ErgoBox],
+                     minerProp: Value[SBoolean.type],
+                     emission: CoinsEmission): ErgoTransaction = {
+    state.emissionBox() match {
+      case Some(emissionBox) =>
+        ErgoMiner.createCoinbase(height, feeBoxes, emissionBox, minerProp, emission)
+      case None =>
+        // TODO extract fees when emission is finished
+        ???
+    }
+  }
+
+  def createCoinbase(height: Int,
+                     feeBoxes: Seq[ErgoBox],
+                     emissionBox: ErgoBox,
+                     minerProp: Value[SBoolean.type],
+                     emission: CoinsEmission): ErgoTransaction = {
+    val prop = emissionBox.proposition
+    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
+    val newEmissionBox: ErgoBoxCandidate =
+      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
+    val inputs = (emissionBox +: feeBoxes)
+      .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
+
+    ErgoTransaction(
+      inputs.toIndexedSeq,
+      IndexedSeq(newEmissionBox, minerBox)
+    )
+  }
 
 
   case object StartMining

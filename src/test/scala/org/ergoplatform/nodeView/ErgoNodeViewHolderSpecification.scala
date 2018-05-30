@@ -5,27 +5,30 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.StateType.Utxo
+import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, NoShrink}
 import org.scalatest.BeforeAndAfterAll
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
+import scorex.crypto.authds.ADKey
+import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAfterAll {
+class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAfterAll with NoShrink {
 
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
@@ -38,6 +41,10 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   override def afterAll(): Unit = {
     system.terminate()
+  }
+
+  override def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
+    ErgoState.generateGenesisUtxoState(createTempDir, nodeViewHolderRef)
   }
 
   type H = ErgoHistory
@@ -141,7 +148,8 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     def run(test: NodeViewFixture => Unit): Unit = try test(this) finally stop()
 
     def stop(): Unit = {
-      system.stop(nodeViewRef); system.stop(testProbe.testActor)
+      system.stop(nodeViewRef);
+      system.stop(testProbe.testActor)
     }
   }
 
@@ -159,8 +167,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t3 = TestCase("apply valid block header") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val block = validFullBlock(None, us, bh)
 
     nodeViewRef ! bestHeaderOpt(nodeViewConfig)
@@ -193,8 +200,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
@@ -222,8 +228,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t5 = TestCase("apply full blocks after genesis") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
@@ -255,19 +260,20 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
-    val tx = AnyoneCanSpendTransaction(IndexedSeq.empty[Long], IndexedSeq.empty[Long])
-
-    subscribeEvents(classOf[FailedTransaction[_, _]])
-    nodeViewRef ! LocallyGeneratedTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction](tx)
-    expectNoMsg()
-    nodeViewRef ! poolSize(nodeViewConfig)
-    expectMsg(1)
+    if (nodeViewConfig.stateType == Utxo) {
+      val (_, bh) = createUtxoState(Some(nodeViewRef))
+      val tx = validTransactionsFromBoxHolder(bh)._1.head
+      subscribeEvents(classOf[FailedTransaction[_]])
+      nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      expectNoMsg()
+      nodeViewRef ! poolSize(nodeViewConfig)
+      expectMsg(1)
+    }
   }
 
   private val t7 = TestCase("apply invalid full block") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
@@ -292,10 +298,13 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     expectMsg(Some(block.header))
 
     val brokenBlock = validFullBlock(Some(block.header), wusAfterBlock)
+    val headTx = brokenBlock.blockTransactions.txs.head
+    val newInput = headTx.inputs.head.copy(boxId = ADKey @@ Algos.hash("wrong input"))
 
     nodeViewRef ! LocallyGeneratedModifier(brokenBlock.header)
 
-    val brokenTransactions = brokenBlock.blockTransactions.copy(txs = brokenBlock.blockTransactions.txs.tail)
+    val brokenTransactions = brokenBlock.blockTransactions
+      .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlock.blockTransactions.txs.tail)
     if (nodeViewConfig.verifyTransactions) {
       nodeViewRef ! LocallyGeneratedModifier(brokenTransactions)
       nodeViewRef ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)
@@ -310,8 +319,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t8 = TestCase("switching for a better chain") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
@@ -378,8 +386,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
   private val t9 = TestCase("UTXO state should generate ADProofs and put them in history") { fixture =>
     import fixture._
     if (nodeViewConfig.stateType == StateType.Utxo) {
-      val dir = createTempDir
-      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+      val (us, bh) = createUtxoState(Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
 
       nodeViewRef ! LocallyGeneratedModifier(genesis.header)
@@ -398,8 +405,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     import fixture._
     if (nodeViewConfig.verifyTransactions) {
 
-      val dir = createTempDir
-      val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+      val (us, bh) = createUtxoState(Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
       val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 
@@ -431,8 +437,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t11 = TestCase("apply blocks in incorrect order") { fixture =>
     import fixture._
-    val dir = createTempDir
-    val (us, bh) = ErgoState.generateGenesisUtxoState(dir, Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
 

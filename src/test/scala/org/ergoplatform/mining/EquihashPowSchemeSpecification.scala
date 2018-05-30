@@ -1,12 +1,14 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash._
+import sigmastate.Values.TrueLeaf
 
 class EquihashPowSchemeSpecification extends ErgoPropertyTest {
 
@@ -23,7 +25,7 @@ class EquihashPowSchemeSpecification extends ErgoPropertyTest {
         RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
         ADDigest @@ Array.fill(33)(0: Byte),
         SerializedAdProof @@ Array.emptyByteArray,
-        Seq(AnyoneCanSpendTransaction(IndexedSeq.empty, IndexedSeq(10L))),
+        Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, TrueLeaf)))),
         ts,
         Algos.hash(Array.emptyByteArray)
       ).getOrElse(loop(ts + 1))

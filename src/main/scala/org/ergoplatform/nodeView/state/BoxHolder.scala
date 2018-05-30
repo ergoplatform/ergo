@@ -35,9 +35,9 @@ class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, ErgoBox]) {
 /**
   * For tests, box holder with in-memory diffs
   */
-class VersionedInMemoryBoxHolder( override val boxes: SortedMap[ByteArrayWrapper, ErgoBox],
-                                  val versions: IndexedSeq[ByteArrayWrapper],
-                                  val diffs: Map[ByteArrayWrapper, (Seq[ErgoBox], Seq[ErgoBox])]
+class VersionedInMemoryBoxHolder(override val boxes: SortedMap[ByteArrayWrapper, ErgoBox],
+                                 val versions: IndexedSeq[ByteArrayWrapper],
+                                 val diffs: Map[ByteArrayWrapper, (Seq[ErgoBox], Seq[ErgoBox])]
                                 ) extends BoxHolder(boxes) {
 
   //todo: this implementation assumes that all the boxes in "toAdd" are not referenced by "toRemove" elements
@@ -54,13 +54,13 @@ class VersionedInMemoryBoxHolder( override val boxes: SortedMap[ByteArrayWrapper
   //todo: the same issue as in applyChanges()
   def rollback(version: ByteArrayWrapper): VersionedInMemoryBoxHolder = {
     val idx = versions.indexOf(version)
-    val (remainingVersions, versionsToRollback) =  versions.splitAt(idx + 1)
-    val (newBoxes, newDiffs) = versionsToRollback.reverse.foldLeft(boxes -> diffs){case ((bs, ds), ver) =>
+    val (remainingVersions, versionsToRollback) = versions.splitAt(idx + 1)
+    val (newBoxes, newDiffs) = versionsToRollback.reverse.foldLeft(boxes -> diffs) { case ((bs, ds), ver) =>
       val diff = diffs(ver)
-        val removedBoxes = diff._1
-        val addedBoxes = diff._2
+      val removedBoxes = diff._1
+      val addedBoxes = diff._2
       (bs ++ removedBoxes.map(box => ByteArrayWrapper(box.id) -> box)
-            -- addedBoxes.map(_.id).map(ByteArrayWrapper.apply)) -> (ds - ver)
+        -- addedBoxes.map(_.id).map(ByteArrayWrapper.apply)) -> (ds - ver)
     }
     new VersionedInMemoryBoxHolder(newBoxes, remainingVersions, newDiffs)
   }

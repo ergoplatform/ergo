@@ -201,7 +201,7 @@ object ErgoMiner extends ScorexLogging {
                      feeBoxes: Seq[ErgoBox],
                      emissionBox: ErgoBox,
                      minerProp: Value[SBoolean.type],
-                     emission: CoinsEmission) = {
+                     emission: CoinsEmission): ErgoTransaction = {
     val prop = emissionBox.proposition
     val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
     val newEmissionBox: ErgoBoxCandidate =

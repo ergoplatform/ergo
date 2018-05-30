@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.{Bytes, Shorts}
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
@@ -59,7 +59,7 @@ object BlockTransactions {
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
   override def toBytes(obj: BlockTransactions): Array[Byte] = {
     val txsBytes = concatBytes(obj.txs.map { tx =>
-      val txBytes = ErgoTransaction.serializer.toBytes(tx)
+      val txBytes = ErgoTransactionSerializer.toBytes(tx)
       Bytes.concat(Shorts.toByteArray(txBytes.length.toShort), txBytes)
     }) //todo: short is wrong
     Bytes.concat(obj.headerId, txsBytes)
@@ -73,7 +73,7 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
         BlockTransactions(headerId, acc)
       } else {
         val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        val tx = ErgoTransaction.serializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
+        val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f
         }

@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
+import scorex.crypto.authds.ADKey
 import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
@@ -297,10 +298,13 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     expectMsg(Some(block.header))
 
     val brokenBlock = validFullBlock(Some(block.header), wusAfterBlock)
+    val headTx = brokenBlock.blockTransactions.txs.head
+    val newInput = headTx.inputs.head.copy(boxId = ADKey @@ Algos.hash("wrong input"))
 
     nodeViewRef ! LocallyGeneratedModifier(brokenBlock.header)
 
-    val brokenTransactions = brokenBlock.blockTransactions.copy(txs = brokenBlock.blockTransactions.txs.tail)
+    val brokenTransactions = brokenBlock.blockTransactions
+      .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlock.blockTransactions.txs.tail)
     if (nodeViewConfig.verifyTransactions) {
       nodeViewRef ! LocallyGeneratedModifier(brokenTransactions)
       nodeViewRef ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)

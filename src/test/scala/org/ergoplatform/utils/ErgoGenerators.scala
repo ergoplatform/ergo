@@ -9,7 +9,7 @@ import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -185,6 +185,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
     val (transactions, _) = validTransactionsFromBoxHolder(boxHolder, rnd)
+    transactions.nonEmpty shouldBe true
+    ErgoState.boxChanges(transactions).operations.foreach{
+      case Removal(boxId: ADKey) => assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
+      case _ =>
+    }
     validFullBlock(parentOpt, utxoState, transactions)
   }
 

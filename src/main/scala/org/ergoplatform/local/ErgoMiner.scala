@@ -188,7 +188,7 @@ object ErgoMiner extends ScorexLogging {
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
                      emission: CoinsEmission): ErgoTransaction = {
-    state.getEmissionBox() match {
+    state.emissionBox() match {
       case Some(emissionBox) =>
         ErgoMiner.createCoinbase(height, feeBoxes, emissionBox, minerProp, emission)
       case None =>

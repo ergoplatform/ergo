@@ -7,6 +7,7 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
 import sigmastate.Values.TrueLeaf

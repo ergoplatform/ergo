@@ -75,8 +75,8 @@ object ErgoState extends ScorexLogging {
     val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
     val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
-    ErgoBox(9773992500000000L, prop, Map(register -> IntConstant(-1)))
+    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), GE(Height, blocksTotal))
+    ErgoBox(9773992500000000L, prop, Map(register -> LongConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
@@ -95,7 +95,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
   //33 bytes in Base16 encoding
-  val afterGenesisStateDigestHex: String = "f98abce15485b4278b847b02340413533e383342e5594c36c924e55aff10596701"
+  val afterGenesisStateDigestHex: String = "a316537c1ca6db045316608dee0e0bb967e0cb4ff0c441a533e40c122571a05101"
   //TODO rework try.get
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
 

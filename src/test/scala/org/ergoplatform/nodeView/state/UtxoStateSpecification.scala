@@ -2,6 +2,8 @@ package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.WrappedUtxoState
@@ -82,6 +84,21 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     val block = validFullBlock(parentOpt = None, us, bh, rnd = r)
 
     us.applyModifier(block).get
+  }
+
+  property("applyModifier() for real genesis state") {
+    var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var height = 1
+    val emission: CoinsEmission = new CoinsEmission
+    forAll(invalidHeaderGen) { header =>
+      val txs = Seq(ErgoMiner.createCoinbase(us, height, Seq.empty, TrueLeaf, emission))
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      us = us.applyModifier(fb).get
+      height = height + 1
+    }
   }
 
   property("applyModifier() - valid full block") {

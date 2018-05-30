@@ -19,8 +19,8 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import sigmastate.{NoProof, SigSerializer}
-import sigmastate.Values.{LongConstant, TrueLeaf}
+import sigmastate.{NoProof, SBoolean, SigSerializer}
+import sigmastate.Values.{LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.collection.mutable
@@ -132,28 +132,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  private def createCoinbase(state: UtxoStateReader,
-                             height: Int,
-                             feeBoxes: Seq[ErgoBox]): ErgoTransaction = {
-    state.getEmissionBox() match {
-      case Some(emissionBox) =>
-        val prop = emissionBox.proposition
-        val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
-        val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
-        val inputs = (emissionBox +: feeBoxes)
-          .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
-
-        ErgoTransaction(
-          inputs.toIndexedSeq,
-          IndexedSeq(newEmissionBox, minerBox)
-        )
-      case None =>
-        // TODO extract fees when emission is finished
-        ???
-    }
-  }
-
   private def createCandidate(history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): CandidateBlock = {
@@ -165,7 +143,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).take(10)
     // TODO extract boxes with TrueLeaf proposition
     val feeBoxes: Seq[ErgoBox] = Seq.empty
-    val coinbase = createCoinbase(state, height, feeBoxes)
+    val coinbase = ErgoMiner.createCoinbase(state, height, feeBoxes, minerProp, emission)
     val txs = externalTransactions :+ coinbase
 
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
@@ -204,6 +182,38 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  def createCoinbase(state: UtxoStateReader,
+                     height: Int,
+                     feeBoxes: Seq[ErgoBox],
+                     minerProp: Value[SBoolean.type],
+                     emission: CoinsEmission): ErgoTransaction = {
+    state.getEmissionBox() match {
+      case Some(emissionBox) =>
+        ErgoMiner.createCoinbase(height, feeBoxes, emissionBox, minerProp, emission)
+      case None =>
+        // TODO extract fees when emission is finished
+        ???
+    }
+  }
+
+  def createCoinbase(height: Int,
+                     feeBoxes: Seq[ErgoBox],
+                     emissionBox: ErgoBox,
+                     minerProp: Value[SBoolean.type],
+                     emission: CoinsEmission) = {
+    val prop = emissionBox.proposition
+    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
+    val newEmissionBox: ErgoBoxCandidate =
+      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
+    val inputs = (emissionBox +: feeBoxes)
+      .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
+
+    ErgoTransaction(
+      inputs.toIndexedSeq,
+      IndexedSeq(newEmissionBox, minerBox)
+    )
+  }
 
 
   case object StartMining

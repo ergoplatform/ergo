@@ -89,7 +89,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() for real genesis state") {
     var (us: UtxoState, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
-    var height = 1
+    var height = 0
     forAll(invalidHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new Random(12))
       val txs = t._1

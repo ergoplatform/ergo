@@ -10,6 +10,7 @@ import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
+import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import sigmastate.AvlTreeData
@@ -22,7 +23,7 @@ case class ErgoBlockchainState(height: Long, lastUtxoDigest: ADDigest)
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
-  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier {
+  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ScorexLogging {
 
   override type IdType = ModifierId
 
@@ -64,7 +65,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         case Success((res, cost)) =>
           if (!res) return Failure(new Exception(s"Validation failed for input #$idx"))
           else cost
-        case Failure(e) => return Failure(e)
+        case Failure(e) =>
+          log.warn(s"Invalid transaction $toString: ", e)
+          return Failure(e)
       }
       accCost + scriptCost
     }

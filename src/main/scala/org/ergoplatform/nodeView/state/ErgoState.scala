@@ -59,7 +59,7 @@ object ErgoState extends ScorexLogging {
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
-  lazy val emissionBoxProposition: Value[SBoolean.type] = {
+  lazy val genesisEmissionBox: ErgoBox = {
     // TODO check that this corresponds to ChainSettings.blockInterval
     val fixedRate = LongConstant(7500000000L)
     val fixedRatePeriod = LongConstant(460800)
@@ -75,14 +75,13 @@ object ErgoState extends ScorexLogging {
     val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
     val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
+    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
+    ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
     log.info("Generating genesis UTXO state")
-    val prop = emissionBoxProposition
-    val initialBoxCandidate: ErgoBox = ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
-    val bh = BoxHolder(Seq(initialBoxCandidate))
+    val bh = BoxHolder(Seq(genesisEmissionBox))
 
     UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")

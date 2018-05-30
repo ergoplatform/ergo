@@ -66,7 +66,7 @@ class BlocksApiRouteSpec extends FlatSpec
   val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
-  it should "get block by header id" in {
+  ignore should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val expected = history.typedModifierById[Header](headerIdBytes)
@@ -91,7 +91,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "get transactions by header id" in {
+  ignore should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val header = history.typedModifierById[Header](headerIdBytes).value

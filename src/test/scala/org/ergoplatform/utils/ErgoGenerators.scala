@@ -133,7 +133,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
       stateBoxes.find(_ == ErgoState.genesisEmissionBox) match {
         case Some(emissionBox) if txRemain > 0 =>
           // Extract money to anyoneCanSpend output and forget about emission box for tests
-          val tx = ErgoMiner.createCoinbase(1, Seq.empty, emissionBox, TrueLeaf, emission)
+          val tx = ErgoMiner.createCoinbase(0, Seq.empty, emissionBox, TrueLeaf, emission)
           val remainedBoxes = stateBoxes.filter(_ != ErgoState.genesisEmissionBox)
           loop(txRemain - 1, remainedBoxes, selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf), tx +: acc)
 

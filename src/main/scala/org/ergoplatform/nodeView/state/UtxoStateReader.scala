@@ -21,6 +21,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
+  protected var emissionBoxOpt: Option[ErgoBox] = None
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
     val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
@@ -29,13 +30,8 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
 
   override def validate(tx: ErgoTransaction): Try[Unit] = ???
 
-  /**
-    * @return boxes, that miner (or any user) can take to himself when he creates a new block
-    */
-  def anyoneCanSpendBoxesAtHeight(height: Int): IndexedSeq[ErgoBox] = {
-    //TODO fix
-    randomBox().toIndexedSeq
-  }
+  def getEmissionBox(): Option[ErgoBox] = emissionBoxOpt
+
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

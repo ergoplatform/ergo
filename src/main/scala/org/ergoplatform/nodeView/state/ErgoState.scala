@@ -3,15 +3,17 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import akka.actor.ActorRef
-import io.iohk.iodb.Store
+import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.R3
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.encode.Base16
 import sigmastate.Values.{IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
@@ -59,6 +61,21 @@ object ErgoState extends ScorexLogging {
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
+  /**
+    * Extract ordered sequence of operations on UTXO set from set of transactions
+    */
+  def boxChanges(txs: Seq[ErgoTransaction]): StateChanges = {
+    val opened: Seq[ADKey] = txs.flatMap(t => t.inputs.map(_.boxId))
+    val openedSet: Set[ByteArrayWrapper] = opened.map(o => ByteArrayWrapper(o)).toSet
+    val inserted: Seq[ErgoBox] = txs.flatMap(t => t.outputs)
+    val insertedSet: Set[ByteArrayWrapper] = inserted.map(b => ByteArrayWrapper(b.id)).toSet
+    val both: Set[ByteArrayWrapper] = insertedSet.intersect(openedSet)
+    val toRemove = opened.filterNot(s => both.contains(ByteArrayWrapper(s)))
+      .map(id => Removal(id))
+    val toInsert = inserted.filterNot(s => both.contains(ByteArrayWrapper(s.id)))
+      .map(b => Insertion(b))
+    StateChanges(toRemove ++ toInsert)
+  }
   lazy val genesisEmissionBox: ErgoBox = {
     // TODO check that this corresponds to ChainSettings.blockInterval
     val fixedRate = LongConstant(7500000000L)

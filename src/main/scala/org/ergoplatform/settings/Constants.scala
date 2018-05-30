@@ -10,4 +10,5 @@ object Constants {
   val InitialDifficulty: Difficulty = BigInt(1)
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = hashLength
+  val MaxTransactionCost: Long = 1000000
 }

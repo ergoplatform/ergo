@@ -9,7 +9,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
@@ -79,9 +79,9 @@ class UtxoState(override val version: VersionTag,
       tx.statefulValidity(boxesToSpend, blockchainState).get
     }.sum
 
-    assert(totalCost <= 1000000) //todo: externalize the number
+    if(totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
-    val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
+    val mods = ErgoState.boxChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)

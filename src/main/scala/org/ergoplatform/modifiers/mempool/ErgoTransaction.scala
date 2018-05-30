@@ -69,11 +69,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
         case Success((res, cost)) =>
-          if (!res) return Failure(new Exception(s"Validation failed for input #$idx"))
-          else cost
+          if (!res) {
+            throw new Exception(s"Validation failed for input #$idx")
+          } else {
+            cost
+          }
         case Failure(e) =>
           log.warn(s"Invalid transaction $toString: ", e)
-          return Failure(e)
+          throw e
       }
       accCost + scriptCost
     }
@@ -82,21 +85,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override type M = ErgoTransaction
 
-  override def serializer: Serializer[ErgoTransaction] = ErgoTransaction.serializer
+  override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
 }
 
 
 object ErgoTransaction {
   implicit val jsonEncoder: Encoder[ErgoTransaction] = TransactionView(_).asJson
 
-  object serializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-    override def toBytes(tx: ErgoTransaction): Array[Byte] =
-      flattenedTxSerializer.toBytes(tx.inputs, tx.outputCandidates)
+}
 
-    override def parseBody(bytes: Array[Byte], pos: Position): (ErgoTransaction, Consumed) = {
-      val ((inputs, outputCandidates), consumed) = flattenedTxSerializer.parseBody(bytes, pos)
-      ErgoTransaction(inputs, outputCandidates) -> consumed
-    }
+object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
+  override def toBytes(tx: ErgoTransaction): Array[Byte] =
+    flattenedTxSerializer.toBytes(tx.inputs, tx.outputCandidates)
+
+  override def parseBody(bytes: Array[Byte], pos: Position): (ErgoTransaction, Consumed) = {
+    val ((inputs, outputCandidates), consumed) = flattenedTxSerializer.parseBody(bytes, pos)
+    ErgoTransaction(inputs, outputCandidates) -> consumed
   }
-
 }

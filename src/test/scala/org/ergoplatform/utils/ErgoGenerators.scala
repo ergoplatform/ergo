@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotCh
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
@@ -21,7 +21,7 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.SBoolean
-import sigmastate.Values.{IntConstant, TrueLeaf, Value}
+import sigmastate.Values.{IntConstant, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.annotation.tailrec
@@ -126,7 +126,21 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
              stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[ErgoBox])  = {
-      if (txRemain > 1) {
+      if (txRemain >= 1 && stateBoxes.contains(ErgoState.genesisEmissionBox)) {
+        // Extract money to anyoneCanSpend outpuit and forget about emission box for tests
+        val prop = ErgoState.genesisEmissionBox.proposition
+        val minerBox = new ErgoBoxCandidate(7500000000L, TrueLeaf, Map())
+        val newEmissionBox: ErgoBoxCandidate =
+          new ErgoBoxCandidate(ErgoState.genesisEmissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(1)))
+
+        val tx = ErgoTransaction(
+          IndexedSeq(ErgoState.genesisEmissionBox)
+            .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty))),
+          IndexedSeq(newEmissionBox, minerBox)
+        )
+        val remainedBoxes = stateBoxes.filter(_ != ErgoState.genesisEmissionBox)
+        loop(txRemain - 1, remainedBoxes, selfBoxes :+ tx.outputs.last, tx +: acc)
+      } else if (txRemain > 1) {
         val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
         val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
         val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq

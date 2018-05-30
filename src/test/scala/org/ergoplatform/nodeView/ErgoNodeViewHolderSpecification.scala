@@ -5,13 +5,14 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -19,6 +20,7 @@ import org.scalatest.BeforeAndAfterAll
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
+import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -37,6 +39,10 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   override def afterAll(): Unit = {
     system.terminate()
+  }
+
+  override def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
+    ErgoState.generateGenesisUtxoState(createTempDir, nodeViewHolderRef)
   }
 
   type H = ErgoHistory
@@ -140,7 +146,8 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     def run(test: NodeViewFixture => Unit): Unit = try test(this) finally stop()
 
     def stop(): Unit = {
-      system.stop(nodeViewRef); system.stop(testProbe.testActor)
+      system.stop(nodeViewRef);
+      system.stop(testProbe.testActor)
     }
   }
 
@@ -158,7 +165,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
   private val t3 = TestCase("apply valid block header") { fixture =>
     import fixture._
-    val (us, bh) =  createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
     val block = validFullBlock(None, us, bh)
 
     nodeViewRef ! bestHeaderOpt(nodeViewConfig)

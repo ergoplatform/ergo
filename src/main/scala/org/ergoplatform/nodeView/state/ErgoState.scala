@@ -4,18 +4,18 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.Store
-import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
-import org.ergoplatform.ErgoBox.{R3, R4}
+import org.ergoplatform.ErgoBox.R3
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.Base16
-import sigmastate.{SLong, _}
-import sigmastate.Values.{ByteConstant, IntConstant, LongConstant, TrueLeaf, Value}
+import sigmastate.Values.{IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
+import sigmastate.{SLong, _}
 
 import scala.util.Try
 
@@ -70,13 +70,13 @@ object ErgoState extends ScorexLogging {
     val register = R3
     val red = Modulo(Multiply(fixedRate, Modulo(Minus(Height, fixedRatePeriod), rewardReductionPeriod)), decreasingEpochs)
     val coinsToIssue = If(LE(Height, fixedRatePeriod), fixedRate, Minus(fixedRate, red))
-    val out = ByIndex(Outputs, 0)
+    val out = ByIndex(Outputs, LongConstant(0))
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
     val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
     val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
     val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), EQ(Height, blocksTotal))
-    ErgoBox(9773992500000000L, prop, Map(R4 -> IntConstant(-1)))
+    ErgoBox(9773992500000000L, prop, Map(register -> IntConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
@@ -95,7 +95,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
   //33 bytes in Base16 encoding
-  val afterGenesisStateDigestHex: String = "78b130095239561ecf5449a7794c0615326d1fd007cc79dcc286e46e4beb1d3f01"
+  val afterGenesisStateDigestHex: String = "f98abce15485b4278b847b02340413533e383342e5594c36c924e55aff10596701"
   //TODO rework try.get
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
 

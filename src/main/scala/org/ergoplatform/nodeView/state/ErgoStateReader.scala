@@ -14,7 +14,7 @@ trait ErgoStateReader extends StateReader {
   /**
     * Extract ordered sequence of operations on UTXO set from set of transactions
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): StateChanges = {
+  protected def boxChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val opened: Seq[ADKey] = txs.flatMap(t => t.inputs.map(_.boxId))
     val openedSet: Set[ByteArrayWrapper] = opened.map(o => ByteArrayWrapper(o)).toSet
     val inserted: Seq[ErgoBox] = txs.flatMap(t => t.outputs)

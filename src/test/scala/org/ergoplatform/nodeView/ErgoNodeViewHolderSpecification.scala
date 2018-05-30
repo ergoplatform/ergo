@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, NoShrink}
 import org.scalatest.BeforeAndAfterAll
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
@@ -26,7 +26,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAfterAll {
+class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAfterAll with NoShrink {
 
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")

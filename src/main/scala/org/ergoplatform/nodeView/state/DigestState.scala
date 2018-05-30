@@ -5,7 +5,7 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer}
+import org.ergoplatform.modifiers.mempool.{ErgoStateContext, ErgoBoxSerializer}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
@@ -44,7 +44,7 @@ class DigestState protected(override val version: VersionTag,
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
           Try {
-            val blockchainState = ErgoBlockchainState(fb.header.height, rootHash)
+            val blockchainState = ErgoStateContext(fb.header.height, rootHash)
 
             val txs = fb.blockTransactions.txs
 

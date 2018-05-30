@@ -19,7 +19,7 @@ import sigmastate.serialization.Serializer.{Consumed, Position}
 import scala.util.{Failure, Success, Try}
 
 
-case class ErgoBlockchainState(height: Long, lastUtxoDigest: ADDigest)
+case class ErgoStateContext(height: Long, lastUtxoDigest: ADDigest)
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
@@ -50,7 +50,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @param blockchainState
     * @return total coimputation cost
     */
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoBlockchainState): Try[Long] = Try {
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
     require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 
     val lastUtxoDigest = AvlTreeData(blockchainState.lastUtxoDigest, ErgoBox.BoxId.size)

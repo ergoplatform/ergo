@@ -7,7 +7,7 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoStateContext, ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
@@ -65,7 +65,7 @@ class UtxoState(override val version: VersionTag,
                                        expectedDigest: ADDigest,
                                        height: Height) = Try {
 
-    val blockchainState = ErgoBlockchainState(height, persistentProver.digest)
+    val blockchainState = ErgoStateContext(height, persistentProver.digest)
 
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>

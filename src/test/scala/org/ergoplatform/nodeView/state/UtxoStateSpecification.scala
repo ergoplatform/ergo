@@ -88,11 +88,12 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyModifier() for real genesis state") {
-    var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var (us: UtxoState, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
     var height = 1
-    val emission: CoinsEmission = new CoinsEmission
     forAll(invalidHeaderGen) { header =>
-      val txs = Seq(ErgoMiner.createCoinbase(us, height, Seq.empty, TrueLeaf, emission))
+      val t = validTransactionsFromBoxHolder(bh, new Random(12))
+      val txs = t._1
+      bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)

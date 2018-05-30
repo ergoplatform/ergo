@@ -2,7 +2,9 @@ package org.ergoplatform.utils
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R3}
+import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.mining.{DefaultFakePowScheme, EquihashSolution}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
@@ -28,6 +30,8 @@ import scala.annotation.tailrec
 import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
+
+  val emission: CoinsEmission = new CoinsEmission()
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
@@ -126,36 +130,31 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
              stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[ErgoBox])  = {
-      if (txRemain >= 1 && stateBoxes.contains(ErgoState.genesisEmissionBox)) {
-        // Extract money to anyoneCanSpend outpuit and forget about emission box for tests
-        val prop = ErgoState.genesisEmissionBox.proposition
-        val minerBox = new ErgoBoxCandidate(7500000000L, TrueLeaf, Map())
-        val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(ErgoState.genesisEmissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(1)))
+      stateBoxes.find(_ == ErgoState.genesisEmissionBox) match {
+        case Some(emissionBox) if txRemain > 0 =>
+          // Extract money to anyoneCanSpend output and forget about emission box for tests
+          val tx = ErgoMiner.createCoinbase(1, Seq.empty, emissionBox, TrueLeaf, emission)
+          val remainedBoxes = stateBoxes.filter(_ != ErgoState.genesisEmissionBox)
+          loop(txRemain - 1, remainedBoxes, selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf), tx +: acc)
 
-        val tx = ErgoTransaction(
-          IndexedSeq(ErgoState.genesisEmissionBox)
-            .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty))),
-          IndexedSeq(newEmissionBox, minerBox)
-        )
-        val remainedBoxes = stateBoxes.filter(_ != ErgoState.genesisEmissionBox)
-        loop(txRemain - 1, remainedBoxes, selfBoxes :+ tx.outputs.last, tx +: acc)
-      } else if (txRemain > 1) {
-        val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
-        val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
-        val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
-        assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-        val outputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).map(outputForAnyone).toIndexedSeq
-        val tx = new ErgoTransaction(inputs, outputs)
-        loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc)
-      } else {
-        // take all remaining boxes from state and return transactions set
-        val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-        val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
-        assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-        val outputs = stateBoxes.map(_.value).map(outputForAnyone).toIndexedSeq
-        val tx = new ErgoTransaction(inputs, outputs)
-        (tx +: acc , remainedSelfBoxes)
+        case _ =>
+          if (txRemain > 1) {
+            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
+            val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
+            val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
+            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
+            val outputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).map(outputForAnyone).toIndexedSeq
+            val tx = new ErgoTransaction(inputs, outputs)
+            loop(txRemain - 1, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc)
+          } else {
+            // take all remaining boxes from state and return transactions set
+            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
+            val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
+            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
+            val outputs = (consumedSelfBoxes ++ stateBoxes).map(_.value).map(outputForAnyone).toIndexedSeq
+            val tx = new ErgoTransaction(inputs, outputs)
+            (tx +: acc , remainedSelfBoxes ++ tx.outputs)
+          }
       }
     }
 

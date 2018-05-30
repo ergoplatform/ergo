@@ -3,17 +3,17 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.Store
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[ErgoTransaction] {
 
@@ -22,15 +22,16 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
-  protected var emissionBoxOpt: Option[ErgoBox] = None
+  protected var emissionBoxOpt: Option[ErgoBox] = Some(ErgoState.genesisEmissionBox)
 
   /**
     * Extract emission box from transactions and save it to emissionBoxOpt
+    *
     * @param fb - ergo full block
     */
   protected def extractEmissionBox(fb: ErgoFullBlock): Unit = {
     fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-      .find(o => o.proposition == ErgoState.emissionBoxProposition) match {
+      .find(o => o.proposition == ErgoState.genesisEmissionBox.proposition) match {
       case Some(newEmissionBox) => emissionBoxOpt = Some(newEmissionBox)
       case _ => log.warn(s"Emission box not found in block ${fb.encodedId}")
     }

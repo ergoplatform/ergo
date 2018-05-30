@@ -142,7 +142,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         val newEmissionBox: ErgoBoxCandidate =
           new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
         val inputs = (emissionBox +: feeBoxes)
-          .map(b => new Input(b.id, SerializedProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)))
+          .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
         ErgoTransaction(
           inputs.toIndexedSeq,

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import io.iohk.iodb.Store
+import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
@@ -22,21 +22,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
-  protected var emissionBoxOpt: Option[ErgoBox] = Some(ErgoState.genesisEmissionBox)
 
-  /**
-    * Extract emission box from transactions and save it to emissionBoxOpt
-    *
-    * @param fb - ergo full block
-    */
-  protected def extractEmissionBox(fb: ErgoFullBlock): Unit = {
-    // TODO fake emission box by malicious miner may break this algorithm
-    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-      .find(o => o.proposition == ErgoState.genesisEmissionBox.proposition) match {
-      case Some(newEmissionBox) => emissionBoxOpt = Some(newEmissionBox)
-      case _ => log.warn(s"Emission box not found in block ${fb.encodedId}")
-    }
-  }
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
     val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
@@ -45,8 +31,24 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
 
   override def validate(tx: ErgoTransaction): Try[Unit] = ???
 
-  def getEmissionBox(): Option[ErgoBox] = emissionBoxOpt
+  /**
+    * Extract emission box from transactions and save it to emissionBoxOpt
+    *
+    * @param fb - ergo full block
+    */
+  protected def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    // TODO fake emission box by malicious miner may break this algorithm
+    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
+      .find(o => o.proposition == ErgoState.genesisEmissionBox.proposition) match {
+      case Some(newEmissionBox) => Some(newEmissionBox)
+      case _ =>
+        log.warn(s"Emission box not found in block ${fb.encodedId}")
+        None
+    }
+  }
 
+  def emissionBox(): Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxKey))
+    .flatMap(b => ErgoBoxSerializer.parseBytes(b.data).toOption)
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

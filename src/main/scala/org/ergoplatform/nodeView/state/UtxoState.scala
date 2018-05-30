@@ -4,9 +4,10 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBlockchainState, ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -102,12 +103,13 @@ class UtxoState(override val version: VersionTag,
         s"to UtxoState with root hash ${Algos.encode(rootHash)}")
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
-        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+        val emissionBox = extractEmissionBox(fb)
+        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox)
 
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
-        extractEmissionBox(fb)
+
         log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
           s"root hash ${Algos.encode(rootHash)}")
         if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
@@ -143,13 +145,18 @@ class UtxoState(override val version: VersionTag,
 
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
+  val EmissionBoxKey = Algos.hash("emission box jey")
 
-  private def metadata(modId: VersionTag, stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {
+  private def metadata(modId: VersionTag,
+                       stateRoot: ADDigest,
+                       emissionBoxOpt: Option[ErgoBox]): Seq[(Array[Byte], Array[Byte])] = {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
+    val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => ErgoBoxSerializer.toBytes(emissionBox))
+      .getOrElse(Array.empty)
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
+    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb)
   }
 
   def create(dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
@@ -170,7 +177,7 @@ object UtxoState {
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest),
+          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox)),
           paranoidChecks = true
         ).get
 

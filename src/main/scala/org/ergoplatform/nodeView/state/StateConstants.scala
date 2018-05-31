@@ -11,5 +11,5 @@ import org.ergoplatform.mining.emission.CoinsEmission
   * @param emission          - emission curve
   */
 case class StateConstants(nodeViewHolderRef: Option[ActorRef], emission: CoinsEmission) {
-  val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
+  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
 }

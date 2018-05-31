@@ -35,6 +35,24 @@ class CoinsEmission(val settings: MonetarySettings) {
     loop(0, 0)
   }
 
+  def issuedCoinsAfterHeight(h: Long): Long = {
+    if (h < settings.fixedRatePeriod) {
+      settings.fixedRate * (h + 1)
+    } else {
+      val fixedRateIssue: Long = settings.fixedRate * settings.fixedRatePeriod
+      val epoch = (h - settings.fixedRatePeriod) / settings.epochLength
+      val fullEpochsIssued: Long = (1 to epoch.toInt).map { e =>
+        Math.max(settings.fixedRate - settings.oneEpochReduction * e, 0) * settings.epochLength
+      }.sum
+      val heightInThisEpoch = (h - settings.fixedRatePeriod) % settings.epochLength + 1
+      val rateThisEpoch = Math.max(settings.fixedRate - settings.oneEpochReduction * (epoch + 1), 0)
+      val thisEpochIssued = heightInThisEpoch * rateThisEpoch
+
+      fullEpochsIssued + fixedRateIssue + thisEpochIssued
+    }
+  }
+
+  def remainingCoinsAfterHeight(h: Long): Long = coinsTotal - issuedCoinsAfterHeight(h)
 
   def emissionAtHeight(h: Long): Long = {
     if (h < settings.fixedRatePeriod) {

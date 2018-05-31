@@ -1,14 +1,11 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.core.VersionTag
 import sigmastate.Values.TrueLeaf
 
@@ -17,12 +14,38 @@ import scala.util.Random
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
-  property("extractEmissionBox()") {
+  property("extractEmissionBox() should extract correct box") {
     val (us, bh) = createUtxoState()
     forAll { seed: Int =>
       val fb = validFullBlock(None, us, bh, new Random(seed))
       us.extractEmissionBox(fb) should not be None
     }
+  }
+
+  property("extractEmissionBox() should not extract fake box") {
+    var (us, bh) = createUtxoState()
+    val t = validTransactionsFromBoxHolder(bh)
+    val txs = t._1
+    bh = t._2
+
+    // first block that spends and creates emission box
+    val fb = validFullBlock(None, us, txs)
+    val newEmissionBox = us.extractEmissionBox(fb)
+    newEmissionBox should not be None
+    us = us.applyModifier(fb).get
+
+    // second block, that do not contain emission box
+    val fb2 = validFullBlock(None, us, bh)
+    us.extractEmissionBox(fb2) shouldBe None
+
+    // third block, that do contain box similar to emission one, but with lower amount
+    val ft = fb2.blockTransactions.txs.head
+    val fakeCandidate: ErgoBoxCandidate = new ErgoBoxCandidate(newEmissionBox.get.value + 1,
+      newEmissionBox.get.proposition,
+      newEmissionBox.get.additionalRegisters)
+    val txs3 = fb2.blockTransactions.txs.tail :+ ft.copy(outputCandidates = ft.outputCandidates.tail :+ fakeCandidate)
+    val fb3 = fb2.copy(blockTransactions = fb2.blockTransactions.copy(txs = txs3))
+    us.extractEmissionBox(fb3) shouldBe None
   }
 
   property("fromBoxHolder") {
@@ -38,7 +61,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     var (us: UtxoState, bh) = createUtxoState()
     var height: Int = 0
     forAll(invalidHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh, new Random(12))
+      val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get

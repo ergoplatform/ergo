@@ -39,8 +39,9 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     * @param fb - ergo full block
     */
   def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    val coinsAtHeight = constants.emission.remainingCoinsAfterHeight(fb.header.height)
     fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-      .find(o => o.proposition == constants.genesisEmissionBox.proposition) match {
+      .find(o => o.value == coinsAtHeight && o.proposition == constants.genesisEmissionBox.proposition) match {
       case Some(newEmissionBox) => Some(newEmissionBox)
       case _ =>
         log.warn(s"Emission box not found in block ${fb.encodedId}")

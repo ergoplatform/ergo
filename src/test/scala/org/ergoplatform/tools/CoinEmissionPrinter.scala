@@ -40,6 +40,9 @@ object CoinEmissionPrinter extends App {
   @tailrec
   def loop(height: Int, supply: Long): Unit = if (height < emissionCurve.blocksTotal) {
     val currentSupply = emissionCurve.emissionAtHeight(height)
+    assert(supply + currentSupply == emissionCurve.issuedCoinsAfterHeight(height),
+      s"$height: $supply == ${emissionCurve.issuedCoinsAfterHeight(height - 1)} => " +
+        s"${supply + currentSupply} == ${emissionCurve.issuedCoinsAfterHeight(height)}")
     if (height % (blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / emissionCurve.coinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.coinsInOneErgo}")
     loop(height + 1, supply + currentSupply)
   }

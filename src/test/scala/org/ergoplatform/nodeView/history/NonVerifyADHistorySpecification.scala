@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.NoShrink
+import org.ergoplatform.utils.{HistorySpecification, NoShrink}
 import scorex.core.consensus.History.{Equal, Unknown, Younger}
 import scorex.crypto.hash.Digest32
 

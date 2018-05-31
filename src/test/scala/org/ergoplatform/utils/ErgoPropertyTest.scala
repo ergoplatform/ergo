@@ -9,3 +9,4 @@ trait ErgoPropertyTest extends PropSpec
   with ErgoTestHelpers
   with ErgoGenerators
   with NoShrink
+  with ValidBlocksGenerators

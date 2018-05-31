@@ -19,6 +19,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
 
   protected implicit val hf = Algos.hash
 
+  val constants: StateConstants
   val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
@@ -38,18 +39,13 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     * @param fb - ergo full block
     */
   def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
-    /*
-        // TODO fake emission box by malicious miner may break this algorithm
-        fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-          .find(o => o.proposition == ErgoState.genesisEmissionBox.proposition) match {
-          case Some(newEmissionBox) => Some(newEmissionBox)
-          case _ =>
-            log.warn(s"Emission box not found in block ${fb.encodedId}")
-            None
-        }
-    */
-    //TODO
-    None
+    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
+      .find(o => o.proposition == constants.genesisEmissionBox.proposition) match {
+      case Some(newEmissionBox) => Some(newEmissionBox)
+      case _ =>
+        log.warn(s"Emission box not found in block ${fb.encodedId}")
+        None
+    }
   }
 
   // TODO implement

@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -16,6 +16,14 @@ import scala.util.Random
 
 
 class UtxoStateSpecification extends ErgoPropertyTest {
+
+  property("extractEmissionBox()") {
+    val (us, bh) = createUtxoState()
+    forAll { seed: Int =>
+      val fb = validFullBlock(None, us, bh, new Random(seed))
+      us.extractEmissionBox(fb) should not be None
+    }
+  }
 
   property("fromBoxHolder") {
     forAll(boxesHolderGen) { bh =>

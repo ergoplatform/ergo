@@ -59,7 +59,7 @@ object WrappedUtxoState {
             emission: CoinsEmission,
             nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
     val us = UtxoState.fromBoxHolder(boxHolder, dir, emission, nodeViewHolderRef)
-    val constants: StateConstants = StateConstants(nodeViewHolderRef, ErgoState.genesisEmissionBox(emission))
+    val constants: StateConstants = StateConstants(nodeViewHolderRef, emission)
     WrappedUtxoState(us, boxHolder, constants)
   }
 

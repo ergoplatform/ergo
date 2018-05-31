@@ -6,8 +6,9 @@ import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoStateContext, ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
@@ -166,7 +167,10 @@ object UtxoState {
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
-  def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
+  def fromBoxHolder(bh: BoxHolder,
+                    dir: File,
+                    emission: CoinsEmission,
+                    nodeViewHolderRef: Option[ActorRef]): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
@@ -177,7 +181,7 @@ object UtxoState {
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox)),
+          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox(emission))),
           paranoidChecks = true
         ).get
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Shorts}
+import com.google.common.primitives.{Bytes, Ints}
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
@@ -36,7 +36,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
       * Artificial limit to show only first 10 txs.
       */
     val txsStr = txs.take(10).map(_.toString).mkString(",")
-    val txsSuffix = if (txs.length > 10) ", ..." else ""
+    val txsSuffix = if (txs.lengthCompare(10) > 0) ", ..." else ""
 
     s"BlockTransactions(Id:$idStr,HeaderId:$headerIdStr,Txs:$txsStr$txsSuffix)"
   }
@@ -60,8 +60,8 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
   override def toBytes(obj: BlockTransactions): Array[Byte] = {
     val txsBytes = concatBytes(obj.txs.map { tx =>
       val txBytes = ErgoTransactionSerializer.toBytes(tx)
-      Bytes.concat(Shorts.toByteArray(txBytes.length.toShort), txBytes)
-    }) //todo: short is wrong
+      Bytes.concat(Ints.toByteArray(txBytes.length), txBytes)
+    })
     Bytes.concat(obj.headerId, txsBytes)
   }
 
@@ -72,12 +72,12 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
       if (index == bytes.length) {
         BlockTransactions(headerId, acc)
       } else {
-        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
+        val txLength = Ints.fromByteArray(bytes.slice(index, index + 4))
+        val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 4, index + 4 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f
         }
-        parseTransactions(index + 2 + txLength, acc :+ tx)
+        parseTransactions(index + 4 + txLength, acc :+ tx)
       }
     }
 

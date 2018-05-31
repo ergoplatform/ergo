@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val version: VersionTag,
                 override val store: Store,
-                constants: StateConstants)
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
@@ -163,7 +163,7 @@ object UtxoState {
   def create(dir: File, emission: CoinsEmission, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
-    val constants = StateConstants(nodeViewHolderRef, ErgoState.genesisEmissionBox(emission))
+    val constants = StateConstants(nodeViewHolderRef, emission)
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, constants)
   }
 
@@ -176,7 +176,7 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
-    val constants = StateConstants(nodeViewHolderRef, ErgoState.genesisEmissionBox(emission))
+    val constants = StateConstants(nodeViewHolderRef, emission)
 
     new UtxoState(ErgoState.genesisStateVersion, store, constants) {
       override protected lazy val persistentProver =

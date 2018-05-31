@@ -30,7 +30,7 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
   lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
-  lazy val stateConstants: StateConstants = StateConstants(None, genesisEmissionBox)
+  lazy val stateConstants: StateConstants = StateConstants(None, emission)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, emission, nodeViewHolderRef)

@@ -104,16 +104,15 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               monetary: MonetarySettings,
+                               emission: CoinsEmission,
                                nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
-    val emission = new CoinsEmission(monetary)
 
     log.info("Generating genesis UTXO state")
     val bh = BoxHolder(Seq(genesisEmissionBox(emission)))
 
     UtxoState.fromBoxHolder(bh, stateDir, emission, nodeViewHolderRef).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      us.rootHash.sameElements(monetary.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+      us.rootHash.sameElements(emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
@@ -126,14 +125,16 @@ object ErgoState extends ScorexLogging {
 
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Array.fill(32)(1: Byte)
 
-  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
+  def readOrGenerate(settings: ErgoSettings,
+                     emission: CoinsEmission,
+                     nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
-      case _ => ErgoState.generateGenesisUtxoState(dir, settings.chainSettings.monetary, nodeViewHolderRef)._1
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, emission, nodeViewHolderRef)
+      case _ => ErgoState.generateGenesisUtxoState(dir, emission, nodeViewHolderRef)._1
     }
   }
 }

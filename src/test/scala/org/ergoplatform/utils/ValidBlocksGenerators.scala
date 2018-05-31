@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.Removal
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
@@ -30,9 +30,10 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
   lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
+  lazy val stateConstants: StateConstants = StateConstants(None, genesisEmissionBox)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, emission.settings, nodeViewHolderRef)
+    ErgoState.generateGenesisUtxoState(createTempDir, emission, nodeViewHolderRef)
   }
 
 

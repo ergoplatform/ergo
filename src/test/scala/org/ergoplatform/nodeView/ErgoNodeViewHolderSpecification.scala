@@ -72,7 +72,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
       ),
       chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )
-    ErgoNodeViewRef(settings, timeProvider)
+    ErgoNodeViewRef(settings, timeProvider, emission)
   }
 
   private def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
@@ -226,7 +226,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     if (nodeViewConfig.verifyTransactions) {
@@ -271,7 +271,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     if (nodeViewConfig.verifyTransactions) {
@@ -317,7 +317,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     if (nodeViewConfig.verifyTransactions) {
@@ -403,7 +403,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
 
       val (us, bh) = createUtxoState(Some(nodeViewRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
-      val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+      val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
       nodeViewRef ! LocallyGeneratedModifier(genesis.header)
       nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
@@ -435,7 +435,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     nodeViewRef ! LocallyGeneratedModifier(genesis.header)
     if (nodeViewConfig.verifyTransactions) {

@@ -113,28 +113,25 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, stateDir, emission, nodeViewHolderRef).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+      us.rootHash.sameElements(monetary.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
-  def generateGenesisDigestState(stateDir: File, settings: NodeConfigurationSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings)
+  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
+      stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-  //33 bytes in Base16 encoding
-  val afterGenesisStateDigestHex: String = "736bb8bd8a2dabbc5ab7ce0f23c81d1abbba33d5e19ed3b73f60f981c2400fce01"
-  //TODO rework try.get
-  val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
 
-  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ Array.fill(32)(1: Byte)
 
   def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, settings.nodeSettings)
+      case StateType.Digest => DigestState.create(None, None, dir, settings)
       case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
       case _ => ErgoState.generateGenesisUtxoState(dir, settings.chainSettings.monetary, nodeViewHolderRef)._1
     }

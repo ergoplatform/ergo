@@ -7,7 +7,7 @@ import scala.annotation.tailrec
 
 object CoinEmissionPrinter extends App {
 
-  val emissionCurve = new CoinsEmission(MonetarySettings())
+  val emissionCurve = new CoinsEmission(MonetarySettings(afterGenesisStateDigestHex = "aa"))
   val blocksPerHour = 30
 
   //  // Number of coins issued after slow start period

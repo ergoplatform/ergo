@@ -89,12 +89,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     {
       (version, digest, settings.nodeSettings.stateType) match {
         case (Some(_), Some(_), StateType.Digest) =>
-          DigestState.create(version, digest, dir, settings.nodeSettings)
+          DigestState.create(version, digest, dir, settings)
         case _ =>
           ErgoState.readOrGenerate(settings, Some(self))
       }
     }.asInstanceOf[State]
-      .ensuring(_.rootHash sameElements digest.getOrElse(ErgoState.afterGenesisStateDigest), "State root is incorrect")
+      .ensuring(_.rootHash sameElements digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest),
+        "State root is incorrect")
   }
 
   // scalastyle:off cyclomatic.complexity

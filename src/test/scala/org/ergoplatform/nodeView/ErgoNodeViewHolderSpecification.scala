@@ -76,7 +76,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
   }
 
   private def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
-    v.state.rootHash.sameElements(ErgoState.afterGenesisStateDigest)
+    v.state.rootHash.sameElements(settings.chainSettings.monetary.afterGenesisStateDigest)
   }
 
   private def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)

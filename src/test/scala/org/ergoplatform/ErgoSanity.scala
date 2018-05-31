@@ -5,12 +5,12 @@ import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, HistorySpecification}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.core.transaction.state.MinimalState
@@ -34,8 +34,6 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
   with ErgoTestHelpers
   with HistorySpecification {
-
-  lazy val settings: ErgoSettings = ErgoSettings.read(None)
 
   //Node view components
   //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo,

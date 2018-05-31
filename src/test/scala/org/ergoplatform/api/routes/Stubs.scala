@@ -34,11 +34,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val nodeId = Algos.hash("testroute").take(5)
 
-  lazy val settings = ErgoSettings.read(None)
   lazy val history = applyChain(generateHistory(), chain)
 
   lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
-    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings.nodeSettings)
+    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
   }
   }.sample.get
 
@@ -147,7 +146,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
-    val monetarySettings = MonetarySettings()
+    val monetarySettings = settings.chainSettings.monetary
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
 
     val dir = createTempDir

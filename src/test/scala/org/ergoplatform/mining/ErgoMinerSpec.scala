@@ -8,7 +8,6 @@ import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusRespon
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
-import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}

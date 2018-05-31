@@ -17,7 +17,7 @@ import scala.annotation.tailrec
   *
   * @param settings - network settings
   */
-class CoinsEmission(settings: MonetarySettings) {
+class CoinsEmission(val settings: MonetarySettings) {
 
   val coinsInOneErgo: Long = 100000000
 

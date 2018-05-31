@@ -6,6 +6,7 @@ import java.io.File
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState, VersionedInMemoryBoxHolder}
@@ -53,8 +54,11 @@ class WrappedUtxoState(override val version: VersionTag,
 }
 
 object WrappedUtxoState {
-  def apply(boxHolder: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
-    val us = UtxoState.fromBoxHolder(boxHolder, dir, nodeViewHolderRef)
+  def apply(boxHolder: BoxHolder,
+            dir: File,
+            emission: CoinsEmission,
+            nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
+    val us = UtxoState.fromBoxHolder(boxHolder, dir,  emission, nodeViewHolderRef)
     WrappedUtxoState(us, boxHolder, nodeViewHolderRef)
   }
 

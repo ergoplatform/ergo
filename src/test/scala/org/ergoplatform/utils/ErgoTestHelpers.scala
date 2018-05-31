@@ -19,12 +19,12 @@ trait ErgoTestHelpers extends TestkitHelpers with FileUtils with Matchers with C
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, nodeViewHolderRef)
+    ErgoState.generateGenesisUtxoState(createTempDir, emission.settings, nodeViewHolderRef)
   }
 
 
   def createUtxoState(bh: BoxHolder): UtxoState =
-    UtxoState.fromBoxHolder(bh, createTempDir, None)
+    UtxoState.fromBoxHolder(bh, createTempDir, emission, None)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None).nodeSettings)

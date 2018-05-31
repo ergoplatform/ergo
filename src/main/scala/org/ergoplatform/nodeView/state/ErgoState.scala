@@ -5,10 +5,11 @@ import java.io.File
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.R3
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
@@ -76,31 +77,41 @@ object ErgoState extends ScorexLogging {
       .map(b => Insertion(b))
     StateChanges(toRemove ++ toInsert)
   }
-  lazy val genesisEmissionBox: ErgoBox = {
-    // TODO check that this corresponds to ChainSettings.blockInterval
-    val fixedRate = LongConstant(7500000000L)
-    val fixedRatePeriod = LongConstant(460800)
-    val rewardReductionPeriod = LongConstant(64800)
-    val decreasingEpochs = LongConstant(25)
-    val blocksTotal = LongConstant(2102400)
+
+  /**
+    * @param emission - emission curve
+    * @return Genesis box that contains all the coins in the system, protected by the script,
+    *         that allows to take part of them every block.
+    */
+  def genesisEmissionBox(emission: CoinsEmission): ErgoBox = {
+    val s = emission.settings
 
     val register = R3
-    val red = Modulo(Multiply(fixedRate, Modulo(Minus(Height, fixedRatePeriod), rewardReductionPeriod)), decreasingEpochs)
-    val coinsToIssue = If(LE(Height, fixedRatePeriod), fixedRate, Minus(fixedRate, red))
     val out = ByIndex(Outputs, LongConstant(0))
+    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
+    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
+      s.fixedRate,
+      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+    )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
     val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
-    val heightIncreased = GT(ExtractRegisterAs[SLong.type](out, register), ExtractRegisterAs[SLong.type](Self, register))
+    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val prop = OR(AND(sameScriptRule, correctCoinsConsumed, heightIncreased, heightCorrect), GE(Height, blocksTotal))
-    ErgoBox(9773992500000000L, prop, Map(register -> LongConstant(-1)))
+    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+
+    val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
+    ErgoBox(emission.coinsTotal, prop, Map(register -> LongConstant(-1)))
   }
 
-  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
-    log.info("Generating genesis UTXO state")
-    val bh = BoxHolder(Seq(genesisEmissionBox))
+  def generateGenesisUtxoState(stateDir: File,
+                               monetary: MonetarySettings,
+                               nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+    val emission = new CoinsEmission(monetary)
 
-    UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
+    log.info("Generating genesis UTXO state")
+    val bh = BoxHolder(Seq(genesisEmissionBox(emission)))
+
+    UtxoState.fromBoxHolder(bh, stateDir, emission, nodeViewHolderRef).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
@@ -112,7 +123,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
   //33 bytes in Base16 encoding
-  val afterGenesisStateDigestHex: String = "a316537c1ca6db045316608dee0e0bb967e0cb4ff0c441a533e40c122571a05101"
+  val afterGenesisStateDigestHex: String = "736bb8bd8a2dabbc5ab7ce0f23c81d1abbba33d5e19ed3b73f60f981c2400fce01"
   //TODO rework try.get
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
 
@@ -125,7 +136,7 @@ object ErgoState extends ScorexLogging {
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings.nodeSettings)
       case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
-      case _ => ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
+      case _ => ErgoState.generateGenesisUtxoState(dir, settings.chainSettings.monetary, nodeViewHolderRef)._1
     }
   }
 }

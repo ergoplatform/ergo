@@ -28,15 +28,17 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState()
+    var height: Int = 0
     forAll(invalidHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new Random(12))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
       us = us.applyModifier(fb).get
+      height = height + 1
     }
   }
 
@@ -84,7 +86,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyModifier() for real genesis state") {
-    var (us: UtxoState, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var (us: UtxoState, bh) = createUtxoState()
     var height = 0
     forAll(invalidHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new Random(12))
@@ -130,7 +132,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val bh = BoxHolder(initialBoxes)
 
-      UtxoState.fromBoxHolder(bh, createTempDir, None) -> bh
+      createUtxoState(bh) -> bh
     }
     val invalidBlock = validFullBlock(parentOpt = None, us2, bh2)
 

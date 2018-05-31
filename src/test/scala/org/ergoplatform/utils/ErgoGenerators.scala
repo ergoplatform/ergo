@@ -23,7 +23,7 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.SBoolean
-import sigmastate.Values.{IntConstant, LongConstant, TrueLeaf, Value}
+import sigmastate.Values.{IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.annotation.tailrec
@@ -32,6 +32,7 @@ import scala.util.{Random, Try}
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   val emission: CoinsEmission = new CoinsEmission(MonetarySettings())
+  val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
@@ -141,11 +142,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
       }
     }
 
-    stateBoxes.find(_ == ErgoState.genesisEmissionBox) match {
+    stateBoxes.find(_ == genesisEmissionBox) match {
       case Some(emissionBox) if txRemain > 0 =>
         // Extract money to anyoneCanSpend output and forget about emission box for tests
         val tx = ErgoMiner.createCoinbase(0, Seq.empty, emissionBox, TrueLeaf, emission)
-        val remainedBoxes = stateBoxes.filter(_ != ErgoState.genesisEmissionBox)
+        val remainedBoxes = stateBoxes.filter(_ != genesisEmissionBox)
         val newSelfBoxes = selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf)
         validTransactionsFromBoxes(txRemain - 1, remainedBoxes, newSelfBoxes, tx +: acc, rnd)
 

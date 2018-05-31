@@ -43,10 +43,6 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     system.terminate()
   }
 
-  override def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, nodeViewHolderRef)
-  }
-
   type H = ErgoHistory
   type S = ErgoState[_]
   type D = DigestState

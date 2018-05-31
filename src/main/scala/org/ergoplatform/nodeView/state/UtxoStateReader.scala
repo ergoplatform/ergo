@@ -37,7 +37,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     *
     * @param fb - ergo full block
     */
-  protected def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+  def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
     /*
         // TODO fake emission box by malicious miner may break this algorithm
         fb.blockTransactions.txs.reverse.flatMap(_.outputs)

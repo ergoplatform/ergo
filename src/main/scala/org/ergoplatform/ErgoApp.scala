@@ -30,16 +30,16 @@ class ErgoApp(args: Seq[String]) extends Application {
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
   val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider, emission)
 
@@ -56,7 +56,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-                             settings.network, timeProvider)
+      settings.network, timeProvider)
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -86,7 +86,7 @@ object ErgoApp extends ScorexLogging {
 
   def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
     log.warn("Terminating Actors")
-    actors.foreach{ a => a ! PoisonPill }
+    actors.foreach { a => a ! PoisonPill }
     log.warn("Terminating ActorSystem")
     val termination = system.terminate()
     Await.result(termination, 60.seconds)

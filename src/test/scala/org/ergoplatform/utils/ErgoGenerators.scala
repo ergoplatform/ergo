@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, MonetarySettings}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -31,7 +31,7 @@ import scala.util.{Random, Try}
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
-  val emission: CoinsEmission = new CoinsEmission()
+  val emission: CoinsEmission = new CoinsEmission(MonetarySettings())
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)

@@ -8,6 +8,7 @@ import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusRespon
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}
@@ -42,7 +43,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider, emission)
     val listener = system.actorOf(Props(new Listener))
 
     val testingSettings = TestingSettings(transactionGeneration = true, 500)

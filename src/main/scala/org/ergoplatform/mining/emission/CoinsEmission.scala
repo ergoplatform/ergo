@@ -1,36 +1,47 @@
 package org.ergoplatform.mining.emission
 
+import org.ergoplatform.settings.MonetarySettings
+
+import scala.annotation.tailrec
+
 /**
   * Ergo coin emission curve.
-  * Properties:
+  *
+  * Mainnet properties:
+  * 100000000 parts of one coin
   * block every 2 minutes
-  * fixed rate during first 2 years
+  * fixed rate 75 coins during first 2 years
+  * reward reduction for 3 coins every 3 month after that
   * 19710000 coins after the first year
   * 97739925 coins total
-  * no slow start period
-  * reward reduction every 3 month
   *
-  * @param coinsInOneErgo - number of <minimal coin name> in 1 Ergo
-  * @param blocksPerHour - munber of blocks per hour. Should be correlated with LinearDifficultyControl.desiredInterval
+  * @param settings - network settings
   */
-class CoinsEmission(val coinsInOneErgo: Long = 100000000, val blocksPerHour: Int = 30) {
-  // 2 years of fixed rate
-  private val fixedRatePeriod = blocksPerHour * 2 * 24 * 365
-  // 75 coins per block
-  private val fixedRate = 2250 * coinsInOneErgo / blocksPerHour
-  // 3 months of epoch
-  private val epochLength: Int = 90 * 24 * blocksPerHour
-  // 3 coins reduction every epoch
-  private val oneEpochReduction = 3 * coinsInOneErgo
-  val blocksTotal = fixedRatePeriod * 4
+class CoinsEmission(settings: MonetarySettings) {
+
+  val coinsInOneErgo: Long = 100000000
+
+  lazy val (coinsTotal, blocksTotal) = {
+    @tailrec
+    def loop(height: Int, acc: Long): (Long, Int) = {
+      val currentRate = emissionAtHeight(height)
+      if (currentRate > 0) {
+        loop(height + 1, acc + currentRate)
+      } else {
+        (acc, height - 1)
+      }
+    }
+
+    loop(0, 0)
+  }
 
 
   def emissionAtHeight(h: Long): Long = {
-    if (h < fixedRatePeriod) {
-      fixedRate
+    if (h < settings.fixedRatePeriod) {
+      settings.fixedRate
     } else {
-      val epoch = 1 + (h - fixedRatePeriod) / epochLength
-      Math.max(fixedRate - oneEpochReduction * epoch, 0)
+      val epoch = 1 + (h - settings.fixedRatePeriod) / settings.epochLength
+      Math.max(settings.fixedRate - settings.oneEpochReduction * epoch, 0)
     }
   }.ensuring(_ >= 0, s"Negative at $h")
 

@@ -31,7 +31,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 nodeId: Array[Byte],
-                timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
+                timeProvider: NetworkTimeProvider,
+                emission: CoinsEmission) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -45,7 +46,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   // TODO extract from wallet or settings
   private val minerProp = TrueLeaf
-  private val emission = new CoinsEmission()
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -236,23 +236,26 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             nodeId: Array[Byte],
-            timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
-
-  def apply(ergoSettings: ErgoSettings,
-            viewHolderRef: ActorRef,
-            readersHolderRef: ActorRef,
-            nodeId: Array[Byte],
-            timeProvider: NetworkTimeProvider)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider))
+            timeProvider: NetworkTimeProvider,
+            emission: CoinsEmission): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             nodeId: Array[Byte],
             timeProvider: NetworkTimeProvider,
+            emission: CoinsEmission)
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            nodeId: Array[Byte],
+            timeProvider: NetworkTimeProvider,
+            emission: CoinsEmission,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider), name)
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission), name)
 }

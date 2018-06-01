@@ -5,6 +5,8 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADDigest
 
+import scala.util.Random
+
 class DigestStateSpecification extends ErgoPropertyTest {
 
   private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
@@ -28,14 +30,14 @@ class DigestStateSpecification extends ErgoPropertyTest {
   }
 
   property("validate() - valid block") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
-
-      val block = validFullBlock(parentOpt = None, us, bh)
-
-      val ds = createDigestState(us.version, us.rootHash)
-      ds.validate(block).get
+    var (us, bh) = createUtxoState()
+    var ds = createDigestState(us.version, us.rootHash)
+    forAll { seed: Int =>
+      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val block = blBh._1
+      bh = blBh._2
+      ds = ds.applyModifier(block).get
+      us = us.applyModifier(block).get
     }
   }
 

@@ -20,6 +20,7 @@ import sigmastate.Values.LongConstant
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}
 
+import scala.collection.mutable
 import scala.util.Try
 
 
@@ -65,7 +66,8 @@ object ErgoState extends ScorexLogging {
   /**
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
-    *         if some box was created and spend in this sequence - it is not included in both in the result at all
+    *         if some box was created and later spend in this sequence - it is not included in the result at all
+    *         if box was first spend and created after that - it is in both toInsert and toRemove
     */
   def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val (toRemove, toInsert) = boxChanges(txs)
@@ -76,18 +78,23 @@ object ErgoState extends ScorexLogging {
 
   /**
     * @param txs - sequence of transactions
-    * @return modifications from `txs` - sequennce of ids to remove, and sequence of ErgoBoxes to create.
-    *         if some box was created and spend in this sequence - it is not included in both in the result at all
+    * @return modifications from `txs` - sequence of ids to remove, and sequence of ErgoBoxes to create.
+    *         if some box was created and later spend in this sequence - it is not included in the result at all
+    *         if box was first spend and created after that - it is in both toInsert and toRemove
     */
   def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
-    val opened: Seq[ADKey] = txs.flatMap(t => t.inputs.map(_.boxId))
-    val openedSet: Set[ByteArrayWrapper] = opened.map(o => ByteArrayWrapper(o)).toSet
-    val inserted: Seq[ErgoBox] = txs.flatMap(t => t.outputs)
-    val insertedSet: Set[ByteArrayWrapper] = inserted.map(b => ByteArrayWrapper(b.id)).toSet
-    val both: Set[ByteArrayWrapper] = insertedSet.intersect(openedSet)
-    val toRemove = opened.filterNot(s => both.contains(ByteArrayWrapper(s)))
-    val toInsert = inserted.filterNot(s => both.contains(ByteArrayWrapper(s.id)))
-    (toRemove, toInsert)
+    val toRemove: mutable.HashMap[ByteArrayWrapper, ADKey] = mutable.HashMap.empty
+    val toInsert: mutable.HashMap[ByteArrayWrapper, ErgoBox] = mutable.HashMap.empty
+    txs.foreach { tx =>
+      tx.inputs.foreach { i =>
+        toInsert.remove(ByteArrayWrapper(i.boxId)) match {
+          case None => toRemove += ByteArrayWrapper(i.boxId) -> i.boxId
+          case _ => // old value removed, do nothing
+        }
+      }
+      tx.outputs.foreach(o => toInsert += ByteArrayWrapper(o.id) -> o)
+    }
+    (toRemove.values.toSeq, toInsert.values.toSeq)
   }
 
   /**

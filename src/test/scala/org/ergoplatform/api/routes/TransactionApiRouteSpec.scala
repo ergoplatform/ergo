@@ -5,24 +5,24 @@ import java.net.InetSocketAddress
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
 import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
-import supertagged._
 
 import scala.concurrent.duration._
 
 class TransactionApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
-  with Stubs  {
+  with Stubs
+  with FailFastCirceSupport {
 
   implicit val timeout = RouteTestTimeout(15.seconds dilated)
 
@@ -37,9 +37,8 @@ class TransactionApiRouteSpec extends FlatSpec
   val output = new ErgoBoxCandidate(0, TrueLeaf)
   val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
 
-  //TODO: Not fully implemented yet. There is no codec for tx.
-  ignore should "post transaction" in {
-    Post(prefix, tx.asJson.toString()) ~> route ~> check {
+  it should "post transaction" in {
+    Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }
@@ -51,10 +50,10 @@ class TransactionApiRouteSpec extends FlatSpec
     }
   }
 
-  ignore should "get unconfirmed from mempool" in {
+  it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).toSeq.map(_.asJson).asJson.toString shouldBe responseAs[String]
+      memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 

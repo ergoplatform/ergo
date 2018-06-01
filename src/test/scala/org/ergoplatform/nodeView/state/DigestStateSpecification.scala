@@ -1,17 +1,11 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADDigest
 
-class DigestStateSpecification extends PropSpec
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with ErgoTestHelpers {
+class DigestStateSpecification extends ErgoPropertyTest {
 
   private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -23,11 +17,11 @@ class DigestStateSpecification extends PropSpec
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, ErgoSettings.read(None).nodeSettings)
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, ErgoSettings.read(None))
       ds.applyModifier(fb).isSuccess shouldBe true
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, ErgoSettings.read(None).nodeSettings)
+      val state = DigestState.create(None, None, dir2, ErgoSettings.read(None))
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }

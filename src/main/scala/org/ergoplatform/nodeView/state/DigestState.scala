@@ -3,13 +3,18 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
+import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, ADValue}
+import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,16 +43,39 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          val txs = fb.blockTransactions.txs
-          val declaredHash = fb.header.stateRoot
-          txs.foldLeft(Success(): Try[Unit]) { case (status, tx) =>
-            status.flatMap(_ => tx.semanticValidity)
-          }.map(_ => proofs.verify(boxChanges(txs), rootHash, declaredHash))
+          Try {
+            val blockchainState = ErgoStateContext(fb.header.height, rootHash)
+
+            val txs = fb.blockTransactions.txs
+
+            val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
+
+            val verifier = new BatchAVLVerifier[Digest32, HF](rootHash, proofs.proofBytes, ADProofs.KL,
+              None, maxNumOperations = Some(maxOps))
+
+            val declaredHash = fb.header.stateRoot
+            // Check modifications, returning sequence of old values
+            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.boxChanges(txs), rootHash, declaredHash)
+              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+            val totalCost = txs.map { tx =>
+              tx.statelessValidity.get
+              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+                knownBoxes.get(ByteArrayWrapper(id)) match {
+                  case Some(box) => box
+                  case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+                }
+              }
+              tx.statefulValidity(boxesToSpend, blockchainState).get
+            }.sum
+            if (totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
+          }
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
-    case h: Header => Success()
+    case _: Header => Success()
 
     case a: Any =>
       Failure(new Error(s"Modifier not validated: $a"))
@@ -60,7 +88,7 @@ class DigestState protected(override val version: VersionTag,
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
         case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason ${e.getMessage}")
+          log.warn(s"Invalid block ${fb.encodedId}, reason: ", e)
           Failure(e)
       }
 
@@ -114,22 +142,22 @@ object DigestState {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             settings: NodeConfigurationSettings): DigestState = Try {
+             settings: ErgoSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
-          new DigestState(version, rootHash, store, settings)
+          new DigestState(version, rootHash, store, settings.nodeSettings)
         } else {
           val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings).update(version, rootHash).get //sync store
+          new DigestState(inVersion, rootHash, store, settings.nodeSettings).update(version, rootHash).get //sync store
         }
         state.ensuring(store.lastVersionID.get.data.sameElements(version))
       case (None, None) =>
         val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, settings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings.nodeSettings)
       case _ => ???
     }
   }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))

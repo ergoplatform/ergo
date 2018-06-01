@@ -3,22 +3,50 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendNoncedBox
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTestHelpers}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.core.VersionTag
+import sigmastate.Values.TrueLeaf
 
 import scala.util.Random
 
 
-class UtxoStateSpecification extends PropSpec
-  with GeneratorDrivenPropertyChecks
-  with Matchers
-  with ErgoGenerators
-  with ErgoTestHelpers {
+class UtxoStateSpecification extends ErgoPropertyTest {
+
+  property("extractEmissionBox() should extract correct box") {
+    val (us, bh) = createUtxoState()
+    forAll { seed: Int =>
+      val fb = validFullBlock(None, us, bh, new Random(seed))
+      us.extractEmissionBox(fb) should not be None
+    }
+  }
+
+  property("extractEmissionBox() should not extract fake box") {
+    var (us, bh) = createUtxoState()
+    val t = validTransactionsFromBoxHolder(bh)
+    val txs = t._1
+    bh = t._2
+
+    // first block that spends and creates emission box
+    val fb = validFullBlock(None, us, txs)
+    val newEmissionBox = us.extractEmissionBox(fb)
+    newEmissionBox should not be None
+    us = us.applyModifier(fb).get
+
+    // second block, that do not contain emission box
+    val fb2 = validFullBlock(None, us, bh)
+    us.extractEmissionBox(fb2) shouldBe None
+
+    // third block, that do contain box similar to emission one, but with lower amount
+    val ft = fb2.blockTransactions.txs.head
+    val fakeCandidate: ErgoBoxCandidate = new ErgoBoxCandidate(newEmissionBox.get.value + 1,
+      newEmissionBox.get.proposition,
+      newEmissionBox.get.additionalRegisters)
+    val txs3 = fb2.blockTransactions.txs.tail :+ ft.copy(outputCandidates = ft.outputCandidates.tail :+ fakeCandidate)
+    val fb3 = fb2.copy(blockTransactions = fb2.blockTransactions.copy(txs = txs3))
+    us.extractEmissionBox(fb3) shouldBe None
+  }
 
   property("fromBoxHolder") {
     forAll(boxesHolderGen) { bh =>
@@ -30,15 +58,18 @@ class UtxoStateSpecification extends PropSpec
   }
 
   property("proofsForTransactions") {
-    var (us: UtxoState, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var (us: UtxoState, bh) = createUtxoState()
+    var height: Int = 0
     forAll(invalidHeaderGen) { header =>
-      val boxes = us.anyoneCanSpendBoxesAtHeight(header.height)
-      val txs = Seq(AnyoneCanSpendTransaction(boxes.map(_.nonce).toIndexedSeq, IndexedSeq(boxes.map(_.value).sum)))
+      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val txs = t._1
+      bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes))
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
       us = us.applyModifier(fb).get
+      height = height + 1
     }
   }
 
@@ -55,32 +86,37 @@ class UtxoStateSpecification extends PropSpec
     }
   }
 
-  property("checkTransactions()") {
+  property("applyTransactions()") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
-      val boxIds = txs.flatMap(_.boxIdsToOpen)
-      boxIds.foreach(id => bh.get(ByteArrayWrapper(id)) should not be None)
+      val created = txs.flatMap(_.outputs.map(_.id)).map(ByteArrayWrapper.apply)
+      val boxIds = txs.flatMap(_.inputs.map(_.boxId)).map(ByteArrayWrapper.apply)
       boxIds.distinct.size shouldBe boxIds.size
+      val toRemove = boxIds.filterNot(id => created.contains(id))
+      toRemove.foreach(id => bh.get(id) should not be None)
 
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest).isSuccess shouldBe true
+      us.applyTransactions(txs, digest, height = 1).get
     }
   }
 
-  property("applyModifier() - special case") {
-
-    val r = new Random(54)
-    val initialBoxes = (0 until 100) map (s => AnyoneCanSpendNoncedBox(r.nextLong(), Math.abs(r.nextLong())))
-    val bh = BoxHolder(initialBoxes)
-
-    val us = createUtxoState(bh)
-    bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
-    val block = validFullBlock(parentOpt = None, us, bh, rnd = r)
-
-    us.applyModifier(block).get
+  property("applyModifier() for real genesis state") {
+    var (us: UtxoState, bh) = createUtxoState()
+    var height = 0
+    forAll(invalidHeaderGen) { header =>
+      val t = validTransactionsFromBoxHolder(bh, new Random(12))
+      val txs = t._1
+      bh = t._2
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      us = us.applyModifier(fb).get
+      height = height + 1
+    }
   }
 
   property("applyModifier() - valid full block") {
@@ -95,13 +131,13 @@ class UtxoStateSpecification extends PropSpec
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createUtxoState
+      val state = createUtxoState()._1
       state.applyModifier(b).isFailure shouldBe true
     }
   }
 
   property("applyModifier() - valid full block after invalid one") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us, bh) = createUtxoState()
     val validBlock = validFullBlock(parentOpt = None, us, bh)
 
     //Different state
@@ -109,12 +145,12 @@ class UtxoStateSpecification extends PropSpec
       lazy val genesisSeed = Long.MaxValue
       lazy val rndGen = new scala.util.Random(genesisSeed)
 
-      lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
-        (1 to 1).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
+      lazy val initialBoxes: Seq[ErgoBox] =
+        (1 to 1).map(_ => ErgoBox(value = 10000, TrueLeaf))
 
       val bh = BoxHolder(initialBoxes)
 
-      UtxoState.fromBoxHolder(bh, createTempDir, None) -> bh
+      createUtxoState(bh) -> bh
     }
     val invalidBlock = validFullBlock(parentOpt = None, us2, bh2)
 
@@ -124,20 +160,20 @@ class UtxoStateSpecification extends PropSpec
 
 
   property("2 forks switching") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    val (us, bh) = createUtxoState()
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
     val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1).get
     val chain1block2 = validFullBlock(Some(chain1block1.header), wusChain1Block1)
 
-    val (us2, bh2) = ErgoState.generateGenesisUtxoState(createTempDir, None)
-    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, None).applyModifier(genesis).get
+    val (us2, bh2) = createUtxoState()
+    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, stateConstants).applyModifier(genesis).get
     val chain2block1 = validFullBlock(Some(genesis.header), wus2AfterGenesis)
     val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
 
-    var (state, _) = ErgoState.generateGenesisUtxoState(createTempDir, None)
+    var (state, _) = createUtxoState()
     state = state.applyModifier(genesis).get
 
     state = state.applyModifier(chain1block1).get
@@ -158,7 +194,7 @@ class UtxoStateSpecification extends PropSpec
         val us = createUtxoState(bh)
         bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val wusAfterGenesis = WrappedUtxoState(us, bh, None).applyModifier(genesis).get
+        val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)

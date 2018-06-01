@@ -1,5 +1,8 @@
 package org.ergoplatform.modifiers.mempool.proposition
 
+/*
+
+
 import com.google.common.primitives.Longs
 import io.circe.Encoder
 import io.circe.syntax._
@@ -49,4 +52,4 @@ object AnyoneCanSpendNoncedBoxSerializer extends Serializer[AnyoneCanSpendNonced
     val value = Longs.fromByteArray(bytes.slice(8, 16))
     AnyoneCanSpendNoncedBox(nonce, value)
   }
-}
+} */

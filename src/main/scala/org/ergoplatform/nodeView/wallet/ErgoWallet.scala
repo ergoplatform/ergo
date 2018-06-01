@@ -1,37 +1,25 @@
 package org.ergoplatform.nodeView.wallet
 
+
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
-import scorex.core.transaction.wallet.{Wallet, WalletBox, WalletTransaction}
+import scorex.core.transaction.wallet.Vault
 import scorex.core.utils.ScorexLogging
 
 import scala.util.{Success, Try}
 
-class ErgoWallet extends Wallet[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction, ErgoPersistentModifier, ErgoWallet]
+class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
-  override type S = Nothing
-  override type PI = AnyoneCanSpendProposition.type
 
-  override def secretByPublicImage(publicImage: AnyoneCanSpendProposition.type): Option[Nothing] = None
 
-  override def generateNewSecret(): ErgoWallet = this
-
-  override def historyTransactions: Seq[WalletTransaction[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]] = ???
-
-  override def boxes(): Seq[WalletBox[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]] = ???
-
-  override def publicKeys: Set[PI] = Set.empty
-
-  override def secrets: Set[S] = Set.empty
 
   //todo: implement
-  override def scanOffchain(tx: AnyoneCanSpendTransaction): ErgoWallet = this
+  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = this
 
   //todo: implement
-  override def scanOffchain(txs: Seq[AnyoneCanSpendTransaction]): ErgoWallet = this
+  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = this
 
   //todo: implement
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = this

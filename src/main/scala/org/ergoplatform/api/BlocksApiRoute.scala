@@ -10,10 +10,12 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.ModifierId
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.encode.Base58
+import scorex.core.settings.RESTApiSettings
+import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.Future
 
@@ -36,7 +38,7 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
   private def getHistory = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
   private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAtHeight(h).map(Base58.encode).asJson
+    history.headerIdsAtHeight(h).map(Algos.encode).asJson
   }
 
   private def getLastHeaders(n: Int): Future[Json] = getHistory.map { history =>
@@ -44,7 +46,7 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
   }
 
   private def getHeaderIds(limit: Int, offset: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAt(limit, offset).map(Base58.encode).asJson
+    history.headerIdsAt(limit, offset).map(Algos.encode).asJson
   }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = getHistory.map { history =>

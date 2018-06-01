@@ -5,9 +5,9 @@ import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -23,24 +23,24 @@ import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
-  override type P = AnyoneCanSpendProposition.type
-  override type TX = AnyoneCanSpendTransaction
+  override type TX = ErgoTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
-  val nodeId: Array[Byte] = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider)
+
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
 
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
@@ -48,14 +48,14 @@ class ErgoApp(args: Seq[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings, nodeId),
+    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-                             settings.network, timeProvider)
+      settings.network, timeProvider)
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -85,7 +85,7 @@ object ErgoApp extends ScorexLogging {
 
   def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
     log.warn("Terminating Actors")
-    actors.foreach{ a => a ! PoisonPill }
+    actors.foreach { a => a ! PoisonPill }
     log.warn("Terminating ActorSystem")
     val termination = system.terminate()
     Await.result(termination, 60.seconds)

@@ -14,9 +14,7 @@ import scorex.core.network.Handshake
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import scorex.crypto.encode.Base58
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 /**
@@ -32,7 +30,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
+    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
   }
 
   private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
@@ -100,7 +98,7 @@ object ErgoStatsCollector {
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
-        "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Base58.encode).asJson,
+        "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
         "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
         "unconfirmedCount" -> ni.unconfirmedCount.asJson,
         "stateRoot" -> ni.stateRoot.asJson,

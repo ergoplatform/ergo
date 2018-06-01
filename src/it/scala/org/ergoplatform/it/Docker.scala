@@ -23,13 +23,12 @@ import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Future, blocking}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
-class Docker(suiteConfig: Config = ConfigFactory.empty,
-             tag: String = "") extends AutoCloseable with ScorexLogging {
+class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
+            (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
 
@@ -297,7 +296,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId, node.nodeInfo.networkIpAddress)
 
-  def cleanUpDanglingResources(): Unit = {
+  def cleanupDanglingResources(): Unit = {
     log.debug("Cleaning up Docker resources")
 
     // remove containers
@@ -319,7 +318,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def cleanupDanglingIfNeeded(): Unit = {
     val shouldCleanup = nodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
     if (shouldCleanup) {
-      cleanUpDanglingResources()
+      cleanupDanglingResources()
     }
   }
 }
@@ -335,6 +334,6 @@ object Docker {
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  def apply(owner: Class[_]): Docker = new Docker(tag = owner.getSimpleName)
+  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName)
 
 }

@@ -3,7 +3,6 @@ package org.ergoplatform.api
 import akka.http.scaladsl.server.{Directive, Directive1}
 import scorex.core.ModifierId
 import scorex.core.api.http.ApiRoute
-import scorex.crypto.encode.Base58
 
 import scala.util.Success
 
@@ -14,7 +13,7 @@ trait ErgoBaseApiRoute extends ApiRoute {
   val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
 
   val headerId: Directive1[ModifierId] = pathPrefix(Segment).flatMap { h =>
-    Base58.decode(h) match {
+    Algos.decode(h) match {
       case Success(header) => provide(ModifierId @@ header)
       case _ => reject
     }

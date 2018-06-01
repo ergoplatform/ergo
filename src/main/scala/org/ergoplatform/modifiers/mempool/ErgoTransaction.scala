@@ -1,19 +1,24 @@
 package org.ergoplatform.modifiers.mempool
 
-import io.circe.Encoder
+import io.circe._
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox.NonMandatoryIdentifier
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
-import org.ergoplatform.api.TransactionView
 import org.ergoplatform._
+import org.ergoplatform.api.BaseCodecs
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
+import scorex.core.validation.ModifierValidator
+import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Blake2b256
-import sigmastate.AvlTreeData
+import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.{AvlTreeData, SBoolean, SType}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 
 import scala.util.{Failure, Success, Try}
@@ -23,13 +28,12 @@ case class ErgoStateContext(height: Long, lastUtxoDigest: ADDigest)
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
-  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ScorexLogging {
+  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier
+     with ModifierValidator with ScorexLogging {
 
   override type IdType = ModifierId
 
   override lazy val id: ModifierId = ModifierId @@ Blake2b256.hash(messageToSign)
-
-  //todo: testnet1 - implement
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
@@ -37,17 +41,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @return Success(Unit) if transaction is valid, Failure(e) if transaction is invalid, with respect to
     *         an error encapsulated in the exception "e".
     */
-  def statelessValidity: Try[Unit] =
-    Try {
-      require(inputs.nonEmpty, s"No inputs in transaction $toString")
-      require(inputs.size <= Short.MaxValue, s"Too much inputs in transaction $toString")
-      require(outputCandidates.size <= Short.MaxValue, s"Too much outputCandidates in transaction $toString")
+  def statelessValidity: Try[Unit] = {
+    accumulateErrors
+      .validate(inputs.nonEmpty) {
+        fatal( s"No inputs in transaction $toString")
+      }
+      .validate(inputs.size <= Short.MaxValue) {
+        fatal(s"Too many inputs in transaction $toString")
+      }
+      .validate(outputCandidates.size <= Short.MaxValue) {
+        fatal(s"Too many outputCandidates in transaction $toString")
+      }
+      .result.toTry
     }
 
   /**
-    *
-    * @param boxesToSpend
-    * @param blockchainState
     * @return total coimputation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
@@ -89,9 +97,90 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 
-object ErgoTransaction {
-  implicit val jsonEncoder: Encoder[ErgoTransaction] = TransactionView(_).asJson
+object ErgoTransaction extends BaseCodecs with ModifierValidator {
 
+  implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
+    extension.values.map { case (key, value) =>
+      key -> valueEncoder(value)
+    }.asJson
+  }
+
+  implicit private val inputEncoder: Encoder[Input] = { input =>
+    Json.obj(
+      "boxId" -> input.boxId.asJson,
+      "spendingProof" -> Json.obj(
+        "proofBytes" -> byteSeqEncoder(input.spendingProof.proofBytes),
+        "extension" -> extensionEncoder(input.spendingProof.extension)
+      )
+    )
+  }
+
+  implicit val proofDecoder: Decoder[SerializedProverResult] = { cursor =>
+    for {
+      proofBytes <- cursor.downField("proofBytes").as[Array[Byte]]
+      extMap <- cursor.downField("extension").as[Map[Byte, EvaluatedValue[SType]]]
+    } yield SerializedProverResult(proofBytes, ContextExtension(extMap))
+  }
+
+  implicit private val inputDecoder: Decoder[Input] = { cursor =>
+    for {
+      boxId <- cursor.downField("boxId").as[ADKey]
+      proof <- cursor.downField("spendingProof").as[SerializedProverResult]
+    } yield Input(boxId, proof)
+  }
+
+  implicit private val registersEncoder: Encoder[Map[NonMandatoryIdentifier, EvaluatedValue[_ <: SType]]] = {
+    _.map {  case (key, value) =>
+      key.number -> valueEncoder(value)
+    }.asJson
+  }
+
+  implicit private val outputEncoder: Encoder[ErgoBoxCandidate] = { box =>
+    Json.obj(
+      "value" -> box.value.asJson,
+      "proposition" -> valueEncoder(box.proposition),
+      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
+    )
+  }
+
+  implicit private val identifierDecoder: KeyDecoder[NonMandatoryIdentifier] = { key =>
+    Try(ErgoBox.findRegisterByIndex(key.toByte).map(_.asInstanceOf[NonMandatoryIdentifier])).toOption.flatten
+  }
+
+  implicit private val outputDecoder: Decoder[ErgoBoxCandidate] = { cursor =>
+    for {
+      value <- cursor.downField("value").as[Long]
+      proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
+      registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryIdentifier, EvaluatedValue[SType]]]
+    } yield new ErgoBoxCandidate(value, proposition, registers)
+  }
+
+  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
+    Json.obj(
+      "id" -> tx.id.asJson,
+      "inputs" -> tx.inputs.asJson,
+      "outputs" -> tx.outputCandidates.asJson
+    )
+  }
+
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
+    for {
+      id <- cursor.downField("id").as[Option[ModifierId]]
+      inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
+      outputs <- cursor.downField("outputs").as[IndexedSeq[ErgoBoxCandidate]]
+      result <- validateId(ErgoTransaction(inputs, outputs), id)
+    } yield result
+  }
+
+  def validateId(tx: ErgoTransaction, maybeId: Option[ModifierId])
+                (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
+    fromValidation(tx) {
+      accumulateErrors.validate(maybeId.forall(_ sameElements tx.id)) {
+        fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
+              s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+      }.result
+    }
+  }
 }
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {

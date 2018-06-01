@@ -53,7 +53,7 @@ class TransactionApiRouteSpec extends FlatSpec
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).toSeq.map(_.asJson).asJson.toString shouldBe responseAs[String]
+      memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 

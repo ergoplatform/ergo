@@ -5,7 +5,8 @@ import java.io.File
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
-import scorex.crypto.encode.Base58
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.HistorySpecification
 
 import scala.util.Random
 
@@ -66,10 +67,10 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     val missedChain = chain.tail.toList
     val missedBT = missedChain.map(fb => (BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId))
-    history.nextModifiersToDownload(1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.take(1)
-    history.nextModifiersToDownload(BlocksToKeep - 1, Seq()).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT
+    history.nextModifiersToDownload(1, Seq()).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.take(1)
+    history.nextModifiersToDownload(BlocksToKeep - 1, Seq()).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT
 
-    history.nextModifiersToDownload(2, Seq(missedChain.head.blockTransactions.id)).map(id => (id._1, Base58.encode(id._2))) shouldEqual missedBT.tail.take(2)
+    history.nextModifiersToDownload(2, Seq(missedChain.head.blockTransactions.id)).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.tail.take(2)
   }
 
   property("append header as genesis") {
@@ -92,7 +93,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   }
 
   property("append header to genesis - 2") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()), None)
+    val (us, bh) = createUtxoState()
 
     val block = validFullBlock(None, us, bh)
 

@@ -4,18 +4,20 @@ import java.io.File
 
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.authds.{ADDigest, ADValue}
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -26,14 +28,14 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val version: VersionTag,
                 override val store: Store,
-                nodeViewHolderRef: Option[ActorRef])
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
-    with TransactionValidation[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
+    with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if (nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
-    nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
+    if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
+    constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
 
   import UtxoState.metadata
@@ -48,7 +50,7 @@ class UtxoState(override val version: VersionTag,
     store.get(ByteArrayWrapper(version)) match {
       case Some(hash) =>
         val rollbackResult = p.rollback(ADDigest @@ hash.data).map { _ =>
-          new UtxoState(version, store, nodeViewHolderRef) {
+          new UtxoState(version, store, constants) {
             override protected lazy val persistentProver = p
           }
         }
@@ -60,11 +62,27 @@ class UtxoState(override val version: VersionTag,
   }
 
   @SuppressWarnings(Array("TryGet"))
-  private[state] def applyTransactions(transactions: Seq[AnyoneCanSpendTransaction], expectedDigest: ADDigest) = Try {
+  private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       expectedDigest: ADDigest,
+                                       height: Height) = Try {
 
-    transactions.foreach(tx => tx.semanticValidity.get)
+    val blockchainState = ErgoStateContext(height, persistentProver.digest)
 
-    val mods = boxChanges(transactions).operations.map(ADProofs.changeToMod)
+    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val totalCost = transactions.map { tx =>
+      tx.statelessValidity.get
+      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+          case Some(box) => box
+          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+        }
+      }
+      tx.statefulValidity(boxesToSpend, blockchainState).get
+    }.sum
+
+    if(totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
+    val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)
@@ -80,14 +98,19 @@ class UtxoState(override val version: VersionTag,
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height ${fb.header.height} " +
+      val height = fb.header.height
+
+      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height " +
         s"to UtxoState with root hash ${Algos.encode(rootHash)}")
 
-      val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot) map { _: Unit =>
-        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot)
+      val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
+        val emissionBox = extractEmissionBox(fb)
+        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox)
+
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+
         log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} applied to UtxoState with " +
           s"root hash ${Algos.encode(rootHash)}")
         if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
@@ -97,7 +120,7 @@ class UtxoState(override val version: VersionTag,
         } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
           throw new Error("Calculated stateRoot is not equal to the declared one")
         }
-        new UtxoState(VersionTag @@ fb.id, store, nodeViewHolderRef)
+        new UtxoState(VersionTag @@ fb.id, store, constants)
       }
       stateTry.recoverWith[UtxoState] { case e =>
         log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -107,7 +130,7 @@ class UtxoState(override val version: VersionTag,
       }
 
     case h: Header =>
-      Success(new UtxoState(VersionTag @@ h.id, this.store, nodeViewHolderRef))
+      Success(new UtxoState(VersionTag @@ h.id, this.store, constants))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -123,34 +146,44 @@ class UtxoState(override val version: VersionTag,
 
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
+  val EmissionBoxKey = Algos.hash("emission box jey")
 
-  private def metadata(modId: VersionTag, stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {
+  private def metadata(modId: VersionTag,
+                       stateRoot: ADDigest,
+                       emissionBoxOpt: Option[ErgoBox]): Seq[(Array[Byte], Array[Byte])] = {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
+    val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => ErgoBoxSerializer.toBytes(emissionBox))
+      .getOrElse(Array.empty)
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion)
+    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb)
   }
 
-  def create(dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
+  def create(dir: File, emission: CoinsEmission, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
-    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, nodeViewHolderRef)
+    val constants = StateConstants(nodeViewHolderRef, emission)
+    new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, constants)
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
-  def fromBoxHolder(bh: BoxHolder, dir: File, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = Some(ErgoState.BoxSize))
+  def fromBoxHolder(bh: BoxHolder,
+                    dir: File,
+                    emission: CoinsEmission,
+                    nodeViewHolderRef: Option[ActorRef]): UtxoState = {
+    val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) // todo: magic number, move to settings
+    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
+    val constants = StateConstants(nodeViewHolderRef, emission)
 
-    new UtxoState(ErgoState.genesisStateVersion, store, nodeViewHolderRef) {
+    new UtxoState(ErgoState.genesisStateVersion, store, constants) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest),
+          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox(emission))),
           paranoidChecks = true
         ).get
 

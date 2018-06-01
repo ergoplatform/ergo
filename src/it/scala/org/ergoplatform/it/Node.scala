@@ -3,13 +3,14 @@ package org.ergoplatform.it
 import org.asynchttpclient._
 import org.ergoplatform.it.api.{NetworkNodeApi, NodeApi}
 import org.ergoplatform.settings.ErgoSettings
-import org.slf4j.{LoggerFactory, Logger}
+import org.slf4j.{Logger, LoggerFactory}
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 
 class Node(settings: ErgoSettings, val nodeInfo: NodeInfo, override val client: AsyncHttpClient)
-  extends NodeApi with NetworkNodeApi {
+          (implicit override val ec: ExecutionContext) extends NodeApi with NetworkNodeApi {
 // todo after addresses will added
 //  val privateKey: String = config.getString("private-key")
 //  val publicKey: String = config.getString("public-key")

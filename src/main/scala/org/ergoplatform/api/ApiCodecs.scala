@@ -13,7 +13,7 @@ import sigmastate.{SBoolean, SType}
 
 import scala.util.Try
 
-trait BaseCodecs {
+trait ApiCodecs {
 
   def fromTry[T](tryResult: Try[T])(implicit cursor: ACursor): Either[DecodingFailure, T] = {
     tryResult.fold(e => Left(DecodingFailure(e.toString, cursor.history)), Right.apply)

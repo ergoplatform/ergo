@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoBox.NonMandatoryIdentifier
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
-import org.ergoplatform.api.BaseCodecs
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
@@ -97,7 +97,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 
-object ErgoTransaction extends BaseCodecs with ModifierValidator {
+object ErgoTransaction extends ApiCodecs with ModifierValidator {
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>

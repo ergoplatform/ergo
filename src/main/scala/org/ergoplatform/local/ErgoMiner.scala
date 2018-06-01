@@ -1,9 +1,13 @@
 package org.ergoplatform.local
 
+import java.math.BigInteger
+import java.security.SecureRandom
+
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.R3
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -17,10 +21,12 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
+import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import sigmastate.{NoProof, SBoolean, SigSerializer}
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
+import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.collection.mutable
@@ -30,22 +36,22 @@ import scala.concurrent.duration._
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
-                nodeId: Array[Byte],
                 timeProvider: NetworkTimeProvider,
                 emission: CoinsEmission) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
   private val startTime = timeProvider.time()
-  private val votes: Array[Byte] = nodeId
 
   //shared mutable state
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  // TODO extract from wallet or settings
-  private val minerProp = TrueLeaf
+  private val minerProp: Value[SBoolean.type] = {
+    //TODO extract from wallet
+    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.wallet.seed.arr)).publicImage
+  }
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -162,7 +168,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .getOrElse(Constants.InitialNBits)
 
     //TODO real extension should be there
-    val extensionHash = Algos.hash(nodeId)
+    val extensionHash = Algos.hash(ergoSettings.scorexSettings.network.nodeName)
 
     CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
   }
@@ -236,27 +242,24 @@ object ErgoMinerRef {
   def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
-            nodeId: Array[Byte],
             timeProvider: NetworkTimeProvider,
             emission: CoinsEmission): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission))
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
-            nodeId: Array[Byte],
             timeProvider: NetworkTimeProvider,
             emission: CoinsEmission)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
-            nodeId: Array[Byte],
             timeProvider: NetworkTimeProvider,
             emission: CoinsEmission,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, nodeId, timeProvider, emission), name)
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission), name)
 }

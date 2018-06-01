@@ -38,11 +38,9 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
     val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
 
-    val nodeId = Algos.hash(ergoSettings.scorexSettings.network.nodeName).take(5)
-
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, nodeId, timeProvider, emission)
+    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
     val listener = system.actorOf(Props(new Listener))
 
     val testingSettings = TestingSettings(transactionGeneration = true, 500)

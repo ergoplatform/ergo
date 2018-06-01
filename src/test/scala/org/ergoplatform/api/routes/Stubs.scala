@@ -32,8 +32,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val chain = genChain(4)
 
-  lazy val nodeId = Algos.hash("testroute").take(5)
-
   lazy val history = applyChain(generateHistory(), chain)
 
   lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>

@@ -43,15 +43,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statelessValidity: Try[Unit] = {
     accumulateErrors
-      .validate(inputs.nonEmpty) {
-        fatal( s"No inputs in transaction $toString")
-      }
-      .validate(inputs.size <= Short.MaxValue) {
-        fatal(s"Too many inputs in transaction $toString")
-      }
-      .validate(outputCandidates.size <= Short.MaxValue) {
-        fatal(s"Too many outputCandidates in transaction $toString")
-      }
+      .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
+      .demand(inputs.size <= Short.MaxValue,s"Too many inputs in transaction $toString")
+      .demand(outputCandidates.size <= Short.MaxValue,s"Too many outputCandidates in transaction $toString")
       .result.toTry
     }
 
@@ -174,12 +168,10 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator {
 
   def validateId(tx: ErgoTransaction, maybeId: Option[ModifierId])
                 (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
-    fromValidation(tx) {
-      accumulateErrors.validate(maybeId.forall(_ sameElements tx.id)) {
-        fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
-              s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
-      }.result
-    }
+    validate(maybeId.forall(_ sameElements tx.id)) {
+      fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
+            s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+    }.toDecoderResult(tx)
   }
 }
 

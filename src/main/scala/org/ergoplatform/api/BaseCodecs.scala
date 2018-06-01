@@ -5,6 +5,7 @@ import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
+import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.ADKey
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.serialization.ValueSerializer
@@ -14,16 +15,21 @@ import scala.util.Try
 
 trait BaseCodecs {
 
-  def fromTry[T](tryResult: Try[T], cursor: ACursor): Either[DecodingFailure, T] = {
+  def fromTry[T](tryResult: Try[T])(implicit cursor: ACursor): Either[DecodingFailure, T] = {
     tryResult.fold(e => Left(DecodingFailure(e.toString, cursor.history)), Right.apply)
   }
 
-  def fromOption[T](maybeResult: Option[T], cursor: ACursor, msg: => String): Either[DecodingFailure, T] = {
-    maybeResult.fold[Either[DecodingFailure, T]](Left(DecodingFailure(msg, cursor.history)))(Right.apply)
+  def fromOption[T](maybeResult: Option[T])(implicit cursor: ACursor): Either[DecodingFailure, T] = {
+    maybeResult.fold[Either[DecodingFailure, T]](Left(DecodingFailure("No value found", cursor.history)))(Right.apply)
   }
 
-  def fromThrows[T](throwsResult: T, cursor: ACursor): Either[DecodingFailure, T] = {
+  def fromThrows[T](throwsResult: T)(implicit cursor: ACursor): Either[DecodingFailure, T] = {
     Either.catchNonFatal(throwsResult).leftMap(e => DecodingFailure(e.toString, cursor.history))
+  }
+
+  def fromValidation[T](value: T)(validationResult: ValidationResult)
+                       (implicit cursor: ACursor): Either[DecodingFailure, T] = {
+    fromTry(validationResult.toTry.map(_ => value))
   }
 
   implicit val bytesEncoder: Encoder[Array[Byte]] =  Algos.encode(_).asJson
@@ -40,10 +46,10 @@ trait BaseCodecs {
 
   implicit val adKeyDecoder: Decoder[ADKey] = bytesDecoder(ADKey @@  _)
 
-  def bytesDecoder[T](transform: Array[Byte] => T): Decoder[T] = { cursor =>
+  def bytesDecoder[T](transform: Array[Byte] => T): Decoder[T] = { implicit cursor =>
     for {
       str <- cursor.as[String]
-      bytes <- fromTry(Algos.decode(str), cursor)
+      bytes <- fromTry(Algos.decode(str))
     } yield transform(bytes)
   }
 
@@ -63,9 +69,9 @@ trait BaseCodecs {
     valueDecoder(_.asInstanceOf[EvaluatedValue[SType]])
   }
 
-  def valueDecoder[T](transform: Value[SType] => T): Decoder[T]  = { cursor: ACursor =>
+  def valueDecoder[T](transform: Value[SType] => T): Decoder[T]  = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ValueSerializer.deserialize(bytes)), cursor)
+      fromThrows(transform(ValueSerializer.deserialize(bytes)))
     }
   }
 

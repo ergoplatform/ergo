@@ -17,6 +17,22 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     rootHash shouldBe expectedRootHash
   }
 
+  property("ErgoState.boxChanges() should generate operations in the same order") {
+    var (us, bh) = createUtxoState()
+
+    forAll { seed: Int =>
+      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val block = blBh._1
+      bh = blBh._2
+      us = us.applyModifier(block).get
+
+      val changes1 = ErgoState.boxChanges(block.transactions)
+      val changes2 = ErgoState.boxChanges(block.transactions)
+      changes1._1 shouldBe changes2._1
+      changes1._2 shouldBe changes2._2
+    }
+  }
+
   property("ErgoState.boxChanges() double spend attempt") {
       var (us: UtxoState, bh) = createUtxoState()
       bh.boxes.size shouldBe 1

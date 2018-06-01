@@ -83,8 +83,8 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove
     */
   def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
-    val toRemove: mutable.HashMap[ByteArrayWrapper, ADKey] = mutable.HashMap.empty
     val toInsert: mutable.HashMap[ByteArrayWrapper, ErgoBox] = mutable.HashMap.empty
+    val toRemove: mutable.HashMap[ByteArrayWrapper, ADKey] = mutable.HashMap.empty
     txs.foreach { tx =>
       tx.inputs.foreach { i =>
         toInsert.remove(ByteArrayWrapper(i.boxId)) match {
@@ -94,7 +94,7 @@ object ErgoState extends ScorexLogging {
       }
       tx.outputs.foreach(o => toInsert += ByteArrayWrapper(o.id) -> o)
     }
-    (toRemove.values.toSeq, toInsert.values.toSeq)
+    (toRemove.toSeq.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
   /**

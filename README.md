@@ -27,15 +27,15 @@ and currently the reference implementation code should be considered as a specif
 
 Ergo has officially supported Docker package. To run Ergo as a console application with logs in console:
 
-    sudo docker run --rm -p 9001:9001 -p 9051:9051 -v ergo-testnet:/root/ergo/data ergoplatform/ergo
+    sudo docker run --rm -p 9002:9002 -p 9052:9052 -v ergo-testnet:/root/ergo/data ergoplatform/ergo
     
-This will connect to Ergo testnet with default config and open ports 9001 and 9051 on host system. All data will be stored in your named Docker volume `ergo-testnet`. 
+This will connect to Ergo testnet with default config and open ports 9002 and 9052 on host system. All data will be stored in your named Docker volume `ergo-testnet`.
 
 To run certain Ergo version as a service with custom config:
 
-    sudo docker run -d -p 9001:9001 -p 9051:9051
+    sudo docker run -d -p 9002:9002 -p 9052:9052
 		-v ergo:/root/ergo/data
 		-v /path/on/host/system/to/myergo.conf:/root/ergo/myergo.conf
 		ergoplatform/ergo:v0.2.1 /root/ergo/myergo.conf
 
-This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to changed location) and open ports 9001 and 9051 on host system.
+This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to changed location) and open ports 9002 and 9052 on host system.

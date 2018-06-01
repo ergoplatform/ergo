@@ -5,19 +5,20 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "0.2.4"
+version := "1.0.0"
 
-scalaVersion := "2.12.3"
+scalaVersion := "2.12.6"
 
 resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
   "SonaType" at "https://oss.sonatype.org/content/groups/public",
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "e77cc239-SNAPSHOT"
+val scorexVersion = "33d8f788-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.1",
+  "org.scorexfoundation" %% "sigma-state" % "0.9.3",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.13",
   "org.scorexfoundation" %% "iodb" % "0.3.2",
@@ -33,9 +34,9 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "it",
-  "com.spotify" % "docker-client" % "8.11.0" % "it" classifier "shaded",
-  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "it"
+  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "test",
+  "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
+  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
 )
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
@@ -102,7 +103,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest)
+configs(IntegrationTest extend(Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
@@ -114,7 +115,7 @@ dockerfile in docker := {
   val startErgo = (sourceDirectory in IntegrationTest).value / "container" / "start-ergo.sh"
 
   new Dockerfile {
-    from("anapsix/alpine-java:8_server-jre")
+    from("openjdk:9-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configTemplate, startErgo), "/opt/ergo/")

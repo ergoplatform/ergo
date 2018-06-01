@@ -3,18 +3,15 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Bytes
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendProposition}
+import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
-import scorex.core.transaction.state.{BoxStateChangeOperation, BoxStateChanges, Insertion, Removal}
 import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
-import scorex.crypto.encode.Base58
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -49,28 +46,25 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
     * @param expectedHash - expected (declared by miner) hash. A hash after applying proof must be the same.
     * @return Success, if verification passed
     */
-  def verify(changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox],
+  def verify(changes: StateChanges,
              previousHash: ADDigest,
-             expectedHash: ADDigest): Try[Unit] = {
+             expectedHash: ADDigest): Try[Seq[ADValue]] = {
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
-                     changes: BoxStateChanges[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]) =
-      changes.operations.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, o) =>
-        t.flatMap(_ => {
-          verifier.performOneOperation(ADProofs.changeToMod(o))
-        })
-      }
+                     changes: StateChanges): Try[Seq[ADValue]] = Try {
+      changes.operations.flatMap(o => verifier.performOneOperation(ADProofs.changeToMod(o)).get)
+    }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
-      Some(ErgoState.BoxSize), maxNumOperations = Some(changes.operations.size))
+      None, maxNumOperations = Some(changes.operations.size))
 
-    applyChanges(verifier, changes).flatMap { _ =>
+    applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
           if (digest sameElements expectedHash) {
-            Success()
+            Success(oldValues)
           } else {
-            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Base58.encode(digest)} != ${Base58.encode(expectedHash)}"))
+            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))
           }
         case None =>
           Failure(new IllegalStateException("Digest is undefined"))
@@ -92,19 +86,19 @@ object ADProofs {
     * @param change - operation over a box
     * @return AVL+ tree modification
     */
-  def changeToMod(change: BoxStateChangeOperation[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox]): Modification =
+  def changeToMod(change: StateChangeOperation): Modification =
     change match {
-      case i: Insertion[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
+      case i: Insertion =>
         Insert(i.box.id, ADValue @@ i.box.bytes)
-      case r: Removal[AnyoneCanSpendProposition.type, AnyoneCanSpendNoncedBox] =>
+      case r: Removal =>
         Remove(r.boxId)
     }
 
   implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
     Map(
-      "headerId" -> Base58.encode(proof.headerId).asJson,
-      "proofBytes" -> Base58.encode(proof.proofBytes).asJson,
-      "digest" -> Base58.encode(proof.digest).asJson
+      "headerId" -> Algos.encode(proof.headerId).asJson,
+      "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
+      "digest" -> Algos.encode(proof.digest).asJson
     ).asJson
 }
 

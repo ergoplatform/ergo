@@ -3,8 +3,7 @@ package org.ergoplatform.modifiers
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
@@ -13,7 +12,7 @@ case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          aDProofs: Option[ADProofs])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction] {
+    with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
   lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
 
@@ -27,7 +26,7 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val serializer: Serializer[ErgoFullBlock] = ???
 
-  override lazy val transactions: Seq[AnyoneCanSpendTransaction] = blockTransactions.txs
+  override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 }
 
 object ErgoFullBlock {

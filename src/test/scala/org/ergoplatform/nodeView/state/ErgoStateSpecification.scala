@@ -25,7 +25,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     forAll { seed: Int =>
       val txs = validTransactionsFromBoxHolder(bh, new Random(seed))._1
       whenever(txs.lengthCompare(1) > 0) {
-        val changes = ErgoState.boxChanges(txs)
+        val changes = ErgoState.stateChanges(txs)
         val removals = changes.operations.filter(_.isInstanceOf[Removal]).map(_.asInstanceOf[Removal])
         // should remove the only genesis box from the state
         removals.length shouldBe 1
@@ -37,7 +37,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         // sum of coins in outputs should equal to genesis value
         insertions.map(_.box.value).sum shouldBe genesisBox.value
 
-        val changesRev = ErgoState.boxChanges(txs.reverse)
+        val changesRev = ErgoState.stateChanges(txs.reverse)
         val removalsRev = changesRev.operations.filter(_.isInstanceOf[Removal]).map(_.asInstanceOf[Removal])
         val insertionsRev = changesRev.operations.filter(_.isInstanceOf[Insertion]).map(_.asInstanceOf[Insertion])
         removalsRev shouldEqual removals

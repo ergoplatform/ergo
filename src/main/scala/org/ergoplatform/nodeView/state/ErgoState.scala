@@ -9,14 +9,14 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
-import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.encode.Base16
-import sigmastate.Values.{IntConstant, LongConstant}
+import sigmastate.Values.LongConstant
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}
 
@@ -63,19 +63,31 @@ object ErgoState extends ScorexLogging {
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
-    * Extract ordered sequence of operations on UTXO set from set of transactions
+    * @param txs - sequence of transactions
+    * @return ordered sequence of operations on UTXO set from this sequence of transactions
+    *         if some box was created and spend in this sequence - it is not included in both in the result at all
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): StateChanges = {
+  def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
+    val (toRemove, toInsert) = boxChanges(txs)
+    val toRemoveChanges = toRemove.map(id => Removal(id))
+    val toInsertChanges = toInsert.map(b => Insertion(b))
+    StateChanges(toRemoveChanges ++ toInsertChanges)
+  }
+
+  /**
+    * @param txs - sequence of transactions
+    * @return modifications from `txs` - sequennce of ids to remove, and sequence of ErgoBoxes to create.
+    *         if some box was created and spend in this sequence - it is not included in both in the result at all
+    */
+  def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
     val opened: Seq[ADKey] = txs.flatMap(t => t.inputs.map(_.boxId))
     val openedSet: Set[ByteArrayWrapper] = opened.map(o => ByteArrayWrapper(o)).toSet
     val inserted: Seq[ErgoBox] = txs.flatMap(t => t.outputs)
     val insertedSet: Set[ByteArrayWrapper] = inserted.map(b => ByteArrayWrapper(b.id)).toSet
     val both: Set[ByteArrayWrapper] = insertedSet.intersect(openedSet)
     val toRemove = opened.filterNot(s => both.contains(ByteArrayWrapper(s)))
-      .map(id => Removal(id))
     val toInsert = inserted.filterNot(s => both.contains(ByteArrayWrapper(s.id)))
-      .map(b => Insertion(b))
-    StateChanges(toRemove ++ toInsert)
+    (toRemove, toInsert)
   }
 
   /**

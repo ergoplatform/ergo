@@ -82,7 +82,7 @@ class UtxoState(override val version: VersionTag,
 
     if(totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
-    val mods = ErgoState.boxChanges(transactions).operations.map(ADProofs.changeToMod)
+    val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
       t.flatMap(_ => {
         persistentProver.performOneOperation(m)

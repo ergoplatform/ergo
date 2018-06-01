@@ -140,7 +140,7 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
                     ): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions).operations.foreach {
+    ErgoState.stateChanges(transactions).operations.foreach {
       case Removal(boxId: ADKey) => assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
       case _ =>
     }

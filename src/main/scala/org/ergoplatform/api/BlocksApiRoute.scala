@@ -17,7 +17,7 @@ import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.Future
 
-case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte])
+case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
 
   override val route: Route = pathPrefix("blocks") {

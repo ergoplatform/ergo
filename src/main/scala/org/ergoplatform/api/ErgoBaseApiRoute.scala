@@ -1,6 +1,7 @@
 package org.ergoplatform.api
 
 import akka.http.scaladsl.server.{Directive, Directive1}
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.api.http.ApiRoute
 

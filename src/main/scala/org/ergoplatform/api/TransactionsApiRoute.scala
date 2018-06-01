@@ -14,7 +14,7 @@ import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
-case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, restApiSettings: RESTApiSettings)
+case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   override val route: Route = (pathPrefix("transactions") & withCors) {

@@ -13,6 +13,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.testkit.TestkitHelpers
 
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 trait HistorySpecification extends PropSpec
   with PropertyChecks

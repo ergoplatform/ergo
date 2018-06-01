@@ -4,29 +4,29 @@ import java.io.FileOutputStream
 import java.net.InetAddress
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.{Collections, Properties, List => JList, Map => JMap}
+import java.util.{Collections, Properties, UUID, List => JList, Map => JMap}
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
 import com.google.common.primitives.Ints
-import com.spotify.docker.client.DockerClient.RemoveContainerParam
+import com.spotify.docker.client.DockerClient._
+import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
+import net.ceedubs.ficus.Ficus._
 import org.asynchttpclient.Dsl._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.{Await, Future, blocking}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-
-import scala.util.Random
+import scala.concurrent.{Future, blocking}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Random, Try}
 
 class Docker(suiteConfig: Config = ConfigFactory.empty,
              tag: String = "") extends AutoCloseable with ScorexLogging {
@@ -45,28 +45,35 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   private var seedAddress = Option.empty[String]
   private val isStopped = new AtomicBoolean(false)
 
-  sys.addShutdownHook {
-    close()
-  }
+  // This should be called after client is ready but before network created.
+  // This allows resource cleanup for the network if we are running out of them
+  initBeforeStart()
 
-  private def hashString: String = this.##.toLong.toHexString
-
-  private val networkName = "inner-" + hashString
+  private def uuidShort: String = UUID.randomUUID().hashCode().toHexString
+  private val networkName = Docker.networkNamePrefix + uuidShort
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
-  private val innerNetwork: Network =  createNetwork(3)
+  private val innerNetwork: Network = createNetwork(3)
 
-  def startNodes(nodeConfigs: Seq[Config]): Seq[Node] = {
-    log.trace(s"Starting ${nodeConfigs.size} containers")
-    val nodes = nodeConfigs.map(startNode)
-    log.debug("Waiting for nodes to start")
-    blocking(Thread.sleep(nodes.size * 5000))
-    val nodeStatusFuture = Future.traverse(nodes)(_.status)
-    Await.result(nodeStatusFuture, 3.minutes)
-    nodes
+  def initBeforeStart(): Unit = {
+    cleanupDanglingIfNeeded()
+    sys.addShutdownHook {
+      close()
+    }
   }
 
-  def startNode(nodeConfig: Config): Node = {
+  def startNodes(nodeConfigs: Seq[Config]): Future[Seq[Node]] = {
+    log.trace(s"Starting ${nodeConfigs.size} containers")
+    val tryNodes: Seq[Try[Node]] = nodeConfigs.map(startNode)
+    log.debug("Waiting for nodes to start")
+    blocking(Thread.sleep(tryNodes.size * 5000))
+    val futureNodes: Seq[Future[Node]] = tryNodes map { tryNode =>
+      Future.fromTry(tryNode.map(node => node.waitForStartup)).flatten
+    }
+    Future.sequence(futureNodes)
+  }
+
+  def startNode(nodeConfig: Config): Try[Node] = {
     val settings: ErgoSettings = buildErgoSettings(nodeConfig)
 
     val configuredNodeName = settings.scorexSettings.network.nodeName
@@ -77,36 +84,53 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
 
     val containerConfig: ContainerConfig = buildContainerConfig(nodeConfig, ip, restApiPort, networkPort)
-    val containerId = client.createContainer(containerConfig, configuredNodeName + "-" + hashString).id()
+    val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
-    val attachedNetwork = connectToNetwork(containerId, ip)
-    client.startContainer(containerId)
+    Try {
+      val containerId = client.createContainer(containerConfig, containerName).id
+      val attachedNetwork = connectToNetwork(containerId, ip)
+      client.startContainer(containerId)
 
-    val containerInfo = client.inspectContainer(containerId)
-    val ports = containerInfo.networkSettings().ports()
+      val containerInfo = client.inspectContainer(containerId)
+      val ports = containerInfo.networkSettings().ports()
 
-    val nodeInfo = NodeInfo(
-      extractHostPort(ports, restApiPort),
-      extractHostPort(ports, networkPort),
-      networkPort,
-      containerInfo.networkSettings().ipAddress(),
-      attachedNetwork.ipAddress(),
-      containerId)
+      val nodeInfo = NodeInfo(
+        hostRestApiPort = extractHostPort(ports, restApiPort),
+        hostNetworkPort = extractHostPort(ports, networkPort),
+        containerNetworkPort = networkPort,
+        apiIpAddress = containerInfo.networkSettings().ipAddress(),
+        networkIpAddress = attachedNetwork.ipAddress(),
+        containerId = containerId)
 
-    log.info(s"Started node: $nodeInfo")
-    val node = new Node(settings, nodeInfo, http)
+      log.info(s"Started node: $nodeInfo")
+      val node = new Node(settings, nodeInfo, http)
 
-    if (seedAddress.isEmpty) {
-      seedAddress = Some(s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}")
+      if (seedAddress.isEmpty) {
+        seedAddress = Some(s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}")
+      }
+      nodes += containerId -> node
+      node
+    } recoverWith {
+      case e: ImageNotFoundException =>
+        Failure(new Exception(s"Error: docker image is missing. Run 'sbt it:test' to generate it.", e))
     }
-    nodes += containerId -> node
-    node
   }
+
+  private def asProperties(config: Config): Properties = {
+    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
+    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
+  }
+
+  private def renderProperties(props: Properties): String =
+    props.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
+
+  private def extractHostPort(portBindingMap: JMap[String, JList[PortBinding]], containerPort: Int): Int =
+    portBindingMap.get(s"$containerPort/tcp").get(0).hostPort().toInt
 
   private def buildErgoSettings(nodeConfig: Config) = {
     val actualConfig = nodeConfig
       .withFallback(suiteConfig)
-      .withFallback(DefaultConfigTemplate)
+      .withFallback(defaultConfigTemplate)
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
@@ -272,24 +296,45 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def disconnectFromNetwork(node: Node): Unit = disconnectFromNetwork(node.nodeInfo.containerId)
 
   def connectToNetwork(node: Node): Unit = connectToNetwork(node.nodeInfo.containerId, node.nodeInfo.networkIpAddress)
+
+  def cleanUpDanglingResources(): Unit = {
+    log.debug("Cleaning up Docker resources")
+
+    // remove containers
+    client.listContainers(ListContainersParam.allContainers()).asScala
+      .filter(_.names.asScala.head.startsWith("/" + networkNamePrefix))
+      .foreach(c => client.removeContainer(c.id, RemoveContainerParam.forceKill))
+
+    // removes networks
+    client.listNetworks(ListNetworksParam.customNetworks).asScala
+      .filter(_.name().startsWith(networkNamePrefix))
+      .foreach(n => client.removeNetwork(n.id))
+
+    //remove images
+    client.listImages(ListImagesParam.danglingImages()).asScala
+      .filter(img => Option(img.labels()).exists(_.containsKey(dockerImageLabel)))
+      .foreach(img => client.removeImage(img.id()))
+  }
+
+  def cleanupDanglingIfNeeded(): Unit = {
+    val shouldCleanup = nodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
+    if (shouldCleanup) {
+      cleanUpDanglingResources()
+    }
+  }
 }
 
 object Docker {
+
+  val dockerImageLabel = "ergo-integration-tests"
+  val networkNamePrefix: String = "ergo-itest-"
+
+  val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
+  val nodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
+
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
   def apply(owner: Class[_]): Docker = new Docker(tag = owner.getSimpleName)
 
-  private def asProperties(config: Config): Properties = {
-    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
-    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
-  }
-
-  private def renderProperties(p: Properties) = p.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
-
-  private def extractHostPort(m: JMap[String, JList[PortBinding]], containerPort: Int) =
-    m.get(s"$containerPort/tcp").get(0).hostPort().toInt
-
-  val DefaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
-  val NodeConfigs: Config = ConfigFactory.parseResources("nodes.conf")
 }

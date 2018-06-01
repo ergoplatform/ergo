@@ -4,7 +4,7 @@ import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.NoShrink
+import org.ergoplatform.utils.{HistorySpecification, NoShrink}
 import org.scalacheck.Gen
 import scorex.crypto.authds._
 import scorex.crypto.hash.Digest32

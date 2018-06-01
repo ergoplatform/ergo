@@ -11,4 +11,5 @@ import scala.concurrent.duration.FiniteDuration
 case class ChainSettings(blockInterval: FiniteDuration,
                          epochLength: Int,
                          useLastEpochs: Int,
-                         powScheme: PowScheme)
+                         powScheme: PowScheme,
+                         monetary: MonetarySettings)

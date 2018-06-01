@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.HistorySpecification
 
 import scala.util.Random
 
@@ -92,7 +93,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   }
 
   property("append header to genesis - 2") {
-    val (us, bh) = ErgoState.generateGenesisUtxoState(new File(s"/tmp/ergo/${Random.nextInt()}").ensuring(_.mkdirs()), None)
+    val (us, bh) = createUtxoState()
 
     val block = validFullBlock(None, us, bh)
 

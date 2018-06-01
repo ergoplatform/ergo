@@ -5,10 +5,10 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoStateContext, ErgoBoxSerializer}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
@@ -142,22 +142,22 @@ object DigestState {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             settings: NodeConfigurationSettings): DigestState = Try {
+             settings: ErgoSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
 
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
-          new DigestState(version, rootHash, store, settings)
+          new DigestState(version, rootHash, store, settings.nodeSettings)
         } else {
           val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings).update(version, rootHash).get //sync store
+          new DigestState(inVersion, rootHash, store, settings.nodeSettings).update(version, rootHash).get //sync store
         }
         state.ensuring(store.lastVersionID.get.data.sameElements(version))
       case (None, None) =>
         val version = VersionTag @@ store.lastVersionID.get.data
         val rootHash = store.get(ByteArrayWrapper(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, settings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings.nodeSettings)
       case _ => ???
     }
   }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))

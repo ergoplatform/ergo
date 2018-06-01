@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import scorex.core.consensus.History.ProgressInfo
-import scorex.crypto.encode.Base58
 
 import scala.util.{Failure, Success, Try}
 
@@ -24,7 +23,7 @@ trait UTXOSnapshotChunkProcessor {
   }
 
   def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
-    Failure(new Error(s"UTXOSnapshotChunk with id ${Base58.encode(m.id)} is already in history"))
+    Failure(new Error(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
   } else {
     Success()
   }

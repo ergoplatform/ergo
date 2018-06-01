@@ -97,8 +97,14 @@
 \newcommand{\sse}{\textbf{Space-Scarce Economy}}
 \newcommand{\popow}{\textbf{PoPoW}}
 \newcommand{\ads}{\textbf{ADS}}
-\newcommand{\ssal}{\textbf{$\Sigma$SAL}}
 
+% as we do not know which term to use for a state element, we use a command for this
+\newcommand{\coin}{coin}
+\newcommand{\Coin}{Coin}
+
+\newcommand{\sigm}{sigma}
+
+\newcommand{\extract}[1]{$extract({#1})$}
 
 \usepackage[utf8]{inputenc}
 
@@ -543,6 +549,216 @@ Two infinite loops in different threads with the following functions inside:
 \section{Peer-to-Peer Network}
 
 
+\section{Emission Rules}
+
+\knote{are these rules for money chain only?}
+
+First, we are describing some preliminaries before providing rules for coins emission. Target mean delay between blocks
+is $\Delta = 2$ minutes. We plan to issue all the tokens in about eight years, thus the number of blocks minting
+coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
+
+
+\section{Transactions}
+
+
+A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16} - 1$ if block size
+limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
+in a \coin{} is disappearing
+from the state during transaction application: monetary value, guard script, contents of all the registers,
+all the bytes and also an identifier of the \coin{}.
+
+\subsection{\Coin{} Format}
+\label{coin-format}
+
+A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
+and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
+From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
+serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
+the coin in the transaction.
+
+Each register is an expression in \sigm language. Thus the registers are typed: every register contains a value of
+some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
+
+We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
+from the \coin{} $c$.
+
+\Coin{} bytes to be used to get the \coin{} identifier, build authenticated tree for the state, and build a transaction,
+are to be formed as follows:
+
+\begin{itemize}
+    \item{\em monetary value. } We use 64 bits long {\em signed} integer value to store monetary value of the \coin{}
+    (we use the signed integer to make processing easier on platforms with no unsigned integers, such as JVM platform).
+    This value to be represented as register R0 by wrapping it as a constant of integer type.
+    \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
+    serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
+    bytes.
+    \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
+    represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
+    zero, next field is missed.
+    \item{\em additional registers. } Extra registers are serialized without any delimiters. Each register is
+    serialized as a \sigm expression.
+    \item{\em transaction identifier and index of a transaction output. } Identifier of a transaction which created
+    the \coin{}, 32-bytes long, as well as index of the \coin in the transaction outputs, 2-bytes long. These values
+    are to be concatenated into a single array of 34 bytes and wrapped into \sigm language constant stored in the
+    register $R2$.
+\end{itemize}
+
+
+
+\subsection{\Coin{} template}
+\label{coin-template}
+
+Here we describe difference between a \coin{} and a \coin{} template. A \coin{} has a unique identifier to be defined
+deterministically from its contents. Thus we need to have different identifiers for \coin{}s of the same meaning, even
+if they are created by the same transaction. We also require a \coin{} to have an identifier which is derived solely
+from \coin{} contents, thus we can not use {\em (transaction\_id, output\_id)} pair as Bitcoin Core implementation is
+doing.
+
+To solve the issue we split concepts of a \coin{} and a \coin{} template. A \coin{} template is defining semantics of
+the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_2$ which is set to
+$null$.
+
+
+\subsection{Transaction Format}
+\label{tx-format}
+
+A transaction simply refers to a set of \coin{}s, by providing their identifiers and also spending proofs for
+them; the transaction also providing set of new \coin{} templates. A \coin{} template becomes a \coin{} in result of
+transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
+coin is also known before the application).
+
+We now introduce two functions to extract a \coin{} or a \coin{} template which a transaction is trying to spend.
+ In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
+ returns a \coin{} template . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
+
+We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
+to preserve overall monetary value:
+
+$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{j=0}^{c_o - 1}$ \extract{out(tx,j), R_0}
+
+\subsection{Transaction Merkle Tree}
+\label{tx-tree}
+
+Like a miner in the Bitcoin protocol is building a Merkle tree of block transactions, as well as a Merkle tree of
+transaction witnesses~(after the Segwit upgrade), in Ergo, a miner should build a Merkle tree~(and include a correct
+ root hash of the tree into a block header), which is in case of Ergo combines both transactions and their respective
+ spending proofs.
+
+This tree is to be constructed as follows. A data block under a leaf of the tree could be empty or 64 bytes in length.
+Data of 64 bytes contains identifier of the transaction~(256-bits digest of transaction bytes without spending proofs)
+and 256 bits of a digest of all the spending proofs for the transaction combined. Data for $i-th$ transaction
+in the block~(starting from 0) is authenticated by the $i-th$ leaf.
+A leaf is $hash(0 || pos || data)$, if the $data$ is not empty
+~(we do add prefix for domain separation), or $null$ otherwise. Here, $pos$ is a position of the transaction in the block.
+ For internal nodes, a node is $hash(1 || left\_child || right\_child)$, if either left child or right child of the
+ node is not $null$, $null$ othewise. If root hash is $null$, we are writing all zeros~(of hash function output length)
+ instead of it.
+
+
+\subsection{Transaction Identifier and Its Malleability}
+\label{tx-identifier}
+
+A transaction has a unique identifier to be defined deterministically from its contents.
+
+There are different ways to produce semantically the same transaction with different identifiers. We are interesting
+to prevent {\em unauthorized malleability}. We define unauthorized malleability as a way to change transaction
+identifier without re-signing the transaction. One particular way to malleate a transaction is to use signature
+malleability, which is common for most popular digital signature schemes.
+
+To prevent unauthorized transaction malleability, we do not put spending proofs under hash function when we calculate a
+transaction identifier.
+
+In details, we are constructing bytes to get the transaction identifier~(and in the follow-up section, also a signature)
+as follows. We concatenate the following fields:
+
+\begin{itemize}
+    \item{\em number of inputs.} Unsigned 2-bytes integer giving a number of \coin{}s the transaction is spending. Thus
+    the transaction can not spend more than 65536 \coin{}s.
+    \item{\em input identifiers.} Given the number $c_{ins}$ of \coin{}s to spend from the previous field, we form
+    $32 * c_{ins}$ bytes, where $i$-th chunk of 32 bytes represents an identifier of $i$-th \coin{} to spend~(see Section
+    \ref{coin-format} for details).
+    \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
+    transaction can not create more than 65,536 \coin{}s).
+    \item{\em transaction outputs.} In this section we store serialized \coin{} templates, with no delimiters. A \coin{}
+    template is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
+    identifier and index of the \coin{} in transaction outputs).
+\end{itemize}
+
+Denoting the binary serialization procedure for a transaction $tx$ explained above as $bytes(tx)$, we can derive
+transaction identifier $ident(tx)$ from it as:
+    $$ident(tx) = hash(bytes(tx))$$
+
+\subsection{Signing A Transaction}
+
+To spend a \coin{} a spending transaction $tx$ has as an input, one needs to use $bytes(tx)$~(note that different inputs
+can be signed in parallel, however, the coins being spent are to be specified before signing), as well as current state
+of the blockchain, or $context$. To avoid any I/O operations, this context is small. In details, it consists of current
+height, last block's state root digest, and the spending transaction along with \coin{}s it spends. The signer also can
+extend the context by putting values there.
+
+By having this data, a signer~(or a prover) of an input first reduces the guarding proposition for the input \coin{} by
+evaluating, it using the context. Possible results of the reduction are:
+
+\begin{itemize}
+    \item{abort} if estimated upper-bound cost of evaluation~(and verification) is too high.
+    \item{true} means that the \coin{} is spendable by anyone
+    \item{false} means that the \coin{} is not spendable at all~(at least according to the current context)
+    \item{expression still containing predicates over the context. } That means context is not enough to evaluate
+    some predicates over it. Prover can look into its own not revealed yet secrets in order to extend context. If the
+    secrets are found, prover is reducing the expression further and doing the next step, if there is nothing more to
+    evaluate. Otherwise the prover aborts.
+    \item{expression containing only expressions over secret information provable via $\Sigma$-protocols. } This is the
+    most common case, and we are going to explain it in details further.
+\end{itemize}
+
+We are having possible complex expression, like $dlog(x_1) \lor (dlog(x2) /\ dlog(x3))$, where $dlog(x)$ means ``prove me
+knowledge of a secret $w$, such as for a known group with generator $g$, $g^w = x$, via a non-interactive form of the
+Schnorr protocol''. Internally, this exression is represented as a tree~(\knote{draw the tree}). This proof is to be
+proven and then serialized into a binary spending proof~(which could be included into a transaction) as follows:
+
+Proving steps for a tree:
+
+\knote{text below is duplicated in Sigma paper, also this is a raw text copypasted from an email}
+
+
+    1. bottom-up: mark every node real or simulated, according to the following rule. DLogNode -- if you know the secret,
+     then real, else simulated. $\lor$: if at least one child real, then real; else simulated. $\land$: if at least one child
+     simulated, then simulated; else real. Note that all descendants of a simulated node will be later simulated, even
+     if they were marked as real. This is what the next step will do.
+
+     Root should end up real according to this rule -- else you won't be able to carry out the proof in the end.
+
+    2. top-down: mark every child of a simulated node "simulated." If two or more more children of a real $\lor$ are real,
+     mark all but one simulated.
+
+    3. top-down: compute a challenge for every simulated child of every $\lor$ and $\land$, according to the following rules.
+     If $\lor$, then every simulated child gets a fresh random challenge. If $\land$ (which means $\land$ itself is simulated, and
+     all its children are), then every child gets the same challenge as the $\land$.
+
+    4. bottom-up: For every simulated leaf, simulate a response and a commitment (i.e., second and first prover message)
+     according to the Schnorr simulator. For every real leaf, compute the commitment (i.e., first prover message) according
+     to the Schnorr protocol. For every $\lor$/$\land$ node, let the commitment be the union (as a set) of commitments below it.
+
+    5. Compute the Schnorr challenge as the hash of the commitment of the root (plus other inputs -- probably the tree
+     being proven and the message).
+
+    6. top-down: compute the challenge for every real child of every real $\lor$ and $\land$, as follows. If $\lor$, then the
+     challenge for the one real child of $\lor$ is equal to the XOR of the challenge of $\lor$ and the challenges for all the
+     simulated children of $\lor$. If $\land$, then the challenge for every real child of $\land$ is equal to the the challenge of
+     the $\land$. Note that simulated $\land$ and $\lor$ have only simulated descendants, so no need to recurse down from them.
+
+
+Now, how to get a flat binary string containing $(e, z)$ pairs~(challenge and prover's response for a leafsub-protocol)
+from the tree:
+
+
+
+
+\subsection{Verifying A Transaction}
+
+
+
+\subsection{Unified Transactions}
 
 
 \bibliographystyle{elsarticle-num}

@@ -3,15 +3,24 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import akka.actor.ActorRef
-import io.iohk.iodb.Store
+import io.iohk.iodb.{ByteArrayWrapper, Store}
+import org.ergoplatform.ErgoBox.R3
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.proposition.{AnyoneCanSpendNoncedBox, AnyoneCanSpendNoncedBoxSerializer}
-import org.ergoplatform.settings.{Algos, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
+import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.encode.Base16
+import sigmastate.Values.LongConstant
+import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
+import sigmastate.{SLong, _}
 
+import scala.collection.mutable
 import scala.util.Try
 
 
@@ -49,50 +58,102 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
 object ErgoState extends ScorexLogging {
 
-  val BoxSize = AnyoneCanSpendNoncedBoxSerializer.Length
-
   //TODO move to settings?
   val KeepVersions = 200
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
-  def generateGenesisUtxoState(stateDir: File, nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+  /**
+    * @param txs - sequence of transactions
+    * @return ordered sequence of operations on UTXO set from this sequence of transactions
+    *         if some box was created and later spend in this sequence - it is not included in the result at all
+    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    */
+  def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
+    val (toRemove, toInsert) = boxChanges(txs)
+    val toRemoveChanges = toRemove.map(id => Removal(id))
+    val toInsertChanges = toInsert.map(b => Insertion(b))
+    StateChanges(toRemoveChanges ++ toInsertChanges)
+  }
+
+  /**
+    * @param txs - sequence of transactions
+    * @return modifications from `txs` - sequence of ids to remove, and sequence of ErgoBoxes to create.
+    *         if some box was created and later spend in this sequence - it is not included in the result at all
+    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    */
+  def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
+    val toInsert: mutable.HashMap[ByteArrayWrapper, ErgoBox] = mutable.HashMap.empty
+    val toRemove: mutable.HashMap[ByteArrayWrapper, ADKey] = mutable.HashMap.empty
+    txs.foreach { tx =>
+      tx.inputs.foreach { i =>
+        toInsert.remove(ByteArrayWrapper(i.boxId)) match {
+          case None => toRemove += ByteArrayWrapper(i.boxId) -> i.boxId
+          case _ => // old value removed, do nothing
+        }
+      }
+      tx.outputs.foreach(o => toInsert += ByteArrayWrapper(o.id) -> o)
+    }
+    (toRemove.toSeq.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
+  }
+
+  /**
+    * @param emission - emission curve
+    * @return Genesis box that contains all the coins in the system, protected by the script,
+    *         that allows to take part of them every block.
+    */
+  def genesisEmissionBox(emission: CoinsEmission): ErgoBox = {
+    val s = emission.settings
+
+    val register = R3
+    val out = ByIndex(Outputs, LongConstant(0))
+    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
+    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
+      s.fixedRate,
+      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+    )
+    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
+    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
+    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
+    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
+    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+
+    val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
+    ErgoBox(emission.coinsTotal, prop, Map(register -> LongConstant(-1)))
+  }
+
+  def generateGenesisUtxoState(stateDir: File,
+                               emission: CoinsEmission,
+                               nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+
     log.info("Generating genesis UTXO state")
-    lazy val genesisSeed = Long.MaxValue
-    lazy val rndGen = new scala.util.Random(genesisSeed)
-    lazy val initialBoxesNumber = 10000
+    val bh = BoxHolder(Seq(genesisEmissionBox(emission)))
 
-    lazy val initialBoxes: Seq[AnyoneCanSpendNoncedBox] =
-      (1 to initialBoxesNumber).map(_ => AnyoneCanSpendNoncedBox(nonce = rndGen.nextLong(), value = 10000))
-
-    val bh = BoxHolder(initialBoxes)
-
-    UtxoState.fromBoxHolder(bh, stateDir, nodeViewHolderRef).ensuring(us => {
-      log.info("Genesis UTXO state generated")
-      us.rootHash.sameElements(afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+    UtxoState.fromBoxHolder(bh, stateDir, emission, nodeViewHolderRef).ensuring(us => {
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
+      us.rootHash.sameElements(emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
-  def generateGenesisDigestState(stateDir: File, settings: NodeConfigurationSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(afterGenesisStateDigest), stateDir, settings)
+  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
+      stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-  //33 bytes in Base58 encoding
-  val afterGenesisStateDigestHex: String = "2Ex5aoUXVCg47AYAsGwRBKarv5PEdig5ZuJwdzkvoxqu6o"
-  //TODO rework try.get
-  val afterGenesisStateDigest: ADDigest = ADDigest @@ Algos.decode(afterGenesisStateDigestHex).get
 
-  lazy val genesisStateVersion: VersionTag = VersionTag @@ Algos.hash(afterGenesisStateDigest.tail)
+  lazy val genesisStateVersion: VersionTag = VersionTag @@ Array.fill(32)(1: Byte)
 
-  def readOrGenerate(settings: ErgoSettings, nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
+  def readOrGenerate(settings: ErgoSettings,
+                     emission: CoinsEmission,
+                     nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, settings.nodeSettings)
-      case StateType.Utxo  if dir.listFiles().nonEmpty => UtxoState.create(dir, nodeViewHolderRef)
-      case _ => ErgoState.generateGenesisUtxoState(dir, nodeViewHolderRef)._1
+      case StateType.Digest => DigestState.create(None, None, dir, settings)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, emission, nodeViewHolderRef)
+      case _ => ErgoState.generateGenesisUtxoState(dir, emission, nodeViewHolderRef)._1
     }
   }
 }

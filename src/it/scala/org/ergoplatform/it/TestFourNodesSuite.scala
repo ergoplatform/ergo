@@ -9,7 +9,6 @@ import scala.collection.immutable.IndexedSeq
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
-import scala.util.control.NonFatal
 
 class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with IntegrationTest {
 
@@ -33,7 +32,7 @@ class TestFourNodesSuite extends FreeSpec with BeforeAndAfterAll with Integratio
   override def nestedSuites: IndexedSeq[Suite] = {
     val futureSuits = futureNodes.map(nodeSuites)
     futureSuits.recover {
-      case NonFatal(e) => fail(e); IndexedSeq.empty
+      case e => fail(e); IndexedSeq.empty
     }
     Await.result(futureSuits, 3.minutes)
   }

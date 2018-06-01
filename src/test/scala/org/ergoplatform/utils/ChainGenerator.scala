@@ -14,6 +14,7 @@ import scorex.crypto.hash._
 
 import scala.concurrent.duration._
 import scala.util.Random
+import scala.concurrent.ExecutionContext.Implicits.global
 
 trait ChainGenerator {
 

@@ -1,49 +1,67 @@
 package org.ergoplatform.mining.emission
 
+import org.ergoplatform.settings.MonetarySettings
+
+import scala.annotation.tailrec
+
 /**
   * Ergo coin emission curve.
-  * Properties:
+  *
+  * Mainnet properties:
+  * 100000000 parts of one coin
   * block every 2 minutes
-  * fixed rate during first 2 years
+  * fixed rate 75 coins during first 2 years
+  * reward reduction for 3 coins every 3 month after that
   * 19710000 coins after the first year
   * 97739925 coins total
-  * no slow start period
-  * reward reduction every 3 month
   *
-  * @param coinsInOneErgo - number of <minimal coin name> in 1 Ergo
-  * @param blocksPerHour - munber of blocks per hour. Should be correlated with LinearDifficultyControl.desiredInterval
+  * @param settings - network settings
   */
-class CoinsEmission(val coinsInOneErgo: Long = 100000000, val blocksPerHour: Int = 30) {
+class CoinsEmission(val settings: MonetarySettings) {
 
-  // Number of blocks per year on average
-  private val blocksPerYear: Int = 365 * 24 * blocksPerHour
+  val coinsInOneErgo: Long = 100000000
 
-  // 8 years of emission
-  val blocksTotal: Int = blocksPerYear * 8
+  lazy val (coinsTotal, blocksTotal) = {
+    @tailrec
+    def loop(height: Int, acc: Long): (Long, Int) = {
+      val currentRate = emissionAtHeight(height)
+      if (currentRate > 0) {
+        loop(height + 1, acc + currentRate)
+      } else {
+        (acc, height - 1)
+      }
+    }
 
-  // reward reduction every 3 month
-  private lazy val rewardReductionPeriod: Int = 90 * 24 * blocksPerHour
+    loop(0, 0)
+  }
 
-  // Number of blocks for initial fixed rate
-  private lazy val fixedRatePeriod = 2 * blocksPerYear - rewardReductionPeriod
+  def issuedCoinsAfterHeight(h: Long): Long = {
+    if (h < settings.fixedRatePeriod) {
+      settings.fixedRate * (h + 1)
+    } else {
+      val fixedRateIssue: Long = settings.fixedRate * settings.fixedRatePeriod
+      val epoch = (h - settings.fixedRatePeriod) / settings.epochLength
+      val fullEpochsIssued: Long = (1 to epoch.toInt).map { e =>
+        Math.max(settings.fixedRate - settings.oneEpochReduction * e, 0) * settings.epochLength
+      }.sum
+      val heightInThisEpoch = (h - settings.fixedRatePeriod) % settings.epochLength + 1
+      val rateThisEpoch = Math.max(settings.fixedRate - settings.oneEpochReduction * (epoch + 1), 0)
+      val thisEpochIssued = heightInThisEpoch * rateThisEpoch
 
-  // NUmber of coins issued per block during FixedRatePeriod
-  private val fixedRate = 2250 * coinsInOneErgo / blocksPerHour
+      fullEpochsIssued + fixedRateIssue + thisEpochIssued
+    }
+  }
 
-  //Total number of epochs with different number of coins issued
-  private val decreasingEpochs = (blocksTotal - fixedRatePeriod) / rewardReductionPeriod
+  def remainingCoinsAfterHeight(h: Long): Long = coinsTotal - issuedCoinsAfterHeight(h)
 
   def emissionAtHeight(h: Long): Long = {
-    if (h <= fixedRatePeriod) {
-      fixedRate
-    } else if (h > blocksTotal) {
-      0
+    if (h < settings.fixedRatePeriod) {
+      settings.fixedRate
     } else {
-      val epoch: Int = ((h - fixedRatePeriod) / rewardReductionPeriod).toInt
-      fixedRate - fixedRate * epoch / decreasingEpochs
+      val epoch = 1 + (h - settings.fixedRatePeriod) / settings.epochLength
+      Math.max(settings.fixedRate - settings.oneEpochReduction * epoch, 0)
     }
   }.ensuring(_ >= 0, s"Negative at $h")
-
 
 }
 

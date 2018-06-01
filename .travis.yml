@@ -3,6 +3,7 @@ language: scala
 sudo: false
 branches:
   only:
+    - sigma
     - master
     - /^\d\.\d+$/
 jdk:

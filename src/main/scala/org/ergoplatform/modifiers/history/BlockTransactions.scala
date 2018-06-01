@@ -1,25 +1,23 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Shorts}
+import com.google.common.primitives.{Bytes, Ints}
+import io.circe.Encoder
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
-import org.ergoplatform.modifiers.mempool.proposition.AnyoneCanSpendProposition
-import org.ergoplatform.modifiers.mempool.{AnyoneCanSpendTransaction, AnyoneCanSpendTransactionSerializer}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.crypto.authds.LeafData
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransaction])
+case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[AnyoneCanSpendProposition.type, AnyoneCanSpendTransaction]
-  with ModifierWithDigest {
+    with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction]
+    with ModifierWithDigest {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
@@ -38,12 +36,12 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[AnyoneCanSpendTransa
       * Artificial limit to show only first 10 txs.
       */
     val txsStr = txs.take(10).map(_.toString).mkString(",")
-    val txsSuffix = if (txs.length > 10) ", ..." else ""
+    val txsSuffix = if (txs.lengthCompare(10) > 0) ", ..." else ""
 
     s"BlockTransactions(Id:$idStr,HeaderId:$headerIdStr,Txs:$txsStr$txsSuffix)"
   }
 
-  override lazy val transactions: Seq[AnyoneCanSpendTransaction] = txs
+  override lazy val transactions: Seq[ErgoTransaction] = txs
 }
 
 object BlockTransactions {
@@ -53,34 +51,36 @@ object BlockTransactions {
 
   implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
     Map(
-      "headerId" -> Base58.encode(bt.headerId).asJson,
+      "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson
     ).asJson
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
   override def toBytes(obj: BlockTransactions): Array[Byte] = {
-    val txsBytes = concatBytes(obj.txs.map{tx =>
-      assert(tx.bytes.length.toShort % 8 == 0)
-      Bytes.concat(Shorts.toByteArray(tx.bytes.length.toShort), tx.bytes)})
+    val txsBytes = concatBytes(obj.txs.map { tx =>
+      val txBytes = ErgoTransactionSerializer.toBytes(tx)
+      Bytes.concat(Ints.toByteArray(txBytes.length), txBytes)
+    })
     Bytes.concat(obj.headerId, txsBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[BlockTransactions] = Try {
     val headerId: ModifierId = ModifierId @@ bytes.slice(0, Constants.ModifierIdSize)
 
-    def parseTransactions(index: Int, acc: Seq[AnyoneCanSpendTransaction]): BlockTransactions = {
+    def parseTransactions(index: Int, acc: Seq[ErgoTransaction]): BlockTransactions = {
       if (index == bytes.length) {
         BlockTransactions(headerId, acc)
       } else {
-        val txLength = Shorts.fromByteArray(bytes.slice(index, index + 2)).ensuring(_ % 8 == 0)
-        val tx = AnyoneCanSpendTransactionSerializer.parseBytes(bytes.slice(index + 2, index + 2 + txLength)) match {
+        val txLength = Ints.fromByteArray(bytes.slice(index, index + 4))
+        val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 4, index + 4 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f
         }
-        parseTransactions(index + 2 + txLength, acc :+ tx)
+        parseTransactions(index + 4 + txLength, acc :+ tx)
       }
     }
+
     parseTransactions(Constants.ModifierIdSize, Seq.empty)
   }
 }

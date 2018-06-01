@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, NodeViewModifier}
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Digest32
 
 import scala.util.Try
@@ -33,7 +32,7 @@ object TransactionIdsForHeader {
 
   implicit val jsonEncoder: Encoder[TransactionIdsForHeader] = (t: TransactionIdsForHeader) =>
     Map(
-      "ids" -> t.ids.map(Base58.encode)
+      "ids" -> t.ids.map(Algos.encode)
     ).asJson
 
 }

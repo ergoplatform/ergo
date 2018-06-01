@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.utils.HistorySpecification
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
 

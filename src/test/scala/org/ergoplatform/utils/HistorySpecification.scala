@@ -1,27 +1,16 @@
-package org.ergoplatform.nodeView.history
+package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, TestingSettings}
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.settings._
 import org.scalacheck.Gen
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
-import org.scalatest.PropSpec
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
-import scorex.testkit.TestkitHelpers
 
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 
-trait HistorySpecification extends PropSpec
-  with PropertyChecks
-  with GeneratorDrivenPropertyChecks
-  with ErgoGenerators
-  with ErgoTestHelpers
-  with TestkitHelpers
-  with ChainGenerator {
+trait HistorySpecification extends ErgoPropertyTest {
 
   override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
 
@@ -57,13 +46,12 @@ trait HistorySpecification extends PropSpec
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
-    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)
+    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme,
+      settings.chainSettings.monetary)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
       nodeSettings, scorexSettings)
-
-    val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

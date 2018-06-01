@@ -1,16 +1,14 @@
 package org.ergoplatform.it
 
-import org.scalatest.{FreeSpec, Matchers}
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import scorex.core.utils.ScorexLogging
+import org.ergoplatform.it.util.IntegrationTest
+import org.scalatest.FreeSpec
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Await.result
 import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 
-class SynchronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with ScalaFutures with IntegrationPatience
-  with Matchers with ScorexLogging {
+class SynchronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with IntegrationTest {
 
   val blocksCount = 5
   val forkDepth = blocksCount

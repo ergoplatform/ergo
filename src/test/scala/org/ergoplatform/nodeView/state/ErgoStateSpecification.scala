@@ -63,11 +63,12 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         // sum of coins in outputs should equal to genesis value
         insertions.map(_.box.value).sum shouldBe genesisBox.value
 
+        // if output was spend and then created - it is in both toInsert and toRemove
         val changesRev = ErgoState.stateChanges(txs.reverse)
         val removalsRev = changesRev.operations.filter(_.isInstanceOf[Removal]).map(_.asInstanceOf[Removal])
         val insertionsRev = changesRev.operations.filter(_.isInstanceOf[Insertion]).map(_.asInstanceOf[Insertion])
-        removalsRev shouldEqual removals
-        insertionsRev.sortBy(_.toString) shouldEqual insertions.sortBy(_.toString)
+        removalsRev.length should be > removals.length
+        insertionsRev.length should be > insertions.length
       }
     }
 

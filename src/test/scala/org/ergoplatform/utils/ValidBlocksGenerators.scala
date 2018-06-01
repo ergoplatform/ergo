@@ -127,6 +127,14 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
     validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
+  def validFullBlockWithBlockHolder(parentOpt: Option[Header],
+                                    utxoState: UtxoState,
+                                    boxHolder: BoxHolder,
+                                    rnd: Random): (ErgoFullBlock, BoxHolder) = {
+    val txsBh = validTransactionsFromBoxHolder(boxHolder, rnd)
+    validFullBlock(parentOpt, utxoState, txsBh._1) -> txsBh._2
+  }
+
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: WrappedUtxoState): ErgoFullBlock = {
     validFullBlock(parentOpt, utxoState, validTransactionsFromUtxoState(utxoState))
@@ -140,9 +148,8 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
                     ): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.stateChanges(transactions).operations.foreach {
-      case Removal(boxId: ADKey) => assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
-      case _ =>
+    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+      assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get

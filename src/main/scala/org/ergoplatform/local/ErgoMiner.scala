@@ -14,7 +14,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.UtxoStateReader
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -142,7 +142,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // todo: move magic number to testnet settings
     val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).take(10)
     // TODO extract boxes with TrueLeaf proposition
-    val feeBoxes: Seq[ErgoBox] = Seq.empty
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(externalTransactions)._2.filter(_.proposition == TrueLeaf)
     val coinbase = ErgoMiner.createCoinbase(state, height, feeBoxes, minerProp, emission)
     val txs = externalTransactions :+ coinbase
 
@@ -202,6 +202,7 @@ object ErgoMiner extends ScorexLogging {
                      emissionBox: ErgoBox,
                      minerProp: Value[SBoolean.type],
                      emission: CoinsEmission): ErgoTransaction = {
+    feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
     val prop = emissionBox.proposition
     val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
     val newEmissionBox: ErgoBoxCandidate =

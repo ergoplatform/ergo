@@ -79,7 +79,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     } else if (!storage.version.exists(_.sameElements(rootHash))) {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}"))
     } else {
-      persistentProver.avlProver.generateProofForOperations(ErgoState.boxChanges(txs).operations.map(ADProofs.changeToMod))
+      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
 }

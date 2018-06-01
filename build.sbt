@@ -115,7 +115,7 @@ dockerfile in docker := {
   val startErgo = (sourceDirectory in IntegrationTest).value / "container" / "start-ergo.sh"
 
   new Dockerfile {
-    from("anapsix/alpine-java:8_server-jre")
+    from("openjdk:9-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configTemplate, startErgo), "/opt/ergo/")

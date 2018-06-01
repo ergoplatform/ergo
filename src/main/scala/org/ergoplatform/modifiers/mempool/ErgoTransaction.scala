@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.mempool
 
-import io.circe.{Decoder, Encoder, Json, KeyDecoder}
+import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.NonMandatoryIdentifier
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.BaseCodecs
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
@@ -96,7 +97,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 
-object ErgoTransaction extends BaseCodecs {
+object ErgoTransaction extends BaseCodecs with ModifierValidator {
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
@@ -162,11 +163,23 @@ object ErgoTransaction extends BaseCodecs {
     )
   }
 
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
     for {
+      id <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
       outputs <- cursor.downField("outputs").as[IndexedSeq[ErgoBoxCandidate]]
-    } yield ErgoTransaction(inputs, outputs)
+      result <- validateId(ErgoTransaction(inputs, outputs), id)
+    } yield result
+  }
+
+  def validateId(tx: ErgoTransaction, maybeId: Option[ModifierId])
+                (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
+    fromValidation(tx) {
+      accumulateErrors.validate(maybeId.forall(_ sameElements tx.id)) {
+        fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
+              s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+      }.result
+    }
   }
 }
 

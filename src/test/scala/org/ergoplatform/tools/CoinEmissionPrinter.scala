@@ -1,17 +1,19 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.settings.MonetarySettings
 
 import scala.annotation.tailrec
 
 object CoinEmissionPrinter extends App {
 
-  val emissionCurve = new CoinsEmission()
+  val emissionCurve = new CoinsEmission(MonetarySettings(afterGenesisStateDigestHex = "aa"))
+  val blocksPerHour = 30
 
   //  // Number of coins issued after slow start period
   //  lazy val SlowStartFinalSupply: Long = (0 until emissionCurve.SlowStartPeriod)
   //    .map(h => emissionCurve.emissionAtHeight(h)).sum
-  val blocksPerYear = 365 * 24 * emissionCurve.blocksPerHour
+  val blocksPerYear = 365 * 24 * blocksPerHour
 
   // 100215692 coins total supply
   lazy val TotalSupply: Long = (1 to emissionCurve.blocksTotal).map(h => emissionCurve.emissionAtHeight(h)).sum
@@ -38,7 +40,10 @@ object CoinEmissionPrinter extends App {
   @tailrec
   def loop(height: Int, supply: Long): Unit = if (height < emissionCurve.blocksTotal) {
     val currentSupply = emissionCurve.emissionAtHeight(height)
-    if (height % (emissionCurve.blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / emissionCurve.coinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.coinsInOneErgo}")
+    assert(supply + currentSupply == emissionCurve.issuedCoinsAfterHeight(height),
+      s"$height: $supply == ${emissionCurve.issuedCoinsAfterHeight(height - 1)} => " +
+        s"${supply + currentSupply} == ${emissionCurve.issuedCoinsAfterHeight(height)}")
+    if (height % (blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / emissionCurve.coinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.coinsInOneErgo}")
     loop(height + 1, supply + currentSupply)
   }
 

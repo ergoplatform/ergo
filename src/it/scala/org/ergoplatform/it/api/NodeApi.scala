@@ -17,13 +17,14 @@ import org.slf4j.LoggerFactory
 import scorex.core.utils.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 trait NodeApi {
 
   import NodeApi._
+
+  implicit def ec: ExecutionContext
 
   def restAddress: String
 
@@ -88,6 +89,8 @@ trait NodeApi {
   }
 
   def waitForHeight(expectedHeight: Int): Future[Int] = waitFor[Int](_.height, h => h >= expectedHeight, 1.second)
+
+  def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 

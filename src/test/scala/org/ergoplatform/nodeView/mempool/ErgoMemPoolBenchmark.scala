@@ -1,17 +1,15 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.mempool.AnyoneCanSpendTransaction
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.ErgoGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
+import org.scalameter.picklers.Implicits._
+import scorex.core.ModifierId
+import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.Random
-import scala.concurrent.ExecutionContext.Implicits.global
-import org.scalameter.picklers.Implicits._
-import scorex.core.{ModifierId, NodeViewModifier}
-
 import scala.util.{Random => Rng}
 
 object ErgoMemPoolBenchmark
@@ -21,14 +19,14 @@ object ErgoMemPoolBenchmark
   private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
 
-  private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[AnyoneCanSpendTransaction]] => Seq[AnyoneCanSpendTransaction]) = for {
+  private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]) = for {
     waitingSize <- waitingSizes
     transactionsPerBlock <- blockSizes
   } yield {
     val txsByWaitingGroups = for {_ <- 0 until waitingSize}
       yield {
         (for {_ <- 0 until transactionsPerBlock} yield {
-          invalidAnyoneCanSpendTransactionGen.sample
+          invalidErgoTransactionGen.sample
         }).flatten
       }
     (txsByWaitingGroups.map(_.map(_.id)), txIncomeOrder(txsByWaitingGroups))
@@ -48,7 +46,7 @@ object ErgoMemPoolBenchmark
   )
 
   private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
-                    txsInIncomeOrder: Seq[AnyoneCanSpendTransaction]) = {
+                    txsInIncomeOrder: Seq[ErgoTransaction]) = {
     val pool = ErgoMemPool.empty
     val futures = txsByWaitingGroups.map(group => {
       pool.waitForAll(group)

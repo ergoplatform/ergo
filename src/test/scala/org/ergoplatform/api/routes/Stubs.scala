@@ -34,11 +34,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val nodeId = Algos.hash("testroute").take(5)
 
-  lazy val settings = ErgoSettings.read(None)
   lazy val history = applyChain(generateHistory(), chain)
 
-  lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None)).map { wus =>
-    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings.nodeSettings)
+  lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
   }
   }.sample.get
 
@@ -147,7 +146,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
-    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme)
+    val monetarySettings = settings.chainSettings.monetary
+    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
@@ -166,7 +166,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Digest32 @@ Array.fill(hashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Array.fill(5)(0.toByte)
-    )
+      Digest32 @@ Array.fill(hashLength)(0.toByte)
+    ).get
   }
 }

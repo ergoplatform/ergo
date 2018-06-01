@@ -13,13 +13,10 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.ModifierId
 import scorex.core.api.http.ApiResponse
-import scorex.crypto.encode.Base58
-import scorex.core.settings.RESTApiSettings
-import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.Future
 
-case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings, nodeId: Array[Byte])
+case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   val settings = ergoSettings.scorexSettings.restApi

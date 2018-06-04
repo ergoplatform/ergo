@@ -44,8 +44,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statelessValidity: Try[Unit] = {
     accumulateErrors
       .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
-      .demand(inputs.size <= Short.MaxValue,s"Too many inputs in transaction $toString")
-      .demand(outputCandidates.size <= Short.MaxValue,s"Too many outputCandidates in transaction $toString")
+      .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
+      .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
       .result.toTry
     }
 

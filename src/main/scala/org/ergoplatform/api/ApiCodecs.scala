@@ -3,6 +3,7 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.validation.ValidationResult
@@ -31,6 +32,12 @@ trait ApiCodecs {
                        (implicit cursor: ACursor): Either[DecodingFailure, T] = {
     fromTry(validationResult.toTry.map(_ => value))
   }
+
+  implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>
+    JsonNumber.fromDecimalStringUnsafe(bigInt.toString).asJson
+  }
+
+  implicit val difficultyEncoder: Encoder[Difficulty] = bigIntEncoder
 
   implicit val bytesEncoder: Encoder[Array[Byte]] =  Algos.encode(_).asJson
 

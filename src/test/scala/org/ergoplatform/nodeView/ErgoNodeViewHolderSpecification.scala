@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -22,7 +21,6 @@ import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.TrueLeaf
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -144,7 +142,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     def run(test: NodeViewFixture => Unit): Unit = try test(this) finally stop()
 
     def stop(): Unit = {
-      system.stop(nodeViewRef);
+      system.stop(nodeViewRef)
       system.stop(testProbe.testActor)
     }
   }

@@ -15,19 +15,21 @@ Thus for the first $fixedRatePeriod$ blocks block reward for miner will be fixed
 after $fixedRatePeriod$ block reward will be reduced for $oneEpochReduction$ coins every $epochLength$ blocks.
 
 Instead of having implicit emission rules via a special type of transaction (e.g. coinbase transaction in Bitcoin),
-Ergo coins emission is defined explicitly by \Sigma-state transactional language.
+Ergo coins emission is defined explicitly by sigma-state transactional language.
 All \ergo{} coins will be created in the genesis state, in an output protected by the following script:
 
-\begin{minted}{java}
+\begin{minted}{js}
     let epoch = 1 + ((HEIGHT - fixedRatePeriod) / epochLength)
     let out = OUTPUTS(0)
-    let coinsToIssue = if(HEIGHT < fixedRatePeriod) fixedRate else fixedRate - (oneEpochReduction * epoch)
+    let coinsToIssue = if(HEIGHT < fixedRatePeriod) fixedRate
+    else fixedRate - (oneEpochReduction * epoch)
     let correctCoinsConsumed = coinsToIssue == (SELF.value - out.value)
     let sameScriptRule = SELF.propositionBytes == out.propositionBytes
     let heightIncreased = HEIGHT > SELF.R3[Long].value
     let heightCorrect = out.R3[Long].value == HEIGHT
     let lastCoins = SELF.value <= oneEpochReduction
-    (correctCoinsConsumed && heightCorrect && heightIncreased && sameScriptRule)) || (heightIncreased && lastCoins)
+    (correctCoinsConsumed && heightCorrect && heightIncreased && sameScriptRule) ||
+    (heightIncreased && lastCoins)
 \end{minted}
 
 This protection script allows miner to take only a part of all coins, corresponding to current block reward.

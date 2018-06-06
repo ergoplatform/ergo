@@ -59,7 +59,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenNoProp).map(l => BoxHolder(l))
 
   lazy val stateChangesGen: Gen[StateChanges] = ergoBoxGenNoProp
-    .map(b => StateChanges(Seq(Insertion(b))))
+    .map(b => StateChanges(Seq(), Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))

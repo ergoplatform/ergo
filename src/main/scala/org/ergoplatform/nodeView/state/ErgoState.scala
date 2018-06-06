@@ -73,7 +73,7 @@ object ErgoState extends ScorexLogging {
     val (toRemove, toInsert) = boxChanges(txs)
     val toRemoveChanges = toRemove.map(id => Removal(id))
     val toInsertChanges = toInsert.map(b => Insertion(b))
-    StateChanges(toRemoveChanges ++ toInsertChanges)
+    StateChanges(toRemoveChanges, toInsertChanges)
   }
 
   /**

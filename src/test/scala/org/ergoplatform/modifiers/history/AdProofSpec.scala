@@ -45,7 +45,7 @@ class AdProofSpec extends ErgoPropertyTest {
       whenever(s >= 0) {
         val (operations, prevDigest, newDigest, pf) = createEnv(s)
         val proof = ADProofs(emptyModifierId, pf)
-        proof.verify(StateChanges(operations), prevDigest, newDigest) shouldBe 'success
+        proof.verify(StateChanges(Seq(), operations), prevDigest, newDigest) shouldBe 'success
       }
     }
   }
@@ -53,13 +53,13 @@ class AdProofSpec extends ErgoPropertyTest {
   property("verify should be failed if first operation is missed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    proof.verify(StateChanges(operations.tail), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operations.tail), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if last operation is missed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    proof.verify(StateChanges(operations.init), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operations.init), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are more operations than expected") {
@@ -67,7 +67,7 @@ class AdProofSpec extends ErgoPropertyTest {
     val proof = ADProofs(emptyModifierId, pf)
     val moreInsertions = operations :+
       Insertion(ErgoBox(10, TrueLeaf))
-    proof.verify(StateChanges(moreInsertions), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), moreInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
@@ -75,34 +75,34 @@ class AdProofSpec extends ErgoPropertyTest {
     val proof = ADProofs(emptyModifierId, pf)
     val differentInsertions = operations.init :+
       Insertion(ErgoBox(10, TrueLeaf))
-    proof.verify(StateChanges(differentInsertions), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), differentInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are operations in different order") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
     val operationsInDifferentOrder = operations.last +: operations.init
-    proof.verify(StateChanges(operationsInDifferentOrder), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operationsInDifferentOrder), prevDigest, newDigest) shouldBe 'failure
   }
 
   //todo: what to do with that?
   ignore("verify should be failed if there are more proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, SerializedAdProof @@ (pf :+ 't'.toByte))
-    proof.verify(StateChanges(operations), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operations), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are less proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, SerializedAdProof @@ pf.init)
-    proof.verify(StateChanges(operations), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operations), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are different proof bytes") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     pf.update(4, 6.toByte)
     val proof = ADProofs(emptyModifierId, pf)
-    proof.verify(StateChanges(operations), prevDigest, newDigest) shouldBe 'failure
+    proof.verify(StateChanges(Seq(), operations), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("proof is deterministic") {

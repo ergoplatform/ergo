@@ -1,0 +1,18 @@
+Token emission is incoroporated without any modification of internal logic. One output can
+contain arbitrary number of different token kinds. They are stored in the
+register R1 as the dictionary $\{token\_id: amount\}$. This is the only data
+which can be stored in R1.  The emission is organized as appending an item to
+the dictionary. To avoid collisions, appended $token\_id$ must be equal to the
+$id$ of the first input of the generating transaction. The uniqueness of outputs
+yields the uniqueness of tokens. The validation script is then
+\begin{eqnarray*}
+    &\forall\,id\in \left\{ i\, | \exists\, out \in outputs : i\in out.R1.keys
+    \right\} \nonumber\\
+    &\left(\sum_{in\in inputs} in.R1[id] = \sum_{out\in
+    outputs} out.R1[id] \right) \vee \left(id = inputs[0].id\right)\,.
+\end{eqnarray*}
+Here $\sum$ stands for the safe sum, which ensures non-negativeness of all the
+values, and the absence of integer overflow. The controlled emission of the
+tokens may be organized by attaching the emission script to the output
+containing newly generated $token\_id$.
+

@@ -1,3 +1,4 @@
+\section{Emission Rules}
 Ergo emission properties are defined by the following parameters in a monetary section of the config:
 
 \begin{itemize}
@@ -14,6 +15,22 @@ Ergo emission properties are defined by the following parameters in a monetary s
 Thus for the first $fixedRatePeriod$ blocks miner reward will be equals to $fixedRate$ \ergo{} coins,
 after $fixedRatePeriod$ block reward will be reduced for $oneEpochReduction$ coins every $epochLength$ blocks.
 Mainnet parameters will lead to 8 years of coins emission with 97739925 coins total.
+
+Taking all these concepts into consideration, Ergo's emission curve is as illustrated at Fig. \ref{fig:emission}:
+
+\begin{figure}[H]
+    \centering
+    \begin{minipage}[b]{0.4\textwidth}
+
+        \includegraphics[width=\textwidth]{img/EmissionCurve.png}
+    \end{minipage}
+    \begin{minipage}[b]{0.4\textwidth}
+        \includegraphics[width=\textwidth]{img/EmissionRate.png}
+    \end{minipage}
+    \caption{Ergo mainnet emission rules
+    \label{fig:emission}}
+\end{figure}
+
 
 Instead of having implicit emission rules via a special type of transaction (e.g. coinbase transaction in Bitcoin),
 Ergo coins emission is defined explicitly by sigma-state transactional language.

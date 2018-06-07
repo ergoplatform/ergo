@@ -74,25 +74,28 @@ trait ChainGenerator {
   def genChain(height: Int, prefix: ErgoFullBlock): Seq[ErgoFullBlock] =
     blockStream(Option(prefix)).take(height + 1)
 
-  def genChain(height: Int, history: ErgoHistory): Seq[ErgoFullBlock] = {
+  def genChain(height: Int, history: ErgoHistory,
+               nBits: Long = Constants.InitialNBits): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
-    blockStream(prefix).take(height + prefix.size)
+    blockStream(prefix, nBits).take(height + prefix.size)
   }
 
-  protected def blockStream(prefix: Option[ErgoFullBlock]): Stream[ErgoFullBlock] = {
+  protected def blockStream(prefix: Option[ErgoFullBlock],
+                            nBits: Long = Constants.InitialNBits): Stream[ErgoFullBlock] = {
     def txs(i: Long) = Seq(ErgoTransaction(IndexedSeq(), IndexedSeq()))
 
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, txs(1)) #::
-        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i)) })
+      nextBlock(prefix, txs(1), nBits = nBits) #::
+        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i), nBits = nBits) })
     prefix ++: blocks
   }
 
   def nextBlock(prev: Option[ErgoFullBlock], txs: Seq[ErgoTransaction],
-                extensionHash: Digest32 = EmptyDigest32): ErgoFullBlock =
+                extensionHash: Digest32 = EmptyDigest32,
+                nBits: Long = Constants.InitialNBits): ErgoFullBlock =
     powScheme.proveBlock(
       prev.map(_.header),
-      Constants.InitialNBits,
+      nBits,
       EmptyStateRoot,
       emptyProofs,
       txs,

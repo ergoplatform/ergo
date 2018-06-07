@@ -1,12 +1,13 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import io.circe.Encoder
 import io.circe.syntax._
-import io.circe.{Encoder, JsonNumber}
 import org.ergoplatform.Version
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -89,7 +90,7 @@ object ErgoStatsCollector {
                       launchTime: Long) {
   }
 
-  object NodeInfo {
+  object NodeInfo extends ApiCodecs {
     implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
       Map(
         "name" -> ni.nodeName.asJson,
@@ -99,7 +100,7 @@ object ErgoStatsCollector {
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
-        "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty.toString(10)).map(JsonNumber.fromString).asJson,
+        "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,
         "unconfirmedCount" -> ni.unconfirmedCount.asJson,
         "stateRoot" -> ni.stateRoot.asJson,
         "stateType" -> ni.stateType.stateTypeName.asJson,

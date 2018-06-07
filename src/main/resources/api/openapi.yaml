@@ -24,17 +24,22 @@ components:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
-          description: Spending proof for transaction input
+          $ref: '#/components/schemas/SpendingProof'
+
+    SpendingProof:
+      description: Spending proof for transaction input
+      type: object
+      required:
+        - proofBytes
+        - extension
+      properties:
+        proofBytes:
+          $ref: '#/components/schemas/SpendingProofBytes'
+        extension:
           type: object
-          required:
-          - proofBytes
-          - extension
-          properties:
-            proofBytes:
-              $ref: '#/components/schemas/SerializedAdProof'
-            extension:
-              type: object
-              description: Variables to be put into context
+          description: Variables to be put into context
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
 
     ErgoTransactionOutput:
       type: object
@@ -54,6 +59,11 @@ components:
         additionalRegisters:
           description: Additional registers
           type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+#          properties:
+#            "3":
+#              $ref: '#/components/schemas/SValue'
 
     ErgoTransaction:
       type: object
@@ -218,16 +228,14 @@ components:
         name:
           type: string
           example: mynode
-        nonce:
-          type: integer
-          format: int32
-          example: 123456
+          nullable: true
         lastSeen:
           type: integer
           format: int64
           example: 1514194867
         connectionType:
           type: string
+          nullable: true
           enum:
             - Incoming
             - Outgoing
@@ -294,7 +302,7 @@ components:
           type: string
           nullable: true
           description: Can be 'null' if state is empty (no full block is applied since node launch)
-          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          example: Dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
         stateType:
           type: string
           enum:
@@ -303,11 +311,14 @@ components:
         stateVersion:
           description: Can be 'null' if no full block is applied since node launch
           type: string
-          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          example: Fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
           nullable: true
         isMining:
           type: boolean
           example: true
+        votes:
+          type: string
+          description: Base16-encoded array
         peersCount:
           type: integer
           description: Number of connected peers
@@ -360,6 +371,11 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
+    SValue:
+      description: Base-16 envoded serialized Sigma-state value
+      type: string
+      example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
     ModifierId:
       description: Base16-encoded 32 byte modifier id
       type: string
@@ -379,6 +395,11 @@ components:
       description: Base16-encoded ad proofs
       type: string
       example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    SpendingProofBytes:
+      description: Base16-encoded spending proofs
+      type: string
+      example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     BlockSignature:
       description: Base16-encoded block signature
@@ -433,12 +454,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
                   # Parameter `offset` is out of range
-                  - invalid.offset.out.of.range
+                  # invalid.offset.out.of.range
     post:
       summary: Send a mined block
       operationId: sendMinedBlock
@@ -456,11 +476,10 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
-                  - invalid.block
+                  # invalid.block
 
   /blocks/at/{blockHeight}:
     get:
@@ -493,12 +512,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
                   # Provided height is invalid
-                  - invalid.block.height
+                  # invalid.block.height
 
   /blocks/{headerId}:
     get:
@@ -526,12 +544,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
                   # Provided header id is invalid
-                  - invalid.block.id
+                  # invalid.block.id
 
   /blocks/{headerId}/header:
     get:
@@ -559,12 +576,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
                   # Provided header id is invalid
-                  - invalid.block.id
+                  # invalid.block.id
 
   /blocks/{headerId}/transactions:
     get:
@@ -592,12 +608,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
                   # Provided header id is invalid
-                  - invalid.block.id
+                  # invalid.block.id
 
   /blocks/candidateBlock:
     get:
@@ -617,6 +632,12 @@ paths:
                     type: boolean
                   candidateBlock:
                     $ref: '#/components/schemas/CandidateBlock'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /blocks/lastHeaders/{count}:
     get:
@@ -641,6 +662,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /info:
     get:
@@ -655,6 +682,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NodeInfo'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /transactions:
     post:
@@ -678,19 +711,18 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
-                  # Transaction signature doesn't match transaction data
-                  - invalid.transaction.signature
-                  # Provided timestamp is invalid
-                  - invalid.transaction.timestamp
-                  # Provided amount in invalid
-                  - invalid.transaction.value
-                  # Provided box nonce in invalid
-                  - invalid.box.nonce
-                  - invalid.json
+                # Transaction signature doesn't match transaction data
+                  # invalid.transaction.signature
+                # Provided timestamp is invalid
+                  # invalid.transaction.timestamp
+                # Provided amount in invalid
+                  # invalid.transaction.value
+                # Provided box nonce in invalid
+                  # invalid.box.nonce
+                  # invalid.json
 
   /transactions/unconfirmed:
     parameters:
@@ -726,6 +758,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
 
   /peers/all:
     get:
@@ -742,6 +781,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Peer'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /peers/connected:
     get:
@@ -758,6 +803,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Peer'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /peers/connect:
     post:
@@ -778,12 +829,11 @@ paths:
         default:
           description: Error
           content:
-            application/json:
+            text/plain; charset=UTF-8:
               schema:
                 type: string
-                enum:
-                  - invalid.peer.address
-                  - invalid.json
+                  # invalid.peer.address
+                  # invalid.json
 
   /peers/blacklisted:
     get:
@@ -801,6 +851,12 @@ paths:
                 items:
                   type: string
                   description: Blacklisted node address
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /utils/seed:
     get:
@@ -816,6 +872,12 @@ paths:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /utils/seed/{length}:
     get:
@@ -838,6 +900,12 @@ paths:
               schema:
                 type: string
                 example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /utils/hash/blake2b:
     post:
@@ -860,3 +928,9 @@ paths:
               schema:
                 type: string
                 example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string

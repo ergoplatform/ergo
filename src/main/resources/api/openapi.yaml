@@ -457,8 +457,8 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # Parameter `offset` is out of range
-                  # invalid.offset.out.of.range
+                # Parameter `offset` is out of range
+                example: invalid.offset.out.of.range
     post:
       summary: Send a mined block
       operationId: sendMinedBlock
@@ -479,7 +479,7 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # invalid.block
+                example: invalid.block
 
   /blocks/at/{blockHeight}:
     get:
@@ -515,8 +515,8 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # Provided height is invalid
-                  # invalid.block.height
+                # Provided height is invalid
+                example: invalid.block.height
 
   /blocks/{headerId}:
     get:
@@ -547,8 +547,8 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # Provided header id is invalid
-                  # invalid.block.id
+                # Provided header id is invalid
+                example: invalid.block.id
 
   /blocks/{headerId}/header:
     get:
@@ -579,8 +579,8 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # Provided header id is invalid
-                  # invalid.block.id
+                # Provided header id is invalid
+                example: invalid.block.id
 
   /blocks/{headerId}/transactions:
     get:
@@ -611,8 +611,8 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # Provided header id is invalid
-                  # invalid.block.id
+                # Provided header id is invalid
+                example: invalid.block.id
 
   /blocks/candidateBlock:
     get:
@@ -714,15 +714,11 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                # Transaction signature doesn't match transaction data
-                  # invalid.transaction.signature
-                # Provided timestamp is invalid
-                  # invalid.transaction.timestamp
-                # Provided amount in invalid
-                  # invalid.transaction.value
-                # Provided box nonce in invalid
-                  # invalid.box.nonce
-                  # invalid.json
+                  # Transaction signature doesn't match transaction data
+                  # Provided timestamp is invalid
+                  # Provided amount in invalid
+                  # Provided box nonce in invalid
+                example: invalid.transaction.signature, invalid.transaction.timestamp, invalid.transaction.value, invalid.box.nonce, invalid.json
 
   /transactions/unconfirmed:
     parameters:
@@ -832,8 +828,7 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                  # invalid.peer.address
-                  # invalid.json
+                example: invalid.peer.address, invalid.json
 
   /peers/blacklisted:
     get:

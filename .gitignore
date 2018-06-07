@@ -21,6 +21,10 @@ my-application.conf
 # logs
 *.log
 
+# compiled docs
+*.pdf
+
+
 # db files
 *.data
 ergo/

@@ -6,8 +6,6 @@ import scorex.crypto.authds.ADKey
 
 
 abstract class StateChangeOperation {
-
-
   override def equals(that: scala.Any): Boolean = (this, that) match {
     case (Removal(i1), Removal(i2)) => i1 sameElements i2
     case (Insertion(b1), Insertion(b2)) => b1 == b2
@@ -23,18 +21,6 @@ case class Insertion(box: ErgoBox) extends StateChangeOperation {
   override def toString: String = s"Insertion(id: ${Algos.encode(box.id)})"
 }
 
-case class StateChanges(operations: Seq[StateChangeOperation]) {
-  lazy val toAppend: Seq[Insertion] = operations.filter { op =>
-    op match {
-      case _: Insertion => true
-      case _ => false
-    }
-  }.asInstanceOf[Seq[Insertion]]
-
-  lazy val toRemove: Seq[Removal] = operations.filter { op =>
-    op match {
-      case _: Removal => true
-      case _ => false
-    }
-  }.asInstanceOf[Seq[Removal]]
+case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion]) {
+  val operations: Seq[StateChangeOperation] = toRemove ++ toAppend
 }

@@ -1,14 +1,10 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
-
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HeaderChain, HeaderSerializer}
-import org.ergoplatform.nodeView.state.{ErgoState, StateType}
+import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderChain, HeaderSerializer}
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistorySpecification
-
-import scala.util.Random
 
 class VerifyNonADHistorySpecification extends HistorySpecification {
 

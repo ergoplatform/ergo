@@ -2,19 +2,12 @@ package org.ergoplatform.utils
 
 import java.util.concurrent.Executors
 
-import akka.actor.ActorRef
-import org.ergoplatform.nodeView.state.{BoxHolder, DigestState, ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
-import org.scalatest.Matchers
-import scorex.core.VersionTag
-import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.authds.ADDigest
-import scorex.testkit.TestkitHelpers
-import scorex.testkit.utils.FileUtils
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.ExecutionContext
 
-trait ErgoTestHelpers extends ValidBlocksGenerators {
+trait ErgoTestHelpers extends ValidBlocksGenerators with ScorexLogging {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 

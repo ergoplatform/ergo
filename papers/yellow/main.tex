@@ -1,4 +1,4 @@
-\documentclass[]{report}   % list options between brackets
+\documentclass[]{article}   % list options between brackets
 
 \usepackage{color}
 \usepackage{graphicx}
@@ -84,7 +84,7 @@
 \newcommand{\dlog}{dlog(h)}
 \newcommand{\pedersen}{pcom(h, c)}
 \newcommand{\height}{\mathcal{H}}
-\newcommand{\ergo}{$\Sigma$RGO}
+\newcommand{\ergo}{Ergo}
 
 \newcommand{\ecash}{$\Sigma$-Cash}
 
@@ -536,27 +536,19 @@ Two infinite loops in different threads with the following functions inside:
 \end{minted}
 
 
+%
+%\section{Components}
+%\subsection{History}
+%\subsection{State}
+%\subsection{Memory Pool}
+%
+%\section{Transactional Language}
+%
+%\section{Protocol Updates}
+%
+%\section{Peer-to-Peer Network}
 
-\section{Components}
-\subsection{History}
-\subsection{State}
-\subsection{Memory Pool}
-
-\section{Transactional Language}
-
-\section{Protocol Updates}
-
-\section{Peer-to-Peer Network}
-
-
-\section{Emission Rules}
-
-\knote{are these rules for money chain only?}
-
-First, we are describing some preliminaries before providing rules for coins emission. Target mean delay between blocks
-is $\Delta = 2$ minutes. We plan to issue all the tokens in about eight years, thus the number of blocks minting
-coins is $E_{total} = 365 \cdot 24 \cdot \frac{60}{\Delta} = 262800$.
-
+\include{emission}
 
 \section{Transactions}
 

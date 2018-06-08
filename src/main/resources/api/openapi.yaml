@@ -40,6 +40,8 @@ components:
           description: Variables to be put into context
           additionalProperties:
             $ref: '#/components/schemas/SValue'
+          example:
+            '1': '7c'
 
     ErgoTransactionOutput:
       type: object
@@ -48,6 +50,8 @@ components:
         - proposition
         - additionalRegisters
       properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
         value:
           description: Amount of Ergo token
           type: integer
@@ -61,9 +65,8 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/SValue'
-#          properties:
-#            "3":
-#              $ref: '#/components/schemas/SValue'
+          example:
+            R3: '7c'
 
     ErgoTransaction:
       type: object
@@ -351,7 +354,7 @@ components:
             - $ref: '#/components/schemas/Timestamp'
 
     TransactionBoxId:
-      description: Base16-encoded transaction box id bytes
+      description: Base16-encoded transaction box id bytes. Should be 32 bytes long
       type: string
       example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
@@ -374,7 +377,7 @@ components:
     SValue:
       description: Base-16 envoded serialized Sigma-state value
       type: string
-      example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: 7c
 
     ModifierId:
       description: Base16-encoded 32 byte modifier id

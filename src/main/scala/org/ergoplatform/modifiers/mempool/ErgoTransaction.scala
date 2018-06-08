@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.NonMandatoryIdentifier
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryIdentifier}
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
@@ -13,7 +13,7 @@ import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexLogging
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
@@ -41,13 +41,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @return Success(Unit) if transaction is valid, Failure(e) if transaction is invalid, with respect to
     *         an error encapsulated in the exception "e".
     */
-  def statelessValidity: Try[Unit] = {
+  def statelessValidity: Try[Unit] = validateStateless.toTry
+
+  /** Stateless transaction validation with result returned as [[ValidationResult]]
+    * to accumulate further validation results
+    */
+  def validateStateless: ValidationResult = {
     accumulateErrors
       .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
-      .result.toTry
-    }
+      .result
+  }
 
   /**
     * @return total coimputation cost
@@ -91,7 +96,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 
-object ErgoTransaction extends ApiCodecs with ModifierValidator {
+object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging {
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
@@ -125,12 +130,13 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator {
 
   implicit private val registersEncoder: Encoder[Map[NonMandatoryIdentifier, EvaluatedValue[_ <: SType]]] = {
     _.map {  case (key, value) =>
-      key.number -> valueEncoder(value)
+      s"R${key.number}" -> valueEncoder(value)
     }.asJson
   }
 
-  implicit private val outputEncoder: Encoder[ErgoBoxCandidate] = { box =>
+  implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
     Json.obj(
+      "boxId" -> box.id.asJson,
       "value" -> box.value.asJson,
       "proposition" -> valueEncoder(box.proposition),
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
@@ -138,40 +144,63 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator {
   }
 
   implicit private val identifierDecoder: KeyDecoder[NonMandatoryIdentifier] = { key =>
-    Try(ErgoBox.findRegisterByIndex(key.toByte).map(_.asInstanceOf[NonMandatoryIdentifier])).toOption.flatten
+    ErgoBox.registerByName.get(key).collect {
+      case nonMandatoryId: NonMandatoryIdentifier => nonMandatoryId
+    }
   }
 
-  implicit private val outputDecoder: Decoder[ErgoBoxCandidate] = { cursor =>
+  implicit private val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
     for {
+      maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryIdentifier, EvaluatedValue[SType]]]
-    } yield new ErgoBoxCandidate(value, proposition, registers)
+    } yield (new ErgoBoxCandidate(value, proposition, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
     Json.obj(
       "id" -> tx.id.asJson,
       "inputs" -> tx.inputs.asJson,
-      "outputs" -> tx.outputCandidates.asJson
+      "outputs" -> tx.outputs.asJson
     )
   }
 
   implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
     for {
-      id <- cursor.downField("id").as[Option[ModifierId]]
+      maybeId <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
-      outputs <- cursor.downField("outputs").as[IndexedSeq[ErgoBoxCandidate]]
-      result <- validateId(ErgoTransaction(inputs, outputs), id)
+      outputs <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
+      result <- validateDecodedTransaction(inputs, outputs, maybeId)
     } yield result
   }
 
-  def validateId(tx: ErgoTransaction, maybeId: Option[ModifierId])
-                (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
-    validate(maybeId.forall(_ sameElements tx.id)) {
-      fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
+  def validateDecodedTransaction(inputs: IndexedSeq[Input], outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])],
+                                 maybeId: Option[ModifierId])(implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
+    val tx = ErgoTransaction(inputs, outputs.map(_._1))
+    val result = accumulateErrors
+      .validate(maybeId.forall(_ sameElements tx.id)) {
+        fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
             s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
-    }.toDecoderResult(tx)
+      }
+      .validate(tx.validateStateless)
+      .validate(validateOutputs(outputs, tx.id))
+      .result
+    if (!result.isValid) log.info(s"Transaction from json validation failed: ${result.message}")
+    result.toDecoderResult(tx)
+  }
+
+  def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], txId: ModifierId): ValidationResult = {
+    outputs.zipWithIndex.foldLeft(accumulateErrors) {
+      case (validationState, ((candidate, maybeId), index)) =>
+        maybeId.map { boxId =>
+          val box = candidate.toBox(txId, index.toShort)
+          validationState.validate(boxId sameElements box.id) {
+            fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
+                  s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
+          }
+        }.getOrElse(validationState)
+    }.result
   }
 }
 

@@ -206,8 +206,7 @@ components:
         timestamp:
           $ref: '#/components/schemas/Timestamp'
         stateRoot:
-          type: string
-          example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+          $ref: '#/components/schemas/ADDigest'
         nBits:
           # todo actually it is unsigned int?
           type: integer
@@ -233,9 +232,7 @@ components:
           example: mynode
           nullable: true
         lastSeen:
-          type: integer
-          format: int64
-          example: 1514194867
+          $ref: '#/components/schemas/Timestamp'
         connectionType:
           type: string
           nullable: true
@@ -356,20 +353,23 @@ components:
     TransactionBoxId:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long
       type: string
+      format: base16
       example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     TransactionId:
       description: Base16-encoded transaction id bytes
       type: string
+      format: base16
       example: 2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     Proposition:
       description: Base16-encoded proposition bytes
       type: string
+      format: base16
       example: 7c
 
     Transactions:
-      description: Anyone can spend transaction objects
+      description: Ergo transaction objects
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
@@ -377,36 +377,43 @@ components:
     SValue:
       description: Base-16 envoded serialized Sigma-state value
       type: string
+      format: base16
       example: 7c
 
     ModifierId:
       description: Base16-encoded 32 byte modifier id
       type: string
+      format: base16
       example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     Digest32:
       description: Base16-encoded 32 byte digest
       type: string
+      format: base16
       example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     ADDigest:
       description: Base16-encoded 33 byte digest - digest with extra byte with tree height
       type: string
+      format: base16
       example: 333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     SerializedAdProof:
       description: Base16-encoded ad proofs
       type: string
+      format: base16
       example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     SpendingProofBytes:
       description: Base16-encoded spending proofs
       type: string
+      format: base16
       example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     BlockSignature:
       description: Base16-encoded block signature
       type: string
+      format: base16
       example: 5ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
 
     Timestamp:

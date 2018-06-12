@@ -14,14 +14,12 @@ import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
-case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, restApiSettings: RESTApiSettings)
+case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
-  override val route: Route = pathPrefix("transactions") {
+  override val route: Route = (pathPrefix("transactions") & withCors) {
     getUnconfirmedTransactionsR ~ sendTransactionR
   }
-
-  override val settings: RESTApiSettings = restApiSettings
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
@@ -37,6 +35,6 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_ , limit) =>
     // todo offset
-    getUnconfirmedTransactions(limit).okJson()
+    ApiResponse(getUnconfirmedTransactions(limit))
   }
 }

@@ -24,8 +24,8 @@ trait ApiCodecs {
     maybeResult.fold[Either[DecodingFailure, T]](Left(DecodingFailure("No value found", cursor.history)))(Right.apply)
   }
 
-  def fromThrows[T](throwsResult: T)(implicit cursor: ACursor): Either[DecodingFailure, T] = {
-    Either.catchNonFatal(throwsResult).leftMap(e => DecodingFailure(e.toString, cursor.history))
+  def fromThrows[T](throwsBlock: => T)(implicit cursor: ACursor): Either[DecodingFailure, T] = {
+    Either.catchNonFatal(throwsBlock).leftMap(e => DecodingFailure(e.toString, cursor.history))
   }
 
   def fromValidation[T](value: T)(validationResult: ValidationResult)

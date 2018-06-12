@@ -12,15 +12,16 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.ModifierId
-import scorex.core.settings.RESTApiSettings
-import scorex.core.utils.ScorexLogging
+import scorex.core.api.http.ApiResponse
 
 import scala.concurrent.Future
 
 case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ScorexLogging {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
-  override val route: Route = pathPrefix("blocks") {
+  val settings = ergoSettings.scorexSettings.restApi
+
+  override val route: Route = (pathPrefix("blocks") & withCors) {
     getBlocksR ~
       postBlocksR ~
       getLastHeadersR ~
@@ -30,8 +31,6 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
       getFullBlockByHeaderIdR ~
       candidateBlockR
   }
-
-  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   private def getHistory = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
@@ -52,7 +51,7 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
   }
 
   def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
-    getHeaderIds(limit, offset).okJson()
+    ApiResponse(getHeaderIds(limit, offset))
   }
 
   def postBlocksR: Route = post {
@@ -76,25 +75,27 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
     */
   }
 
-  def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count => getLastHeaders(count).okJson() }
+  def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>
+    ApiResponse(getLastHeaders(count))
+  }
 
   def getBlockIdsAtHeightR: Route = (pathPrefix("at" / IntNumber) & get) { height =>
-    getHeaderIdsAtHeight(height).okJson()
+    ApiResponse(getHeaderIdsAtHeight(height))
   }
 
   def getBlockHeaderByHeaderIdR: Route = (headerId & pathPrefix("header") & get) { id =>
-    getFullBlockByHeaderId(id).map(_.map(_.header.asJson)).okJson()
+    ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.header)))
   }
 
   def getBlockTransactionsByHeaderIdR: Route = (headerId & pathPrefix("transactions") & get) { id =>
-    getFullBlockByHeaderId(id).map(_.map(_.blockTransactions.asJson)).okJson()
+    ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.blockTransactions)))
   }
 
   def candidateBlockR: Route = (path("candidateBlock") & pathEndOrSingleSlash & get) {
-    (miner ? MiningStatusRequest).mapTo[MiningStatusResponse].map(_.asJson).okJson()
+    ApiResponse((miner ? MiningStatusRequest).mapTo[MiningStatusResponse])
   }
 
   def getFullBlockByHeaderIdR: Route = (headerId & get) { id =>
-    getFullBlockByHeaderId(id).map(_.map(_.asJson)).okJson()
+    ApiResponse(getFullBlockByHeaderId(id))
   }
 }

@@ -307,7 +307,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          fatal(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
+          error(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
         }
       }
     }

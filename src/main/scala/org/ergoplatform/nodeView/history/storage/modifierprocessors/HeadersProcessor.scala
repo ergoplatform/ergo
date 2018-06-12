@@ -297,7 +297,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     }
   }
 
-  class HeaderValidator extends ModifierValidator {
+  class HeaderValidator extends ModifierValidator with ScorexLogging {
 
     def validate(header: Header): ValidationResult = {
       if (header.isGenesis) {

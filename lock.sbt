@@ -47,7 +47,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.13",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "21ae75df-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "ee6c3044-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.1",
   "org.scorexfoundation" % "sigma-state_2.12" % "0.9.3",
   "org.slf4j" % "slf4j-api" % "1.7.25",
@@ -59,4 +59,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.4.1"
 )
-// LIBRARY_DEPENDENCIES_HASH e9c2dc9afb63b5b897e56b8c1e1e884f614555e5
+// LIBRARY_DEPENDENCIES_HASH 2181b46e89d550f4b12dbcc903582cc7a176679c

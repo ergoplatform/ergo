@@ -179,16 +179,16 @@ trait FullBlockProcessor extends HeadersProcessor {
 
     def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult = {
       failFast
-        .validate(historyStorage.contains(m.id)) {
+        .validate(!historyStorage.contains(m.id)) {
           fatal(s"Modifier ${m.encodedId} is already in history")
         }
-        .validate(header.height < minimalHeight) {
+        .validate(header.height >= minimalHeight) {
           fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
         }
-        .validate(!header.isCorrespondingModifier(m)) {
+        .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
-        .validate(isSemanticallyValid(header.id) == Invalid) {
+        .validate(isSemanticallyValid(header.id) != Invalid) {
           fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
         }
         .result

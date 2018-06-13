@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
@@ -14,7 +13,7 @@ import scala.util.{Failure, Success, Try}
   * Contains functions required by History to process Transactions and Proofs when we have them.
   * Prune modifiers older then blocksToKeep.
   */
-trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
+trait FullBlockProcessor extends HeadersProcessor {
 
   /**
     * Id of header that contains transactions and proofs

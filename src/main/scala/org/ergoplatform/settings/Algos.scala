@@ -1,13 +1,13 @@
 package org.ergoplatform.settings
 
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.Try
 
-object Algos extends ScorexLogging {
+object Algos extends ScorexEncoding {
 
   type HF = Blake2b256.type
 

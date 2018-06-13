@@ -14,7 +14,7 @@ import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
@@ -24,7 +24,7 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
+trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
   private val charsetName = "UTF-8"
 
@@ -297,7 +297,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     }
   }
 
-  class HeaderValidator extends ModifierValidator with ScorexLogging {
+  class HeaderValidator extends ModifierValidator with ScorexEncoding {
 
     def validate(header: Header): ValidationResult = {
       if (header.isGenesis) {

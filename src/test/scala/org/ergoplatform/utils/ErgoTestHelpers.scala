@@ -3,11 +3,11 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
 
 import scala.concurrent.ExecutionContext
 
-trait ErgoTestHelpers extends ValidBlocksGenerators with ScorexLogging {
+trait ErgoTestHelpers extends ValidBlocksGenerators with ScorexLogging with ScorexEncoding {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 

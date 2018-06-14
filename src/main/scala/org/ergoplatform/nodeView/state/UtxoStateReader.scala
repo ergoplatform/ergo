@@ -77,7 +77,8 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     if (txs.isEmpty) {
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(_.sameElements(rootHash))) {
-      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}"))
+      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
+        s"Possible reason - state update is in process."))
     } else {
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }

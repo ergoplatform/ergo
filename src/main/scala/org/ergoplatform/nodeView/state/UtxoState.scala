@@ -111,7 +111,7 @@ class UtxoState(override val version: VersionTag,
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-        log.info(s"Valid modifier ${fb.encodedId} with header ${fb.header.encodedId} and emission box " +
+        log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
           s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(rootHash)}")
         if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
           throw new Error("Storage kept roothash is not equal to the declared one")

@@ -72,8 +72,8 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     * @return proof for specified transactions and new state digest
     */
   def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
-    log.debug(s"Going to create proof for ${txs.length} transactions")
     val rootHash = persistentProver.digest
+    log.debug(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(_.sameElements(rootHash))) {

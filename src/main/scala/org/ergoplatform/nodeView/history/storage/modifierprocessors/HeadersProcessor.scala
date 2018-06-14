@@ -218,7 +218,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
+  def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
     .map(b => BigInt(b.data))
 
   /**

@@ -167,13 +167,19 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   protected def modifierValidation(m: ErgoPersistentModifier,
                                    headerOpt: Option[Header]): Try[Unit] = {
-    val minimalHeight = pruningProcessor.minimalFullBlockHeight
-    headerOpt.map(header => PayloadValidator.validate(m, header, minimalHeight).toTry)
-      .getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
+    headerOpt.map { header =>
+      val minimalHeight = if (contains(header.transactionsId) && !(header.transactionsId sameElements m.id)) {
+        // ADProofs for already block transactions that are already in history. Do not validate whether it is too old
+        -1
+      } else {
+        pruningProcessor.minimalFullBlockHeight
+      }
+      PayloadValidator.validate(m, header, minimalHeight).toTry
+    }.getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
   }
 
   /**
-    * Validator for BLockTransactions and ADProofs
+    * Validator for BlockTransactions and ADProofs
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
@@ -182,14 +188,14 @@ trait FullBlockProcessor extends HeadersProcessor {
         .validate(!historyStorage.contains(m.id)) {
           fatal(s"Modifier ${m.encodedId} is already in history")
         }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
-        }
         .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
         .validate(isSemanticallyValid(header.id) != Invalid) {
           fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
+        }
+        .validate(header.height >= minimalHeight) {
+          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
         }
         .result
     }

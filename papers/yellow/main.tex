@@ -345,7 +345,17 @@ nonce: Int - field to iterate and generate valid PoW.
  \hline
  timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
  \hline
- nonce &  8 &  Proof-of-Work nonce  \\
+
+ nBits     &  8 &  Difficulty  \\
+ \hline
+
+ height    &  4 &  Height of the header  \\
+ \hline
+
+ extensionHash &  32 &  Hash of the extension section of the block  \\
+ \hline
+
+ equihashSolution     &  ?? &  Proof-of-Work solution   \\
  \hline
 \end{tabular}
 

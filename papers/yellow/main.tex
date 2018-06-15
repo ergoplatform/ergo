@@ -92,9 +92,6 @@
 
 \newcommand{\state}{\textit{State}}
 \newcommand{\roller}{\textbf{Rollerchain}}
-\newcommand{\aspen}{\textbf{Aspen}}
-\newcommand{\bitcoinng}{\textbf{Bitcoin-ng}}
-\newcommand{\sse}{\textbf{Space-Scarce Economy}}
 \newcommand{\popow}{\textbf{PoPoW}}
 \newcommand{\ads}{\textbf{ADS}}
 
@@ -123,7 +120,23 @@
 \tableofcontents
 
 \section{Introduction}
-\subsection{Multiple Modes}
+
+
+\section{Notation and Preliminaries}
+
+\subsection{A Note on Notation}
+
+\knote{say about coin/box/output}
+
+
+\subsection{Cryptographic Primitives}
+
+We use Blake2b hash function with 256 bits output.
+
+\knote{describe a curve used}
+
+
+\section{Modes of Operation}
 Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node
 mode, which is similar to Bitcoin fullnode, Ergo reference implementation supports Light-SPV, Light-Fullnode and Pruned-Fullnode modes.
 

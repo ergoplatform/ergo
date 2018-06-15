@@ -1,18 +1,20 @@
-Token emission is incoroporated without any modification of internal logic. One output can
+Token emission is incorporated without any modification of internal logic. One output can
 contain arbitrary number of different token kinds. They are stored in the
-register R1 as the dictionary $\{token\_id: amount\}$. This is the only data
-which can be stored in R1.  The emission is organized as appending an item to
+register R3 as a sequence of $\{token\_id: amount\}$ tuples. This is the only kind of data
+which can be stored in R3.  The emission is organized as appending an item to
 the dictionary. To avoid collisions, appended $token\_id$ must be equal to the
 $id$ of the first input of the generating transaction. The uniqueness of outputs
-yields the uniqueness of tokens. The validation script is then
+yields the uniqueness of tokens. Obviously, only an output can contain a new asset, and a transaction
+may create no more than one new asset.
+
+ The validation script is then
 \begin{eqnarray*}
-    &\forall\,id\in \left\{ i\, | \exists\, out \in outputs : i\in out.R1.keys
+    &\forall\,id\in \left\{ i\, | \exists\, out \in outputs : i\in out.R3.keys
     \right\} \nonumber\\
-    &\left(\sum_{in\in inputs} in.R1[id] = \sum_{out\in
-    outputs} out.R1[id] \right) \vee \left(id = inputs[0].id\right)\,.
+    &\left(\sum_{in\in inputs} in.R3[id] = \sum_{out\in
+    outputs} out.R3[id] \right) \vee \left(id = inputs[0].id\right)\,.
 \end{eqnarray*}
 Here $\sum$ stands for the safe sum, which ensures non-negativeness of all the
-values, and the absence of integer overflow. The controlled emission of the
-tokens may be organized by attaching the emission script to the output
-containing newly generated $token\_id$.
+values, and the absence of integer overflows on the way. The controlled emission of the
+tokens may be organized by attaching the emission script to the output which contains newly generated $token\_id$.
 

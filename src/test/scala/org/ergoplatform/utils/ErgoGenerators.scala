@@ -34,7 +34,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     prop <- trueLeafGen
     value <- positiveIntGen
     reg <- positiveIntGen
-    transactionId: Array[Byte] <- genBytesList(Constants.ModifierIdSize)
+    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
   } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
 
@@ -66,24 +66,24 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield ErgoSyncInfo(ids)
 
   lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
-    idGenerator <- genBytesList(Constants.ModifierIdSize)
+    idGenerator <- genBytes(Constants.ModifierIdSize)
     maxLength = 100
     toTake <- Gen.chooseNum(1, 100)
     ids <- Gen.listOfN(maxLength, idGenerator).map(_.take(toTake))
   } yield TransactionIdsForHeader(ModifierId @@ ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
-    val x = Digest32 @@ genBytesList(32)
+    val x = Digest32 @@ genBytes(32)
     x
   }
 
   lazy val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genBytesList(Constants.ModifierIdSize)
+    val x = ADKey @@ genBytes(Constants.ModifierIdSize)
     x
   }
 
   lazy val stateRootGen: Gen[ADDigest] = {
-    val x = ADDigest @@ genBytesList(Constants.ModifierIdSize + 1)
+    val x = ADDigest @@ genBytes(Constants.ModifierIdSize + 1)
     x
   }
 

@@ -6,7 +6,7 @@ class AlgosTests extends ErgoPropertyTest {
 
 
   property("blockIdDifficulty should be > 0") {
-    forAll(genBytesList(32)) { id: Array[Byte] =>
+    forAll(genBytes(32)) { id: Array[Byte] =>
       Algos.blockIdDifficulty(Algos.hash(id)) should be > BigInt(0)
     }
   }

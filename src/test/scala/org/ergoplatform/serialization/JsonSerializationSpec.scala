@@ -12,7 +12,7 @@ import sigmastate.Values.TrueLeaf
 class JsonSerializationSpec extends ErgoPropertyTest {
 
   property("TransactionIdsForHeader should be converted into json correctly") {
-    val modifierId = genBytesList(Constants.ModifierIdSize).sample.get
+    val modifierId = genBytes(Constants.ModifierIdSize).sample.get
     val stringId = Algos.encode(modifierId)
     val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
     val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))

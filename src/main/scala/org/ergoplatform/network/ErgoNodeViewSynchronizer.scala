@@ -13,7 +13,7 @@ import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.Da
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
-import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
+import scorex.core.network.{NodeViewSynchronizer, SendToPeers, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -55,7 +55,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt foreach { h =>
         if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
-          sendSync(h.syncInfo)
+          val peers = statusTracker.peersToSyncWith()
+          if (peers.nonEmpty) {
+            networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(h.syncInfo), None), SendToPeers(peers))
+          }
         } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload

@@ -304,6 +304,8 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
       nodeViewRef ! LocallyGeneratedModifier(brokenBlock.aDProofs.get)
       nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(block))
+      nodeViewRef ! rootHash(nodeViewConfig)
+      expectMsg(Algos.encode(wusAfterBlock.rootHash))
     }
 
     nodeViewRef ! bestHeaderOpt(nodeViewConfig)

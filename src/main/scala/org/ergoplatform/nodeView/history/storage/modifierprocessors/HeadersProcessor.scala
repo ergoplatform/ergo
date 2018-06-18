@@ -14,7 +14,7 @@ import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
@@ -24,7 +24,7 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
+trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
   private val charsetName = "UTF-8"
 
@@ -218,7 +218,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  protected def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
+  def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
     .map(b => BigInt(b.data))
 
   /**
@@ -297,7 +297,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
     }
   }
 
-  class HeaderValidator extends ModifierValidator {
+  class HeaderValidator extends ModifierValidator with ScorexEncoding {
 
     def validate(header: Header): ValidationResult = {
       if (header.isGenesis) {
@@ -307,7 +307,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging {
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          fatal(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
+          error(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
         }
       }
     }

@@ -5,13 +5,14 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.util.{Failure, Success, Try}
 
 /**
   * Contains all functions required by History to process UTXOSnapshotChunk
   */
-trait UTXOSnapshotChunkProcessor {
+trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 

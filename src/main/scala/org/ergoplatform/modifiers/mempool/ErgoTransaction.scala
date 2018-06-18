@@ -12,7 +12,7 @@ import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Blake2b256
@@ -96,7 +96,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 
-object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging {
+object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>

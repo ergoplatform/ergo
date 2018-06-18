@@ -78,7 +78,7 @@ trait ErgoHistoryReader
   /**
     * Check, that it's possible to apply modifier to history
     */
-  override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
+  def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
   /**
     * Whether another's node syncinfo shows that another node is ahead or behind ours
@@ -195,7 +195,7 @@ trait ErgoHistoryReader
   def headerIdsAt(count: Int, offset: Int = 0): Seq[ModifierId] = (offset until (count + offset))
     .flatMap(h => headerIdsAtHeight(h).headOption)
 
-  protected def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)

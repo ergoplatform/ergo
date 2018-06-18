@@ -55,10 +55,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt foreach { h =>
         if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
-          val peers = statusTracker.peersToSyncWith()
-          if (peers.nonEmpty) {
-            networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(h.syncInfo), None), SendToPeers(peers))
-          }
+          sendSync(statusTracker, h)
         } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload

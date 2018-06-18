@@ -38,7 +38,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
 
   // TODO get actual votes and isMining from miner
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
-    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None, None, None,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
@@ -54,9 +54,12 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
   }
 
   private def onHistoryChanged: Receive = {
-    case ChangedHistory(h) if h.isInstanceOf[ErgoHistory] =>
-      nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.asInstanceOf[ErgoHistory].bestFullBlockOpt,
-        bestHeaderOpt = h.asInstanceOf[ErgoHistory].bestHeaderOpt)
+    case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
+      nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
+        bestHeaderOpt = h.bestHeaderOpt,
+        headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
+        fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
+      )
   }
 
   private def onConnectedPeers: Receive = {
@@ -67,7 +70,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
   def onSemanticallySuccessfulModification: Receive = {
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
       nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)),
-                               stateVersion = Some(fb.encodedId))
+        stateVersion = Some(fb.encodedId))
   }
 
 }
@@ -86,7 +89,9 @@ object ErgoStatsCollector {
                       isMining: Boolean,
                       votes: String,
                       bestHeaderOpt: Option[Header],
+                      headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
+                      fullBlocksScore: Option[BigInt],
                       launchTime: Long) {
   }
 
@@ -101,6 +106,8 @@ object ErgoStatsCollector {
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
         "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,
+        "headersScore" -> ni.headersScore.map(difficultyEncoder.apply).asJson,
+        "fullBlocksScore" -> ni.fullBlocksScore.map(difficultyEncoder.apply).asJson,
         "unconfirmedCount" -> ni.unconfirmedCount.asJson,
         "stateRoot" -> ni.stateRoot.asJson,
         "stateType" -> ni.stateType.stateTypeName.asJson,

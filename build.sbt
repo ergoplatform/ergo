@@ -14,13 +14,13 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "cbb302f5-SNAPSHOT"
+val scorexVersion = "d5c4180c-SNAPSHOT"
 
 libraryDependencies ++= Seq(
-  "org.scorexfoundation" %% "scrypto" % "2.1.1",
+  "org.scorexfoundation" %% "scrypto" % "2.1.2",
   "org.scorexfoundation" %% "sigma-state" % "0.9.3",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.13",
+  "org.scorexfoundation" %% "avl-iodb" % "0.2.14",
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   "ch.qos.logback" % "logback-classic" % "1.2.3",

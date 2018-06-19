@@ -25,5 +25,7 @@ class FilesObjectsStore(dir: String) extends ObjectsStore {
     Files.delete(path(id))
   }
 
+  override def contains(id: ModifierId): Boolean = Files.exists(path(id))
+
   private def path(id: ModifierId) = Paths.get(dir + "/" + Algos.encode(id))
 }

@@ -30,6 +30,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+
   lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings

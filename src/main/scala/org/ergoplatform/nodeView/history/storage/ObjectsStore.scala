@@ -13,4 +13,6 @@ trait ObjectsStore {
 
   def put(m: ErgoPersistentModifier): Try[Unit]
 
+  def contains(id: ModifierId): Boolean
+
 }

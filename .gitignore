@@ -1,0 +1,37 @@
+# IDE/Editor files
+.idea
+.ensime
+.ensime_cache/
+scorex.yaml
+
+# scala build folders
+target
+
+# dotfiles
+.dockerignore
+.editorconfig
+
+# standalone docker
+!Dockerfile
+
+# local application.conf
+local-application.conf
+my-application.conf
+
+# logs
+*.log
+
+# compiled docs
+*.pdf
+
+
+# db files
+*.data
+ergo/
+
+# for temporary experiments
+sheet.scala
+project/project/
+
+
+

@@ -21,9 +21,9 @@ import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
+//todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
-  //with NodeViewHolderTests[TX, PM, ST, SI, HT, MPool] todo: uncomment
   //with StateApplyChangesTest[P, TX, PM, B, ST]
   //with WalletSecretsTest[P, TX, PM]
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]

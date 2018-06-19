@@ -17,7 +17,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
         case Success(b) =>
           Some(b)
         case Failure(e) =>
-          log.warn(s"Failed to parse block ${encoder.encode(id)} from db (bytes are: ${bBytes.mkString("-")}): ", e)
+          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${bBytes.mkString("-")}): ", e)
           None
       }
     }
@@ -26,7 +26,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
 
-  def contains(id: ModifierId): Boolean = get(id).isDefined
+  def contains(id: ModifierId): Boolean = objectsStore.contains(id)
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],

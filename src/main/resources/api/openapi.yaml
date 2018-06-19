@@ -1,0 +1,943 @@
+openapi: "3.0.1"
+
+info:
+  version: "0.1"
+  title: Ergo Node API
+  description: API docs for Ergo Node. Models are shared between all Ergo products
+  contact:
+    name: Ergo Platform Team
+    email: ergoplatform@protonmail.com
+    url: https://ergoplatform.org
+  license:
+    name: CC0 1.0 Universal
+    url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+
+components:
+  schemas:
+    # Objects
+    ErgoTransactionInput:
+      type: object
+      required:
+        - boxId
+        - spendingProof
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        spendingProof:
+          $ref: '#/components/schemas/SpendingProof'
+
+    SpendingProof:
+      description: Spending proof for transaction input
+      type: object
+      required:
+        - proofBytes
+        - extension
+      properties:
+        proofBytes:
+          $ref: '#/components/schemas/SpendingProofBytes'
+        extension:
+          type: object
+          description: Variables to be put into context
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': '7c'
+
+    ErgoTransactionOutput:
+      type: object
+      required:
+        - value
+        - proposition
+        - additionalRegisters
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        value:
+          description: Amount of Ergo token
+          type: integer
+          format: int64
+          minimum: 0
+          example: 147
+        proposition:
+          $ref: '#/components/schemas/Proposition'
+        additionalRegisters:
+          description: Additional registers
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            R3: '7c'
+
+    ErgoTransaction:
+      type: object
+      description: Transaction without any lockers and unlockers
+      required:
+        - inputs
+        - outputs
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Many transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        outputs:
+          description: Many transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+
+    FullBlock:
+      description: Block with header and transactions
+      type: object
+      required:
+        - header
+        - blockTransactions
+        - adProofs
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        blockTransactions:
+          $ref: '#/components/schemas/BlockTransactions'
+        adProofs:
+          $ref: '#/components/schemas/BlockADProofs'
+
+    BlockHeader:
+      type: object
+      required:
+        - id
+        - timestamp
+        - version
+        - interlinks
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - equihashSolutions
+        - height
+        - difficulty
+        - parentId
+      properties:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+           type: integer
+           format: int32
+           example: 2
+        interlinks:
+          # todo better description
+          description: Interlinks
+          type: array
+          items:
+            $ref: '#/components/schemas/Digest32'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        nBits:
+          # todo actually it is unsigned int?
+          type: integer
+          format: int64
+          example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        equihashSolutions:
+          description: Base16-encoded equihash solutions
+          type: string
+          example: 11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 62
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+
+    BlockTransactions:
+      type: object
+      required:
+        - headerId
+        - transactions
+      properties:
+        headerId:
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          $ref: '#/components/schemas/Transactions'
+
+    BlockADProofs:
+      type: object
+      required:
+        - headerId
+        - proofBytes
+        - digest
+      properties:
+        headerId:
+          $ref: '#/components/schemas/ModifierId'
+        proofBytes:
+          $ref: '#/components/schemas/SerializedAdProof'
+        digest:
+          $ref: '#/components/schemas/Digest32'
+
+    CandidateBlock:
+      type: object
+      nullable: true
+      description: Can be null if node is not mining or candidate block is not ready
+      required:
+        - extensionHash
+        - parentId
+      properties:
+        transactionsNumber:
+          type: integer
+          format: int32
+          example: 2
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        nBits:
+          # todo actually it is unsigned int?
+          type: integer
+          format: int64
+          example: 19857408
+        adProofBytes:
+          $ref: '#/components/schemas/SerializedAdProof'
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          $ref: '#/components/schemas/Transactions'
+
+    Peer:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          example: 127.0.0.1:5673
+        name:
+          type: string
+          example: mynode
+          nullable: true
+        lastSeen:
+          $ref: '#/components/schemas/Timestamp'
+        connectionType:
+          type: string
+          nullable: true
+          enum:
+            - Incoming
+            - Outgoing
+
+    NodeInfo:
+      type: object
+      required:
+        - name
+        - appVersion
+        - fullHeight
+        - headersHeight
+        - bestFullHeaderId
+        - previousFullHeaderId
+        - bestHeaderId
+        - headersScore
+        - fullBlocksScore
+        - stateRoot
+        - stateType
+        - stateVersion
+        - isMining
+        - peersCount
+        - unconfirmedCount
+        - difficulty
+        - currentTime
+        - launchTime
+      properties:
+        name:
+          type: string
+          example: my-node-1
+        appVersion:
+          type: string
+          example: 0.0.1
+        fullHeight:
+          type: integer
+          format: int32
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          minimum: 0
+          example: 667
+          nullable: true
+        headersHeight:
+          type: integer
+          format: int32
+          description: Can be 'null' if state is empty (no header applied since node launch)
+          minimum: 0
+          example: 667
+          nullable: true
+        bestFullHeaderId:
+          type: string
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        previousFullHeaderId:
+          type: string
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        bestHeaderId:
+          type: string
+          description: Can be 'null' if no header applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        stateRoot:
+          type: string
+          nullable: true
+          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          example: Dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        stateType:
+          type: string
+          enum:
+            - digest
+            - utxo
+        stateVersion:
+          description: Can be 'null' if no full block is applied since node launch
+          type: string
+          example: Fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+          nullable: true
+        isMining:
+          type: boolean
+          example: true
+        votes:
+          type: string
+          description: Base16-encoded array
+        peersCount:
+          type: integer
+          description: Number of connected peers
+          format: int32
+          minimum: 0
+          example: 327
+        unconfirmedCount:
+          description: Current unconfirmed transactions count
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          example: 327
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          example: 667
+          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+        currentTime:
+          type: integer
+          description: Current internal node time
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+        launchTime:
+          type: integer
+          description: Time when the node was started
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+
+    TransactionBoxId:
+      description: Base16-encoded transaction box id bytes. Should be 32 bytes long
+      type: string
+      format: base16
+      example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    TransactionId:
+      description: Base16-encoded transaction id bytes
+      type: string
+      format: base16
+      example: 2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    Proposition:
+      description: Base16-encoded proposition bytes
+      type: string
+      format: base16
+      example: 7c
+
+    Transactions:
+      description: Ergo transaction objects
+      type: array
+      items:
+        $ref: '#/components/schemas/ErgoTransaction'
+
+    SValue:
+      description: Base-16 envoded serialized Sigma-state value
+      type: string
+      format: base16
+      example: 7c
+
+    ModifierId:
+      description: Base16-encoded 32 byte modifier id
+      type: string
+      format: base16
+      example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    Digest32:
+      description: Base16-encoded 32 byte digest
+      type: string
+      format: base16
+      example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    ADDigest:
+      description: Base16-encoded 33 byte digest - digest with extra byte with tree height
+      type: string
+      format: base16
+      example: 333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    SerializedAdProof:
+      description: Base16-encoded ad proofs
+      type: string
+      format: base16
+      example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    SpendingProofBytes:
+      description: Base16-encoded spending proofs
+      type: string
+      format: base16
+      example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    BlockSignature:
+      description: Base16-encoded block signature
+      type: string
+      format: base16
+      example: 5ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+
+    Timestamp:
+      description: Basic timestamp definition
+      type: integer
+      format: int32
+      example: 1524143059077
+
+paths:
+  /blocks:
+    get:
+      summary: Get the Array of header ids
+      operationId: getHeaderIds
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          description: The number of items in list to return
+          schema:
+            type: integer
+            format: int32
+            minimum: 10
+            maximum: 100
+            default: 50
+        - in: query
+          name: offset
+          required: false
+          description: The number of items in list to skip
+          schema:
+            type: integer
+            format: int32
+            default: 0
+      responses:
+        '200':
+          # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
+          description: Array of header ids
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of header ids
+                items:
+                  type: string
+                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Parameter `offset` is out of range
+                example: invalid.offset.out.of.range
+    post:
+      summary: Send a mined block
+      operationId: sendMinedBlock
+      tags:
+        - blocks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FullBlock'
+      responses:
+        '200':
+          description: Block is valid
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                example: invalid.block
+
+  /blocks/at/{blockHeight}:
+    get:
+      summary: Get the header ids at a given height
+      operationId: getFullBlockAt
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height of a wanted block
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Array of header ids
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of header ids
+                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
+                items:
+                  type: string
+                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+        '404':
+          description: Blocks at this height doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided height is invalid
+                example: invalid.block.height
+
+  /blocks/{headerId}:
+    get:
+      summary: Get the full block info by a given signature
+      operationId: getFullBlockById
+      tags:
+        - blocks
+      parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
+        - in: path
+          name: headerId
+          required: true
+          description: ID of a wanted block
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Block object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FullBlock'
+        '404':
+          description: Block with this id doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided header id is invalid
+                example: invalid.block.id
+
+  /blocks/{headerId}/header:
+    get:
+      summary: Get the block header info by a given signature
+      operationId: getBlockHeaderById
+      tags:
+        - blocks
+      parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
+        - in: path
+          name: headerId
+          required: true
+          description: ID of a wanted block header
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Block header object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockHeader'
+        '404':
+          description: Block with this id doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided header id is invalid
+                example: invalid.block.id
+
+  /blocks/{headerId}/transactions:
+    get:
+      summary: Get the block transactions info by a given signature
+      operationId: getBlockTransactionsById
+      tags:
+        - blocks
+      parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
+        - in: path
+          name: headerId
+          required: true
+          description: ID of a wanted block transactions
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Block transaction object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockTransactions'
+        '404':
+          description: Block with this id doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided header id is invalid
+                example: invalid.block.id
+
+  /blocks/candidateBlock:
+    get:
+      summary: Get the candidate block for mining
+      operationId: getCandidateBlock
+      tags:
+        - blocks
+      responses:
+        '200':
+          description: Candidate Full Block object
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isMining:
+                    type: boolean
+                  candidateBlock:
+                    $ref: '#/components/schemas/CandidateBlock'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /blocks/lastHeaders/{count}:
+    get:
+      summary: Get the last headers objects
+      operationId: getLastHeaders
+      tags:
+        - blocks
+      parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
+        - in: path
+          name: count
+          required: true
+          description: count of a wanted block headers
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Array of block headers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /info:
+    get:
+      summary: Get the information about the Node
+      operationId: getNodeInfo
+      tags:
+        - info
+      responses:
+        '200':
+          description: Node info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfo'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /transactions:
+    post:
+      summary: Send an anyone can spend transaction
+      operationId: sendTransaction
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErgoTransaction'
+      responses:
+        '200':
+          description: JSON with ID of the new transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                  # Transaction signature doesn't match transaction data
+                  # Provided timestamp is invalid
+                  # Provided amount in invalid
+                  # Provided box nonce in invalid
+                example: invalid.transaction.signature, invalid.transaction.timestamp, invalid.transaction.value, invalid.box.nonce, invalid.json
+
+  /transactions/unconfirmed:
+    parameters:
+      # useless, varies dynamically
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      # todo from timestamp?
+    get:
+      summary: Get current pool of the unconfirmed transactions pool
+      operationId: getUnconfirmedTransactions
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Array with anyone can spend transactions objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+
+  /peers/all:
+    get:
+      summary: Get all known peers
+      operationId: getAllPeers
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /peers/connected:
+    get:
+      summary: Get current connected peers
+      operationId: getConnectedPeers
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /peers/connect:
+    post:
+      summary: Add address to peers list
+      operationId: connectToPeer
+      tags:
+        - peers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: 127.0.0.1:5673
+      responses:
+        '200':
+          description: Attempt to connect to the peer
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                example: invalid.peer.address, invalid.json
+
+  /peers/blacklisted:
+    get:
+      summary: Get blacklisted peers
+      operationId: getBlacklistedPeers
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Array of the addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  description: Blacklisted node address
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /utils/seed:
+    get:
+      summary: Get random seed with 32 bytes size
+      operationId: getRandomSeed
+      tags:
+        - utils
+      responses:
+        '200':
+          description: Base16-encoded 32 byte seed
+          content:
+            application/json:
+              schema:
+                type: string
+                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /utils/seed/{length}:
+    get:
+      summary: Generate random seed of specified length in bytes
+      operationId: getRandomSeedWithLength
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: length
+          required: true
+          description: seed length in bytes
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Base16-encoded N byte seed
+          content:
+            application/json:
+              schema:
+                type: string
+                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /utils/hash/blake2b:
+    post:
+      summary: Return Blake2b hash of specified message
+      operationId: hashBlake2b
+      tags:
+        - utils
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+      responses:
+        '200':
+          description: Base16-encoded 32 byte hash
+          content:
+            application/json:
+              schema:
+                type: string
+                example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string

@@ -318,9 +318,6 @@ components:
         isMining:
           type: boolean
           example: true
-        votes:
-          type: string
-          description: Base16-encoded array
         peersCount:
           type: integer
           description: Number of connected peers

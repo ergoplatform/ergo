@@ -38,7 +38,6 @@ class InfoRoutesSpec extends FlatSpec
   implicit val routeTimeout = RouteTestTimeout(15.seconds dilated)
   val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, peerManagerRef, settings, fakeTimeProvider)
   val route = InfoRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
-  private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
   val requiredDifficulty = BigInt(320000000)
 
 
@@ -56,7 +55,6 @@ class InfoRoutesSpec extends FlatSpec
       c.downField("appVersion").as[String] shouldEqual Right(Version.VersionString)
       c.downField("stateType").as[String] shouldEqual Right(settings.nodeSettings.stateType.stateTypeName)
       c.downField("isMining").as[Boolean] shouldEqual Right(settings.nodeSettings.mining)
-      c.downField("votes").as[String] shouldEqual Right(votes)
       c.downField("launchTime").as[Long] shouldEqual Right(fakeTimeProvider.time())
     }
   }

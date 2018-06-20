@@ -4,9 +4,12 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.ScorexLogging
+import scorex.core.consensus.ModifierSemanticValidity.Invalid
+import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult}
 
 import scala.util.{Failure, Success, Try}
 
@@ -14,7 +17,7 @@ import scala.util.{Failure, Success, Try}
   * Contains functions required by History to process Transactions and Proofs when we have them.
   * Prune modifiers older then blocksToKeep.
   */
-trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
+trait FullBlockProcessor extends HeadersProcessor {
 
   /**
     * Id of header that contains transactions and proofs
@@ -51,7 +54,7 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
-       if isValidFirstFullBlock(fullBlock.header) =>
+      if isValidFirstFullBlock(fullBlock.header) =>
 
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
@@ -59,8 +62,8 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
   }
 
   private def processBetterChain: BlockProcessing = {
-    case toProcess @ ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep, _)
-        if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
+    case toProcess@ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep, _)
+      if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
 
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestAfterThis)
@@ -99,11 +102,12 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
     isBetter getOrElse false
   }
 
-  private def nonBestBlock: BlockProcessing = { case params =>
-    //Orphaned block or full chain is not initialized yet
-    logStatus(Seq(), Seq(), params.fullBlock, None)
-    historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
-    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+  private def nonBestBlock: BlockProcessing = {
+    case params =>
+      //Orphaned block or full chain is not initialized yet
+      logStatus(Seq(), Seq(), params.fullBlock, None)
+      historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
   private def calculateNewModRow(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ErgoPersistentModifier = {
@@ -163,22 +167,40 @@ trait FullBlockProcessor extends HeadersProcessor with ScorexLogging {
 
   protected def modifierValidation(m: ErgoPersistentModifier,
                                    headerOpt: Option[Header]): Try[Unit] = {
-    if (historyStorage.contains(m.id)) {
-      Failure(new Error(s"Modifier $m is already in history"))
-    } else {
-      val minimalHeight = pruningProcessor.minimalFullBlockHeight
-      headerOpt match {
-        case None =>
-          Failure(new Error(s"Header for modifier $m is not defined"))
-        case Some(header: Header) if header.height < minimalHeight =>
-          Failure(new Error(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight"))
-        case Some(header: Header) if !header.isCorrespondingModifier(m) =>
-          Failure(new Error(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}"))
-        case Some(_) =>
-          Success()
+    headerOpt.map { header =>
+      val minimalHeight = if (contains(header.transactionsId) && !(header.transactionsId sameElements m.id)) {
+        // ADProofs for already block transactions that are already in history. Do not validate whether it is too old
+        -1
+      } else {
+        pruningProcessor.minimalFullBlockHeight
       }
+      PayloadValidator.validate(m, header, minimalHeight).toTry
+    }.getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
+  }
+
+  /**
+    * Validator for BlockTransactions and ADProofs
+    */
+  object PayloadValidator extends ModifierValidator with ScorexEncoding {
+
+    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult = {
+      failFast
+        .validate(!historyStorage.contains(m.id)) {
+          fatal(s"Modifier ${m.encodedId} is already in history")
+        }
+        .validate(header.isCorrespondingModifier(m)) {
+          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
+        }
+        .validate(isSemanticallyValid(header.id) != Invalid) {
+          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
+        }
+        .validate(header.height >= minimalHeight) {
+          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        }
+        .result
     }
   }
+
 
 }
 
@@ -187,10 +209,11 @@ object FullBlockProcessor {
   type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
 
   case class ToProcess(
-    fullBlock: ErgoFullBlock,
-    newModRow: ErgoPersistentModifier,
-    newBestAfterThis: Header,
-    blocksToKeep: Int,
-    bestFullChain: Seq[ErgoFullBlock]
-  )
+                        fullBlock: ErgoFullBlock,
+                        newModRow: ErgoPersistentModifier,
+                        newBestAfterThis: Header,
+                        blocksToKeep: Int,
+                        bestFullChain: Seq[ErgoFullBlock]
+                      )
+
 }

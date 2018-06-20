@@ -20,20 +20,16 @@ Taking all these concepts into consideration, Ergo's emission curve is as illust
 
 \begin{figure}[H]
     \centering
-    \begin{minipage}[b]{0.4\textwidth}
-
+    \begin{minipage}[b]{0.6\textwidth}
         \includegraphics[width=\textwidth]{img/EmissionCurve.png}
     \end{minipage}
-    \begin{minipage}[b]{0.4\textwidth}
-        \includegraphics[width=\textwidth]{img/EmissionRate.png}
-    \end{minipage}
-    \caption{Ergo mainnet emission rules
+    \caption{Ergo mainnet emission rule
     \label{fig:emission}}
 \end{figure}
 
 
-Instead of having implicit emission rules via a special type of transaction (e.g. coinbase transaction in Bitcoin),
-Ergo coins emission is defined explicitly by sigma-state transactional language.
+Instead of having an implicit emission rule via a special type of transaction (e.g. coinbase transaction in Bitcoin),
+Ergo coins emission rule is defined explicitly by sigma-state transactional language.
 All \ergo{} coins will be created in the genesis state in an output, protected by the following script:
 
 \begin{minted}{js}

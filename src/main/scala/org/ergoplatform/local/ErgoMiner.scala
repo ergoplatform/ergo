@@ -32,6 +32,7 @@ import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
@@ -127,8 +128,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onReaders: Receive = {
     case Readers(h, s, m) if s.isInstanceOf[UtxoStateReader] =>
-      val candidate = createCandidate(h, m, s.asInstanceOf[UtxoStateReader])
-      procCandidateBlock(candidate)
+      createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
+        case Success(candidate) => procCandidateBlock(candidate)
+        case Failure(e) => log.warn("Failed to produce candidate block.", e)
+      }
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {
@@ -140,7 +143,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def createCandidate(history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
-                              state: UtxoStateReader): CandidateBlock = {
+                              state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val height = bestHeaderOpt.map(_.height + 1).getOrElse(0)
 
@@ -196,6 +199,7 @@ object ErgoMiner extends ScorexLogging {
                      emission: CoinsEmission): ErgoTransaction = {
     state.emissionBox() match {
       case Some(emissionBox) =>
+        assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
         ErgoMiner.createCoinbase(height, feeBoxes, emissionBox, minerProp, emission)
       case None =>
         // TODO extract fees when emission is finished

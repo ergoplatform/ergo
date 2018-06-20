@@ -4,11 +4,12 @@ import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import scorex.core.ModifierId
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.util.{Failure, Success}
 
-class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends ScorexLogging with AutoCloseable {
+class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends ScorexLogging with AutoCloseable
+  with ScorexEncoding {
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = objectsStore.get(id)
     .flatMap { bBytes =>
@@ -16,7 +17,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
         case Success(b) =>
           Some(b)
         case Failure(e) =>
-          log.warn(s"Failed to parse block from db (bytes are: ${bBytes.mkString("-")}): ", e)
+          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${bBytes.mkString("-")}): ", e)
           None
       }
     }
@@ -25,7 +26,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
 
-  def contains(id: ModifierId): Boolean = get(id).isDefined
+  def contains(id: ModifierId): Boolean = objectsStore.contains(id)
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],

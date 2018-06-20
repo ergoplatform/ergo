@@ -250,6 +250,8 @@ components:
         - bestFullHeaderId
         - previousFullHeaderId
         - bestHeaderId
+        - headersScore
+        - fullBlocksScore
         - stateRoot
         - stateType
         - stateVersion

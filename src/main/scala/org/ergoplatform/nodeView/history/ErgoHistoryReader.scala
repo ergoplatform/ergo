@@ -54,21 +54,31 @@ trait ErgoHistoryReader
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
 
   /**
-    * Get ErgoPersistentModifier by it's id if it is in history
+    * @param id - modifier id
+    * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    historyStorage.modifierById(id)
-      .ensuring(_.forall(_.id sameElements id), s"Modifier ${Algos.encode(id)} id is incorrect")
-  }
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierById(id)
+    } else {
+      None
+    }
+  }.ensuring(_.forall(_.id sameElements id), s"Modifier ${Algos.encode(id)} id is incorrect")
 
   /**
-    * Get ErgoPersistentModifier of type T by it's id if it is in history
+    *
+    * @param id - modifier id
+    * @tparam T - expected Type
+    * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
   @SuppressWarnings(Array("IsInstanceOf"))
   def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T@unchecked) if m.isInstanceOf[T] => Some(m)
     case _ => None
   }
+
+
+  override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
   /**
     * Id of best block to mine
@@ -78,7 +88,7 @@ trait ErgoHistoryReader
   /**
     * Check, that it's possible to apply modifier to history
     */
-  override def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
+  def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
   /**
     * Whether another's node syncinfo shows that another node is ahead or behind ours
@@ -195,7 +205,7 @@ trait ErgoHistoryReader
   def headerIdsAt(count: Int, offset: Int = 0): Seq[ModifierId] = (offset until (count + offset))
     .flatMap(h => headerIdsAtHeight(h).headOption)
 
-  protected def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)

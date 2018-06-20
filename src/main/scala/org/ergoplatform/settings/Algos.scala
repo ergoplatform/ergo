@@ -1,13 +1,13 @@
 package org.ergoplatform.settings
 
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
-import scorex.crypto.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
 import scala.util.Try
 
-object Algos {
+object Algos extends ScorexEncoding {
 
   type HF = Blake2b256.type
 
@@ -24,7 +24,6 @@ object Algos {
   }
 
   val hash: HF = Blake2b256
-  val encoder = Base16
 
   val initialDifficulty = 1
 

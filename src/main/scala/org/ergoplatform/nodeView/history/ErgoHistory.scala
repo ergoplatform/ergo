@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
 
 import scala.util.Try
 
@@ -45,7 +45,8 @@ trait ErgoHistory
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
     with BlockTransactionsProcessor
-    with ScorexLogging {
+    with ScorexLogging
+    with ScorexEncoding {
 
   override type NVCT = ErgoHistory
 

@@ -37,9 +37,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  //TODO implement correctly
-  def stateHeight: Int = 0
-
   val store: Store
 
   def closeStorage: Unit = {

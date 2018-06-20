@@ -93,7 +93,7 @@ class DigestState protected(override val version: VersionTag,
       }
 
     case fb: ErgoFullBlock if !settings.verifyTransactions =>
-      //TODO should not get this messages from node view holders
+      log.warn("Should not get full blocks from node view holders if !settings.verifyTransactions")
       Try(this)
 
     case h: Header if !settings.verifyTransactions =>
@@ -101,12 +101,11 @@ class DigestState protected(override val version: VersionTag,
       update(VersionTag @@ h.id, h.stateRoot)
 
     case h: Header if settings.verifyTransactions =>
-      //TODO should not get this messages from node view holders
+      log.warn("Should not get header from node view holders if settings.verifyTransactions")
       Try(this)
 
     case a: Any =>
-      //todo: fail here? or not?
-      log.info(s"Unhandled modifier: $a")
+      log.warn(s"Unhandled modifier: $a")
       Try(this)
   }
 

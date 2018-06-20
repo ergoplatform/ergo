@@ -77,7 +77,7 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
       modifiersCache.put(fb.header.ADProofsId, fb.aDProofs.get)
     }
 
-    //history is empty - we can apply only a header at height=0 at this moment.
+    //The history is empty - we can apply only a header at height == 0 at this moment.
     //Out of 15 elements in the cache, the cache should propose a proper candidate
     val c1 = modifiersCache.popCandidate(history0).get
     c1.isInstanceOf[Header] shouldBe true
@@ -85,8 +85,10 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     h1.height shouldBe 0
 
     val history1 = history0.append(c1).get._1
-    val c2 = modifiersCache.popCandidate(history1).get
 
+    //We have only header of height == 0 in the history, so cache should return whether a header of height == 1
+    //or a non-header part of the full block at height == 0
+    val c2 = modifiersCache.popCandidate(history1).get
     val properCandidate = c2 match {
       case h: Header => h.height == 1
       case bt: BlockTransactions => bt.id sameElements h1.transactionsId

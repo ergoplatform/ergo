@@ -237,7 +237,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param startHeader - header to start
     * @param until       - stop condition
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
-    *         Note now it includes one header satisfying until condition! (TODO fix)
+    *         Note now it includes one header satisfying until condition!
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
@@ -279,8 +279,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  //TODO rework option.get
-  private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
+  private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 

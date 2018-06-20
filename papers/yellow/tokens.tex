@@ -1,6 +1,7 @@
-Token emission is incorporated without any modification of internal logic. One output can
-contain arbitrary number of different token kinds. They are stored in the
-register R3 as a sequence of $\{token\_id: amount\}$ tuples. This is the only kind of data
+Token emission is incorporated with just value one preservation law added, in addition to the standard one~(that is,
+sum of monetary values for transaction inputs should be equal to the corresponding sum for outputs). One output can
+hold tokens of multiple kinds, the maximum number of tokens per output is 4~(in addition to the main Ergo token).
+They are stored in the register R3 as a sequence of $\{token\_id: amount\}$ tuples. This is the only kind of data
 which can be stored in R3.  The emission is organized as appending an item to
 the dictionary. To avoid collisions, appended $token\_id$ must be equal to the
 $id$ of the first input of the generating transaction. The uniqueness of outputs

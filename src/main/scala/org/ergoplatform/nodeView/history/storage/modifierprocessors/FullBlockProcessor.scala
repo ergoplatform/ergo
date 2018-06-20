@@ -4,14 +4,13 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
-import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity.Invalid
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 /**
   * Contains functions required by History to process Transactions and Proofs when we have them.
@@ -91,15 +90,17 @@ trait FullBlockProcessor extends HeadersProcessor {
       }
   }
 
+  /**
+    *
+    * @param id - if of a header to compare
+    * @return whether block with id `id` is better, than current best block
+    *         if scores are equal return false
+    */
   private def isBetterChain(id: ModifierId): Boolean = {
-    val isBetter = for {
-      bestFullBlockId <- bestFullBlockIdOpt
-      prevBestScore <- scoreOf(bestFullBlockId)
-      score <- scoreOf(id)
-      //TODO currentScore == prevBestScore
-    } yield score > prevBestScore
-
-    isBetter getOrElse false
+    (bestFullBlockIdOpt.flatMap(bfi => scoreOf(bfi)), scoreOf(id)) match {
+      case (Some(prevBestScore), Some(score)) if score > prevBestScore => true
+      case _ => false
+    }
   }
 
   private def nonBestBlock: BlockProcessing = {

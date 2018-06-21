@@ -79,7 +79,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     val wallet = ErgoWallet.readOrGenerate(settings)
     val memPool = ErgoMemPool.empty
-    val state = restoreConsistentState(ErgoState.readOrGenerate(settings, emission, Some(self)).asInstanceOf[MS], history)
+    val constants = StateConstants(Some(self), emission, settings.nodeSettings.keepVersions)
+    val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
     Some((history, state, wallet, memPool))
   }
 
@@ -94,7 +95,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case (Some(_), Some(_), StateType.Digest) =>
           DigestState.create(version, digest, dir, settings)
         case _ =>
-          ErgoState.readOrGenerate(settings, emission, Some(self))
+          ErgoState.readOrGenerate(settings, StateConstants(Some(self), emission, settings.nodeSettings.keepVersions))
       }
     }.asInstanceOf[State]
       .ensuring(_.rootHash sameElements digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest),

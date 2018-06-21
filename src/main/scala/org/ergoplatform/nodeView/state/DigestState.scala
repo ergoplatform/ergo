@@ -114,7 +114,7 @@ class DigestState protected(override val version: VersionTag,
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = ByteArrayWrapper(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
-      store.clean(ErgoState.KeepVersions)
+      store.clean(settings.keepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store, settings)
@@ -142,7 +142,7 @@ object DigestState {
              rootHashOpt: Option[ADDigest],
              dir: File,
              settings: ErgoSettings): DigestState = Try {
-    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions) //todo: read from settings
+    val store = new LSMStore(dir, keepVersions = settings.nodeSettings.keepVersions)
 
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>

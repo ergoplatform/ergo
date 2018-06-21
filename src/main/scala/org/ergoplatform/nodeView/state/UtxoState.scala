@@ -54,7 +54,7 @@ class UtxoState(override val version: VersionTag,
             override protected lazy val persistentProver = p
           }
         }
-        store.clean(ErgoState.KeepVersions)
+        store.clean(constants.keepVersions)
         rollbackResult
       case None =>
         Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
@@ -160,30 +160,27 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb)
   }
 
-  def create(dir: File, emission: CoinsEmission, nodeViewHolderRef: Option[ActorRef]): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
+  def create(dir: File, constants: StateConstants): UtxoState = {
+    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
-    val constants = StateConstants(nodeViewHolderRef, emission)
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, constants)
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     dir: File,
-                    emission: CoinsEmission,
-                    nodeViewHolderRef: Option[ActorRef]): UtxoState = {
+                    constants: StateConstants): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
-    val store = new LSMStore(dir, keepVersions = ErgoState.KeepVersions)
-    val constants = StateConstants(nodeViewHolderRef, emission)
+    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
 
     new UtxoState(ErgoState.genesisStateVersion, store, constants) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox(emission))),
+          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox(constants.emission))),
           paranoidChecks = true
         ).get
 

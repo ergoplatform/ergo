@@ -144,7 +144,6 @@ class UtxoState(override val version: VersionTag,
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxKey = Algos.hash("emission box key")
-  val ContextKey = Algos.hash("current state context")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
@@ -154,7 +153,7 @@ object UtxoState {
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
     val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => emissionBox.bytes).getOrElse(Array.empty)
-    val cb = ContextKey -> context.bytes
+    val cb = ErgoStateReader.ContextKey -> context.bytes
 
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }

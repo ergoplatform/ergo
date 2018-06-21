@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.WrappedUtxoState
@@ -14,11 +15,21 @@ import scala.util.Random
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
-  property("extractEmissionBox() should extract correct box") {
+
+  property("valid coinbase transaction generation when emission box is present") {
     val (us, bh) = createUtxoState()
-    forAll { seed: Int =>
-      val fb = validFullBlock(None, us, bh, new Random(seed))
-      us.extractEmissionBox(fb) should not be None
+    us.emissionBox() should not be None
+    val tx = ErgoMiner.createCoinbase(us, 0, Seq(), TrueLeaf, us.constants.emission)
+    us.validate(tx) shouldBe 'success
+  }
+
+  property("extractEmissionBox() should extract correct box") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh)
+
+      us.emissionBox() shouldBe None
+      val tx = ErgoMiner.createCoinbase(us, 0, bh.boxes.take(5).values.toSeq, TrueLeaf, us.constants.emission)
+      us.validate(tx) shouldBe 'success
     }
   }
 

@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, R3}
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -14,6 +15,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
+import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -29,6 +31,18 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val noProofGen: Gen[SerializedProverResult] =
     Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
+
+  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
+    seed <- genBytes(32)
+  } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
+
+  lazy val ergoBoxGen: Gen[ErgoBox] = for {
+    prop <- ergoPropositionGen
+    value <- positiveIntGen
+    reg <- positiveIntGen
+    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
+    boxId: Short <- Arbitrary.arbitrary[Short]
+  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
@@ -54,7 +68,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield ErgoTransaction(from, to)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
-
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenNoProp).map(l => BoxHolder(l))
 

@@ -129,8 +129,7 @@ components:
            format: int32
            example: 2
         interlinks:
-          # todo better description
-          description: Interlinks
+          description: A vector containing pointers to previous blocks, including the id of the previous block. See https://pdfs.semanticscholar.org/1969/453d7960eaca8cfbd642877925f5f5028ce5.pdf for more info
           type: array
           items:
             $ref: '#/components/schemas/Digest32'
@@ -141,9 +140,9 @@ components:
         transactionsRoot:
           $ref: '#/components/schemas/Digest32'
         nBits:
-          # todo actually it is unsigned int?
           type: integer
           format: int64
+          minimum: 0
           example: 19857408
         extensionHash:
           $ref: '#/components/schemas/Digest32'
@@ -208,9 +207,9 @@ components:
         stateRoot:
           $ref: '#/components/schemas/ADDigest'
         nBits:
-          # todo actually it is unsigned int?
           type: integer
           format: int64
+          minimum: 0
           example: 19857408
         adProofBytes:
           $ref: '#/components/schemas/SerializedAdProof'
@@ -449,7 +448,6 @@ paths:
             default: 0
       responses:
         '200':
-          # TODO : decide whether without `heightFrom` and/or `heightTo` the response will contain `limit` blocks stating from 0 + `offset`, or last `limit` blocks
           description: Array of header ids
           content:
             application/json:
@@ -750,7 +748,6 @@ paths:
           type: integer
           format: int32
           default: 0
-      # todo from timestamp?
     get:
       summary: Get current pool of the unconfirmed transactions pool
       operationId: getUnconfirmedTransactions

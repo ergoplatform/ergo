@@ -58,7 +58,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val state = recreatedState()
 
-    //todo: ensure that history is in certain mode
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
     val wallet = ErgoWallet.readOrGenerate(settings)

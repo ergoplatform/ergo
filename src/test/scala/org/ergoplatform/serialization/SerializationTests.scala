@@ -3,6 +3,7 @@ package org.ergoplatform.serialization
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
+import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 
 class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
@@ -21,6 +22,10 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
       val recovered = serializer.parseBytes(b.bytes)
       recovered.get shouldBe b
     }
+  }
+
+  property("ErgoStateContext serialization") {
+    checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
   }
 
   property("ErgoBox serialization") {

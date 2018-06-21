@@ -4,7 +4,7 @@ import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
@@ -15,12 +15,11 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Try}
 
-trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
 
   protected implicit val hf = Algos.hash
 
   val constants: StateConstants
-  val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
@@ -31,7 +30,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   }
 
   override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
-    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext()).map(_ => Unit))
+    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))
 
   /**
     * Extract emission box from transactions and save it to emissionBoxOpt
@@ -49,10 +48,7 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
     }
   }
 
-  // TODO implement
-  def stateContext(): ErgoStateContext = ErgoStateContext(0, rootHash)
-
-  def emissionBox(): Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxKey))
+  lazy val emissionBox: Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxKey))
     .flatMap(b => ErgoBoxSerializer.parseBytes(b.data).toOption)
 
   def boxById(id: ADKey): Option[ErgoBox] =

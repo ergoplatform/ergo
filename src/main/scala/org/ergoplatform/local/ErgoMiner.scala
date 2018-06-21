@@ -145,14 +145,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
-    val height = bestHeaderOpt.map(_.height + 1).getOrElse(0)
 
     //only transactions valid from against the current utxo state we take from the mem pool
     // todo: size should be limited, size limit should be chosen by miners votes. fix after voting implementation
     val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).take(10)
     // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(externalTransactions)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, height, feeBoxes, minerProp, emission)
+    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
     val txs = externalTransactions :+ coinbase
 
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
@@ -193,14 +192,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 object ErgoMiner extends ScorexLogging {
 
   def createCoinbase(state: UtxoStateReader,
-                     height: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
                      emission: CoinsEmission): ErgoTransaction = {
-    state.emissionBox() match {
+    state.emissionBox match {
       case Some(emissionBox) =>
         assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
-        ErgoMiner.createCoinbase(emissionBox, height, feeBoxes, minerProp, emission)
+        ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)
       case None =>
         val inputs = feeBoxes
           .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))

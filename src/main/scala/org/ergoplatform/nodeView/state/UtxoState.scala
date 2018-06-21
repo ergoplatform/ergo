@@ -2,16 +2,14 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.VersionTag
 import scorex.core.transaction.state.TransactionValidation
@@ -66,8 +64,6 @@ class UtxoState(override val version: VersionTag,
                                        expectedDigest: ADDigest,
                                        height: Height) = Try {
 
-    val blockchainState = ErgoStateContext(height, persistentProver.digest)
-
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
@@ -77,10 +73,10 @@ class UtxoState(override val version: VersionTag,
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      tx.statefulValidity(boxesToSpend, blockchainState).get
+      tx.statefulValidity(boxesToSpend, stateContext).get
     }.sum
 
-    if(totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+    if (totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
     val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
@@ -105,7 +101,8 @@ class UtxoState(override val version: VersionTag,
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
         val emissionBox = extractEmissionBox(fb)
-        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox)
+        val newStateContext = stateContext.appendHeader(fb.header)
+        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox, newStateContext)
 
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
@@ -146,18 +143,20 @@ class UtxoState(override val version: VersionTag,
 
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
-  val EmissionBoxKey = Algos.hash("emission box jey")
+  val EmissionBoxKey = Algos.hash("emission box key")
+  val ContextKey = Algos.hash("current state context")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
-                       emissionBoxOpt: Option[ErgoBox]): Seq[(Array[Byte], Array[Byte])] = {
+                       emissionBoxOpt: Option[ErgoBox],
+                       context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
-    val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => ErgoBoxSerializer.toBytes(emissionBox))
-      .getOrElse(Array.empty)
+    val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => emissionBox.bytes).getOrElse(Array.empty)
+    val cb = ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb)
+    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
   def create(dir: File, constants: StateConstants): UtxoState = {
@@ -175,13 +174,14 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val defaultStateContext = ErgoStateContext(Seq(), p.digest)
 
     new UtxoState(ErgoState.genesisStateVersion, store, constants) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest, emissionBoxOpt),
+          metadata(ErgoState.genesisStateVersion, p.digest, emissionBoxOpt, defaultStateContext),
           paranoidChecks = true
         ).get
 

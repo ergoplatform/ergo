@@ -5,15 +5,15 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext}
+import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.VersionTag
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.{ADDigest, ADValue}
-import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Remove}
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
@@ -44,8 +44,6 @@ class DigestState protected(override val version: VersionTag,
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
           Try {
-            val blockchainState = ErgoStateContext(fb.header.height, rootHash)
-
             val txs = fb.blockTransactions.txs
 
             val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
@@ -66,7 +64,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, blockchainState).get
+              tx.statefulValidity(boxesToSpend, stateContext).get
             }.sum
             if (totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 

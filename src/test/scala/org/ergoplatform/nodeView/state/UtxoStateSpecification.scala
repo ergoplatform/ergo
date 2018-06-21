@@ -229,5 +229,4 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-
 }

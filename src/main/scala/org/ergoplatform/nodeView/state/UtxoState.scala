@@ -168,6 +168,7 @@ object UtxoState {
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
+                    emissionBoxOpt: Option[ErgoBox],
                     dir: File,
                     constants: StateConstants): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
@@ -180,7 +181,7 @@ object UtxoState {
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest, Some(ErgoState.genesisEmissionBox(constants.emission))),
+          metadata(ErgoState.genesisStateVersion, p.digest, emissionBoxOpt),
           paranoidChecks = true
         ).get
 

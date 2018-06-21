@@ -84,7 +84,9 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock if settings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
-      this.validate(fb).flatMap(_ => update(VersionTag @@ fb.header.id, fb.header.stateRoot)).recoverWith {
+      this.validate(fb).flatMap{_ =>
+        update(fb.header)
+      }.recoverWith {
         case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ", e)
           Failure(e)
@@ -96,7 +98,7 @@ class DigestState protected(override val version: VersionTag,
 
     case h: Header if !settings.verifyTransactions =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
-      update(VersionTag @@ h.id, h.stateRoot)
+      update(h)
 
     case h: Header if settings.verifyTransactions =>
       log.warn("Should not get header from node view holders if settings.verifyTransactions")
@@ -123,9 +125,21 @@ class DigestState protected(override val version: VersionTag,
 
   def close(): Unit = store.close()
 
-  private def update(newVersion: VersionTag, newRootHash: ADDigest): Try[DigestState] = Try {
+  private def update(header: Header): Try[DigestState] = {
+    val version: VersionTag = VersionTag @@ header.id
+    val newContext = stateContext.appendHeader(header)
+    val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
+    update(version, header.stateRoot, Seq(cb))
+  }
+
+  private def update(newVersion: VersionTag,
+                     newRootHash: ADDigest,
+                     additionalData: Seq[(ByteArrayWrapper, ByteArrayWrapper)]): Try[DigestState] = Try {
     val wrappedVersion = ByteArrayWrapper(newVersion)
-    store.update(wrappedVersion, toRemove = Seq.empty, toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)))
+
+    store.update(wrappedVersion,
+      toRemove = Seq.empty,
+      toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)) ++ additionalData)
     new DigestState(newVersion, newRootHash, store, settings)
   }
 
@@ -148,7 +162,8 @@ object DigestState {
           new DigestState(version, rootHash, store, settings.nodeSettings)
         } else {
           val inVersion = VersionTag @@ store.lastVersionID.map(_.data).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings.nodeSettings).update(version, rootHash).get //sync store
+          new DigestState(inVersion, rootHash, store, settings.nodeSettings)
+            .update(version, rootHash, Seq()).get //sync store
         }
         state.ensuring(store.lastVersionID.get.data.sameElements(version))
       case (None, None) =>

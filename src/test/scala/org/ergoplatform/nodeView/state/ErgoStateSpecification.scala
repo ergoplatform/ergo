@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 
@@ -10,16 +11,16 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("stateContext should be the same for Utxo and Diget states") {
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
-    var height = 0
-    requireEqualStateContexts(us.stateContext, ds.stateContext, height)
+    var lastBlockOpt: Option[Header] = None
+    requireEqualStateContexts(us.stateContext, ds.stateContext, 0)
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
-      height = height + 1
-      requireEqualStateContexts(us.stateContext, ds.stateContext, height)
+      lastBlockOpt = Some(block.header)
+      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height + 1)
     }
   }
 

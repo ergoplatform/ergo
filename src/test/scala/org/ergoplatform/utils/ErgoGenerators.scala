@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHea
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.BoxHolder
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.{Arbitrary, Gen}
@@ -35,6 +35,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
+
+  lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
+    headers <- Gen.listOf(invalidHeaderGen).map(_.take(Constants.LastHeadersAvailableForTxValidation))
+    digest <- stateRootGen
+  } yield ErgoStateContext(headers, headers.lastOption.map(_.stateRoot).getOrElse(digest))
 
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- ergoPropositionGen

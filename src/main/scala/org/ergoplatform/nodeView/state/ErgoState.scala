@@ -37,8 +37,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  val store: Store
-
   def closeStorage: Unit = {
     log.warn("Closing state's store.")
     store.close()

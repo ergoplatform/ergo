@@ -18,8 +18,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("valid coinbase transaction generation when emission box is present") {
     val (us, bh) = createUtxoState()
-    us.emissionBox() should not be None
-    val tx = ErgoMiner.createCoinbase(us, 0, Seq(), TrueLeaf, us.constants.emission)
+    us.emissionBox should not be None
+    val tx = ErgoMiner.createCoinbase(us, Seq(), TrueLeaf, us.constants.emission)
     us.validate(tx) shouldBe 'success
   }
 
@@ -27,8 +27,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
 
-      us.emissionBox() shouldBe None
-      val tx = ErgoMiner.createCoinbase(us, 0, bh.boxes.take(5).values.toSeq, TrueLeaf, us.constants.emission)
+      us.emissionBox shouldBe None
+      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.toSeq, TrueLeaf, us.constants.emission)
       us.validate(tx) shouldBe 'success
     }
   }

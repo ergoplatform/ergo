@@ -34,9 +34,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val powScheme: PowScheme
 
-  //TODO alternative DDoS protection
-  protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
-
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
@@ -206,6 +203,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /** Validates given header
+    *
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
@@ -345,8 +343,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
-        .validate(heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
-          fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
+        .validate(heightOf(header.parentId).exists(h => headersHeight - h < config.keepVersions)) {
+          fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
         .validate(powScheme.verify(header)) {
           fatal(s"Wrong proof-of-work solution for $header")
@@ -358,4 +356,5 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
 
   }
+
 }

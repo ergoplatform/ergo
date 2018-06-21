@@ -58,8 +58,8 @@ object WrappedUtxoState {
             dir: File,
             emission: CoinsEmission,
             nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
-    val us = UtxoState.fromBoxHolder(boxHolder, dir, emission, nodeViewHolderRef)
-    val constants: StateConstants = StateConstants(nodeViewHolderRef, emission)
+    val constants = StateConstants(nodeViewHolderRef, emission, 200)
+    val us = UtxoState.fromBoxHolder(boxHolder, dir, constants)
     WrappedUtxoState(us, boxHolder, constants)
   }
 

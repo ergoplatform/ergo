@@ -21,7 +21,7 @@ class SynchronizationTestSpec(nodes: Seq[Node]) extends FreeSpec with Integratio
     } yield {
       log.debug(s"Headers at height ${b + blocksCount - forkDepth}: ${headers.mkString(",")}")
       headers.flatten
-    }, 10.minutes)
+    }, 20.minutes)
 
     val sample = headerIdsAtSameHeight.head
     headerIdsAtSameHeight should contain only sample

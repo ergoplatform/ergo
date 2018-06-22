@@ -36,19 +36,27 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     *
     * @param fb - ergo full block
     */
-  def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
-    val coinsAtHeight = constants.emission.remainingCoinsAfterHeight(fb.header.height)
-    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-      .find(o => o.value == coinsAtHeight && o.proposition == constants.genesisEmissionBox.proposition) match {
-      case Some(newEmissionBox) => Some(newEmissionBox)
-      case _ =>
-        log.warn(s"Emission box not found in block ${fb.encodedId}")
-        None
-    }
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = getEmissionBoxId() match {
+    case Some(id) =>
+      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(_.boxId sameElements id)) match {
+        case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
+          Some(tx.outputs.head)
+        case Some(_) =>
+          log.info(s"Last possible emission box consumed")
+          None
+        case None =>
+          log.warn(s"Emission box not found in block ${fb.encodedId}")
+          boxById(id)
+      }
+    case None =>
+      log.debug("No emission box: emission should be already finished before this block")
+      None
   }
 
-  def getEmissionBox(): Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
-    .flatMap(id => boxById(ADKey @@ id.data))
+  protected def getEmissionBoxId(): Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
+    .map(s => ADKey @@ s.data)
+
+  def getEmissionBox(): Option[ErgoBox] = getEmissionBoxId().flatMap(boxById)
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
@@ -24,39 +24,21 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("extractEmissionBox() should extract correct box") {
-    forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
+    var (us, bh) = createUtxoState()
+    us.getEmissionBox() should not be None
+    var lastBlockOpt: Option[Header] = None
+    forAll { seed: Int =>
+      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
+      val block = blBh._1
+      us.extractEmissionBox(block)  should not be None
+      lastBlockOpt = Some(block.header)
+      bh = blBh._2
+      us = us.applyModifier(block).get
 
-      us.getEmissionBox() shouldBe None
+      us.getEmissionBox() should not be None
       val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.toSeq, TrueLeaf, us.constants.emission)
       us.validate(tx) shouldBe 'success
     }
-  }
-
-  property("extractEmissionBox() should not extract fake box") {
-    var (us, bh) = createUtxoState()
-    val t = validTransactionsFromBoxHolder(bh)
-    val txs = t._1
-    bh = t._2
-
-    // first block that spends and creates emission box
-    val fb = validFullBlock(None, us, txs)
-    val newEmissionBox = us.extractEmissionBox(fb)
-    newEmissionBox should not be None
-    us = us.applyModifier(fb).get
-
-    // second block, that do not contain emission box
-    val fb2 = validFullBlock(None, us, bh)
-    us.extractEmissionBox(fb2) shouldBe None
-
-    // third block, that do contain box similar to emission one, but with lower amount
-    val ft = fb2.blockTransactions.txs.head
-    val fakeCandidate: ErgoBoxCandidate = new ErgoBoxCandidate(newEmissionBox.get.value + 1,
-      newEmissionBox.get.proposition,
-      newEmissionBox.get.additionalRegisters)
-    val txs3 = fb2.blockTransactions.txs.tail :+ ft.copy(outputCandidates = ft.outputCandidates.tail :+ fakeCandidate)
-    val fb3 = fb2.copy(blockTransactions = fb2.blockTransactions.copy(txs = txs3))
-    us.extractEmissionBox(fb3) shouldBe None
   }
 
   property("fromBoxHolder") {

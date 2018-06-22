@@ -35,16 +35,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val downloadListSize = networkSettings.networkChunkSize
 
   override def preStart(): Unit = {
-    val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+    val toDownloadCheckInterval = networkSettings.syncInterval
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
   private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
-    //todo: Full nodes should be here, not a random peer
+    //todo: a full node should be here, not a random peer
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
 

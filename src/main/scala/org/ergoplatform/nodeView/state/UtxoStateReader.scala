@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import io.iohk.iodb.{ByteArrayWrapper, Store}
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -48,7 +47,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  lazy val emissionBox: Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
+  def getEmissionBox(): Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
     .flatMap(id => boxById(ADKey @@ id.data))
 
   def boxById(id: ADKey): Option[ErgoBox] =

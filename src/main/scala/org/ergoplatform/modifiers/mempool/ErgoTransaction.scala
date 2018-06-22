@@ -76,7 +76,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
         case Success((res, cost)) =>
           if (!res) {
-            throw new Exception(s"Validation failed for input #$idx")
+            throw new Exception(s"Validation failed for input #$idx of tx ${toString}")
           } else {
             cost
           }
@@ -92,6 +92,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override type M = ErgoTransaction
 
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
+
+  override def toString: String = this.asJson.noSpaces
 }
 
 

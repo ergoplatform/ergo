@@ -48,8 +48,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  lazy val emissionBox: Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxKey))
-    .flatMap(b => ErgoBoxSerializer.parseBytes(b.data).toOption)
+  lazy val emissionBox: Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
+    .flatMap(id => boxById(ADKey @@ id.data))
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

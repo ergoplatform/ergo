@@ -67,6 +67,7 @@ val opts = Seq(
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
+scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
 
 homepage := Some(url("http://ergoplatform.org/"))
 

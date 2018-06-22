@@ -118,7 +118,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         // Just update state root hash
         log.debug(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(VersionTag @@ bestFullBlock.id), Some(bestFullBlock.header.stateRoot))
-      case (stateId, Some(historyBestBlock), state: State) =>
+      case (stateId, Some(historyBestBlock), state) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.debug(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +

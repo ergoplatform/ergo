@@ -18,7 +18,7 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  implicit val timeout = RouteTestTimeout(15.seconds dilated)
+  implicit val timeout = RouteTestTimeout(15.seconds.dilated)
 
   val prefix = "/blocks"
   val route = BlocksApiRoute(readersRef, minerRef, settings).route

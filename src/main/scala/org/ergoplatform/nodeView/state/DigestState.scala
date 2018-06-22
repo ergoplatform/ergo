@@ -36,7 +36,7 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock if notInitialized => Success()
+    case fb: ErgoFullBlock if notInitialized => Success(Unit)
 
     case fb: ErgoFullBlock =>
       fb.aDProofs match {
@@ -73,7 +73,7 @@ class DigestState protected(override val version: VersionTag,
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
-    case _: Header => Success()
+    case _: Header => Success(Unit)
 
     case a: Any =>
       Failure(new Error(s"Modifier not validated: $a"))

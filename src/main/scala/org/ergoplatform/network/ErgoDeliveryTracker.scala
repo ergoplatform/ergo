@@ -1,14 +1,12 @@
 package org.ergoplatform.network
 
-
 import akka.actor.{ActorContext, ActorRef}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
-
 import scala.collection.mutable
 import scala.concurrent.duration._
+
 
 class ErgoDeliveryTracker(context: ActorContext,
                           deliveryTimeout: FiniteDuration,

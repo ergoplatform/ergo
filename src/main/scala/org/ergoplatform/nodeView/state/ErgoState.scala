@@ -118,8 +118,8 @@ object ErgoState extends ScorexLogging {
                                constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val bh = BoxHolder(Seq(genesisEmissionBox(constants.emission)))
-    val emissionBox = Some(ErgoState.genesisEmissionBox(constants.emission))
+    val emissionBox = Some(genesisEmissionBox(constants.emission))
+    val bh = BoxHolder(emissionBox.toSeq)
 
     UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")

@@ -6,7 +6,7 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
@@ -143,7 +143,7 @@ class UtxoState(override val version: VersionTag,
 
 object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
-  val EmissionBoxKey = Algos.hash("emission box key")
+  val EmissionBoxIdKey = Algos.hash("emission box id key")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
@@ -152,7 +152,7 @@ object UtxoState {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
-    val eb = EmissionBoxKey -> emissionBoxOpt.map(emissionBox => emissionBox.bytes).getOrElse(Array.empty)
+    val eb = EmissionBoxIdKey -> emissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)

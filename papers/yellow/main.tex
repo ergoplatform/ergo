@@ -320,46 +320,7 @@ only. Keep all blocks from genesis if negative
 \par 
 ‘if(VerifyTransactions == false) require(BlocksToKeep == 0)‘ Mode from **"multimode.md"** can be determined as follows:
 
-\section{Ergo Block Structure}
-\subsection{ErgoMinimalHeader is a minimal data amount, required to calculate blockId:}
-payloadRootHash: Array[Byte] - root hash (or simple hash of all payload data) of block payload.
-nonce: Int - field to iterate and generate valid PoW.
-\subsection{ErgoHeader is a header to keep in History and transfer:}
-\vspace{1em}
-\begin{tabular}{ |p{2.5cm}||p{0.5cm}|p{7.5cm}|  }
- \hline
- \hline
- Field & Size & Description  \\
- \hline
- version  &  1 &  block version, to be increased on every soft- and hardfork  \\
- \hline
- parentId &  32 &  id of parent block  \\
- \hline
- interlinksRoot &  32 &  root hash of interlinks structure  \\
- \hline
- ADProofsRoot &  32 &  hash of ADProofs for transactions in a block \\
- \hline
- stateRoot &  32 &  root hash (for an AVL+ tree) of a state after block application  \\
- \hline
- transactionsRoot  &  32 &  root hash (for a Merkle tree) of transactions in a block  \\
- \hline
- timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
- \hline
- nonce &  8 &  Proof-of-Work nonce  \\
- \hline
-\end{tabular}
-
-\vspace{1em}
-Some of this fields may be calculated by node by itself: 
-
-  
-   \begin{itemize}
-     \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
-     \item interlinksRoot: if(PoPoWBootstrap == false).
-     \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
-     \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
-     \end{itemize}
-     
+\include{block}
 
 \section{Ergo Modifiers Processing}
 This section describes processing algorithm for Ergo modifiers in all security modes. Unlike most of blockchain systems, Ergo have the following types of **modifiers**: In-memory:

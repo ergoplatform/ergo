@@ -195,7 +195,7 @@ object ErgoMiner extends ScorexLogging {
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
                      emission: CoinsEmission): ErgoTransaction = {
-    state.getEmissionBox() match {
+    state.emissionBoxOpt match {
       case Some(emissionBox) =>
         assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
         ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)

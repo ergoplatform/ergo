@@ -11,5 +11,4 @@ object Constants {
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = hashLength
   val MaxTransactionCost: Long = 1000000    //todo: move to config
-  val LastHeadersAvailableForTxValidation: Int = 10
 }

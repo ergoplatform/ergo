@@ -37,9 +37,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
-    headers <- Gen.listOf(invalidHeaderGen).map(_.take(Constants.LastHeadersAvailableForTxValidation))
+    height <- positiveIntGen
     digest <- stateRootGen
-  } yield ErgoStateContext(headers, headers.lastOption.map(_.stateRoot).getOrElse(digest))
+  } yield ErgoStateContext(height, digest)
 
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- ergoPropositionGen

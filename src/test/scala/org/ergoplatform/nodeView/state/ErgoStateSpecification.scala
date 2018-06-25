@@ -108,7 +108,6 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     s1.height shouldBe expectedHeight
     s1.height shouldBe s2.height
     s1.digest shouldEqual s2.digest
-    s1.lastHeaders shouldEqual s2.lastHeaders
   }
 
 }

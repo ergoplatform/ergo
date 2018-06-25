@@ -83,6 +83,5 @@ object ErgoSettings extends ScorexLogging
   private def failWithError(msg: String): Nothing = {
     log.error(s"Stop application due to malformed configuration file: $msg")
     ErgoApp.forceStopApplication()
-    ???
   }
 }

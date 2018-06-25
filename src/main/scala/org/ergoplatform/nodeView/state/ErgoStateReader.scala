@@ -15,7 +15,7 @@ trait ErgoStateReader extends StateReader  with ScorexLogging {
     .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)
     .getOrElse {
       log.warn("Unable to parse state context, situation is only valid on empty state")
-      ErgoStateContext(Seq(), rootHash)
+      ErgoStateContext(0, rootHash)
     }
 
 }

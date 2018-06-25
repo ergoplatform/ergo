@@ -92,9 +92,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   /**
     *
-    * @param id - if of a header to compare
-    * @return whether block with id `id` is better, than current best block
-    *         if scores are equal return false
+    * @param id - id of a header to compare
+    * @return `true`, if block with id `id` is better, than current best block, `false` otherwise.
     */
   private def isBetterChain(id: ModifierId): Boolean = {
     (bestFullBlockIdOpt.flatMap(bfi => scoreOf(bfi)), scoreOf(id)) match {

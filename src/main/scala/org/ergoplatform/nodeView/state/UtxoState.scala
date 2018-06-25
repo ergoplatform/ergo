@@ -147,12 +147,12 @@ object UtxoState {
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
-                       emissionBoxOpt: Option[ErgoBox],
+                       currentEmissionBoxOpt: Option[ErgoBox],
                        context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
     val bestVersion = bestVersionKey -> modId
-    val eb = EmissionBoxIdKey -> emissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
+    val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
@@ -166,21 +166,21 @@ object UtxoState {
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
-                    emissionBoxOpt: Option[ErgoBox],
+                    currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
                     constants: StateConstants): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext(Seq(), p.digest)
+    val defaultStateContext = ErgoStateContext(0, p.digest)
 
     new UtxoState(ErgoState.genesisStateVersion, store, constants) {
       override protected lazy val persistentProver =
         PersistentBatchAVLProver.create(
           p,
           storage,
-          metadata(ErgoState.genesisStateVersion, p.digest, emissionBoxOpt, defaultStateContext),
+          metadata(ErgoState.genesisStateVersion, p.digest, currentEmissionBoxOpt, defaultStateContext),
           paranoidChecks = true
         ).get
 

@@ -38,7 +38,7 @@ case class Header(version: Version,
   override lazy val id: ModifierId = ModifierId @@ powHash
 
   lazy val powHash: Digest32 = {
-    // implementations of pow hash similar to ZCash.
+    // An implementation of a PoW function which is similar to one used in ZCash.
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
     val bytes = HeaderSerializer.bytesWithoutPow(this)

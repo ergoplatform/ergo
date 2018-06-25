@@ -32,11 +32,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))
 
   /**
-    * Extract emission box from transactions and save it to emissionBoxOpt
     *
     * @param fb - ergo full block
+    * @return emission box from this block transactions
     */
-  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = getEmissionBoxId() match {
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(_.boxId sameElements id)) match {
         case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
@@ -53,10 +53,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       None
   }
 
-  protected def getEmissionBoxId(): Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
+  protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
     .map(s => ADKey @@ s.data)
 
-  def getEmissionBox(): Option[ErgoBox] = getEmissionBoxId().flatMap(boxById)
+  def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

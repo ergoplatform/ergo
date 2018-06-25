@@ -23,7 +23,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
   /**
     * Constructs SPV Proof from KLS16 paper
-    * TODO replace to NiPoPoW
+    * TODO: replace with KMZ17" (or NiPoPoW)
     *
     * @param m - parameter "m" from the paper (minimal length of innerchain to include)
     * @param k - parameter "k" from the paper (chain suffix)

@@ -8,7 +8,7 @@ import scala.util.Random
 
 class ErgoStateSpecification extends ErgoPropertyTest {
 
-  property("stateContext should be the same for Utxo and Diget states") {
+  property("stateContext should be the same for Utxo and Digest states") {
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
     var lastBlockOpt: Option[Header] = None

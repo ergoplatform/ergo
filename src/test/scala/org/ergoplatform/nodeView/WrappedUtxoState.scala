@@ -35,8 +35,8 @@ class WrappedUtxoState(override val version: VersionTag,
   override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedUtxoState] = super.applyModifier(mod) match {
     case Success(us) =>
       mod match {
-        case ct: TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction@unchecked]
-          if ct.transactions.forall(_.isInstanceOf[ErgoTransaction]) =>
+        case ct: TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction@unchecked] =>
+          // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
           val changes = ErgoState.stateChanges(ct.transactions)
           val updHolder = versionedBoxHolder.applyChanges(

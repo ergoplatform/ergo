@@ -4,7 +4,7 @@ import com.google.common.primitives.{Bytes, Ints}
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction]
-    with ModifierWithDigest {
+    with BlockSection {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 

@@ -33,14 +33,14 @@ trait FullBlockProcessor extends HeadersProcessor {
   /** Process full block when we have one.
     *
     * @param fullBlock - block to process
-    * @param txsAreNew - flag, that transactions where added last
+    * @param newMod - new modifier we are going to put in history
     * @return ProgressInfo required for State to process to be consistent with History
     */
-  protected def processFullBlock(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ProgressInfo[ErgoPersistentModifier] = {
-    val newModRow = calculateNewModRow(fullBlock, txsAreNew)
+  protected def processFullBlock(fullBlock: ErgoFullBlock,
+                                 newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     val bestFullChain = calculateBestFullChain(fullBlock)
     val newBestAfterThis = bestFullChain.last.header
-    processing(ToProcess(fullBlock, newModRow, newBestAfterThis, config.blocksToKeep, bestFullChain))
+    processing(ToProcess(fullBlock, newMod, newBestAfterThis, config.blocksToKeep, bestFullChain))
   }
 
   private def processing: BlockProcessing =
@@ -110,15 +110,6 @@ trait FullBlockProcessor extends HeadersProcessor {
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
-  private def calculateNewModRow(fullBlock: ErgoFullBlock, txsAreNew: Boolean): ErgoPersistentModifier = {
-    if (txsAreNew) {
-      fullBlock.blockTransactions
-    } else {
-      fullBlock.aDProofs
-        .getOrElse(throw new NoSuchElementException("Only transactions can be new when proofs are empty"))
-    }
-  }
-
   private def calculateBestFullChain(fb: ErgoFullBlock): Seq[ErgoFullBlock] = {
     val continuations = continuationHeaderChains(fb.header, h => getFullBlock(h).nonEmpty).map(_.tail)
     val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten)
@@ -164,43 +155,6 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def storageVersion(newModRow: ErgoPersistentModifier) = ByteArrayWrapper(newModRow.id)
-
-  protected def modifierValidation(m: ErgoPersistentModifier,
-                                   headerOpt: Option[Header]): Try[Unit] = {
-    headerOpt.map { header =>
-      val minimalHeight = if (contains(header.transactionsId) && !(header.transactionsId sameElements m.id)) {
-        // ADProofs for already block transactions that are already in history. Do not validate whether it is too old
-        -1
-      } else {
-        pruningProcessor.minimalFullBlockHeight
-      }
-      PayloadValidator.validate(m, header, minimalHeight).toTry
-    }.getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
-  }
-
-  /**
-    * Validator for BlockTransactions and ADProofs
-    */
-  object PayloadValidator extends ModifierValidator with ScorexEncoding {
-
-    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult = {
-      failFast
-        .validate(!historyStorage.contains(m.id)) {
-          fatal(s"Modifier ${m.encodedId} is already in history")
-        }
-        .validate(header.isCorrespondingModifier(m)) {
-          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
-        }
-        .validate(isSemanticallyValid(header.id) != Invalid) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
-        }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
-        }
-        .result
-    }
-  }
-
 
 }
 

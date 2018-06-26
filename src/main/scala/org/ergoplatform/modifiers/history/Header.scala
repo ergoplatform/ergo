@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -32,6 +32,9 @@ case class Header(version: Version,
                   extensionHash: Digest32,
                   equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
+
+
+  override type M = Header
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
@@ -58,18 +61,18 @@ case class Header(version: Version,
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
   lazy val transactionsId: ModifierId =
-    ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+    BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
-
-  override type M = Header
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
+
+
 
   /**
     * Checks, that modifier m corresponds t this header
@@ -79,6 +82,7 @@ case class Header(version: Version,
     case t: BlockTransactions => transactionsRoot sameElements t.digest
     case _ => false
   }
+
 }
 
 object Header {

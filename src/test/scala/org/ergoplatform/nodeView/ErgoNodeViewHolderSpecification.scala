@@ -56,7 +56,6 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     NodeViewHolderConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = false),
     NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true),
     NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false),
-    //TODO     NodeViewHolderConfig(false, false, ???),
   )
 
   private def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {

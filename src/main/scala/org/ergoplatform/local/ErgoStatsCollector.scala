@@ -34,11 +34,8 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
   }
 
-  private val votes = Algos.encode(Algos.hash(settings.scorexSettings.network.nodeName).take(5))
-
-  // TODO get actual votes and isMining from miner
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
-    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, votes, None, None, None, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
@@ -87,7 +84,6 @@ object ErgoStatsCollector {
                       stateType: StateType,
                       stateVersion: Option[String],
                       isMining: Boolean,
-                      votes: String,
                       bestHeaderOpt: Option[Header],
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
@@ -113,7 +109,6 @@ object ErgoStatsCollector {
         "stateType" -> ni.stateType.stateTypeName.asJson,
         "stateVersion" -> ni.stateVersion.asJson,
         "isMining" -> ni.isMining.asJson,
-        "votes" -> ni.votes.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson
       ).asJson

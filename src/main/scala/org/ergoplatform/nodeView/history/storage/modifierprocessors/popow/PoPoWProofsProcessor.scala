@@ -23,6 +23,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
   /**
     * Constructs SPV Proof from KLS16 paper
+    * TODO: replace with KMZ17" (or NiPoPoW)
     *
     * @param m - parameter "m" from the paper (minimal length of innerchain to include)
     * @param k - parameter "k" from the paper (chain suffix)
@@ -36,9 +37,6 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     val suffix: HeaderChain = lastHeaders(k)
     val suffixFirstHeader = suffix.head
 
-    //TODO rework option.get
-    def headerById(id: ModifierId): Header = typedModifierById[Header](id).get
-
     @tailrec
     def constructProof(depth: Int): (Int, Seq[Header]) = {
       require(depth >= 0)
@@ -47,7 +45,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
       def loop(acc: Seq[Header]): Seq[Header] = {
         val interHeader = acc.head
         if (interHeader.interlinks.lengthCompare(depth) > 0) {
-          val header = headerById(interHeader.interlinks(depth))
+          val header = typedModifierById[Header](interHeader.interlinks(depth)).get
           loop(header +: acc)
         } else {
           acc.dropRight(1)

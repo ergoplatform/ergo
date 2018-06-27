@@ -51,7 +51,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private val minerProp: Value[SBoolean.type] = {
     //TODO extract from wallet
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.wallet.seed.arr)).publicImage
+    val secret = BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.agentName.getBytes("UTF-8"))
+    DLogProverInput(secret).publicImage
   }
 
   override def preStart(): Unit = {

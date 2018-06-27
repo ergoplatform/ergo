@@ -37,11 +37,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  //TODO implement correctly
-  def stateHeight: Int = 0
-
-  val store: Store
-
   def closeStorage: Unit = {
     log.warn("Closing state's store.")
     store.close()
@@ -57,9 +52,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 }
 
 object ErgoState extends ScorexLogging {
-
-  //TODO move to settings?
-  val KeepVersions = 200
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
@@ -123,15 +115,15 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               emission: CoinsEmission,
-                               nodeViewHolderRef: Option[ActorRef]): (UtxoState, BoxHolder) = {
+                               constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val bh = BoxHolder(Seq(genesisEmissionBox(emission)))
+    val emissionBox = Some(genesisEmissionBox(constants.emission))
+    val bh = BoxHolder(emissionBox.toSeq)
 
-    UtxoState.fromBoxHolder(bh, stateDir, emission, nodeViewHolderRef).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      us.rootHash.sameElements(emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+      us.rootHash.sameElements(constants.emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
     }) -> bh
   }
 
@@ -145,15 +137,14 @@ object ErgoState extends ScorexLogging {
   lazy val genesisStateVersion: VersionTag = VersionTag @@ Array.fill(32)(1: Byte)
 
   def readOrGenerate(settings: ErgoSettings,
-                     emission: CoinsEmission,
-                     nodeViewHolderRef: Option[ActorRef]): ErgoState[_] = {
+                     constants: StateConstants): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, emission, nodeViewHolderRef)
-      case _ => ErgoState.generateGenesisUtxoState(dir, emission, nodeViewHolderRef)._1
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
   }
 }

@@ -29,8 +29,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
 
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self,
-    timeProvider)
+  override protected val deliveryTracker =
+    new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
   private val downloadListSize = networkSettings.networkChunkSize
 
@@ -42,6 +42,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
+    log.info(s"Requested download of $modifierIds")
+
     modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
     //todo: a full node should be here, not a random peer

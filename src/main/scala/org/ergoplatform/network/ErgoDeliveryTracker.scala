@@ -15,11 +15,12 @@ class ErgoDeliveryTracker(context: ActorContext,
                           timeProvider: NetworkTimeProvider)
   extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
-  private val ToDownloadRetryInterval = 10.seconds
+  private val ToDownloadRetryInterval = 60.seconds
   private val ToDownloadLifetime = 1.hour
-  // Modifiers we need to download, but do not know peer that have this modifier
-  // TODO we may try to guess this peers using delivered map
-  private val expectingFromRandom: mutable.Map[ModifierIdAsKey, ToDownloadStatus] = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
+
+  // Modifiers we need to download but do not know a peer that has this modifier
+  // TODO we may try to guess such peers using delivered map
+  private val expectingFromRandom = mutable.Map[ModifierIdAsKey, ToDownloadStatus]()
 
   def isExpectingFromRandom: Boolean = expectingFromRandom.nonEmpty
 
@@ -52,7 +53,7 @@ class ErgoDeliveryTracker(context: ActorContext,
   }
 
   /**
-    * Id's that are already in queue to download but are not downloaded yet and were not requested recently
+    * Ids which are already in queue to download but are not downloaded yet and were not requested recently
     */
   def idsExpectingFromRandomToRetry(): Seq[(ModifierTypeId, ModifierId)] = {
     val currentTime = timeProvider.time()
@@ -62,7 +63,7 @@ class ErgoDeliveryTracker(context: ActorContext,
   }
 
   /**
-    * Modifier downloaded
+    * A modifier has been downloaded
     */
   override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
     if (expectingFromRandom.contains(key(mid))) {
@@ -72,5 +73,4 @@ class ErgoDeliveryTracker(context: ActorContext,
       super.receive(mtid, mid, cp)
     }
   }
-
 }

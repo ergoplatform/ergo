@@ -58,7 +58,7 @@ class PoPoWProofUtils(powScheme: PowScheme) {
       .forall(s => s(1).interlinks(proof.i) sameElements s.head.id)) {
       Failure(new Error(s"Innerchain links are incorrect in $proof"))
     } else {
-      Success()
+      Success(Unit)
     }
   }
 

@@ -21,9 +21,6 @@ class WrappedUtxoState(override val version: VersionTag,
                        constants: StateConstants)
   extends UtxoState(version, store, constants) {
 
-  private type TCPMOD =
-    TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction]
-
   def size: Int = versionedBoxHolder.size
 
   def takeBoxes(count: Int): Seq[ErgoBox] = versionedBoxHolder.take(count)._1
@@ -38,7 +35,9 @@ class WrappedUtxoState(override val version: VersionTag,
   override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedUtxoState] = super.applyModifier(mod) match {
     case Success(us) =>
       mod match {
-        case ct: TCPMOD =>
+        case ct: TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction@unchecked] =>
+          // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
+
           val changes = ErgoState.stateChanges(ct.transactions)
           val updHolder = versionedBoxHolder.applyChanges(
             ByteArrayWrapper(us.version),
@@ -58,8 +57,9 @@ object WrappedUtxoState {
             dir: File,
             emission: CoinsEmission,
             nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
-    val us = UtxoState.fromBoxHolder(boxHolder, dir, emission, nodeViewHolderRef)
-    val constants: StateConstants = StateConstants(nodeViewHolderRef, emission)
+    val constants = StateConstants(nodeViewHolderRef, emission, 200)
+    val emissionBox = Some(ErgoState.genesisEmissionBox(constants.emission))
+    val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, constants)
     WrappedUtxoState(us, boxHolder, constants)
   }
 

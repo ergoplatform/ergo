@@ -65,11 +65,9 @@ val opts = Seq(
   "-XX:+ParallelRefProcEnabled",
   "-XX:+UseStringDeduplication")
 
-// todo after adding sbt-native-packager
-//javaOptions in Universal ++= opts.map(opt => "-J" + opt)
-
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
+scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
 
 homepage := Some(url("http://ergoplatform.org/"))
 

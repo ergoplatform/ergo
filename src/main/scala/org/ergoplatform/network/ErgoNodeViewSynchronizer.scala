@@ -42,8 +42,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
-    log.info(s"Requested download of $modifierIds")
-
     modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
     //todo: a full node should be here, not a random peer
@@ -78,12 +76,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(mod)
   }
 
+  //todo: this code is nightmare, currentQueue should include delivered(or modifiers cache?) and expected,
+  //todo: nextModifiersToDownload is not efficient
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val currentQueue = deliveryTracker.expectingFromRandomQueue
-        val newIds = h.nextModifiersToDownload(downloadListSize - currentQueue.size, currentQueue)
+        val currentQueue = deliveryTracker.expectingAndDelivered
+        val newIds = h.nextModifiersToDownload(downloadListSize, currentQueue)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }

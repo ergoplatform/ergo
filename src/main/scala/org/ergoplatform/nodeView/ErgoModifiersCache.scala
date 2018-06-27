@@ -29,13 +29,14 @@ class ErgoModifiersCache(override val maxSize: Int)
 
     @tailrec
     def cacheIteration(called: Int): Option[K] = {
-      val expectedFullBlockParts = history
+      val expectedFullBlockPartIds = history
         .headerIdsAtHeight(history.fullBlockHeight + 1)
         .flatMap(id => history.typedModifierById[Header](id))
         .flatMap(h => Seq(mutable.WrappedArray.make[Byte](h.transactionsId), mutable.WrappedArray.make[Byte](h.ADProofsId)))
-        .find(id => contains(id))
-        .flatMap(id => cache.get(id))
         .toSeq
+
+      val foundBlockParts = expectedFullBlockPartIds
+        .flatMap(id => cache.get(id))
 
       val headerToApply =
         cache
@@ -43,7 +44,7 @@ class ErgoModifiersCache(override val maxSize: Int)
           .map(_._2)
           .toSeq
 
-      val mods = expectedFullBlockParts ++ headerToApply
+      val mods = foundBlockParts ++ headerToApply
 
       if(mods.isEmpty) None else {
         val mod = mods(Random.nextInt(mods.size))

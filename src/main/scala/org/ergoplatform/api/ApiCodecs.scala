@@ -43,7 +43,9 @@ trait ApiCodecs {
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
 
-  implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = Algos.encode(_).asJson
+  implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>
+    Algos.encode(in.toArray).asJson
+  }
 
   implicit val modifierIdEncoder: Encoder[ModifierId] = _.array.asJson
 

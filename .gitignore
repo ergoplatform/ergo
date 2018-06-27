@@ -25,7 +25,6 @@ my-application.conf
 # compiled docs
 *.pdf
 
-
 # db files
 *.data
 ergo/

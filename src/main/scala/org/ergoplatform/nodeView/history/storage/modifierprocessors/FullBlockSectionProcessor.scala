@@ -47,17 +47,12 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   private def getFullBlockByBlockSection(m: BlockSection): Option[ErgoFullBlock] = {
     typedModifierById[Header](m.headerId).flatMap { h =>
       m match {
-        case txs: BlockTransactions if !requireProofs => Some(ErgoFullBlock(h, txs, None))
+        case txs: BlockTransactions if !requireProofs =>
+          Some(ErgoFullBlock(h, txs, None))
         case txs: BlockTransactions =>
-          typedModifierById[ADProofs](h.ADProofsId) match {
-            case Some(proofs) => Some(ErgoFullBlock(h, txs, Some(proofs)))
-            case _ => None
-          }
+          typedModifierById[ADProofs](h.ADProofsId).map(proofs => ErgoFullBlock(h, txs, Some(proofs)))
         case proofs: ADProofs =>
-          typedModifierById[BlockTransactions](h.transactionsId) match {
-            case Some(txs) => Some(ErgoFullBlock(h, txs, Some(proofs)))
-            case _ => None
-          }
+          typedModifierById[BlockTransactions](h.transactionsId).map(txs => ErgoFullBlock(h, txs, Some(proofs)))
       }
     }
   }
@@ -80,7 +75,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
-        .validate(isSemanticallyValid(header.id) != Invalid) {
+        .validateSemantics(isSemanticallyValid(header.id)) {
           fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
         }
         .validate(header.height >= minimalHeight) {

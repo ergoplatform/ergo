@@ -229,10 +229,6 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-
-      case m =>
-        throw new Error(s"Unsupported settings combination verifyTransactions==${m._1}, " +
-          s"poPoWBootstrap==${m._2}")
     }
     history
   }

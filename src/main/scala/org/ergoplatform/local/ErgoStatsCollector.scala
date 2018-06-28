@@ -11,6 +11,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
+import scorex.core.ModifierId
 import scorex.core.network.Handshake
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
@@ -35,7 +36,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
   }
 
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
-    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None, None,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
@@ -54,6 +55,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
+        commonBlockId = h.commonBlockIdOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
       )
@@ -87,6 +89,7 @@ object ErgoStatsCollector {
                       bestHeaderOpt: Option[Header],
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
+                      commonBlockId: Option[ModifierId],
                       fullBlocksScore: Option[BigInt],
                       launchTime: Long) {
   }
@@ -108,6 +111,7 @@ object ErgoStatsCollector {
         "stateRoot" -> ni.stateRoot.asJson,
         "stateType" -> ni.stateType.stateTypeName.asJson,
         "stateVersion" -> ni.stateVersion.asJson,
+        "commonBlockId" -> ni.commonBlockId.map(Algos.encode).asJson,
         "isMining" -> ni.isMining.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson

@@ -28,7 +28,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     history.bestFullBlockOpt shouldBe fullBlocksFork.lastOption
     history.bestHeaderOpt shouldBe headersFork.lastOption.map(_.header)
-    history.commonBlockId.get shouldEqual common.head.id
+    history.commonBlockIdOpt.get shouldEqual common.head.id
   }
 
 

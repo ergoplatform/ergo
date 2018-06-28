@@ -67,6 +67,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
 
   /**
+    * Common block between bestHeader and bestFullBlock
+    */
+  def commonBlockId: Option[ModifierId] = {
+    bestFullBlockOpt match {
+      case Some(fb) =>
+        headerChainBack(config.blocksToKeep,
+          fb.header,
+          h => headerIdsAtHeight(h.height).headOption.forall(_ sameElements h.id))
+          .headOption.map(_.id)
+      case None => None
+    }
+  }
+
+  /**
     * @return height of best header with transacions and proofs
     */
   def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)

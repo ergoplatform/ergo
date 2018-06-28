@@ -5,6 +5,10 @@ import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Try}
 
+/**
+  * Trait, that implements BlockSectionProcessor interfaces for regime, where node only
+  * downloads block headers
+  */
 trait EmptyBlockSectionProcessor extends BlockSectionProcessor {
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] =

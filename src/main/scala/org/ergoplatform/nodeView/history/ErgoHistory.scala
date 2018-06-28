@@ -39,7 +39,7 @@ trait ErgoHistory
     with ErgoHistoryReader {
 
   override type NVCT = ErgoHistory
-  protected lazy val adState: Boolean = config.stateType.requireProofs
+  override protected lazy val requireProofs: Boolean = config.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
 

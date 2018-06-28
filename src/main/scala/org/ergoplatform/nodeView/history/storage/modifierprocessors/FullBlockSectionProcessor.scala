@@ -10,9 +10,11 @@ import scorex.core.validation.{ModifierValidator, RecoverableModifierError, Vali
 
 import scala.util.{Failure, Try}
 
+/**
+  * Trait, that implements BlockSectionProcessor interfaces for regimes, where node download
+  * and process full blocks
+  */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
-
-  protected def adState: Boolean
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     getFullBlockByBlockSection(m) match {
@@ -25,25 +27,27 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
   override protected def validate(m: BlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId).map { header =>
-      val minimalHeight = if (contains(header.transactionsId) && !(header.transactionsId sameElements m.id)) {
-        // ADProofs for already block transactions that are already in history. Do not validate whether it is too old
-        -1
-      } else {
-        pruningProcessor.minimalFullBlockHeight
+      val minimalHeight = m match {
+        case proofs: ADProofs if contains(header.transactionsId) =>
+          // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
+          -1
+        case _ => pruningProcessor.minimalFullBlockHeight
       }
+
       PayloadValidator.validate(m, header, minimalHeight).toTry
     }.getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
   }
 
   /**
     * Trying to construct full block with modifier `m` and data, kept in history
+    *
     * @param m - new modifier
     * @return Some(ErgoFullBlock) if block construction is possible, None otherwise
     */
   private def getFullBlockByBlockSection(m: BlockSection): Option[ErgoFullBlock] = {
     typedModifierById[Header](m.headerId).flatMap { h =>
       m match {
-        case txs: BlockTransactions if !adState => Some(ErgoFullBlock(h, txs, None))
+        case txs: BlockTransactions if !requireProofs => Some(ErgoFullBlock(h, txs, None))
         case txs: BlockTransactions =>
           typedModifierById[ADProofs](h.ADProofsId) match {
             case Some(proofs) => Some(ErgoFullBlock(h, txs, Some(proofs)))

@@ -71,8 +71,6 @@ case class Header(version: Version,
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
-
-
   /**
     * Checks, that modifier m corresponds t this header
     */

@@ -13,9 +13,6 @@ object Algos extends ScorexEncoding {
 
   def encode(bytes: Array[Byte]): String = encoder.encode(bytes)
 
-  //TODO: move this to crypto [[Base16]] class
-  def encode(bytes: Seq[Byte]): String = bytes.map("%02x".format(_)).mkString
-
   def decode(str: String): Try[Array[Byte]] = encoder.decode(str)
 
   def blockIdDifficulty(id: Array[Byte]): BigInt = {

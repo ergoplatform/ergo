@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
@@ -23,8 +24,6 @@ import sigmastate.serialization.Serializer.{Consumed, Position}
 
 import scala.util.{Failure, Success, Try}
 
-
-case class ErgoStateContext(height: Long, lastUtxoDigest: ADDigest)
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
@@ -60,7 +59,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
     require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 
-    val lastUtxoDigest = AvlTreeData(blockchainState.lastUtxoDigest, ErgoBox.BoxId.size)
+    val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
 
     val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
       val input = inputs(idx)
@@ -77,7 +76,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
         case Success((res, cost)) =>
           if (!res) {
-            throw new Exception(s"Validation failed for input #$idx")
+            throw new Exception(s"Validation failed for input #$idx of tx ${toString}")
           } else {
             cost
           }
@@ -93,6 +92,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override type M = ErgoTransaction
 
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
+
+  override def toString: String = this.asJson.noSpaces
 }
 
 

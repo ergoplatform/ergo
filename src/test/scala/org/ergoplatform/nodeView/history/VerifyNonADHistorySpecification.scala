@@ -11,17 +11,38 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
+  property("commonBlockId() in case of bestHeader and bestFullBlock are on different forks") {
+    var history = genHistory()
+    val common = genChain(1, history)
+    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+      history.pruningProcessor.updateBestFullBlock(common.last.header)
+    }
+    history = applyChain(history, common)
+    history.bestFullBlockOpt shouldBe Some(common.head)
+
+    val headersFork = genChain(3, history).tail
+    history = applyHeaderChain(history, HeaderChain(headersFork.map(_.header)))
+
+    val fullBlocksFork = genChain(2, history).tail
+    history = applyChain(history, fullBlocksFork)
+
+    history.bestFullBlockOpt shouldBe fullBlocksFork.lastOption
+    history.bestHeaderOpt shouldBe headersFork.lastOption.map(_.header)
+    history.commonBlockId.get shouldEqual common.head.id
+  }
+
+
   property("proofs and transactions application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
-    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
     history = history.append(chain.tail.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
-    val pi1 =  history.append(chain.head.blockTransactions).get._2
+    val pi1 = history.append(chain.head.blockTransactions).get._2
     history.bestFullBlockOpt.get shouldBe chain.tail.head
     pi1.toApply.length shouldBe 2
 
@@ -29,7 +50,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt.get.header.height shouldBe chain.tail.head.header.height
 
     val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
-    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2,3,4,5)
+    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2, 3, 4, 5)
   }
 
   property("bootstrap from headers and last full blocks") {
@@ -42,7 +63,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
-    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
 

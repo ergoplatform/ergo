@@ -243,6 +243,7 @@ components:
       type: object
       required:
         - name
+        - commonBlockId
         - appVersion
         - fullHeight
         - headersHeight
@@ -281,6 +282,12 @@ components:
           minimum: 0
           example: 667
           nullable: true
+        commonBlockId:
+          type: string
+          description: Best common block between headers and full blocks chains. Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
         bestFullHeaderId:
           type: string
           description: Can be 'null' if no full block is applied since node launch

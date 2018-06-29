@@ -27,6 +27,24 @@ class VerifyADHistorySpecification extends HistorySpecification {
     }
   }
 
+  property("bestLinearHeader should return correct header") {
+    var (history, chain) = genHistory(1)
+    val fork1 = genChain(3, history).tail
+    val fork2 = genChain(4, history).tail
+    history = applyHeaderChain(history, HeaderChain(fork1.map(_.header)))
+    history = applyHeaderChain(history, HeaderChain(fork2.map(_.header)))
+
+    history.bestFullBlockOpt shouldBe chain.lastOption
+    history.bestHeaderOpt shouldBe fork2.lastOption.map(_.header)
+    history.bestLinearHeaderOpt shouldBe fork2.lastOption.map(_.header)
+
+    history = history.append(fork1.head.blockTransactions).get._1
+    history = history.append(fork1.head.aDProofs.get).get._1
+    history.bestFullBlockOpt shouldBe fork1.headOption
+    history.bestHeaderOpt shouldBe fork2.lastOption.map(_.header)
+    history.bestLinearHeaderOpt shouldBe fork1.lastOption.map(_.header)
+  }
+
   property("should not be able to apply blocks older than blocksToKeep") {
     var history = genHistory()._1
     history.bestFullBlockOpt shouldBe None

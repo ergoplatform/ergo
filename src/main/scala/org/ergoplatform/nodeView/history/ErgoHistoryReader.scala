@@ -45,6 +45,21 @@ trait ErgoHistoryReader
   def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
   /**
+    * Best Header from all header chains that contain bestFullBlock.
+    * Might differ from bestHeaderOpt if best header and best full block are on different forks.
+    * Equals to bestHeaderOpt if bestFullBlockOpt is empty.
+    */
+  def bestLinearHeaderOpt: Option[Header] = bestFullBlockOpt match {
+    case Some(fb) if isInBestChain(fb.header) =>
+      bestHeaderOpt
+    case Some(fb) =>
+      val chains = continuationHeaderChains(fb.header, _ => true)
+      Some(chains.flatMap(h => h.lastOption).maxBy(h => scoreOf(h.id).getOrElse(BigInt(0))))
+    case None =>
+      bestHeaderOpt
+  }
+
+  /**
     * Complete block of the best chain with transactions.
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */

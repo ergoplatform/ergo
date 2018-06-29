@@ -70,13 +70,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * Common block between bestHeader and bestFullBlock
     */
   def commonBlockIdOpt: Option[ModifierId] = {
-    bestFullBlockOpt match {
-      case Some(fb) =>
+    bestFullBlockOpt.flatMap { fb =>
         headerChainBack(config.blocksToKeep,
           fb.header,
           h => headerIdsAtHeight(h.height).headOption.forall(_ sameElements h.id))
           .headOption.map(_.id)
-      case None => None
     }
   }
 

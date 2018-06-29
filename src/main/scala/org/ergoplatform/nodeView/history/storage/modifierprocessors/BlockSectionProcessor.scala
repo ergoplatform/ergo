@@ -7,13 +7,13 @@ import scorex.core.utils.ScorexEncoding
 import scala.util.Try
 
 /**
-  * Trait, that declares interfaces for validation and processing of various
-  * block sections: BlockTranasction, ADProofs, etc.
+  * Trait that declares interfaces for validation and processing of various
+  * block sections: BlockTransactions, ADProofs, etc.
   */
 trait BlockSectionProcessor extends ScorexEncoding {
 
   /**
-    * Whether state require to download adProofs before full block application
+    * Whether state requires to download adProofs before full block application
     */
   protected def requireProofs: Boolean
 

@@ -4,7 +4,7 @@ import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, ModifierTypeId, PersistentNodeViewModifier}
 
 /**
-  * Section of Ergo block, that contains header id and digest of it's payload
+  * An interface for Ergo block section which contains corresponding header id and a digest of its payload.
   */
 trait BlockSection extends ErgoPersistentModifier {
 

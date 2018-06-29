@@ -35,7 +35,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
   }
 
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
-    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None,
+    settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None, None,
     timeProvider.time())
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
@@ -54,6 +54,7 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
+        bestLinearHeaderOpt = h.bestLinearHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
       )
@@ -85,6 +86,7 @@ object ErgoStatsCollector {
                       stateVersion: Option[String],
                       isMining: Boolean,
                       bestHeaderOpt: Option[Header],
+                      bestLinearHeaderOpt: Option[Header],
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
@@ -99,6 +101,7 @@ object ErgoStatsCollector {
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
+        "bestLinearHeaderId" -> ni.bestLinearHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
         "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,

@@ -92,9 +92,6 @@
 
 \newcommand{\state}{\textit{State}}
 \newcommand{\roller}{\textbf{Rollerchain}}
-\newcommand{\aspen}{\textbf{Aspen}}
-\newcommand{\bitcoinng}{\textbf{Bitcoin-ng}}
-\newcommand{\sse}{\textbf{Space-Scarce Economy}}
 \newcommand{\popow}{\textbf{PoPoW}}
 \newcommand{\ads}{\textbf{ADS}}
 
@@ -111,11 +108,11 @@
 \usepackage{minted}
 \usemintedstyle{manni}
 \usepackage{microtype}
- 
+
 
 \begin{document}
 
-\title{The \ergo{} Yellowpaper}
+\title{The \ergo{} Yellow Paper}
 \author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
 \maketitle
 
@@ -123,7 +120,28 @@
 \tableofcontents
 
 \section{Introduction}
-\subsection{Multiple Modes}
+
+\subsection{Vision}
+
+\subsection{State-Oriented Design}
+
+\section{Notation and Preliminaries}
+
+
+
+\subsection{A Note on Notation}
+
+\knote{say about coin/box/output}
+
+
+\subsection{Cryptographic Primitives}
+
+We use Blake2b hash function with 256 bits output.
+
+\knote{describe a curve used}
+
+
+\section{Modes of Operation}
 Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node
 mode, which is similar to Bitcoin fullnode, Ergo reference implementation supports Light-SPV, Light-Fullnode and Pruned-Fullnode modes.
 
@@ -345,7 +363,17 @@ nonce: Int - field to iterate and generate valid PoW.
  \hline
  timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
  \hline
- nonce &  8 &  Proof-of-Work nonce  \\
+
+ nBits     &  8 &  Difficulty  \\
+ \hline
+
+ height    &  4 &  Height of the header  \\
+ \hline
+
+ extensionHash &  32 &  Hash of the extension section of the block  \\
+ \hline
+
+ equihashSolution     &  ?? &  Proof-of-Work solution   \\
  \hline
 \end{tabular}
 
@@ -359,7 +387,8 @@ Some of this fields may be calculated by node by itself:
      \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
      \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
      \end{itemize}
-     
+
+\knote{height, nBits, extensionHash could be got locally as well, update the list above}
 
 \section{Ergo Modifiers Processing}
 This section describes processing algorithm for Ergo modifiers in all security modes. Unlike most of blockchain systems, Ergo have the following types of **modifiers**: In-memory:
@@ -745,9 +774,7 @@ from the tree:
 
 
 
-
 \subsection{Verifying A Transaction}
-
 
 
 \subsection{Unified Transactions}
@@ -757,6 +784,8 @@ from the tree:
 
 \section{Voting}
 \input{voting.tex}
+
+\section{Proof-of-Work}
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

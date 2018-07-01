@@ -30,15 +30,14 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
   lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
-  lazy val stateConstants: StateConstants = StateConstants(None, emission)
+  lazy val stateConstants: StateConstants = StateConstants(None, emission, 200)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, emission, nodeViewHolderRef)
+    ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(nodeViewHolderRef, emission, 200))
   }
 
-
   def createUtxoState(bh: BoxHolder): UtxoState =
-    UtxoState.fromBoxHolder(bh, createTempDir, emission, None)
+    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
@@ -71,7 +70,7 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
     stateBoxes.find(_ == genesisEmissionBox) match {
       case Some(emissionBox) if txRemain > 0 =>
         // Extract money to anyoneCanSpend output and forget about emission box for tests
-        val tx = ErgoMiner.createCoinbase(0, Seq.empty, emissionBox, TrueLeaf, emission)
+        val tx = ErgoMiner.createCoinbase(emissionBox, 0, Seq.empty, TrueLeaf, emission)
         val remainedBoxes = stateBoxes.filter(_ != genesisEmissionBox)
         val newSelfBoxes = selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf)
         validTransactionsFromBoxes(txRemain - 1, remainedBoxes, newSelfBoxes, tx +: acc, rnd)

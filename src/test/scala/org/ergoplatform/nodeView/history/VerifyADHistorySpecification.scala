@@ -167,27 +167,6 @@ class VerifyADHistorySpecification extends HistorySpecification {
     si.lastHeaderIds.last shouldEqual chain.last.header.id
   }
 
-  property("reportModifierIsValid when better header chain exists") {
-    var history = genHistory(2)._1
-
-    val fork1 = genChain(3, history).tail
-    val fork2 = genChain(4, history).tail
-    fork1.head.parentId shouldEqual fork2.head.parentId
-
-    history = applyChain(history, fork1)
-    history = applyHeaderChain(history, HeaderChain(fork2.map(_.header)))
-    history.bestFullBlockOpt.get shouldBe fork1.last
-    history.bestHeaderOpt.get shouldBe fork2.last.header
-
-    fork1.indices.foreach { i =>
-      val fullBlock = fork1(i)
-      history.reportModifierIsValid(fullBlock)
-      //todo: We may want to enable these checks
-//      val nextBlock = Try(fork1(i + 1)).toOption
-//      progressInfo._2.toApply shouldBe Seq(nextBlock)
-    }
-  }
-
   property("reportModifierIsValid should set isSemanticallyValid() result") {
     var history = genHistory(1)._1
     history.bestFullBlockOpt.isDefined shouldBe true

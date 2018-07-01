@@ -37,9 +37,8 @@ case class Header(version: Version,
 
   override lazy val id: ModifierId = ModifierId @@ powHash
 
-  //todo: why SHA256?
-  //todo: tolsi: check this
   lazy val powHash: Digest32 = {
+    // An implementation of a PoW function which is similar to one used in ZCash.
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
     val bytes = HeaderSerializer.bytesWithoutPow(this)
@@ -159,7 +158,6 @@ object HeaderSerializer extends Serializer[Header] {
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
-    // TODO check version here?
     val parentId = ModifierId @@ bytes.slice(1, 33)
     val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
     val transactionsRoot = Digest32 @@ bytes.slice(65, 97)

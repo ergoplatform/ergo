@@ -8,6 +8,15 @@ import scorex.core.transaction.MemoryPool
 import scala.collection.concurrent.TrieMap
 import scala.util.Try
 
+/**
+  *
+  * TODO This is simplified implementation of Memory pool.
+  * MemPool should:
+  * - have limited size
+  * - replace transactions with the lowest fee if size limit is reached
+  * - validate transactions when put (is called)
+  * - clean transactions, that become invalid
+  */
 class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransaction])
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
@@ -16,14 +25,12 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransacti
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
   override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
-    //todo check validity
     putWithoutCheck(txs.filterNot(tx => unconfirmed.contains(key(tx.id))))
   }
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
     completeAssembly(txs)
-    //todo cleanup?
     this
   }
 

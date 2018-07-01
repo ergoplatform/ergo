@@ -26,7 +26,7 @@ trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
     Failure(new Error(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
   } else {
-    Success()
+    Success(Unit)
   }
 
 }

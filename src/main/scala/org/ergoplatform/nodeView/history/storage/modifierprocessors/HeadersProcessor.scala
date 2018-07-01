@@ -34,9 +34,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val powScheme: PowScheme
 
-  //TODO alternative DDoS protection
-  protected lazy val MaxRollback: Long = 600.days.toMillis / chainSettings.blockInterval.toMillis
-
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
@@ -206,6 +203,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /** Validates given header
+    *
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
@@ -237,7 +235,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param startHeader - header to start
     * @param until       - stop condition
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
-    *         Note now it includes one header satisfying until condition! (TODO fix)
+    *         Note now it includes one header satisfying until condition!
     */
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
@@ -279,8 +277,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  //TODO rework option.get
-  private def bestHeadersChainScore: BigInt = scoreOf(bestHeaderIdOpt.get).get
+  private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
@@ -346,8 +343,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
-        .validate(heightOf(header.parentId).exists(h => headersHeight - h < MaxRollback)) {
-          fatal(s"Trying to apply too old block difficulty at height ${heightOf(header.parentId)}")
+        .validate(heightOf(header.parentId).exists(h => headersHeight - h < config.keepVersions)) {
+          fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
         .validate(powScheme.verify(header)) {
           fatal(s"Wrong proof-of-work solution for $header")
@@ -359,4 +356,5 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
 
   }
+
 }

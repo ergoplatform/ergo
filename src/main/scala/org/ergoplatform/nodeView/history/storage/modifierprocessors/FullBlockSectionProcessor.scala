@@ -11,8 +11,8 @@ import scorex.core.validation.{ModifierValidator, RecoverableModifierError, Vali
 import scala.util.{Failure, Try}
 
 /**
-  * Trait, that implements BlockSectionProcessor interfaces for regimes, where node download
-  * and process full blocks
+  * Trait that implements BlockSectionProcessor interfaces for regimes where the node
+  * downloads and process full blocks.
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 

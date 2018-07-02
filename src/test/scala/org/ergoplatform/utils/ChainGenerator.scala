@@ -84,7 +84,7 @@ trait ChainGenerator {
 
   protected def blockStream(prefix: Option[ErgoFullBlock],
                             nBits: Long = Constants.InitialNBits): Stream[ErgoFullBlock] = {
-    val proof = SerializedProverResult(IndexedSeq(0x7c.toByte), ContextExtension.empty)
+    val proof = SerializedProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val outputs = IndexedSeq()
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))

@@ -1,7 +1,11 @@
 package org.ergoplatform.modifiers.mempool
 
+import java.nio.ByteBuffer
+
+import com.google.common.primitives.Longs
 import io.circe._
 import io.circe.syntax._
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
@@ -15,13 +19,14 @@ import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 import sigmastate.{AvlTreeData, SBoolean, SType}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 
@@ -47,6 +52,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def validateStateless: ValidationResult = {
     accumulateErrors
+      .demand(outputCandidates.nonEmpty, s"No outputs in transaction $toString")
       .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
@@ -54,14 +60,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
   /**
-    * @return total coimputation cost
+    * @return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
     require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 
-    val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
 
-    val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
+    lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
+
+    lazy val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
       val input = inputs(idx)
 
       assert(box.id sameElements input.boxId)
@@ -86,6 +93,50 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       accCost + scriptCost
     }
+
+
+    val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
+
+    val outputSum = outputCandidates.map(_.value).reduce(Math.addExact(_, _))
+
+    def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
+                      map: mutable.Map[ByteArrayWrapper, Long],
+                      amountCheck: Boolean = false) = {
+      boxes.foreach { box =>
+        box.additionalTokens.foreach { case (assetId, amount) =>
+          if (amountCheck) require(amount >=0)
+          val aiWrapped = ByteArrayWrapper(assetId)
+          val total = map.getOrElse(aiWrapped, 0L)
+          map.put(aiWrapped, Math.addExact(total, amount)).ensuring(_ => map.size <= 64)
+        }
+      }
+    }
+
+    def checkAssetPreservationRules = {
+      val inAssets = mutable.Map[ByteArrayWrapper, Long]()
+      val outAssets = mutable.Map[ByteArrayWrapper, Long]()
+
+      fillAssetsMap(boxesToSpend, inAssets)
+      fillAssetsMap(outputCandidates, outAssets, amountCheck = true)
+
+      inAssets.keysIterator.forall{assetId =>
+        val inAmount = inAssets(assetId)
+        val outAmount = outAssets.remove(assetId).getOrElse(0L)
+        inAmount == outAmount
+      } && {
+        outAssets.isEmpty || {
+          outAssets.size == 1 &&
+            outAssets.head._1 == ByteArrayWrapper(inputs.head.boxId) &&
+            outAssets.head._2 > 0
+        }
+      }
+    }
+
+    accumulateErrors
+      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has a negative output $toString")
+      .demand(inputSum == outputSum, s"Ergo token preservation is broken in $toString")
+      .demand(checkAssetPreservationRules, s"Assets preservation tule is broken in $toString")
+
     txCost
   }
 

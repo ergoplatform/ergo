@@ -90,7 +90,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     }
   }
 
-  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {

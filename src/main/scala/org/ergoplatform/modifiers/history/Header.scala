@@ -65,6 +65,8 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId =
     BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
+
+
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer

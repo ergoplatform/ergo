@@ -1,10 +1,12 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.DefaultModifiersCache
 import scorex.core.validation.RecoverableModifierError
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success}
 
@@ -15,14 +17,6 @@ class ErgoModifiersCache(override val maxSize: Int)
     * Id's of block sections we are waiting to create block from full block
     */
   private val waitingIds: ArrayBuffer[K] = ArrayBuffer[K]()
-
-  protected override def onPut(key: K): Unit = {
-    // TODO make efficient when value will be present and add ids that are not in a cache yet
-    cache.foreach { case (k: K, v: V) =>
-      if (v.parentId sameElements key.array) waitingIds += k
-    }
-    super.onPut(key)
-  }
 
   protected override def onRemove(key: K, rememberKey: Boolean): Unit = {
     waitingIds -= key
@@ -53,6 +47,16 @@ class ErgoModifiersCache(override val maxSize: Int)
           true
       }
     }.map(_._1) orElse super.findCandidateKey(history)
+  }.map { key =>
+    cache.foreach { case (k: K, v: V) =>
+      if (v.parentId sameElements key.array) waitingIds += k
+    }
+    cache.get(key) foreach {
+      case h: Header =>
+        waitingIds ++= history.requiredModifiersForHeader(h).map(k => new mutable.WrappedArray.ofByte(k._2))
+      case _ =>
+    }
+    key
   }
 
 }

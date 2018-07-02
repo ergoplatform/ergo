@@ -27,6 +27,7 @@ case class PoPoWProof(m: Byte,
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
 
+  def parentId: ModifierId = ???
 }
 
 object PoPoWProof {

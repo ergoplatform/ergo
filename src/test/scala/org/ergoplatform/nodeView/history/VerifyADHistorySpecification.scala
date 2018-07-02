@@ -2,11 +2,13 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistorySpecification
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -26,6 +28,25 @@ class VerifyADHistorySpecification extends HistorySpecification {
       (inHistory, Seq.empty)
     }
   }
+
+  property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {
+    val modifiersCache = new ErgoModifiersCache(Int.MaxValue)
+
+    var (history, _) = genHistory(2)
+
+    val fork1 = genChain(2, history).tail
+    val fork2 = genChain(3, history).tail
+
+    history = applyChain(history, fork1)
+
+    fork2.foreach{ fb =>
+      modifiersCache.put(new mutable.WrappedArray.ofByte(fb.header.id), fb.header)
+    }
+    history.applicable(fork2.head.header) shouldBe true
+    modifiersCache.contains(new mutable.WrappedArray.ofByte(fork2.head.header.id)) shouldBe true
+    modifiersCache.findCandidateKey(history).isDefined shouldBe true
+  }
+
 
   property("should not be able to apply blocks older than blocksToKeep") {
     var history = genHistory()._1

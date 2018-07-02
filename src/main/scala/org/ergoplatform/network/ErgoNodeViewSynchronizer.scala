@@ -13,7 +13,7 @@ import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.Da
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
-import scorex.core.network.{NodeViewSynchronizer, SendToPeers, SendToRandom}
+import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -29,22 +29,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
 
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, self,
-    timeProvider)
+  override protected val deliveryTracker =
+    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
-  private val downloadListSize = networkSettings.networkChunkSize
+  private val downloadListSize = networkSettings.maxInvObjects
 
   override def preStart(): Unit = {
-    val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+    val toDownloadCheckInterval = networkSettings.syncInterval
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
   private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
     val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
-    //todo: Full nodes should be here, not a random peer
+    //todo: a full node should be here, not a random peer
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
 
@@ -76,12 +76,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(mod)
   }
 
+  //todo: this code is nightmare, currentQueue should include delivered(or modifiers cache?) and expected,
+  //todo: nextModifiersToDownload is not efficient
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val currentQueue = deliveryTracker.expectingFromRandomQueue
-        val newIds = h.nextModifiersToDownload(downloadListSize - currentQueue.size, currentQueue)
+        val currentQueue = deliveryTracker.expectingAndDelivered
+        val newIds = h.nextModifiersToDownload(downloadListSize, currentQueue)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
@@ -93,7 +95,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def onChangedVault: Receive = {
-    case _: ChangedVault =>
+    case _: ChangedVault[_] =>
   }
 
   override protected def viewHolderEvents: Receive =

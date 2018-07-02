@@ -5,14 +5,12 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.adproofs.ADProofsProcessor
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.BlockTransactionsProcessor
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
-import scorex.core.utils.ScorexLogging
+import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Try}
@@ -23,11 +21,11 @@ import scala.util.{Failure, Try}
 trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
     with HeadersProcessor
-    with ADProofsProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
-    with BlockTransactionsProcessor
-    with ScorexLogging {
+    with BlockSectionProcessor
+    with ScorexLogging
+    with ScorexEncoding {
 
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
@@ -109,7 +107,7 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        if(info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
+        if (info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
           //Return Younger, because we can send blocks from our fork that other node can download.
           Younger
         } else {
@@ -157,7 +155,7 @@ trait ErgoHistoryReader
 
   /**
     *
-    * @param header - header to start
+    * @param header     - header to start
     * @param withFilter - condition to satisfy
     * @return all possible forks, starting from specified header and satisfying withFilter condition
     */
@@ -165,7 +163,7 @@ trait ErgoHistoryReader
     @tailrec
     def loop(currentHeight: Option[Int], acc: Seq[Seq[Header]]): Seq[Seq[Header]] = {
       val nextLevelHeaders = currentHeight.toList
-        .flatMap{ h => headerIdsAtHeight(h + 1) }
+        .flatMap { h => headerIdsAtHeight(h + 1) }
         .flatMap { id => typedModifierById[Header](id) }
         .filter(withFilter)
       if (nextLevelHeaders.isEmpty) {
@@ -234,7 +232,7 @@ trait ErgoHistoryReader
     * Return headers, required to apply to reach header2 if you are at header1 position.
     *
     * @param startHeaderOpt - initial position
-    * @param finalHeader - header you should reach
+    * @param finalHeader    - header you should reach
     * @return (Modifier it required to rollback first, header chain to apply)
     */
   def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], HeaderChain) = {
@@ -250,8 +248,8 @@ trait ErgoHistoryReader
   /**
     * Find common block and subchains from common block to header1 and header2
     *
-    * @param header1: Header - header in first subchain
-    * @param header2: Header - header in second subchain
+    * @param header1 : Header - header in first subchain
+    * @param header2 : Header - header in second subchain
     * @return (chain from common block to header1, chain from common block to header2)
     */
   protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {

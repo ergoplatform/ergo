@@ -163,7 +163,8 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     Json.obj(
       "id" -> tx.id.asJson,
       "inputs" -> tx.inputs.asJson,
-      "outputs" -> tx.outputs.asJson
+      "outputs" -> tx.outputs.asJson,
+      "bytesSize" -> tx.bytes.length.toLong.asJson
     )
   }
 

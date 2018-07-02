@@ -36,6 +36,10 @@ object ErgoFullBlock {
     Map(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson),
+      "bytesSize" ->
+        (b.header.bytes.length + b.blockTransactions.bytes.length + b.aDProofs.map(_.bytes.length).getOrElse(0))
+          .toLong
+          .asJson
     ).asJson
 }

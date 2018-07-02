@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, R3}
+import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -47,7 +47,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
+  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
@@ -55,7 +55,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
+  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen

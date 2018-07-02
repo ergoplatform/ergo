@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryIdentifier}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
@@ -76,7 +76,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
         case Success((res, cost)) =>
           if (!res) {
-            throw new Exception(s"Validation failed for input #$idx of tx ${toString}")
+            throw new Exception(s"Validation failed for input #$idx of tx $toString")
           } else {
             cost
           }
@@ -129,7 +129,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield Input(boxId, proof)
   }
 
-  implicit private val registersEncoder: Encoder[Map[NonMandatoryIdentifier, EvaluatedValue[_ <: SType]]] = {
+  implicit private val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
     _.map {  case (key, value) =>
       s"R${key.number}" -> valueEncoder(value)
     }.asJson
@@ -140,13 +140,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       "boxId" -> box.id.asJson,
       "value" -> box.value.asJson,
       "proposition" -> valueEncoder(box.proposition),
+      "assets" -> box.additionalTokens.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
     )
   }
 
-  implicit private val identifierDecoder: KeyDecoder[NonMandatoryIdentifier] = { key =>
+  implicit private val identifierDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
     ErgoBox.registerByName.get(key).collect {
-      case nonMandatoryId: NonMandatoryIdentifier => nonMandatoryId
+      case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
     }
   }
 
@@ -155,8 +156,9 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
-      registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryIdentifier, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, registers), maybeId)
+      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
+      registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
+    } yield (new ErgoBoxCandidate(value, proposition, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

@@ -5,7 +5,7 @@ organization := "org.ergoplatform"
 
 name := "ergo"
 
-version := "1.0.1"
+version := "1.5.0-SNAPSHOT"
 
 scalaVersion := "2.12.6"
 
@@ -18,7 +18,7 @@ val scorexVersion = "effd499c-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.2",
-  "org.scorexfoundation" %% "sigma-state" % "0.9.3",
+  "org.scorexfoundation" %% "sigma-state" % "0.9.4-SNAPSHOT",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.14",
   "org.scorexfoundation" %% "iodb" % "0.3.2",

@@ -8,7 +8,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.R3
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.CoinsEmission
@@ -202,7 +202,7 @@ object ErgoMiner extends ScorexLogging {
       case None =>
         val inputs = feeBoxes
           .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
-        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeBoxes.map(_.value).sum, minerProp, Map())
+        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeBoxes.map(_.value).sum, minerProp, Seq(), Map())
         ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(rewardBox))
     }
   }
@@ -214,9 +214,9 @@ object ErgoMiner extends ScorexLogging {
                      emission: CoinsEmission): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
     val prop = emissionBox.proposition
-    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
+    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Seq(), Map())
     val newEmissionBox: ErgoBoxCandidate =
-      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
+      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Seq(), Map(R4 -> LongConstant(height)))
     val inputs = (emissionBox +: feeBoxes)
       .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
 

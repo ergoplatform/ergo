@@ -12,6 +12,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
       tx.statelessValidity.isSuccess shouldBe true
       val res = tx.statefulValidity(from, context)
+      println(res)
       res.isSuccess shouldBe true
     }
   }

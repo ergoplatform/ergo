@@ -25,7 +25,8 @@ import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 import scala.annotation.tailrec
 import scala.util.{Random, Try}
 
-trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoGenerators {
+trait ValidBlocksGenerators
+  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
   lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)

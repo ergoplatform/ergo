@@ -49,11 +49,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * to accumulate further validation results
     */
   def validateStateless: ValidationResult = {
-    accumulateErrors
+    failFast
       .demand(outputCandidates.nonEmpty, s"No outputs in transaction $toString")
       .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
+      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $toString")
       .result
   }
 
@@ -134,7 +135,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
 
     failFast
-      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has a negative output $toString")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $toString")
       .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $toString")
       .result

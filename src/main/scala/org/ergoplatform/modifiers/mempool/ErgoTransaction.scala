@@ -17,6 +17,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
+import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
@@ -100,7 +101,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                       amountCheck: Boolean = false) = {
       boxes.foreach { box =>
         box.additionalTokens.foreach { case (assetId, amount) =>
-          if (amountCheck) require(amount >= 0)
+          if (amountCheck) require(amount >= 0, s"negative asset amount for ${Base16.encode(assetId)}")
           val aiWrapped = ByteArrayWrapper(assetId)
           val total = map.getOrElse(aiWrapped, 0L)
           map.put(aiWrapped, Math.addExact(total, amount))

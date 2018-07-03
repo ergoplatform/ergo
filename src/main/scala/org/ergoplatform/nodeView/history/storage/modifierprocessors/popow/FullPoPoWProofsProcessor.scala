@@ -25,7 +25,7 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
             if (!(m.suffix ++ m.innerchain).forall(_.interlinks.head sameElements genesisId)) {
               Failure(new Error(s"Genesis id is incorrect for $m"))
             } else {
-              Success()
+              Success(Unit)
             }
           case height =>
             //TODO what if we trying to apply better popow proof to non-empty history?

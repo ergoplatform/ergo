@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.blocktransactions.EmptyBlockTransactionsProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.EmptyBlockSectionProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
@@ -21,7 +21,7 @@ trait HistorySpecification extends ErgoPropertyTest {
     val historyHeight = history.headersHeight
     if (historyHeight < height) {
       history match {
-        case _: EmptyBlockTransactionsProcessor =>
+        case _: EmptyBlockSectionProcessor =>
           val chain = genHeaderChain(height - historyHeight, history)
           if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
         case _ =>
@@ -43,7 +43,7 @@ trait HistorySpecification extends ErgoPropertyTest {
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme,

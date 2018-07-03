@@ -46,10 +46,8 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
         }
       }*/
 
-    case txs: Seq[ErgoTransaction] =>
-      txs.foreach { tx =>
+    case tx: ErgoTransaction =>
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      }
 
     case StopGeneration =>
       txGenerator.cancel()

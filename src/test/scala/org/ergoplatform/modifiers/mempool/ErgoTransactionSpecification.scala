@@ -1,9 +1,11 @@
 package org.ergoplatform.modifiers.mempool
 
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 
 import scala.util.Random
 
@@ -16,6 +18,22 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       boxCandidate.value + delta,
       boxCandidate.proposition,
       boxCandidate.additionalTokens,
+      boxCandidate.additionalRegisters)
+  }
+
+  private def modifyAsset(boxCandidate: ErgoBoxCandidate,
+                          delta: Long,
+                          idToskip: TokenId): ErgoBoxCandidate = {
+    val assetId = boxCandidate.additionalTokens.find(_._1.sameElements(idToskip) == false).get._1
+
+    val tokens = boxCandidate.additionalTokens.map{case (id, amount) =>
+      if(id.sameElements(assetId)) assetId -> (amount + delta) else assetId -> amount
+    }
+
+    new ErgoBoxCandidate(
+      boxCandidate.value,
+      boxCandidate.proposition,
+      tokens,
       boxCandidate.additionalRegisters)
   }
 
@@ -62,26 +80,37 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("assets preservation law holds") {
+    forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
+      val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false){case ((seq, modified), ebc) =>
+          if(modified) {
+            (seq :+ ebc) -> true
+          } else{
+            if(ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)){
+              (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
+            }else {
+              (seq :+ ebc) -> false
+            }
+          }
+      }._1
+        val wrongTx = tx.copy(outputCandidates = updCandidates)
 
+      wrongTx.statelessValidity.isSuccess shouldBe true
+      wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+    }
   }
 
-  property("impossible to create a negative-value asset") {
-
+  property("impossible to create an asset of non-positive amount") {
   }
 
   property("impossible to overflow an asset value") {
-
   }
 
   property("too costly transaction is rejected") {
-
   }
 
   property("output contains too many assets") {
-
   }
 
   property("tx outputs contain too many assets") {
-
   }
 }

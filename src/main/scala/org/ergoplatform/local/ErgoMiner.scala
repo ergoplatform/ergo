@@ -1,7 +1,5 @@
 package org.ergoplatform.local
 
-import java.math.BigInteger
-import java.security.SecureRandom
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
@@ -24,15 +22,15 @@ import org.ergoplatform._
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import sigmastate.{NoProof, SBoolean, SigSerializer}
+import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,

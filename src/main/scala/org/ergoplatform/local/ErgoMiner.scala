@@ -212,11 +212,14 @@ object ErgoMiner extends ScorexLogging {
                      emission: CoinsEmission): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
     val prop = emissionBox.proposition
-    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Seq(), Map())
+    val emissionAmount = emission.emissionAtHeight(height)
     val newEmissionBox: ErgoBoxCandidate =
-      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Seq(), Map(R4 -> LongConstant(height)))
+      new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
     val inputs = (emissionBox +: feeBoxes)
       .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
+    val feeAmount = feeBoxes.map(_.value).sum
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, Seq(), Map())
+
 
     ErgoTransaction(
       inputs.toIndexedSeq,

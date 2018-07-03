@@ -182,13 +182,16 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokenDistrib
   }
 
-  lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
+  def validErgoTransactionGenTemplate(minAssets: Int): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
     inputsCount <- Gen.choose(1, 100)
-    tokensCount <- Gen.choose(0, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1))
+    tokensCount <- Gen.choose(minAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(ergoBoxGenForTokens))
     tx <- validTransactionGen(from.asScala.toIndexedSeq)
   } yield from.asScala.toIndexedSeq -> tx
+
+  lazy val validErgoTransactionGen = validErgoTransactionGenTemplate(0)
+  lazy val validErgoTransactionWithAssetsGen = validErgoTransactionGenTemplate(1)
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenNoProp).map(l => BoxHolder(l))
 

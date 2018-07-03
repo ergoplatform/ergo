@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, R4}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scapi.sigma.DLogProtocol.DLogProverInput
@@ -20,9 +21,11 @@ import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.SBoolean
-import sigmastate.Values.{IntConstant, TrueLeaf, Value}
+import sigmastate.{SBoolean, SByte, SType}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import scala.collection.JavaConverters._
+
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
@@ -49,18 +52,50 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     boxId: Short <- Arbitrary.arbitrary[Short]
   } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
 
+  val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
+    length <- Gen.chooseNum(1, 100)
+    bytes <- Gen.listOfN(length, arbByte.arbitrary)
+  } yield ByteArrayConstant(bytes.toArray)
+
+  def additionalRegistersGen(cnt: Byte): Seq[Gen[(NonMandatoryRegisterId, EvaluatedValue[SType])]] = {
+    (0 until cnt)
+      .map(_ + ErgoBox.startingNonMandatoryIndex)
+      .map(rI => ErgoBox.registerByIndex(rI.toByte).asInstanceOf[NonMandatoryRegisterId])
+      .map { r =>
+        for {
+          arr <- byteArrayConstGen
+          v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
+        } yield r -> v.asInstanceOf[EvaluatedValue[SType]]
+      }
+  }
+
+  def additionalTokensGen(cnt: Byte): Seq[Gen[(TokenId, Long)]] =
+    (0 until cnt).map { _ =>
+      for {
+        id <- Digest32 @@ boxIdGen
+        amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
+      } yield id -> amt
+    }
+
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
-    reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    ar <- Gen.sequence(additionalRegistersGen(regNum))
+    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
+  } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
-  } yield new ErgoBoxCandidate(value, prop)
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    ar <- Gen.sequence(additionalRegistersGen(regNum))
+    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
+  } yield new ErgoBoxCandidate(value, prop, tokens.asScala, ar.asScala.toMap)
 
   lazy val inputGen: Gen[Input] = for {
     boxId <- boxIdGen

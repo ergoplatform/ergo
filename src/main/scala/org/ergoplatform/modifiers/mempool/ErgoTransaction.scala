@@ -103,7 +103,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           if (amountCheck) require(amount >= 0)
           val aiWrapped = ByteArrayWrapper(assetId)
           val total = map.getOrElse(aiWrapped, 0L)
-          map.put(aiWrapped, Math.addExact(total, amount)).ensuring(_ => map.size <= 64)
+          map.put(aiWrapped, Math.addExact(total, amount))
+            .ensuring(_ => map.size <= ErgoBox.MaxTokens, "Transaction is operating with too many assets")
         }
       }
     }

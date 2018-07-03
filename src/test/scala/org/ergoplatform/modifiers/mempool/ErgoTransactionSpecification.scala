@@ -11,7 +11,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
   private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0:Byte))
 
-  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Int): ErgoBoxCandidate = {
+  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
       boxCandidate.value + delta,
       boxCandidate.proposition,
@@ -39,9 +39,15 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("impossible to create a negative-value output") {
+    forAll(validErgoTransactionGen) { case (from, tx) =>
+      val negValue = Math.min(Math.abs(Random.nextLong()), Long.MaxValue - tx.outputCandidates.head.value)
+      val wrongTx = tx.copy(outputCandidates =
+        modifyValue(tx.outputCandidates.head, -(tx.outputCandidates.head.value + negValue)) +: tx.outputCandidates.tail)
 
+      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+    }
   }
-
 
   property("impossible to overflow ergo tokens") {
 
@@ -64,6 +70,10 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("output contains too many assets") {
+
+  }
+
+  property("tx outputs contain too many assets") {
 
   }
 }

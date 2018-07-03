@@ -60,7 +60,7 @@ trait ValidBlocksGenerators
     def genOuts(remainingAmount: Long,
                 acc: IndexedSeq[ErgoBoxCandidate],
                 limit: Int): IndexedSeq[ErgoBoxCandidate] = {
-      val newAmount = rnd.nextLong() % (remainingAmount + acc.map(_.value).sum)
+      val newAmount = Math.abs(rnd.nextLong()) % (remainingAmount + acc.map(_.value).sum)
       if (newAmount >= remainingAmount || limit <= 1) {
         acc :+ outputForAnyone(remainingAmount)
       } else {

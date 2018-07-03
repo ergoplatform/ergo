@@ -1,26 +1,24 @@
 package org.ergoplatform.nodeView.state
 
-import io.iohk.iodb.{ByteArrayWrapper, Store}
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoStateContext, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Try}
 
-trait UtxoStateReader extends ErgoStateReader with ScorexLogging with TransactionValidation[ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
 
   protected implicit val hf = Algos.hash
 
   val constants: StateConstants
-  val store: Store
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
@@ -31,29 +29,34 @@ trait UtxoStateReader extends ErgoStateReader with ScorexLogging with Transactio
   }
 
   override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
-    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext()).map(_ => Unit))
+    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))
 
   /**
-    * Extract emission box from transactions and save it to emissionBoxOpt
     *
     * @param fb - ergo full block
+    * @return emission box from this block transactions
     */
-  def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
-    val coinsAtHeight = constants.emission.remainingCoinsAfterHeight(fb.header.height)
-    fb.blockTransactions.txs.reverse.flatMap(_.outputs)
-      .find(o => o.value == coinsAtHeight && o.proposition == constants.genesisEmissionBox.proposition) match {
-      case Some(newEmissionBox) => Some(newEmissionBox)
-      case _ =>
-        log.warn(s"Emission box not found in block ${fb.encodedId}")
-        None
-    }
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
+    case Some(id) =>
+      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(_.boxId sameElements id)) match {
+        case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
+          Some(tx.outputs.head)
+        case Some(_) =>
+          log.info(s"Last possible emission box consumed")
+          None
+        case None =>
+          log.warn(s"Emission box not found in block ${fb.encodedId}")
+          boxById(id)
+      }
+    case None =>
+      log.debug("No emission box: emission should be already finished before this block")
+      None
   }
 
-  // TODO implement
-  def stateContext(): ErgoStateContext = ErgoStateContext(0, rootHash)
+  protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
+    .map(s => ADKey @@ s.data)
 
-  def emissionBox(): Option[ErgoBox] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxKey))
-    .flatMap(b => ErgoBoxSerializer.parseBytes(b.data).toOption)
+  def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
   def boxById(id: ADKey): Option[ErgoBox] =
     persistentProver

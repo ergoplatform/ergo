@@ -5,8 +5,8 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.ErgoApp
+import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.core.utils.ScorexLogging
 
@@ -42,7 +42,7 @@ object ErgoSettings extends ScorexLogging
       ErgoApp.forceStopApplication()
     }
 
-    ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings)
+    consistentSettings(ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings))
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {
@@ -52,7 +52,7 @@ object ErgoSettings extends ScorexLogging
       if file.exists
     } yield file
 
-    val config = maybeConfigFile match {
+    maybeConfigFile match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
       case None =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS FOR TESTNET!")
@@ -60,10 +60,7 @@ object ErgoSettings extends ScorexLogging
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
       case Some(file) =>
         val cfg = ConfigFactory.parseFile(file)
-        if (!cfg.hasPath("ergo")) {
-          log.error("Malformed configuration file was provided! Aborting!")
-          ErgoApp.forceStopApplication()
-        }
+        if (!cfg.hasPath("ergo")) failWithError("`ergo` path missed")
         ConfigFactory
           .defaultOverrides()
           .withFallback(cfg)
@@ -71,6 +68,20 @@ object ErgoSettings extends ScorexLogging
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
     }
-    config
+  }
+
+  private def consistentSettings(settings: ErgoSettings): ErgoSettings = {
+    if (settings.nodeSettings.keepVersions < 0) {
+      failWithError("nodeSettings.keepVersions should not be negative")
+    } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
+      failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
+    } else {
+      settings
+    }
+  }
+
+  private def failWithError(msg: String): Nothing = {
+    log.error(s"Stop application due to malformed configuration file: $msg")
+    ErgoApp.forceStopApplication()
   }
 }

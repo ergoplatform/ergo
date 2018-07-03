@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -33,13 +33,15 @@ case class Header(version: Version,
                   equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
+
+  override type M = Header
+
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
   override lazy val id: ModifierId = ModifierId @@ powHash
 
-  //todo: why SHA256?
-  //todo: tolsi: check this
   lazy val powHash: Digest32 = {
+    // An implementation of a PoW function which is similar to one used in ZCash.
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
     val bytes = HeaderSerializer.bytesWithoutPow(this)
@@ -58,14 +60,12 @@ case class Header(version: Version,
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
   lazy val transactionsId: ModifierId =
-    ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+    BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
-
-  override type M = Header
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
@@ -79,6 +79,7 @@ case class Header(version: Version,
     case t: BlockTransactions => transactionsRoot sameElements t.digest
     case _ => false
   }
+
 }
 
 object Header {
@@ -159,7 +160,6 @@ object HeaderSerializer extends Serializer[Header] {
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
-    // TODO check version here?
     val parentId = ModifierId @@ bytes.slice(1, 33)
     val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
     val transactionsRoot = Digest32 @@ bytes.slice(65, 97)

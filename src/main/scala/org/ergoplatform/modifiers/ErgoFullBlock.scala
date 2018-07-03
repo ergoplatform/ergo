@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
-//TODO we need it to be ErgoPersistentModifier just to put it to ProgressInfo
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          aDProofs: Option[ADProofs])
@@ -24,7 +23,8 @@ case class ErgoFullBlock(header: Header,
 
   override type M = ErgoFullBlock
 
-  override lazy val serializer: Serializer[ErgoFullBlock] = ???
+  override lazy val serializer: Serializer[ErgoFullBlock] =
+    throw new Error("Should never try to serialize ErgoFullBlock")
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 }

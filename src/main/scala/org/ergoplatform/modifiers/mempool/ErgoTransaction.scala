@@ -30,7 +30,7 @@ import scala.util.{Failure, Success, Try}
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
   extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier
-     with ModifierValidator with ScorexLogging {
+    with ModifierValidator with ScorexLogging {
 
   override type IdType = ModifierId
 
@@ -104,7 +104,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           val aiWrapped = ByteArrayWrapper(assetId)
           val total = map.getOrElse(aiWrapped, 0L)
           map.put(aiWrapped, Math.addExact(total, amount))
-            .ensuring(_ => map.size <= ErgoBox.MaxTokens, "Transaction is operating with too many assets")
+             .ensuring(_ => map.size <= ErgoTransaction.MaxTokens, "Transaction is operating with too many assets")
         }
       }
     }
@@ -116,23 +116,26 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       fillAssetsMap(boxesToSpend, inAssets)
       fillAssetsMap(outputCandidates, outAssets, amountCheck = true)
 
-      inAssets.keysIterator.forall{assetId =>
-        val inAmount = inAssets(assetId)
+      lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+
+      outAssets.keysIterator.forall { assetId =>
+        val inAmount = inAssets.remove(assetId).getOrElse(-1)
         val outAmount = outAssets.remove(assetId).getOrElse(0L)
-        inAmount == outAmount
+        inAmount == outAmount || (assetId == newAssetId)
       } && {
-        outAssets.isEmpty || {
-          outAssets.size == 1 &&
-            outAssets.head._1 == ByteArrayWrapper(inputs.head.boxId) &&
-            outAssets.head._2 > 0
-        }
+        inAssets.isEmpty &&
+          (outAssets.isEmpty || {
+            outAssets.size == 1 &&
+              outAssets.head._1 == newAssetId &&
+              outAssets.head._2 > 0
+          })
       }
     }
 
-    accumulateErrors
+    failFast
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has a negative output $toString")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $toString")
-      .demand(checkAssetPreservationRules, s"Assets preservation tule is broken in $toString")
+      .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $toString")
       .result
       .toTry
       .map(_ => txCost)
@@ -147,6 +150,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 
 object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
+
+  //how many tokens the transaction can contain in outputs
+  val MaxTokens = 16
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
@@ -179,7 +185,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
   }
 
   implicit private val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
-    _.map {  case (key, value) =>
+    _.map { case (key, value) =>
       s"R${key.number}" -> valueEncoder(value)
     }.asJson
   }
@@ -233,7 +239,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     val result = accumulateErrors
       .validate(maybeId.forall(_ sameElements tx.id)) {
         fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
-            s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+          s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
       }
       .validate(tx.validateStateless)
       .validate(validateOutputs(outputs, tx.id))
@@ -249,7 +255,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
           val box = candidate.toBox(txId, index.toShort)
           validationState.validate(boxId sameElements box.id) {
             fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
-                  s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
+              s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
           }
         }.getOrElse(validationState)
     }.result

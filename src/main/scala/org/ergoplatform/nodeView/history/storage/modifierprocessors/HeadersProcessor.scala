@@ -93,6 +93,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
 
     historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
+    onProcess(h)
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>

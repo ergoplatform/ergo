@@ -11,7 +11,7 @@ import scala.util.Random
 
 class ErgoTransactionSpecification extends ErgoPropertyTest {
 
-  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0:Byte))
+  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
@@ -26,8 +26,8 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
                           idToskip: TokenId): ErgoBoxCandidate = {
     val assetId = boxCandidate.additionalTokens.find(_._1.sameElements(idToskip) == false).get._1
 
-    val tokens = boxCandidate.additionalTokens.map{case (id, amount) =>
-      if(id.sameElements(assetId)) assetId -> (amount + delta) else assetId -> amount
+    val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
+      if (id.sameElements(assetId)) assetId -> (amount + delta) else assetId -> amount
     }
 
     new ErgoBoxCandidate(
@@ -38,7 +38,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("a valid transaction is valid") {
-    forAll(validErgoTransactionGen){case (from, tx) =>
+    forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
       tx.statefulValidity(from, context).isSuccess shouldBe true
     }
@@ -46,7 +46,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
   property("ergo preservation law holds") {
     forAll(validErgoTransactionGen, smallPositiveInt) { case ((from, tx), deltaAbs) =>
-      val delta = if(Random.nextBoolean()) -deltaAbs else deltaAbs
+      val delta = if (Random.nextBoolean()) -deltaAbs else deltaAbs
 
       val wrongTx = tx.copy(outputCandidates =
         modifyValue(tx.outputCandidates.head, delta) +: tx.outputCandidates.tail)
@@ -81,18 +81,18 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
   property("assets preservation law holds") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false){case ((seq, modified), ebc) =>
-          if(modified) {
-            (seq :+ ebc) -> true
-          } else{
-            if(ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)){
-              (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
-            }else {
-              (seq :+ ebc) -> false
-            }
+      val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
+        if (modified) {
+          (seq :+ ebc) -> true
+        } else {
+          if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)) {
+            (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
+          } else {
+            (seq :+ ebc) -> false
           }
+        }
       }._1
-        val wrongTx = tx.copy(outputCandidates = updCandidates)
+      val wrongTx = tx.copy(outputCandidates = updCandidates)
 
       wrongTx.statelessValidity.isSuccess shouldBe true
       wrongTx.statefulValidity(from, context).isSuccess shouldBe false

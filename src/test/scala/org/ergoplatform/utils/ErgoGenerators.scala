@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.mining.EquihashSolution
@@ -19,12 +20,15 @@ import org.scalatest.Matchers
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.{SBoolean, SByte, SType}
+import sigmastate._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.util.Random
 
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
@@ -88,6 +92,15 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     tokens <- Gen.sequence(additionalTokensGen(tokensCount))
   } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
 
+  def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)]): Gen[ErgoBox] = for {
+    prop <- trueLeafGen
+    value <- positiveIntGen
+    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
+    boxId: Short <- Arbitrary.arbitrary[Short]
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    ar <- Gen.sequence(additionalRegistersGen(regNum))
+  } yield ErgoBox(value, prop, tokens, ar.asScala.toMap, transactionId, boxId)
+
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
@@ -106,6 +119,100 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
     to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, to)
+
+
+  def validTransactionGen(boxesToSpend: Seq[ErgoBox]): Gen[ErgoTransaction] = {
+    val inputSum = boxesToSpend.map(_.value).sum
+    val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
+      mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
+        ByteArrayWrapper(bs) -> amt
+      }: _*)
+
+    //randomly creating a new asset
+    if (Random.nextBoolean()) {
+      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Random.nextInt(Int.MaxValue))
+          .ensuring(assetsMap.size <= ErgoTransaction.MaxTokens)
+    }
+
+    lazy val tokensSheetIn = assetsMap.toMap
+
+    val inputsCount = boxesToSpend.size
+    val outputsCount = Math.min(Short.MaxValue, Math.max(inputsCount + 1, Random.nextInt(inputsCount * 2)))
+
+    val outputAmounts = (1 to outputsCount).foldLeft(Seq[Long]() -> inputSum) { case ((amounts, remainder), idx) =>
+      val amount = if (idx == outputsCount) {
+        remainder
+      } else {
+        Random.nextInt((inputSum / inputsCount).toInt) + 1
+      }
+      (amounts :+ amount) -> (remainder - amount)
+    }._1.toIndexedSeq
+
+    val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
+      mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
+
+    var availableTokenSlots = (outputsCount * ErgoBox.MaxTokens).ensuring(_ >= assetsMap.size)
+
+    if (assetsMap.nonEmpty) {
+      do {
+        val in = assetsMap.head
+        val outIdx = Stream.from(1, 1).map(_ => Random.nextInt(tokenAmounts.size))
+          .find(idx => tokenAmounts(idx).size < ErgoBox.MaxTokens).get
+        val out = tokenAmounts(outIdx)
+        val contains = out.contains(in._1)
+
+        val amt = if (in._2 == 1 || (availableTokenSlots < assetsMap.size * 2 && !contains) || Random.nextBoolean()) {
+          in._2
+        } else {
+          Math.max(1, Math.min((Random.nextDouble() * in._2).toLong, in._2))
+        }
+
+        if (amt == in._2) assetsMap.remove(in._1) else assetsMap.update(in._1, in._2 - amt)
+        val updOut = if (contains) {
+          val outAmt = out(in._1)
+          out.update(in._1, outAmt + amt)
+        } else {
+          availableTokenSlots = availableTokenSlots - 1
+          out.update(in._1, amt)
+        }
+        tokenAmounts(outIdx) = out
+      } while (assetsMap.nonEmpty)
+    }
+
+    lazy val tokensSheetOut = tokenAmounts.flatMap(_.toSeq).groupBy(_._1).mapValues(_.map(_._2).sum)
+
+    //println("intokens: " + tokensSheetOut)
+    //println("outtokens: " + tokensSheetOut)
+
+    val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
+      val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
+      ErgoBox(amt, TrueLeaf, normalizedTokens)
+    }
+
+    val noProof = SerializedProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)
+    val inputs = boxesToSpend.map(box => Input(box.id, noProof)).toIndexedSeq
+    ErgoTransaction(inputs, newBoxes)
+  }
+
+  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]]  = {
+    val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
+    (1 to tokensCount).foreach { i =>
+      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextDouble() * Long.MaxValue).toLong
+      val idx = i % tokenDistrib.size
+      val s = tokenDistrib(idx)
+      tokenDistrib(idx) = s :+ (id, amt)
+    }
+    tokenDistrib
+  }
+
+  lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
+    inputsCount <- Gen.choose(1, 100)
+    tokensCount <- Gen.choose(0, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1))
+    tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
+    from <- Gen.sequence(tokensDistribution.map(ergoBoxGenForTokens))
+    tx <- validTransactionGen(from.asScala.toIndexedSeq)
+  } yield from.asScala.toIndexedSeq -> tx
+
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 

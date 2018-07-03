@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
@@ -79,21 +79,24 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
     }
   }
 
+  def updateAnAsset(tx: ErgoTransaction, from: IndexedSeq[ErgoBox], delta:Int) = {
+    val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
+      if (modified) {
+        (seq :+ ebc) -> true
+      } else {
+        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)) {
+          (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
+        } else {
+          (seq :+ ebc) -> false
+        }
+      }
+    }._1
+    tx.copy(outputCandidates = updCandidates)
+  }
+
   property("assets preservation law holds") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
-        if (modified) {
-          (seq :+ ebc) -> true
-        } else {
-          if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)) {
-            (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
-          } else {
-            (seq :+ ebc) -> false
-          }
-        }
-      }._1
-      val wrongTx = tx.copy(outputCandidates = updCandidates)
-
+      val wrongTx = updateAnAsset(tx, from, delta = 1)
       wrongTx.statelessValidity.isSuccess shouldBe true
       wrongTx.statefulValidity(from, context).isSuccess shouldBe false
     }

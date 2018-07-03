@@ -50,7 +50,15 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("impossible to overflow ergo tokens") {
+    forAll(validErgoTransactionGen) { case (from, tx) =>
+      val overflowSurplus = (Long.MaxValue - tx.outputCandidates.map(_.value).sum) + 1
 
+      val wrongTx = tx.copy(outputCandidates =
+        modifyValue(tx.outputCandidates.head, overflowSurplus) +: tx.outputCandidates.tail)
+
+      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+    }
   }
 
   property("assets preservation law holds") {

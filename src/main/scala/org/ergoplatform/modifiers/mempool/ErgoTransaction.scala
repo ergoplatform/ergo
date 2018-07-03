@@ -55,6 +55,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $toString")
+      .demand(Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _))).isSuccess, s"Overflow in outputs in $toString")
       .result
   }
 

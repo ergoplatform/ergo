@@ -1,12 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
-import java.nio.ByteBuffer
-
-import com.google.common.primitives.Longs
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
@@ -65,7 +62,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
     require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
 
-
     lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
 
     lazy val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
@@ -104,7 +100,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                       amountCheck: Boolean = false) = {
       boxes.foreach { box =>
         box.additionalTokens.foreach { case (assetId, amount) =>
-          if (amountCheck) require(amount >=0)
+          if (amountCheck) require(amount >= 0)
           val aiWrapped = ByteArrayWrapper(assetId)
           val total = map.getOrElse(aiWrapped, 0L)
           map.put(aiWrapped, Math.addExact(total, amount)).ensuring(_ => map.size <= 64)
@@ -136,9 +132,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has a negative output $toString")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $toString")
       .demand(checkAssetPreservationRules, s"Assets preservation tule is broken in $toString")
-
-    txCost
-  }
+      .result
+      .toTry
+      .map(_ => txCost)
+  }.flatten
 
   override type M = ErgoTransaction
 

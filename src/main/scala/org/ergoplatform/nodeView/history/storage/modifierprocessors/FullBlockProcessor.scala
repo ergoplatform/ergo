@@ -114,7 +114,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     if (txsAreNew) {
       fullBlock.blockTransactions
     } else {
-      fullBlock.aDProofs
+      fullBlock.adProofs
         .getOrElse(throw new NoSuchElementException("Only transactions can be new when proofs are empty"))
     }
   }

@@ -48,7 +48,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
           if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-            newBlock.aDProofs.foreach { adp =>
+            newBlock.adProofs.foreach { adp =>
               viewHolderRef ! LocallyGeneratedModifier(adp)
             }
           }

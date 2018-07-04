@@ -10,12 +10,11 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.Version
 import org.ergoplatform.api.InfoRoute
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
-import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
+import org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo
+import org.ergoplatform.local.NodeInfo
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.Algos
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.NetworkTime.Time
@@ -29,6 +28,8 @@ class InfoRoutesSpec extends FlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport
   with Stubs {
+
+  import jsonEncoders._
 
   val fakeTimeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp) {
     override def time(): Time = 123

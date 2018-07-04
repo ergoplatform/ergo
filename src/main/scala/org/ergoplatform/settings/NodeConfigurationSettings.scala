@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.settings.ApiSettings.EstimateByteLength
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -19,7 +20,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean,
-                                     keepVersions: Int)
+                                     keepVersions: Int,
+                                     apiSettings: ApiSettings)
 
 
 trait NodeConfigurationReaders extends StateTypeReaders {
@@ -27,6 +29,10 @@ trait NodeConfigurationReaders extends StateTypeReaders {
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
     val stateType = stateTypeFromString(cfg.as[String](stateTypeKey), stateTypeKey)
+    val apiSettings = ApiSettings(
+      cfg.as[Option[Boolean]](s"$path.estimateByteLengthApi") -> EstimateByteLength
+    )
+
     NodeConfigurationSettings(stateType,
                               cfg.as[Boolean](s"$path.verifyTransactions"),
                               cfg.as[Int](s"$path.blocksToKeep"),
@@ -35,6 +41,7 @@ trait NodeConfigurationReaders extends StateTypeReaders {
                               cfg.as[Boolean](s"$path.mining"),
                               cfg.as[FiniteDuration](s"$path.miningDelay"),
                               cfg.as[Boolean](s"$path.offlineGeneration"),
-                              cfg.as[Int](s"$path.keepVersions"))
+                              cfg.as[Int](s"$path.keepVersions"),
+                              apiSettings)
   }
 }

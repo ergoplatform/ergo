@@ -1,11 +1,13 @@
 package org.ergoplatform.modifiers.history
 
+import cats.Eval
 import com.google.common.primitives.{Bytes, Ints}
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, ApiSettings, Constants, NodeConfigurationSettings}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
@@ -45,15 +47,30 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
 }
 
 object BlockTransactions {
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(LeafData @@ ids)
+}
 
-  implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
-    Map(
+class BlockTransactionsEncoder(implicit val settings: ApiSettings,
+                               transactionEncoder: Encoder[ErgoTransaction])
+  extends Encoder[BlockTransactions] with ApiCodecs {
+
+  def apply(bt: BlockTransactions): Json = {
+    var byteLength: Seq[Eval[Int]] = Seq(Eval.now(32 /* headerId */))
+
+    val transactionJson = bt.txs.map { tx =>
+      val json = tx.asJson
+      byteLength = byteLength :+ Eval.always(extractByteLength(json) + 2 /* length field */)
+      json
+    }.asJson
+
+    jsonWithLength(byteLength.map(_.value).sum,
       "headerId" -> Algos.encode(bt.headerId).asJson,
-      "transactions" -> bt.txs.map(_.asJson).asJson
-    ).asJson
+      "transactions" -> transactionJson
+    )
+  }
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {

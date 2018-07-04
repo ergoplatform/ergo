@@ -58,7 +58,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val chain = genChain(BlocksToKeep)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.append(chain.head.blockTransactions)
-    history.append(chain.head.aDProofs.get)
+    history.append(chain.head.adProofs.get)
     history.bestFullBlockOpt.get shouldBe chain.head
 
     val missedChain = chain.tail.toList

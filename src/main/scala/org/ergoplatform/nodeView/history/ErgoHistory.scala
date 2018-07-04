@@ -80,7 +80,7 @@ trait ErgoHistory
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
-        val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
+        val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.adProofs.map(_.id))
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
         if (nonMarkedIds.nonEmpty) {

@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+import cats.Eval
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryIdentifier}
@@ -8,14 +9,15 @@ import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ApiSettings, NodeConfigurationSettings}
+import org.ergoplatform.utils.JsonEncoders
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
@@ -93,27 +95,92 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
 
-  override def toString: String = this.asJson.noSpaces
+  override def toString: String = JsonEncoders.default.transactionEncoder(this).noSpaces
 }
 
 
-object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
+class ErgoTransactionEncoder(implicit val settings: ApiSettings) extends Encoder[ErgoTransaction] with ApiCodecs {
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
-    extension.values.map { case (key, value) =>
-      key -> valueEncoder(value)
-    }.asJson
+    var byteLength = 0
+    val jsonMap = extension.values.map { case (key, value) =>
+      val serializedValue = serialize(value)
+      byteLength += 1 /* key */ + serializedValue.length
+      key.toString -> bytesEncoder(serializedValue)
+    }
+    jsonWithLength(byteLength, jsonMap)
+  }
+
+  def estimateInputBytes(input: Input, extensionJson: Json): Int = {
+    ErgoBox.BoxId.size +
+      2 /* extSize field */ +
+      input.spendingProof.proofBytes.length +
+      extractByteLength(extensionJson)
   }
 
   implicit private val inputEncoder: Encoder[Input] = { input =>
-    Json.obj(
+    val extJson = extensionEncoder(input.spendingProof.extension)
+    jsonWithLength(estimateInputBytes(input, extJson),
       "boxId" -> input.boxId.asJson,
       "spendingProof" -> Json.obj(
         "proofBytes" -> byteSeqEncoder(input.spendingProof.proofBytes),
-        "extension" -> extensionEncoder(input.spendingProof.extension)
+        "extension" -> extJson
       )
     )
   }
+
+  implicit private val registersEncoder: Encoder[Map[NonMandatoryIdentifier, EvaluatedValue[_ <: SType]]] = { regsMap =>
+    var byteLength = 0
+    val jsonMap = regsMap.map {  case (key, value) =>
+      val serializedValue = serialize(value)
+      byteLength += 1 /* key */ + serializedValue.length
+      s"R${key.number}" -> serializedValue.asJson
+    }
+    jsonWithLength(byteLength, jsonMap)
+  }
+
+  def estimateOutputBytes(output: ErgoBox, registersJson: Json): Int = {
+    8 /* value */ +
+    output.propositionBytes.length +
+    extractByteLength(registersJson)
+  }
+
+  implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
+    val registersJson = registersEncoder(box.additionalRegisters)
+    jsonWithLength(estimateOutputBytes(box, registersJson),
+      "boxId" -> box.id.asJson,
+      "value" -> box.value.asJson,
+      "proposition" -> valueEncoder(box.proposition),
+      "additionalRegisters" -> registersJson
+    )
+  }
+
+  def apply(tx: ErgoTransaction): Json = {
+    var byteLength: Seq[Eval[Int]] = Seq(Eval.now(32 /* id */ + 2 /* inputsCount field */ + 2 /* outputsCount field */))
+
+    val inputsJson = tx.inputs.map { input =>
+      val inputJson = input.asJson
+      byteLength = byteLength :+ Eval.always(extractByteLength(inputJson))
+      inputJson
+    }.asJson
+
+    val outputsJson = tx.outputs.map { output =>
+      val outputJson = output.asJson
+      byteLength = byteLength :+  Eval.always(extractByteLength(outputJson))
+      outputJson
+    }.asJson
+
+    jsonWithLength(byteLength.map(_.value).sum,
+      "id" -> tx.id.asJson,
+      "inputs" -> inputsJson,
+      "outputs" -> outputsJson
+    )
+  }
+
+}
+
+class ErgoTransactionDecoder(implicit val settings: ApiSettings)
+  extends Decoder[ErgoTransaction] with ApiCodecs with ModifierValidator {
 
   implicit val proofDecoder: Decoder[SerializedProverResult] = { cursor =>
     for {
@@ -127,21 +194,6 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       boxId <- cursor.downField("boxId").as[ADKey]
       proof <- cursor.downField("spendingProof").as[SerializedProverResult]
     } yield Input(boxId, proof)
-  }
-
-  implicit private val registersEncoder: Encoder[Map[NonMandatoryIdentifier, EvaluatedValue[_ <: SType]]] = {
-    _.map {  case (key, value) =>
-      s"R${key.number}" -> valueEncoder(value)
-    }.asJson
-  }
-
-  implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
-    Json.obj(
-      "boxId" -> box.id.asJson,
-      "value" -> box.value.asJson,
-      "proposition" -> valueEncoder(box.proposition),
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
-    )
   }
 
   implicit private val identifierDecoder: KeyDecoder[NonMandatoryIdentifier] = { key =>
@@ -159,15 +211,8 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield (new ErgoBoxCandidate(value, proposition, registers), maybeId)
   }
 
-  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
-    Json.obj(
-      "id" -> tx.id.asJson,
-      "inputs" -> tx.inputs.asJson,
-      "outputs" -> tx.outputs.asJson
-    )
-  }
-
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
+  def apply(cursor: HCursor): Decoder.Result[ErgoTransaction] = {
+    implicit val c = cursor
     for {
       maybeId <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
@@ -176,13 +221,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield result
   }
 
+
   def validateDecodedTransaction(inputs: IndexedSeq[Input], outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])],
                                  maybeId: Option[ModifierId])(implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     val tx = ErgoTransaction(inputs, outputs.map(_._1))
     val result = accumulateErrors
       .validate(maybeId.forall(_ sameElements tx.id)) {
         fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
-            s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+          s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
       }
       .validate(tx.validateStateless)
       .validate(validateOutputs(outputs, tx.id))
@@ -198,7 +244,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
           val box = candidate.toBox(txId, index.toShort)
           validationState.validate(boxId sameElements box.id) {
             fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
-                  s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
+              s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
           }
         }.getOrElse(validationState)
     }.result

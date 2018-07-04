@@ -69,7 +69,8 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
       ),
       chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )
-    ErgoNodeViewRef(settings, timeProvider, emission)
+    val cache = new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
+    ErgoNodeViewRef(settings, timeProvider, emission, cache)
   }
 
   private def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>

@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.{Blake2b256, Digest32}

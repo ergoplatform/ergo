@@ -4,7 +4,8 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorSystem, Props}
 import org.ergoplatform.ErgoSanity.HT
-import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
+import org.ergoplatform.local.ErgoMiner.MiningStatusRequest
+import org.ergoplatform.local.MiningStatus
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
@@ -12,9 +13,10 @@ import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.settings.ApiSettings.EstimateByteLength
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, JsonEncoders}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
@@ -29,6 +31,9 @@ import scala.concurrent.duration._
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
   implicit val system: ActorSystem
+
+  implicit val apiSettings = ApiSettings(Set[ApiSetting](EstimateByteLength))
+  implicit val jsonEncoders = new JsonEncoders
 
   lazy val chain = genChain(4)
 
@@ -76,7 +81,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props() = Props(new PeersManagerStub)
   }
 
-  val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
+  val minerInfo = MiningStatus(isMining = false, candidateBlock = None)
 
   class MinerStub extends Actor {
     def receive = { case MiningStatusRequest => sender() ! minerInfo }
@@ -141,7 +146,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, apiSettings)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val monetarySettings = settings.chainSettings.monetary

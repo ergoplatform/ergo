@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers
 
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -9,11 +9,11 @@ import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNo
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProofs])
+                         adProofs: Option[ADProofs])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
+  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ adProofs.toSeq
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
@@ -27,15 +27,25 @@ case class ErgoFullBlock(header: Header,
     throw new Error("Should never try to serialize ErgoFullBlock")
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+
 }
 
 object ErgoFullBlock {
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
 
-  implicit val jsonEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
-    Map(
+}
+
+class ErgoFullBlockEncoder(implicit headerEncoder: Encoder[Header],
+                           transactionEncoder: Encoder[BlockTransactions],
+                           proofsEncoder: Encoder[ADProofs]) extends Encoder[ErgoFullBlock] {
+
+  def apply(b: ErgoFullBlock): Json = {
+    Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
-    ).asJson
+      "adProofs" -> b.adProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+    )
+  }
+
 }

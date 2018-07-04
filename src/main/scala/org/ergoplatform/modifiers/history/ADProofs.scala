@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, ApiSettings, Constants, NodeConfigurationSettings}
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
@@ -31,7 +32,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
 
     /**
       * Sometimes proofBytes could have length about 350 000 elements, it's useless to convert them into string.
-      * So decisin here is to not render them in toString method.
+      * So decision here is to not render them in toString method.
       */
     //val sProofBytes = Algos.encode(proofBytes)
     s"ADProofs(Id:$sId,HeaderId:$sHeaderId)"
@@ -92,13 +93,18 @@ object ADProofs {
       case r: Removal =>
         Remove(r.boxId)
     }
+}
 
-  implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
-    Map(
-      "headerId" -> Algos.encode(proof.headerId).asJson,
-      "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
-      "digest" -> Algos.encode(proof.digest).asJson
-    ).asJson
+class ADProofsEncoder(implicit val settings: ApiSettings) extends Encoder[ADProofs] with ApiCodecs {
+
+  def apply(proofs: ADProofs): Json = {
+    jsonWithLength(32 /* headerId */ + proofs.proofBytes.length,
+      "headerId" -> Algos.encode(proofs.headerId).asJson,
+      "proofBytes" -> Algos.encode(proofs.proofBytes).asJson,
+      "digest" -> Algos.encode(proofs.digest).asJson
+    )
+  }
+
 }
 
 object ADProofSerializer extends Serializer[ADProofs] {

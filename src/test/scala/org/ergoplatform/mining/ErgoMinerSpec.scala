@@ -4,13 +4,13 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
+import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
+import org.ergoplatform.local.{ErgoMinerRef, MiningStatus, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}
+import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.FlatSpecLike
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -52,7 +52,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     //check that miner actor is still alive
     noException should be thrownBy {
-      val result = await((minerRef ? MiningStatusRequest).mapTo[MiningStatusResponse])
+      val result = await((minerRef ? MiningStatusRequest).mapTo[MiningStatus])
       result.isMining shouldBe true
       result.candidateBlock shouldBe defined
       val height = result.candidateBlock.get.parentOpt.get.height

@@ -8,6 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.utils.JsonEncoders
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -15,7 +16,9 @@ import scorex.core.settings.RESTApiSettings
 import scala.concurrent.Future
 
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
-                               (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                               (implicit val context: ActorRefFactory, enc: JsonEncoders) extends ErgoBaseApiRoute {
+
+  import enc._
 
   override val route: Route = (pathPrefix("transactions") & withCors) {
     getUnconfirmedTransactionsR ~ sendTransactionR

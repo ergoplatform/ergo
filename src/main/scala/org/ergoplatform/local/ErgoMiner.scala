@@ -1,11 +1,6 @@
 package org.ergoplatform.local
 
-import java.math.BigInteger
-import java.security.SecureRandom
-
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
-import io.circe.Encoder
-import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.R3
@@ -24,9 +19,8 @@ import org.ergoplatform._
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import sigmastate.{NoProof, SBoolean, SigSerializer}
+import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.collection.mutable
@@ -73,7 +67,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def miningStatus: Receive = {
     case MiningStatusRequest =>
-      sender ! MiningStatusResponse(isMining, candidateOpt)
+      sender ! MiningStatus(isMining, candidateOpt)
   }
 
   private def startMining: Receive = {
@@ -230,14 +224,6 @@ object ErgoMiner extends ScorexLogging {
   case object StartMining
 
   case object MiningStatusRequest
-
-  case class MiningStatusResponse(isMining: Boolean, candidateBlock: Option[CandidateBlock])
-
-  implicit val jsonEncoder: Encoder[MiningStatusResponse] = (r: MiningStatusResponse) =>
-    Map(
-      "isMining" -> r.isMining.asJson,
-      "candidateBlock" -> r.candidateBlock.asJson
-    ).asJson
 
 }
 

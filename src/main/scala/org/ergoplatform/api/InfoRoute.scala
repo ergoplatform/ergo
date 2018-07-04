@@ -4,7 +4,9 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo
+import org.ergoplatform.local.NodeInfo
+import org.ergoplatform.utils.JsonEncoders
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -12,7 +14,10 @@ import scorex.core.utils.NetworkTimeProvider
 case class InfoRoute(statsCollector: ActorRef,
                      settings: RESTApiSettings,
                      timeProvider: NetworkTimeProvider)
-                    (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                    (implicit val context: ActorRefFactory, encoders: JsonEncoders) extends ErgoBaseApiRoute {
+
+  import encoders._
+
   override val route = withCors {
     info
   }

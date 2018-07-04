@@ -1,15 +1,10 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import io.circe.Encoder
-import io.circe.syntax._
 import org.ergoplatform.Version
-import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
@@ -75,44 +70,6 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
 object ErgoStatsCollector {
 
   case object GetNodeInfo
-
-  case class NodeInfo(nodeName: String,
-                      appVersion: String,
-                      unconfirmedCount: Int,
-                      peersCount: Int,
-                      stateRoot: Option[String],
-                      stateType: StateType,
-                      stateVersion: Option[String],
-                      isMining: Boolean,
-                      bestHeaderOpt: Option[Header],
-                      headersScore: Option[BigInt],
-                      bestFullBlockOpt: Option[ErgoFullBlock],
-                      fullBlocksScore: Option[BigInt],
-                      launchTime: Long) {
-  }
-
-  object NodeInfo extends ApiCodecs {
-    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
-      Map(
-        "name" -> ni.nodeName.asJson,
-        "appVersion" -> Version.VersionString.asJson,
-        "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
-        "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
-        "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
-        "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
-        "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
-        "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,
-        "headersScore" -> ni.headersScore.map(difficultyEncoder.apply).asJson,
-        "fullBlocksScore" -> ni.fullBlocksScore.map(difficultyEncoder.apply).asJson,
-        "unconfirmedCount" -> ni.unconfirmedCount.asJson,
-        "stateRoot" -> ni.stateRoot.asJson,
-        "stateType" -> ni.stateType.stateTypeName.asJson,
-        "stateVersion" -> ni.stateVersion.asJson,
-        "isMining" -> ni.isMining.asJson,
-        "peersCount" -> ni.peersCount.asJson,
-        "launchTime" -> ni.launchTime.asJson
-      ).asJson
-  }
 
 }
 

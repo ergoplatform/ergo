@@ -18,6 +18,8 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
+  import jsonEncoders._
+
   implicit val timeout = RouteTestTimeout(15.seconds.dilated)
 
   val prefix = "/blocks"

@@ -24,6 +24,8 @@ class TransactionApiRouteSpec extends FlatSpec
   with Stubs
   with FailFastCirceSupport {
 
+  import jsonEncoders._
+
   implicit val timeout = RouteTestTimeout(15.seconds.dilated)
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)

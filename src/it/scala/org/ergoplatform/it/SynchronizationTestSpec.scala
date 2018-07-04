@@ -2,7 +2,6 @@ package org.ergoplatform.it
 
 import org.ergoplatform.it.util.IntegrationTest
 import org.scalatest.FreeSpec
-import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Await.result
 import scala.concurrent.Future.traverse

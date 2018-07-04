@@ -1,16 +1,19 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.ApiSettings.EstimateByteLength
+import org.ergoplatform.settings._
+import org.ergoplatform.utils.JsonEncoders
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -65,7 +68,9 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId =
     BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
+  def estimatedByteLength: Int = HeaderSerializer.estimateBytes(this)
+
+  override lazy val toString: String = s"Header(${JsonEncoders.default.headerEncoder(this).noSpaces})"
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
@@ -90,8 +95,14 @@ object Header {
 
   lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
 
-  implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
-    Map(
+}
+
+class HeaderEncoder(implicit val settings: ApiSettings) extends Encoder[Header] with ApiCodecs {
+
+  override def shouldEstimateLength: Boolean = settings(EstimateByteLength)
+
+  def apply(h: Header): Json = {
+    jsonWithLength(HeaderSerializer.estimateBytes(h),
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
       "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
@@ -104,8 +115,9 @@ object Header {
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
-      "version" -> h.version.asJson
-    ).asJson
+      "version" -> h.version.asJson,
+    )
+  }
 }
 
 object HeaderSerializer extends Serializer[Header] {
@@ -121,6 +133,17 @@ object HeaderSerializer extends Serializer[Header] {
       h.extensionHash,
       RequiredDifficulty.toBytes(h.nBits),
       Ints.toByteArray(h.height))
+
+  def countBytesWithoutInterlinksAndPow: Int =
+    1 +    // version
+      32 + // parentId
+      32 + // ADProofsRoot
+      32 + // transactionsRoot
+      33 + // stateRoot
+      8  + // timestamp
+      32 + // extensionHash
+      4  + // nBits
+      4    // height
 
   def bytesWithoutPow(h: Header): Array[Byte] = {
     @SuppressWarnings(Array("TraversableHead"))
@@ -140,6 +163,25 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
+  def countInterlinkBytes(h: Header): Int = {
+    val linksWithIndexView = h.interlinks.view.zipWithIndex
+    val uniqueLinkCount = linksWithIndexView count {
+      case (link, index) => !linksWithIndexView.exists {
+        case (prevLink, prevIndex) =>  (prevLink sameElements link) && prevIndex < index
+      }
+    }
+    uniqueLinkCount * (
+      1 + // repeating count size field
+      32  // link
+    )
+  }
+
+  def countBytesWithoutPow(h: Header): Int = {
+    countBytesWithoutInterlinksAndPow +
+      2 + // interlinkBytesSize field
+      countInterlinkBytes(h)
+  }
+
   def solutionBytes(h: Header): Array[Byte] = {
     val equihashSolutionsSize = Chars.toByteArray(h.equihashSolution.byteLength.toChar)
     val equihashSolutionsBytes = h.equihashSolution.bytes
@@ -156,6 +198,12 @@ object HeaderSerializer extends Serializer[Header] {
 
   override def toBytes(h: Header): Array[Version] =
     Bytes.concat(bytesWithoutPow(h), solutionBytes(h))
+
+  def estimateBytes(h: Header): Int =
+    countBytesWithoutPow(h) +
+      2 + // 0 field
+      2 + // equihashSolutionsSize field
+      h.equihashSolution.byteLength
 
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {

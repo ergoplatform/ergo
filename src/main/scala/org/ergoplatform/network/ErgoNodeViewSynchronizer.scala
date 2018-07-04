@@ -18,6 +18,7 @@ import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
 
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
@@ -80,7 +81,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val currentQueue = deliveryTracker.expectingFromRandomQueue
+        val currentQueue = deliveryTracker.expectingFromRandomQueue.map(a => a: mutable.WrappedArray[Byte])
         val newIds = h.missedModifiersForFullChain(downloadListSize - currentQueue.size, currentQueue)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
@@ -133,4 +134,5 @@ object ErgoNodeViewSynchronizer {
 
 
   case object CheckModifiersToDownload
+
 }

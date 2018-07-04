@@ -7,13 +7,15 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Success, Try}
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends ScorexLogging {
+
+  private type K = mutable.WrappedArray[Byte]
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
 
@@ -26,8 +28,7 @@ trait ToDownloadProcessor extends ScorexLogging {
   /**
     * Ids of block sections we are waiting to create block from full block
     */
-  private val missedModifiers: ArrayBuffer[(ModifierTypeId, ModifierId)] =
-    ArrayBuffer[(ModifierTypeId, ModifierId)]()
+  private val missedModifiers: TrieMap[K, ModifierTypeId] = TrieMap()
 
   private var isHeadersChainSyncedVar: Boolean = false
 
@@ -55,7 +56,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         case Some(bestHeaderAtThisHeight) =>
           requiredModifiersForHeader(bestHeaderAtThisHeight)
             .filter(m => !contains(m._2))
-            .foreach(m => missedModifiers += m)
+            .foreach(m => missedModifiers.put(new mutable.WrappedArray.ofByte(m._2), m._1))
           continuation(height + 1)
         case None =>
       }
@@ -65,36 +66,30 @@ trait ToDownloadProcessor extends ScorexLogging {
   }
 
   /**
-    * Function that is called on successful processing of a header `h`
+    * Function that is called on successful processing of modifier `modifier`
     *
-    * @param h - processed header
+    * @param modifier - processed modifier
     */
-  protected def onProcess(h: Header): Unit = if (isHeadersChainSynced) {
-    requiredModifiersForHeader(h).foreach(m => missedModifiers += m)
+  protected def onProcess(modifier: ErgoPersistentModifier): Unit = if (isHeadersChainSynced) {
+    modifier match {
+      case h: Header =>
+        requiredModifiersForHeader(h).foreach(m => missedModifiers.put(new mutable.WrappedArray.ofByte(m._2), m._1))
+      case _ =>
+    }
+    missedModifiers.remove(new mutable.WrappedArray.ofByte(modifier.id))
   }
+
+  /**
+    * @return Set of missed modifiers keys
+    */
+  def missedModifiersKeySet: scala.collection.Set[K] = missedModifiers.keySet
 
   /**
     * Next howMany modifiers we should download to synchronize full block chain with headers chain
     */
-  def missedModifiersForFullChain(howMany: Int, excluding: Iterable[ModifierId]): Seq[(ModifierTypeId, ModifierId)] = {
-    if (excluding.isEmpty) {
-      missedModifiers.take(howMany)
-    } else {
-      @tailrec
-      def collect(i: Int, remaining: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
-        if (remaining > 0) {
-          Try(missedModifiers(i)) match {
-            case Success(id) if !excluding.exists(_ sameElements id._2) => collect(i + 1, remaining - 1, id +: acc)
-            case Success(_) => collect(i + 1, remaining, acc)
-            case Failure(_) => acc
-          }
-        } else {
-          acc
-        }
-      }
-
-      collect(0, howMany, Seq())
-    }
+  def missedModifiersForFullChain(howMany: Int, excluding: scala.collection.Set[K]): Seq[(ModifierTypeId, ModifierId)] = {
+    missedModifiers.keySet.diff(excluding).take(howMany).flatMap(k => missedModifiers.get(k)
+      .map(v => v -> ModifierId @@ k.array)).toSeq
   }
 
 

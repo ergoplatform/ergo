@@ -35,11 +35,8 @@ class ErgoModifiersCache(override val maxSize: Int)
       }
     }
 
-    // TODO in some cases (e.g. when cache have small size while missedModifiersForFullChain are big) it might be more
-    // efficient to iterate through all candidates in cache
-    val required: Set[mutable.WrappedArray[Byte]] = history.missedModifiersForFullChain(Int.MaxValue, Seq())
-      .map(m => new mutable.WrappedArray.ofByte(m._2)).toSet
-    val containing = cache.keySet
+    val required: scala.collection.Set[mutable.WrappedArray[Byte]] = history.missedModifiersKeySet
+    val containing: scala.collection.Set[mutable.WrappedArray[Byte]] = cache.keySet
     val probableCandidateKeys = containing.intersect(required)
 
     probableCandidateKeys.find { key =>

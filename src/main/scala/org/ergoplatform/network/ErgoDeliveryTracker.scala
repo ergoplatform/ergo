@@ -30,7 +30,7 @@ class ErgoDeliveryTracker(context: ActorContext,
   /**
     * @return ids we're going to download
     */
-  def expectingFromRandomQueue: Iterable[ModifierId] = ModifierId @@ expectingFromRandom.keys.map(_.array)
+  def expectingFromRandomQueue: scala.collection.Set[ModifierIdAsKey] = expectingFromRandom.keySet
 
   /**
     * Process download request of modifier of type modifierTypeId with id modifierId

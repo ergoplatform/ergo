@@ -49,7 +49,7 @@ trait ErgoHistory
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
     applicableTry(modifier).map { _ =>
-      modifier match {
+      val progressInfo = modifier match {
         case header: Header =>
           (this, process(header))
         case section: BlockSection =>
@@ -59,6 +59,8 @@ trait ErgoHistory
         case chunk: UTXOSnapshotChunk =>
           (this, process(chunk))
       }
+      onProcess(modifier)
+      progressInfo
     }
   }
 

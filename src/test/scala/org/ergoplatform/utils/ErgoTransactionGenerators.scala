@@ -108,7 +108,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     //randomly creating a new asset
     if (Random.nextBoolean()) {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Random.nextInt(Int.MaxValue))
-        .ensuring(assetsMap.size <= ErgoTransaction.MaxTokens)
     }
 
     lazy val tokensSheetIn = assetsMap.toMap
@@ -182,9 +181,14 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokenDistrib.ensuring(_.forall(_.forall(_._2 > 0)))
   }
 
-  def validErgoTransactionGenTemplate(minAssets: Int): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
-    inputsCount <- Gen.choose(1, 100)
-    tokensCount <- Gen.choose(minAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1))
+  def validErgoTransactionGenTemplate(minAssets: Int,
+                                      maxAssets: Int = -1,
+                                      minInputs: Int = 1,
+                                      maxInputs: Int = 100): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
+    inputsCount <- Gen.choose(minInputs, maxInputs)
+    tokensCount <- Gen.choose(
+      minAssets,
+      Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(ergoBoxGenForTokens))
     tx <- validTransactionGen(from.asScala.toIndexedSeq)

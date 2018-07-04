@@ -14,7 +14,7 @@ import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.Da
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
-import scorex.core.network.{NodeViewSynchronizer, SendToPeers, SendToRandom}
+import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -84,7 +84,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
         val currentQueue = deliveryTracker.expectingFromRandomQueue.map(a => a: mutable.WrappedArray[Byte])
-        val newIds = h.missedModifiersForFullChain(downloadListSize - currentQueue.size, currentQueue)
+        val currentCache = modifiersCache.keySet
+        val excluding = currentCache ++ currentQueue
+        val newIds = h.missedModifiersForFullChain(downloadListSize - excluding.size, excluding)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }

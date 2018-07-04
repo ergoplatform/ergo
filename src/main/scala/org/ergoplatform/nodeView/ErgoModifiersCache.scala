@@ -12,6 +12,8 @@ import scala.util.{Failure, Success}
 class ErgoModifiersCache(override val maxSize: Int)
   extends DefaultModifiersCache[ErgoPersistentModifier, ErgoHistory](maxSize) {
 
+  def keySet: scala.collection.Set[K] = cache.keySet
+
   /**
     * Defines a candidate to be applied.
     *
@@ -19,7 +21,7 @@ class ErgoModifiersCache(override val maxSize: Int)
     * @return - candidate if it is found
     */
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
-    def checkApplicability(key: mutable.WrappedArray[Byte], v: ErgoPersistentModifier) = {
+    def checkApplicability(key: K, v: ErgoPersistentModifier) = {
       history.applicableTry(v) match {
         case Failure(e) if e.isInstanceOf[RecoverableModifierError] =>
           // do nothing - modifier may be applied in future
@@ -35,8 +37,8 @@ class ErgoModifiersCache(override val maxSize: Int)
       }
     }
 
-    val required: scala.collection.Set[mutable.WrappedArray[Byte]] = history.missedModifiersKeySet
-    val containing: scala.collection.Set[mutable.WrappedArray[Byte]] = cache.keySet
+    val required: scala.collection.Set[K] = history.missedModifiersKeySet
+    val containing: scala.collection.Set[K] = cache.keySet
     val probableCandidateKeys = containing.intersect(required)
 
     probableCandidateKeys.find { key =>

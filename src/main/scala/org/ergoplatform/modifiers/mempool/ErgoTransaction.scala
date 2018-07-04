@@ -42,6 +42,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
                             map: mutable.Map[ByteArrayWrapper, Long]) = Try {
     boxes.foreach { box =>
+      require(box.additionalTokens.size <= ErgoBox.MaxTokens, "Output contains too many assets")
       box.additionalTokens.foreach { case (assetId, amount) =>
         require(amount >= 0, s"negative asset amount for ${Base16.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)

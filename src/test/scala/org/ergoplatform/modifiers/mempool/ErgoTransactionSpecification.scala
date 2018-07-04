@@ -142,9 +142,32 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("too costly transaction is rejected") {
+    //todo: implement
   }
 
   property("output contains too many assets") {
+    val gen = validErgoTransactionGenTemplate(1, 2, 1, 2)
+    forAll(gen) { case (from, tx) =>
+      var modified = false
+      val updCandidates = tx.outputCandidates.map { c =>
+        if(!modified) {
+          c.additionalTokens.find(_._2 > ErgoBox.MaxTokens + 1 - c.additionalTokens.size) match {
+            case Some((assetId, amount)) =>
+              val updAmount = amount - (ErgoBox.MaxTokens + 1)
+              val updTokens = Seq(assetId -> amount) ++ (1 to (amount - updAmount).toInt).map(_ => assetId -> 1L) ++
+                c.additionalTokens.filterNot(_._1 sameElements assetId)
+                modified = true
+              new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+            case None => c
+          }
+        } else {
+          c
+        }
+      }
+      val wrongTx = tx.copy(outputCandidates = updCandidates)
+      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+    }
   }
 
   property("tx outputs contain too many assets in total") {

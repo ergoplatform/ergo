@@ -33,7 +33,7 @@ import scala.util.Try
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging with ErgoStateReader {
+  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
 
   self: IState =>
 

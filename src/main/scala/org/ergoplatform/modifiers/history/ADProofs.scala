@@ -5,7 +5,7 @@ import io.circe.{Encoder, Json}
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, ApiSettings, Constants, NodeConfigurationSettings}
 import scorex.core.serialization.Serializer
@@ -16,8 +16,7 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends ErgoPersistentModifier
-  with ModifierWithDigest {
+case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends BlockSection {
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 

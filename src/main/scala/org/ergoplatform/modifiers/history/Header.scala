@@ -8,7 +8,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ApiSettings.EstimateByteLength
@@ -36,6 +36,9 @@ case class Header(version: Version,
                   equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
+
+  override type M = Header
+
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
   override lazy val id: ModifierId = ModifierId @@ powHash
@@ -60,16 +63,14 @@ case class Header(version: Version,
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = ModifierWithDigest.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
   lazy val transactionsId: ModifierId =
-    ModifierWithDigest.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+    BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   def estimatedByteLength: Int = HeaderSerializer.estimateBytes(this)
 
   override lazy val toString: String = s"Header(${JsonEncoders.default.headerEncoder(this).noSpaces})"
-
-  override type M = Header
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
@@ -83,6 +84,7 @@ case class Header(version: Version,
     case t: BlockTransactions => transactionsRoot sameElements t.digest
     case _ => false
   }
+
 }
 
 object Header {

@@ -125,7 +125,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
       mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
 
-    var availableTokenSlots = (outputsCount * ErgoBox.MaxTokens).ensuring(_ >= assetsMap.size)
+    var availableTokenSlots = outputsCount * ErgoBox.MaxTokens
 
     if (assetsMap.nonEmpty) {
       do {
@@ -171,7 +171,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]]  = {
     val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
-      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> Random.nextInt(Int.MaxValue).toLong
+      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)
       val idx = i % tokenDistrib.size
       val s = tokenDistrib(idx)
       tokenDistrib(idx) = s :+ (id, amt)

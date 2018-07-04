@@ -120,7 +120,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       val amount = if (idx == outputsCount) {
         remainder
       } else {
-        Random.nextInt((inputSum / inputsCount).toInt) + 1
+        Random.nextInt((remainder / inputsCount).toInt) + 1
       }
       (amounts :+ amount) -> (remainder - amount)
     }._1.toIndexedSeq

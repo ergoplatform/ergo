@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -111,6 +112,33 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   property("impossible to overflow an asset value") {
+    val gen = validErgoTransactionGenTemplate(1, 1, 8, 16)
+    forAll(gen){ case (from, tx) =>
+      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
+        .groupBy(_._1).find(_._2.size >= 2)
+
+      whenever(tokenOpt.nonEmpty){
+        val tokenId = tokenOpt.get._1
+        val tokenAmount = tokenOpt.get._2.map(_._2).sum
+
+        var modified = false
+        val updCandidates = tx.outputCandidates.map { c =>
+          val updTokens = c.additionalTokens.map{case (id, amount) =>
+            if(!modified && ByteArrayWrapper(id) == tokenId){
+              modified = true
+              id -> ((Long.MaxValue - tokenAmount) + amount + 1)
+            } else {
+              id -> amount
+            }
+          }
+          new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+        }
+
+        val wrongTx = tx.copy(outputCandidates = updCandidates)
+        wrongTx.statelessValidity.isSuccess shouldBe false
+        wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+      }
+    }
   }
 
   property("too costly transaction is rejected") {

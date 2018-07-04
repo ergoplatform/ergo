@@ -106,9 +106,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       }: _*)
 
     //randomly creating a new asset
-    if (Random.nextBoolean()) {
-      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Random.nextInt(Int.MaxValue))
-    }
+    if (Random.nextBoolean()) assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Random.nextInt(Int.MaxValue))
 
     lazy val tokensSheetIn = assetsMap.toMap
 

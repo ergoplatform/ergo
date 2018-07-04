@@ -46,8 +46,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   private val minerProp: Value[SBoolean.type] = {
-    //TODO extract from wallet
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.wallet.seed.arr)).publicImage
+    //TODO extract from wallet when it will be implemented
+    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
   }
 
   override def preStart(): Unit = {

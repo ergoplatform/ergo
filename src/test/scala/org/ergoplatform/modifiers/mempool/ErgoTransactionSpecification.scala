@@ -22,12 +22,12 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   }
 
   private def modifyAsset(boxCandidate: ErgoBoxCandidate,
-                          delta: Long,
+                          deltaFn: Long => Long,
                           idToskip: TokenId): ErgoBoxCandidate = {
     val assetId = boxCandidate.additionalTokens.find(_._1.sameElements(idToskip) == false).get._1
 
     val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (id.sameElements(assetId)) assetId -> (amount + delta) else assetId -> amount
+      if (id.sameElements(assetId)) assetId -> deltaFn(amount) else assetId -> amount
     }
 
     new ErgoBoxCandidate(
@@ -79,13 +79,13 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
     }
   }
 
-  def updateAnAsset(tx: ErgoTransaction, from: IndexedSeq[ErgoBox], delta:Int) = {
+  private def updateAnAsset(tx: ErgoTransaction, from: IndexedSeq[ErgoBox], deltaFn: Long => Long) = {
     val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
       if (modified) {
         (seq :+ ebc) -> true
       } else {
         if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)) {
-          (seq :+ modifyAsset(ebc, 1, Digest32 @@ from.head.id)) -> true
+          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
         } else {
           (seq :+ ebc) -> false
         }
@@ -96,13 +96,18 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
   property("assets preservation law holds") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val wrongTx = updateAnAsset(tx, from, delta = 1)
+      val wrongTx = updateAnAsset(tx, from, _ + 1)
       wrongTx.statelessValidity.isSuccess shouldBe true
       wrongTx.statefulValidity(from, context).isSuccess shouldBe false
     }
   }
 
   property("impossible to create an asset of non-positive amount") {
+    forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
+      val wrongTx = updateAnAsset(tx, from, _ => -1)
+      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+    }
   }
 
   property("impossible to overflow an asset value") {

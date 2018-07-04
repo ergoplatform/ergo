@@ -179,7 +179,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       val s = tokenDistrib(idx)
       tokenDistrib(idx) = s :+ (id, amt)
     }
-    tokenDistrib
+    tokenDistrib.ensuring(_.forall(_.forall(_._2 > 0)))
   }
 
   def validErgoTransactionGenTemplate(minAssets: Int): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {

@@ -6,7 +6,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.R4
+import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.CoinsEmission
@@ -22,6 +22,7 @@ import org.ergoplatform._
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.crypto.hash.Digest32
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
@@ -215,14 +216,22 @@ object ErgoMiner extends ScorexLogging {
     val emissionAmount = emission.emissionAtHeight(height)
     val newEmissionBox: ErgoBoxCandidate =
       new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
-    val inputs = (emissionBox +: feeBoxes)
+    val inputBoxes = (emissionBox +: feeBoxes).toIndexedSeq
+    val inputs = inputBoxes
       .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
-    val feeAmount = feeBoxes.map(_.value).sum
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, Seq(), Map())
 
+    val feeAmount = feeBoxes.map(_.value).sum
+    val feeAssets = feeBoxes.flatMap(_.additionalTokens)
+
+    //todo: a miner is creating a new asset, remove it after playing for a while
+    val newAsset: (TokenId, Long) = (Digest32 @@ inputBoxes.head.id) -> 1000
+
+    val minerAssets = feeAssets :+ newAsset
+
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, minerAssets, Map())
 
     ErgoTransaction(
-      inputs.toIndexedSeq,
+      inputs,
       IndexedSeq(newEmissionBox, minerBox)
     )
   }

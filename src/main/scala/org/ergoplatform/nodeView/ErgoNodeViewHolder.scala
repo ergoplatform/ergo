@@ -23,7 +23,8 @@ import scala.util.Try
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider,
-                                                             emission: CoinsEmission)
+                                                             emission: CoinsEmission,
+                                                             modifiersCache: ErgoModifiersCache)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
   override type MS = State
@@ -33,8 +34,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override type MP = ErgoMemPool
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
-
-  override protected lazy val modifiersCache = new ErgoModifiersCache(scorexSettings.network.maxModifiersCacheSize)
 
   override lazy val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
@@ -149,13 +148,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
                                              timeProvider: NetworkTimeProvider,
-                                             emission: CoinsEmission)
-  extends ErgoNodeViewHolder[DigestState](settings, timeProvider, emission)
+                                             emission: CoinsEmission,
+                                             cache: ErgoModifiersCache)
+  extends ErgoNodeViewHolder[DigestState](settings, timeProvider, emission, cache)
 
 private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
                                            timeProvider: NetworkTimeProvider,
-                                           emission: CoinsEmission)
-  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, emission)
+                                           emission: CoinsEmission,
+                                           cache: ErgoModifiersCache)
+  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, emission, cache)
 
 
 /** This class guarantees to its inheritors the creation of correct instance of [[ErgoNodeViewHolder]]
@@ -163,37 +164,45 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
-  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST, emission: CoinsEmission): Props
+  def apply(settings: ErgoSettings,
+            timeProvider: NetworkTimeProvider,
+            digestType: ST,
+            emission: CoinsEmission,
+            cache: ErgoModifiersCache): Props
 }
 
 object DigestNodeViewProps extends ErgoNodeViewProps[StateType.DigestType, DigestState, DigestNodeViewHolder] {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             digestType: StateType.DigestType,
-            emission: CoinsEmission): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, emission)
+            emission: CoinsEmission,
+            cache: ErgoModifiersCache): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, emission, cache)
 }
 
 object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState, UtxoNodeViewHolder] {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             digestType: StateType.UtxoType,
-            emission: CoinsEmission): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, emission)
+            emission: CoinsEmission,
+            cache: ErgoModifiersCache): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, emission, cache)
 }
 
 object ErgoNodeViewRef {
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission): Props =
+            emission: CoinsEmission,
+            cache: ErgoModifiersCache): Props =
     settings.nodeSettings.stateType match {
-      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType, emission)
-      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType, emission)
+      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType, emission, cache)
+      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType, emission, cache)
     }
 
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(settings, timeProvider, emission))
+            emission: CoinsEmission,
+            cache: ErgoModifiersCache)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings, timeProvider, emission, cache))
 }

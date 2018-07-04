@@ -1,17 +1,21 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends ScorexLogging {
+
+  private type K = mutable.WrappedArray[Byte]
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
 
@@ -20,6 +24,11 @@ trait ToDownloadProcessor extends ScorexLogging {
   protected val chainSettings: ChainSettings
 
   protected val timeProvider: NetworkTimeProvider
+
+  /**
+    * Ids of block sections we are waiting to create block from full block
+    */
+  private val missedModifiers: TrieMap[K, ModifierTypeId] = TrieMap()
 
   private var isHeadersChainSyncedVar: Boolean = false
 
@@ -31,48 +40,63 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   def contains(id: ModifierId): Boolean
 
-  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
-
   /**
     * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 
   /**
-    * Next howMany modifiers we should download to synchronize full block chain with headers chain
+    * Add ids of modifiers, required for full chain to `missedModifiers` list.
+    * One-time function that runs, when headers chain is synced
     */
-  def nextModifiersToDownload(howMany: Int, excluding: Iterable[ModifierId]): Seq[(ModifierTypeId, ModifierId)] = {
+  private def updateMissedModifiers(): Unit = {
     @tailrec
-    def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
-      if (acc.lengthCompare(howMany) >= 0) {
-        acc
-      } else {
-        headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
-          case Some(bestHeaderAtThisHeight) =>
-            val toDownload = requiredModifiersForHeader(bestHeaderAtThisHeight)
-              .filter(m => !excluding.exists(ex => ex sameElements m._2))
-              .filter(m => !contains(m._2))
-            continuation(height + 1, acc ++ toDownload)
-          case None => acc
-        }
+    def continuation(height: Int): Unit = {
+      headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
+        case Some(bestHeaderAtThisHeight) =>
+          requiredModifiersForHeader(bestHeaderAtThisHeight)
+            .filter(m => !contains(m._2))
+            .foreach(m => missedModifiers.put(new mutable.WrappedArray.ofByte(m._2), m._1))
+          continuation(height + 1)
+        case None =>
       }
     }
 
-    bestFullBlockOpt match {
-      case _ if !isHeadersChainSynced =>
-        Seq.empty
-      case Some(fb) =>
-        continuation(fb.header.height + 1, Seq.empty)
-      case None =>
-        continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
-    }
+    continuation(pruningProcessor.minimalFullBlockHeight)
   }
+
+  /**
+    * Function that is called on successful processing of modifier `modifier`
+    *
+    * @param modifier - processed modifier
+    */
+  protected def onProcess(modifier: ErgoPersistentModifier): Unit = if (isHeadersChainSynced) {
+    modifier match {
+      case h: Header =>
+        requiredModifiersForHeader(h).foreach(m => missedModifiers.put(new mutable.WrappedArray.ofByte(m._2), m._1))
+      case _ =>
+    }
+    missedModifiers.remove(new mutable.WrappedArray.ofByte(modifier.id))
+  }
+
+  /**
+    * @return Set of missed modifiers keys
+    */
+  def missedModifiersKeySet: scala.collection.Set[K] = missedModifiers.keySet
+
+  /**
+    * Next howMany modifiers we should download to synchronize full block chain with headers chain
+    */
+  def missedModifiersForFullChain(howMany: Int, excluding: scala.collection.Set[K]): Seq[(ModifierTypeId, ModifierId)] = {
+    missedModifiers.keySet.diff(excluding).take(howMany).flatMap(k => missedModifiers.get(k)
+      .map(v => v -> ModifierId @@ k.array)).toSeq
+  }
+
 
   /**
     * Checks, whether it's time to download full chain and return toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
-
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
@@ -84,6 +108,7 @@ trait ToDownloadProcessor extends ScorexLogging {
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       isHeadersChainSyncedVar = true
       pruningProcessor.updateBestFullBlock(header)
+      updateMissedModifiers()
       Seq.empty
     } else {
       Seq.empty

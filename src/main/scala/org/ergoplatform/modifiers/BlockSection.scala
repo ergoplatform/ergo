@@ -12,6 +12,8 @@ trait BlockSection extends ErgoPersistentModifier {
 
   def digest: Array[Byte]
   def headerId: ModifierId
+  override def parentId: ModifierId = headerId
+
 }
 
 object BlockSection {

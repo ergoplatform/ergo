@@ -3,59 +3,57 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.{LRUCache, ModifiersCache}
-import scorex.core.utils.ScorexLogging
+import scorex.core.DefaultModifiersCache
 import scorex.core.validation.RecoverableModifierError
 
-import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Success}
 
 class ErgoModifiersCache(override val maxSize: Int)
-  extends ModifiersCache[ErgoPersistentModifier, ErgoHistory]
-      with LRUCache[ErgoPersistentModifier, ErgoHistory]
-      with ScorexLogging  {
+  extends DefaultModifiersCache[ErgoPersistentModifier, ErgoHistory](maxSize) {
 
-  protected override def onPut(key: K): Unit =
-    super.onPut(key)
+  def keySet: scala.collection.Set[K] = cache.keySet
 
-  protected override def onRemove(key: K, rememberKey: Boolean): Unit =
-    super.onRemove(key, rememberKey)
-
+  /**
+    * Defines a candidate to be applied.
+    *
+    * @param history - an interface to history which could be needed to define a candidate
+    * @return - candidate if it is found
+    */
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
-    val headersHeight = history.headersHeight
-
-    val maxIterations = 10
-
-    @tailrec
-    def cacheIteration(called: Int): Option[K] = {
-      val expectedFullBlockParts = history
-        .headerIdsAtHeight(history.fullBlockHeight + 1)
-        .flatMap(id => history.typedModifierById[Header](id))
-        .flatMap(h => Seq(mutable.WrappedArray.make[Byte](h.transactionsId), mutable.WrappedArray.make[Byte](h.ADProofsId)))
-        .find(id => contains(id))
-        .flatMap(id => cache.get(id))
-        .toSeq
-
-      val headerToApply =
-        cache
-          .find { case (_, p) => p.isInstanceOf[Header] && p.asInstanceOf[Header].height <= headersHeight + 1 }
-          .map(_._2)
-          .toSeq
-
-      val mods = expectedFullBlockParts ++ headerToApply
-
-      if(mods.isEmpty) None else {
-        val mod = mods(Random.nextInt(mods.size))
-        history.applicableTry(mod) match {
-          case Failure(e) =>
-            if (!e.isInstanceOf[RecoverableModifierError]) remove(mod.id, rememberKey = true)
-            if (called == maxIterations - 1) None else cacheIteration(called + 1)
-          case Success(_) => Some(mod.id)
-        }
+    def checkApplicability(key: K, v: ErgoPersistentModifier) = {
+      history.applicableTry(v) match {
+        case Failure(e) if e.isInstanceOf[RecoverableModifierError] =>
+          // do nothing - modifier may be applied in future
+          false
+        case Failure(e) =>
+          // non-recoverable error - remove modifier from cache
+          // TODO blacklist peer who sent it
+          log.warn(s"Modifier ${v.encodedId} is permanently invalid and will be removed from cache", e)
+          remove(key, rememberKey = true)
+          false
+        case Success(_) =>
+          true
       }
     }
 
-    cacheIteration(0)
+    val required: scala.collection.Set[K] = history.missedModifiersKeySet
+    val containing: scala.collection.Set[K] = cache.keySet
+    val probableCandidateKeys = containing.intersect(required)
+
+    probableCandidateKeys.find { key =>
+      cache.get(key).exists { v =>
+        checkApplicability(key, v)
+      }
+    } orElse {
+      val curHeight = history.headersHeight
+      cache.find { case (key, modifier) =>
+        modifier match {
+          case header: Header if header.height <= curHeight + 1 => checkApplicability(key, header)
+          case _ => false
+        }
+      }.map(_._1)
+    }
   }
+
 }

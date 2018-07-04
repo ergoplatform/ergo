@@ -20,6 +20,8 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
   override lazy val serializer: Serializer[UTXOSnapshotManifest] = ???
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(LeafData @@ chunkRootHashes)
+
+  override def parentId: ModifierId = ???
 }
 
 object UTXOSnapshotManifest {

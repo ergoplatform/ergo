@@ -2,10 +2,10 @@
 Ergo block consists of 4 parts:
 
 \begin{itemize}
-    \item{\em Header } - minimal amount of data, required to synchronize the chain and check PoW correctness.
+    \item{\em Header } - minimal amount of data required to synchronize the chain and check PoW correctness.
     Also contains hashes of other sections.
     \item{\em BlockTransactions } - sequence of transactions, included in this block.
-    \item{\em ADProofs } - proofs for transactions, included into BlockTransactions.
+    \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
     Allows light clients to verify all the transactions and calculate new root hash.
     \item{\em Extension } - additional data, that does not correspond to previous sections.
           May contain interlinks, current miner votes and (sometimes) current parameters of the chain.
@@ -41,7 +41,7 @@ Ergo block consists of 4 parts:
 \end{tabular}
 
 \vspace{1em}
-Some of this fields may be calculated by node by itself if it is in correct mode:
+Some of these fields may be calculated by node by itself if it is in a certain mode:
 
 \begin{itemize}
     \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
@@ -55,13 +55,13 @@ Some of this fields may be calculated by node by itself if it is in correct mode
 Extension is a key-value storage for a variety of data.
 It contains 2 parts:
 \begin{itemize}
-    \item{\em Mandatory fields } - fields, that are known to all node in the network and may be changed
+    \item{\em Mandatory fields } - fields which keys are set via consensus rules and may be changed
     via soft/hard forks only. This fields have 4 bytes key and at most 64 bytes value.
     Value length is known for all peers and this limit only important due to soft forks -
     it is allowed to add at most 1 new key to this section per epoch (256 blocks between
     difficulty recalculation), if key is not known to a peer it assumes that soft fork that
     added this key was performed.
-    \item{\em Optional fields } - random data miner may add to a block. This section contains at most 8
-    elements with 32 byte key size and at most 1024 bytes value size.
+    \item{\em Optional fields } - random data miner may add to a block. This section contains at most 2
+    elements with 32 byte key size and at most 32 byte value size.
 \end{itemize}
 

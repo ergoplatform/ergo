@@ -37,6 +37,24 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = ModifierId @@ Blake2b256.hash(messageToSign)
 
+  private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
+                            map: mutable.Map[ByteArrayWrapper, Long]) = Try {
+    boxes.foreach { box =>
+      box.additionalTokens.foreach { case (assetId, amount) =>
+        require(amount >= 0, s"negative asset amount for ${Base16.encode(assetId)}")
+        val aiWrapped = ByteArrayWrapper(assetId)
+        val total = map.getOrElse(aiWrapped, 0L)
+        map.put(aiWrapped, Math.addExact(total, amount))
+        require(map.size <= ErgoTransaction.MaxTokens, "Transaction is operating with too many assets")
+      }
+    }
+  }
+
+  lazy val outAssetsOpt: Try[Map[ByteArrayWrapper, Long]] = {
+    val mutableMap = mutable.Map[ByteArrayWrapper, Long]()
+    fillAssetsMap(outputCandidates, mutableMap).map(_ => mutableMap.toMap)
+  }
+
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
     *
@@ -56,6 +74,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $toString")
       .demand(Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _))).isSuccess, s"Overflow in outputs in $toString")
+      .demand(outAssetsOpt.isSuccess, s"Asset rules violated in $toString: ${outAssetsOpt.failed.get.getMessage}")
       .result
   }
 
@@ -69,23 +88,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     lazy val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
       val input = inputs(idx)
-
-      assert(box.id sameElements input.boxId)
+      require(box.id.sameElements(input.boxId))
 
       val proof = input.spendingProof
-
       val proverExtension = inputs(idx).spendingProof.extension
-
       val context =
         ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
 
       val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
         case Success((res, cost)) =>
-          if (!res) {
-            throw new Exception(s"Validation failed for input #$idx of tx $toString")
-          } else {
-            cost
-          }
+          if (!res) throw new Exception(s"Validation failed for input #$idx of tx $toString") else cost
         case Failure(e) =>
           log.warn(s"Invalid transaction $toString: ", e)
           throw e
@@ -93,45 +105,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       accCost + scriptCost
     }
 
-
-    val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
-
-    val outputSum = outputCandidates.map(_.value).reduce(Math.addExact(_, _))
-
-    def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
-                      map: mutable.Map[ByteArrayWrapper, Long],
-                      amountCheck: Boolean = false) = {
-      boxes.foreach { box =>
-        box.additionalTokens.foreach { case (assetId, amount) =>
-          if (amountCheck) require(amount >= 0, s"negative asset amount for ${Base16.encode(assetId)}")
-          val aiWrapped = ByteArrayWrapper(assetId)
-          val total = map.getOrElse(aiWrapped, 0L)
-          map.put(aiWrapped, Math.addExact(total, amount))
-             .ensuring(_ => map.size <= ErgoTransaction.MaxTokens, "Transaction is operating with too many assets")
-        }
-      }
-    }
+    lazy val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
+    lazy val outputSum = outputCandidates.map(_.value).reduce(Math.addExact(_, _))
 
     def checkAssetPreservationRules = {
-      val inAssets = mutable.Map[ByteArrayWrapper, Long]()
-      val outAssets = mutable.Map[ByteArrayWrapper, Long]()
-
-      fillAssetsMap(boxesToSpend, inAssets)
-      fillAssetsMap(outputCandidates, outAssets, amountCheck = true)
-
-      lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-
-      outAssets.keysIterator.forall { assetId =>
-        val inAmount = inAssets.remove(assetId).getOrElse(-1)
-        val outAmount = outAssets.remove(assetId).getOrElse(0L)
-        inAmount == outAmount || (assetId == newAssetId)
-      } && {
-        inAssets.isEmpty &&
-          (outAssets.isEmpty || {
-            outAssets.size == 1 &&
-              outAssets.head._1 == newAssetId &&
-              outAssets.head._2 > 0
-          })
+      outAssetsOpt match {
+        case Success(outAssets) =>
+          val inAssets = mutable.Map[ByteArrayWrapper, Long]()
+          fillAssetsMap(boxesToSpend, inAssets)
+          lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+          outAssets.keysIterator.forall { assetId =>
+            val inAmount = inAssets.remove(assetId).getOrElse(-1)
+            val outAmount = outAssets.getOrElse(assetId, 0L)
+            inAmount == outAmount || (assetId == newAssetId && outAmount > 0)
+          }
+        case Failure(_) => false
       }
     }
 

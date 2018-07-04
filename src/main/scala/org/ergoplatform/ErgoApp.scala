@@ -14,8 +14,10 @@ import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReade
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
+import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
+import scorex.core.transaction.box.proposition.Proposition
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.duration._
@@ -26,6 +28,9 @@ class ErgoApp(args: Seq[String]) extends Application {
   override type TX = ErgoTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
+  override type P = Proposition
+
+  override protected val features: Seq[PeerFeature] = Seq()
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 

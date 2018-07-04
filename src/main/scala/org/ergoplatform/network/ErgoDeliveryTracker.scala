@@ -1,8 +1,7 @@
 package org.ergoplatform.network
 
 
-import akka.actor.{ActorContext, ActorRef}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import akka.actor.{ActorRef, ActorSystem}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -10,12 +9,12 @@ import scorex.core.{ModifierId, ModifierTypeId}
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-class ErgoDeliveryTracker(context: ActorContext,
+class ErgoDeliveryTracker(system: ActorSystem,
                           deliveryTimeout: FiniteDuration,
                           maxDeliveryChecks: Int,
                           nvsRef: ActorRef,
                           timeProvider: NetworkTimeProvider)
-  extends DeliveryTracker(context, deliveryTimeout, maxDeliveryChecks, nvsRef) {
+  extends DeliveryTracker(system, deliveryTimeout, maxDeliveryChecks, nvsRef) {
 
   private val ToDownloadRetryInterval = 10.seconds
   private val ToDownloadLifetime = 1.hour
@@ -66,12 +65,12 @@ class ErgoDeliveryTracker(context: ActorContext,
   /**
     * Modifier downloaded
     */
-  override def receive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
+  override def onReceive(mtid: ModifierTypeId, mid: ModifierId, cp: ConnectedPeer): Unit = {
     if (expectingFromRandom.contains(key(mid))) {
       expectingFromRandom.remove(key(mid))
       delivered(key(mid)) = cp
     } else {
-      super.receive(mtid, mid, cp)
+      super.onReceive(mtid, mid, cp)
     }
   }
 

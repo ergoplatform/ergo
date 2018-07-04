@@ -316,7 +316,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   }
 
   def cleanupDanglingIfNeeded(): Unit = {
-    val shouldCleanup = nodeConfigs.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
+    val shouldCleanup = nodesJointConfig.getOrElse[Boolean]("testing.integration.cleanupDocker", false)
     if (shouldCleanup) {
       cleanupDanglingResources()
     }
@@ -329,7 +329,8 @@ object Docker {
   val networkNamePrefix: String = "ergo-itest-"
 
   val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
-  val nodeConfigs: Config = ConfigFactory.parseResources("nodes.conf").resolve()
+  val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
+  val nodeConfigs: Seq[Config] = nodesJointConfig.getConfigList("nodes").asScala
 
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper

@@ -220,11 +220,10 @@ object ErgoMiner extends ScorexLogging {
       .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
     val feeAmount = feeBoxes.map(_.value).sum
-    val feeAssets = feeBoxes.flatMap(_.additionalTokens)
 
+    val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
     //todo: a miner is creating a new asset, remove it after playing for a while
     val newAsset: (TokenId, Long) = (Digest32 @@ inputBoxes.head.id) -> 1000
-
     val minerAssets = feeAssets :+ newAsset
 
     val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, minerAssets, Map())

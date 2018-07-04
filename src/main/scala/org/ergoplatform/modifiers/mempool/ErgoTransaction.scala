@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
+import java.util
+
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -88,7 +90,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     lazy val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
       val input = inputs(idx)
-      require(box.id.sameElements(input.boxId))
+      require(util.Arrays.equals(box.id, input.boxId))
 
       val proof = input.spendingProof
       val proverExtension = inputs(idx).spendingProof.extension
@@ -227,7 +229,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                                  maybeId: Option[ModifierId])(implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     val tx = ErgoTransaction(inputs, outputs.map(_._1))
     val result = accumulateErrors
-      .validate(maybeId.forall(_ sameElements tx.id)) {
+      .validate(maybeId.forall(id => util.Arrays.equals(id, tx.id))) {
         fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
           s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
       }
@@ -243,7 +245,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       case (validationState, ((candidate, maybeId), index)) =>
         maybeId.map { boxId =>
           val box = candidate.toBox(txId, index.toShort)
-          validationState.validate(boxId sameElements box.id) {
+          validationState.validate(util.Arrays.equals(boxId, box.id)) {
             fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
               s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
           }

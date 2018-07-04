@@ -6,11 +6,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity.Invalid
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult}
 
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
   * Contains functions required by History to process Transactions and Proofs when we have them.

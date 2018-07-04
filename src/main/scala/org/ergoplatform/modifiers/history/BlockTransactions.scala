@@ -7,9 +7,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
-import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ModifierWithDigest}
-import org.ergoplatform.settings.{Algos, ApiSettings, Constants, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ApiSettings, Constants}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}

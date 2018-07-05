@@ -21,6 +21,7 @@ my*.conf
 
 # logs
 *.log
+*.log.gz
 
 # compiled docs
 *.pdf

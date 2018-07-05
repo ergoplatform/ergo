@@ -1,5 +1,7 @@
 package org.ergoplatform.local
 
+import java.util
+
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -87,7 +89,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
     val parentHeaderIdOpt = candidateOpt.flatMap(_.parentOpt).map(_.id)
-    !parentHeaderIdOpt.exists(_.sameElements(b.header.id))
+    !parentHeaderIdOpt.exists(parentHeaderId => util.Arrays.equals(parentHeaderId, b.header.id))
   }
 
   private def shouldStartMine(b: ErgoFullBlock): Boolean = {

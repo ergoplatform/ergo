@@ -34,8 +34,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
-  override val scorexSettings: ScorexSettings = settings.scorexSettings
-
   override protected lazy val modifiersCache = new ErgoModifiersCache(scorexSettings.network.maxModifiersCacheSize)
 
   override lazy val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =

@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
 import scorex.core.serialization.Serializer
+import scorex.core.settings.ScorexSettings
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -25,7 +26,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                                              emission: CoinsEmission)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
-  override lazy val networkChunkSize: Int = settings.scorexSettings.network.networkChunkSize
+
+  override val scorexSettings: ScorexSettings = settings.scorexSettings
 
   override type MS = State
   override type SI = ErgoSyncInfo

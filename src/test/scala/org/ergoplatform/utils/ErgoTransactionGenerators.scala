@@ -14,7 +14,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.{NoProof, SByte, SType, SigSerializer}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.mutable
 import scala.util.Random
@@ -108,8 +108,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     //randomly creating a new asset
     if (Random.nextBoolean()) assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Random.nextInt(Int.MaxValue))
 
-    lazy val tokensSheetIn = assetsMap.toMap
-
     val inputsCount = boxesToSpend.size
     val outputsCount = Math.min(Short.MaxValue, Math.max(inputsCount + 1, Random.nextInt(inputsCount * 2)))
 
@@ -153,17 +151,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       } while (assetsMap.nonEmpty)
     }
 
-    lazy val tokensSheetOut = tokenAmounts.flatMap(_.toSeq).groupBy(_._1).mapValues(_.map(_._2).sum)
-
-    //println("intokens: " + tokensSheetOut)
-    //println("outtokens: " + tokensSheetOut)
-
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
       ErgoBox(amt, TrueLeaf, normalizedTokens)
     }
 
-    val noProof = SerializedProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)
+    val noProof = ProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)
     val inputs = boxesToSpend.map(box => Input(box.id, noProof)).toIndexedSeq
     ErgoTransaction(inputs, newBoxes)
   }

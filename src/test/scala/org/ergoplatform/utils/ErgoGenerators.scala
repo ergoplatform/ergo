@@ -20,7 +20,7 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate._
 import sigmastate.Values.{TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
@@ -28,8 +28,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
-  lazy val noProofGen: Gen[SerializedProverResult] =
-    Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
+  lazy val noProofGen: Gen[ProverResult] =
+    Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
     seed <- genBytes(32)

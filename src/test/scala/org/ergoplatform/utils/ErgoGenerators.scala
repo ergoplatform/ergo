@@ -1,18 +1,16 @@
 package org.ergoplatform.utils
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, R3}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scapi.sigma.DLogProtocol.DLogProverInput
@@ -20,17 +18,18 @@ import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.SBoolean
-import sigmastate.Values.{IntConstant, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate._
+import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
+
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
-  lazy val noProofGen: Gen[SerializedProverResult] =
-    Gen.const(SerializedProverResult(Array.emptyByteArray, ContextExtension(Map())))
+  lazy val noProofGen: Gen[ProverResult] =
+    Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
     seed <- genBytes(32)
@@ -41,43 +40,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     digest <- stateRootGen
   } yield ErgoStateContext(height, digest)
 
-  lazy val ergoBoxGen: Gen[ErgoBox] = for {
-    prop <- ergoPropositionGen
-    value <- positiveIntGen
-    reg <- positiveIntGen
-    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
-
-  lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
-    prop <- trueLeafGen
-    value <- positiveIntGen
-    reg <- positiveIntGen
-    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Map(R3 -> IntConstant(reg)), transactionId, boxId)
-
-  lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
-    prop <- trueLeafGen
-    value <- positiveIntGen
-  } yield new ErgoBoxCandidate(value, prop)
-
-  lazy val inputGen: Gen[Input] = for {
-    boxId <- boxIdGen
-    spendingProof <- noProofGen
-  } yield Input(boxId, spendingProof)
-
-  lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
-    from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
-    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i, ergoBoxCandidateGen).map(_.toIndexedSeq))
-  } yield ErgoTransaction(from, to)
-
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
-
-  lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenNoProp).map(l => BoxHolder(l))
-
-  lazy val stateChangesGen: Gen[StateChanges] = ergoBoxGenNoProp
-    .map(b => StateChanges(Seq(), Seq(Insertion(b))))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
@@ -125,26 +88,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
     RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash, EquihashSolution(equihashSolutions))
 
-  lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
-    headerId <- modifierIdGen
-    txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
-  } yield BlockTransactions(headerId, txs)
-
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen
   } yield ADProofs(headerId, proof)
-
-  lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
-    index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UTXOSnapshotChunk(stateElements, index)
-
-  lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
-    header <- invalidHeaderGen
-    txs <- invalidBlockTransactionsGen
-    proof <- randomADProofsGen
-  } yield ErgoFullBlock(header, txs, Some(proof))
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))

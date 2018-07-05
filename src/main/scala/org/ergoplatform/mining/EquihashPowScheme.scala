@@ -12,7 +12,6 @@ import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
-import scala.annotation.tailrec
 import scala.math.BigInt
 
 class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {

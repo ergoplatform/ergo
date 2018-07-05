@@ -26,13 +26,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                                              emission: CoinsEmission)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
+  override val scorexSettings: ScorexSettings = settings.scorexSettings
+
   override type MS = State
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
-
-  override val scorexSettings: ScorexSettings = settings.scorexSettings
 
   override protected lazy val modifiersCache = new ErgoModifiersCache(scorexSettings.network.maxModifiersCacheSize)
 

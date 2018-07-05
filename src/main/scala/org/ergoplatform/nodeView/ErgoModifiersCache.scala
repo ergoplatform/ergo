@@ -12,6 +12,8 @@ import scala.util.Failure
 class ErgoModifiersCache(override val maxSize: Int)
   extends DefaultModifiersCache[ErgoPersistentModifier, ErgoHistory](maxSize) {
 
+  def keys: Iterable[K] = cache.keys.toSeq
+
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
     def tryToApply(k: K, v: ErgoPersistentModifier): Boolean = {
       history.applicableTry(v) match {

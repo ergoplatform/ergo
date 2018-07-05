@@ -15,13 +15,10 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.{NoProof, SByte, SType, SigSerializer}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-
-import scala.collection.mutable
-import scala.util.Random
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
+
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 

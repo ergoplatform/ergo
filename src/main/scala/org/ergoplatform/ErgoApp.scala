@@ -28,7 +28,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
-  override protected val features: Seq[PeerFeature] = Seq()
+  override protected lazy val features: Seq[PeerFeature] = Seq()
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 

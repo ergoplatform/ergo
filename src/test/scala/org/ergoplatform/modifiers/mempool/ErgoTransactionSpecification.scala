@@ -143,6 +143,9 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
 
   property("too costly transaction is rejected") {
     //todo: implement
+    //todo: make a transaction which costs more than Constants.MaxBlockCost and check that
+    //todo: wrongTx.statelessValidity.isSuccess shouldBe true
+    //todo: wrongTx.statefulValidity(from, context).isSuccess shouldBe false
   }
 
   property("output contains too many assets") {

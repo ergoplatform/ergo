@@ -24,7 +24,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.hash.Digest32
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -199,8 +199,10 @@ object ErgoMiner extends ScorexLogging {
         ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)
       case None =>
         val inputs = feeBoxes
-          .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
-        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeBoxes.map(_.value).sum, minerProp, Seq(), Map())
+          .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+        val feeAmount = feeBoxes.map(_.value).sum
+        val feeTokens = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens)
+        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeAmount, minerProp, feeTokens, Map())
         ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(rewardBox))
     }
   }
@@ -217,7 +219,7 @@ object ErgoMiner extends ScorexLogging {
       new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
     val inputBoxes = (emissionBox +: feeBoxes).toIndexedSeq
     val inputs = inputBoxes
-      .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
     val feeAmount = feeBoxes.map(_.value).sum
 

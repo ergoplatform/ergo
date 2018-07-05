@@ -22,7 +22,7 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.{AvlTreeData, SBoolean, SType}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 
@@ -157,23 +157,23 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     Json.obj(
       "boxId" -> input.boxId.asJson,
       "spendingProof" -> Json.obj(
-        "proofBytes" -> byteSeqEncoder(input.spendingProof.proofBytes),
+        "proofBytes" -> byteSeqEncoder(input.spendingProof.proof),
         "extension" -> extensionEncoder(input.spendingProof.extension)
       )
     )
   }
 
-  implicit val proofDecoder: Decoder[SerializedProverResult] = { cursor =>
+  implicit val proofDecoder: Decoder[ProverResult] = { cursor =>
     for {
       proofBytes <- cursor.downField("proofBytes").as[Array[Byte]]
       extMap <- cursor.downField("extension").as[Map[Byte, EvaluatedValue[SType]]]
-    } yield SerializedProverResult(proofBytes, ContextExtension(extMap))
+    } yield ProverResult(proofBytes, ContextExtension(extMap))
   }
 
   implicit private val inputDecoder: Decoder[Input] = { cursor =>
     for {
       boxId <- cursor.downField("boxId").as[ADKey]
-      proof <- cursor.downField("spendingProof").as[SerializedProverResult]
+      proof <- cursor.downField("spendingProof").as[ProverResult]
     } yield Input(boxId, proof)
   }
 

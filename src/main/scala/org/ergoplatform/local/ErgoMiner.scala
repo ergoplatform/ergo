@@ -1,8 +1,5 @@
 package org.ergoplatform.local
 
-import java.math.BigInteger
-import java.security.SecureRandom
-
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -24,9 +21,8 @@ import org.ergoplatform._
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-import sigmastate.{NoProof, SBoolean, SigSerializer}
+import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
 
 import scala.collection.mutable
@@ -50,8 +46,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   private val minerProp: Value[SBoolean.type] = {
-    //TODO extract from wallet
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.wallet.seed.arr)).publicImage
+    //TODO extract from wallet when it will be implemented
+    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
   }
 
   override def preStart(): Unit = {

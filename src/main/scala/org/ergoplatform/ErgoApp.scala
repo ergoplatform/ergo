@@ -23,12 +23,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.io.Source
 
-class ErgoApp(args: Seq[String]) extends {
-  override protected val features: Seq[PeerFeature] = Seq()
-} with Application {
+class ErgoApp(args: Seq[String]) extends Application {
   override type TX = ErgoTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
+
+  override protected lazy val features: Seq[PeerFeature] = Seq()
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 

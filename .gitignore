@@ -16,10 +16,12 @@ target
 
 # local application.conf
 local-application.conf
-my-application.conf
+*-local.conf
+my*.conf
 
 # logs
 *.log
+*.log.gz
 
 # compiled docs
 *.pdf

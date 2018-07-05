@@ -26,7 +26,7 @@ class AdProofSpec extends ErgoPropertyTest {
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = ErgoBox(0, TrueLeaf, Map(), Array.fill(32)(0: Byte), 0)
+    val zeroBox = ErgoBox(0, TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte), 0)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 

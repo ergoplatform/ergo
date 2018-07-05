@@ -1,11 +1,13 @@
 package org.ergoplatform.local
 
+import java.util
+
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.R3
+import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.CoinsEmission
@@ -21,14 +23,16 @@ import org.ergoplatform._
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.crypto.hash.Digest32
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
@@ -85,7 +89,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
     val parentHeaderIdOpt = candidateOpt.flatMap(_.parentOpt).map(_.id)
-    !parentHeaderIdOpt.exists(_.sameElements(b.header.id))
+    !parentHeaderIdOpt.exists(parentHeaderId => util.Arrays.equals(parentHeaderId, b.header.id))
   }
 
   private def shouldStartMine(b: ErgoFullBlock): Boolean = {
@@ -197,8 +201,10 @@ object ErgoMiner extends ScorexLogging {
         ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)
       case None =>
         val inputs = feeBoxes
-          .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
-        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeBoxes.map(_.value).sum, minerProp, Map())
+          .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+        val feeAmount = feeBoxes.map(_.value).sum
+        val feeTokens = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens)
+        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeAmount, minerProp, feeTokens, Map())
         ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(rewardBox))
     }
   }
@@ -210,14 +216,24 @@ object ErgoMiner extends ScorexLogging {
                      emission: CoinsEmission): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
     val prop = emissionBox.proposition
-    val minerBox = new ErgoBoxCandidate(emission.emissionAtHeight(height), minerProp, Map())
+    val emissionAmount = emission.emissionAtHeight(height)
     val newEmissionBox: ErgoBoxCandidate =
-      new ErgoBoxCandidate(emissionBox.value - minerBox.value, prop, Map(R3 -> LongConstant(height)))
-    val inputs = (emissionBox +: feeBoxes)
-      .map(b => new Input(b.id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
+    val inputBoxes = (emissionBox +: feeBoxes).toIndexedSeq
+    val inputs = inputBoxes
+      .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+
+    val feeAmount = feeBoxes.map(_.value).sum
+
+    val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+    //todo: a miner is creating a new asset, remove it after playing for a while
+    val newAsset: (TokenId, Long) = (Digest32 @@ inputBoxes.head.id) -> 1000
+    val minerAssets = feeAssets :+ newAsset
+
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, minerAssets, Map())
 
     ErgoTransaction(
-      inputs.toIndexedSeq,
+      inputs,
       IndexedSeq(newEmissionBox, minerBox)
     )
   }

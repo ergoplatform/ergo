@@ -18,7 +18,7 @@ val scorexVersion = "626ab49a-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.2",
-  "org.scorexfoundation" %% "sigma-state" % "0.9.4-SNAPSHOT",
+  "org.scorexfoundation" %% "sigma-state" % "0.9.4",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "org.scorexfoundation" %% "avl-iodb" % "0.2.14",
   "org.scorexfoundation" %% "iodb" % "0.3.2",

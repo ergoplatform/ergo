@@ -62,8 +62,9 @@ case class Header(version: Version,
 
   lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
-  lazy val transactionsId: ModifierId =
-    BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+  lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+
+  lazy val sectionIds: Seq[ModifierId] = Seq(ADProofsId, transactionsId)
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 

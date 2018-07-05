@@ -230,7 +230,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                                  maybeId: Option[ModifierId])(implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     val tx = ErgoTransaction(inputs, outputs.map(_._1))
     val result = accumulateErrors
-      .validate(maybeId.forall(id => util.Arrays.equals(id, tx.id))) {
+      .validate(maybeId.forall(Уid => util.Arrays.equals(id, tx.id))) {
         fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
           s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
       }

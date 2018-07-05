@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
+import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder._
@@ -13,7 +14,7 @@ import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.Da
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
-import scorex.core.network.{NodeViewSynchronizer, SendToPeers, SendToRandom}
+import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -24,7 +25,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)(implicit ex: ExecutionContext)
+                               timeProvider: NetworkTimeProvider,
+                               modifiersCache: ErgoModifiersCache)(implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
@@ -110,27 +112,31 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
-      timeProvider))
-
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
+      timeProvider, cache))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache)
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, cache))
+
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            networkSettings: NetworkSettings,
+            timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache,
             name: String)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, cache), name)
 
 
   case object CheckModifiersToDownload

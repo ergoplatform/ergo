@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoModifiersCache, ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
@@ -30,16 +30,19 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val features: Seq[PeerFeature] = Seq()
 
+
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
+
 
   lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
 
-  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
+  val modifiersCache = new ErgoModifiersCache(settings.network.maxModifiersCacheSize)
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission, modifiersCache)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -59,7 +62,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      settings.network, timeProvider, modifiersCache)
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining

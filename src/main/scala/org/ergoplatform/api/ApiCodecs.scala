@@ -30,9 +30,9 @@ trait ApiCodecs {
     Either.catchNonFatal(throwsBlock).leftMap(e => DecodingFailure(e.toString, cursor.history))
   }
 
-  def fromValidation[T](value: T)(validationResult: ValidationResult)
+  def fromValidation[T](validationResult: ValidationResult[T])
                        (implicit cursor: ACursor): Either[DecodingFailure, T] = {
-    fromTry(validationResult.toTry.map(_ => value))
+    fromTry(validationResult.toTry)
   }
 
   implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>

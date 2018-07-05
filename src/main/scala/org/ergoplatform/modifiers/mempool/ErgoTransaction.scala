@@ -69,43 +69,41 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Stateless transaction validation with result returned as [[ValidationResult]]
     * to accumulate further validation results
     */
-  def validateStateless: ValidationResult = {
+  def validateStateless: ValidationResult[Unit] = {
     failFast
-      .demand(outputCandidates.nonEmpty, s"No outputs in transaction $toString")
-      .demand(inputs.nonEmpty, s"No inputs in transaction $toString")
-      .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $toString")
-      .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $toString")
-      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $toString")
-      .demand(Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _))).isSuccess, s"Overflow in outputs in $toString")
-      .demand(outAssetsOpt.isSuccess, s"Asset rules violated in $toString: ${outAssetsOpt.failed.get.getMessage}")
+      .demand(outputCandidates.nonEmpty, s"No outputs in transaction $this")
+      .demand(inputs.nonEmpty, s"No inputs in transaction $this")
+      .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
+      .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
+      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
+      .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
+      .demandSuccess(outAssetsOpt, s"Asset rules violated in $this")
       .result
   }
 
   /**
     * @return total computation cost
     */
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = Try {
-    require(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
-
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = {
     lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
-
-    lazy val txCost = boxesToSpend.zipWithIndex.foldLeft(0L) { case (accCost, (box, idx)) =>
-      val input = inputs(idx)
-      require(util.Arrays.equals(box.id, input.boxId))
-
-      val proof = input.spendingProof
-      val proverExtension = inputs(idx).spendingProof.extension
-      val context =
-        ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
-
-      val scriptCost: Long = verifier.verify(box.proposition, context, proof, messageToSign) match {
-        case Success((res, cost)) =>
-          if (!res) throw new Exception(s"Validation failed for input #$idx of tx $toString") else cost
-        case Failure(e) =>
-          log.warn(s"Invalid transaction $toString: ", e)
-          throw e
+    val initial = failFast
+      .payload(0L)
+      .validate(boxesToSpend.size == inputs.size) {
+        fatal(s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       }
-      accCost + scriptCost
+    lazy val validationState = boxesToSpend.zipWithIndex.foldLeft(initial) {
+      case (validationState, (box, idx)) =>
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val proverExtension = proof.extension
+        def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
+        lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
+        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
+        validationState
+          .demandEqualIds(box.id, input.boxId, s"Box id doesn't match input")
+          .demandSuccess(costTry, s"Invalid transaction $this")
+          .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
+          .map(_ + scriptCost)
     }
 
     lazy val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -126,13 +124,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
     }
 
-    failFast
-      .demand(inputSum == outputSum, s"Ergo token preservation is broken in $toString")
-      .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $toString")
+    validationState
+      .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
+      .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $this")
       .result
       .toTry
-      .map(_ => txCost)
-  }.flatten
+  }
 
   override type M = ErgoTransaction
 
@@ -140,7 +137,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override def toString: String = this.asJson.noSpaces
 }
-
 
 object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
 
@@ -221,37 +217,40 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
-      outputs <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
-      result <- validateDecodedTransaction(inputs, outputs, maybeId)
+      outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
+      outputs <- validateOutputs(outputsWithIndex, maybeId)
+      result <- validateTransaction(ErgoTransaction(inputs, outputs), maybeId)
     } yield result
   }
 
-  def validateDecodedTransaction(inputs: IndexedSeq[Input], outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])],
-                                 maybeId: Option[ModifierId])(implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
-    val tx = ErgoTransaction(inputs, outputs.map(_._1))
+  def validateTransaction(tx: ErgoTransaction, txId: Option[ModifierId])
+                         (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     val result = accumulateErrors
-      .validate(maybeId.forall(id => util.Arrays.equals(id, tx.id))) {
-        fatal(s"Bad identifier ${Algos.encode(maybeId.get)} for ergo transaction. " +
+      .validate(txId.forall(id => util.Arrays.equals(id, tx.id))) {
+        fatal(s"Bad identifier ${Algos.encode(txId.get)} for ergo transaction. " +
           s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
       }
       .validate(tx.validateStateless)
-      .validate(validateOutputs(outputs, tx.id))
-      .result
+      .result(tx)
     if (!result.isValid) log.info(s"Transaction from json validation failed: ${result.message}")
-    result.toDecoderResult(tx)
+    result.toDecoderResult
   }
 
-  def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], txId: ModifierId): ValidationResult = {
-    outputs.zipWithIndex.foldLeft(accumulateErrors) {
-      case (validationState, ((candidate, maybeId), index)) =>
-        maybeId.map { boxId =>
-          val box = candidate.toBox(txId, index.toShort)
-          validationState.validate(util.Arrays.equals(boxId, box.id)) {
-            fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
-              s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
-          }
-        }.getOrElse(validationState)
-    }.result
+  def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], maybeTxId: Option[ModifierId])
+                     (implicit cursor: ACursor): Decoder.Result[IndexedSeq[ErgoBoxCandidate]] = {
+    def toOutputs = outputs.map(_._1)
+    maybeTxId.map { txId =>
+      outputs.zipWithIndex.foldLeft(accumulateErrors) {
+        case (validationState, ((candidate, maybeId), index)) =>
+          maybeId.map { boxId =>
+            val box = candidate.toBox(txId, index.toShort)
+            validationState.validate(util.Arrays.equals(boxId, box.id)) {
+              fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
+                s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
+            }
+          }.getOrElse(validationState)
+      }.result(toOutputs)
+    }.getOrElse(success.apply(toOutputs)).toDecoderResult
   }
 }
 

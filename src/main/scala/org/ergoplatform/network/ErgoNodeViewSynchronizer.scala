@@ -80,9 +80,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val (delivered, currentQueue) = deliveryTracker.expectingAndDelivered
-        val toExclude = delivered ++ currentQueue
-        val newIds = h.nextModifiersToDownload(downloadListSize - currentQueue.size, toExclude)
+        val (expecting, delivered) = deliveryTracker.expectingAndDelivered
+        val toExclude = delivered ++ expecting
+        val newIds = h.nextModifiersToDownload(downloadListSize - expecting.size, toExclude)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }

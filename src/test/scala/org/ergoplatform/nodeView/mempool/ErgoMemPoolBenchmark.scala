@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.ErgoGenerators
+import org.ergoplatform.utils.{ErgoGenerators, ErgoTransactionGenerators}
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._
@@ -14,7 +14,7 @@ import scala.util.{Random => Rng}
 
 object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
-    with ErgoGenerators {
+    with ErgoTransactionGenerators {
 
   private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)

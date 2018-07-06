@@ -3,11 +3,13 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.ADKey
+import scorex.crypto.hash.Digest32
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.serialization.ValueSerializer
 import sigmastate.{SBoolean, SType}
@@ -50,6 +52,10 @@ trait ApiCodecs {
   implicit val modifierIdEncoder: Encoder[ModifierId] = _.array.asJson
 
   implicit val modifierIdDecoder: Decoder[ModifierId] = bytesDecoder(ModifierId @@ _)
+
+  implicit val tokenIdEncoder: Encoder[TokenId] = _.array.asJson
+
+  implicit val tokenIdDecoder: Decoder[TokenId] = bytesDecoder(Digest32 @@ _)
 
   implicit val adKeyEncoder: Encoder[ADKey] = _.array.asJson
 

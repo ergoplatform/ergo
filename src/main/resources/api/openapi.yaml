@@ -66,7 +66,7 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/SValue'
           example:
-            R3: '7c'
+            R4: '7c'
 
     ErgoTransaction:
       type: object

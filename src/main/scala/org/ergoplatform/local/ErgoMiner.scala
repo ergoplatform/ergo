@@ -169,8 +169,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    //TODO real extension should be there
-    val extensionHash = Algos.hash(ergoSettings.scorexSettings.network.nodeName)
+    //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
+    val extensionHash = Algos.hash(Array[Byte]())
 
     CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
   }

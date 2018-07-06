@@ -9,7 +9,6 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.Removal
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
@@ -20,12 +19,13 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 import sigmastate.Values.TrueLeaf
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
 import scala.util.{Random, Try}
 
-trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoGenerators {
+trait ValidBlocksGenerators
+  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
   lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)
@@ -43,7 +43,7 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
 
   def noProofInput(id: ErgoBox.BoxId): Input =
-    Input(id, SerializedProverResult(Array.emptyByteArray, ContextExtension.empty))
+    Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
   def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, TrueLeaf)
 
@@ -59,7 +59,7 @@ trait ValidBlocksGenerators extends TestkitHelpers with FileUtils with Matchers 
     def genOuts(remainingAmount: Long,
                 acc: IndexedSeq[ErgoBoxCandidate],
                 limit: Int): IndexedSeq[ErgoBoxCandidate] = {
-      val newAmount = rnd.nextLong() % (remainingAmount + acc.map(_.value).sum)
+      val newAmount = Math.abs(rnd.nextLong()) % (remainingAmount + acc.map(_.value).sum)
       if (newAmount >= remainingAmount || limit <= 1) {
         acc :+ outputForAnyone(remainingAmount)
       } else {

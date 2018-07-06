@@ -1,10 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
-import akka.actor.ActorRef
-import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.ErgoBox.R3
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -16,7 +14,7 @@ import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.encode.Base16
-import sigmastate.Values.LongConstant
+import sigmastate.Values.{IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}
 
@@ -33,7 +31,7 @@ import scala.util.Try
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
 trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ScorexLogging with ErgoStateReader {
+  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
 
   self: IState =>
 
@@ -97,8 +95,8 @@ object ErgoState extends ScorexLogging {
   def genesisEmissionBox(emission: CoinsEmission): ErgoBox = {
     val s = emission.settings
 
-    val register = R3
-    val out = ByIndex(Outputs, LongConstant(0))
+    val register = R4
+    val out = ByIndex(Outputs, IntConstant(0))
     val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
     val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
       s.fixedRate,
@@ -111,7 +109,7 @@ object ErgoState extends ScorexLogging {
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
 
     val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
-    ErgoBox(emission.coinsTotal, prop, Map(register -> LongConstant(-1)))
+    ErgoBox(emission.coinsTotal, prop, Seq(), Map(register -> LongConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File,

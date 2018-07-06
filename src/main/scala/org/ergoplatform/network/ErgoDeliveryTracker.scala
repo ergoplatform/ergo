@@ -31,7 +31,7 @@ class ErgoDeliveryTracker(system: ActorSystem,
     * @return ids we're going to download or already have downloaded
     */
   def expectingAndDelivered: (Iterable[ModifierId], Iterable[ModifierId]) =
-    (ModifierId @@ delivered.keys.map(_.array), ModifierId @@ expectingFromRandom.keys.map(_.array))
+    (ModifierId @@ expectingFromRandom.keys.map(_.array), ModifierId @@ delivered.keys.map(_.array))
 
   /**
     * Process download request of modifier of type modifierTypeId with id modifierId

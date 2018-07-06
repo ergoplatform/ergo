@@ -1,7 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import java.util
-
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -11,7 +9,6 @@ import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.serialization.Serializer
 import sigmastate.serialization.{Serializer => SSerializer}
@@ -86,28 +83,28 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = {
     lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
-    val initial = failFast
+    val initialValidation = failFast
       .payload(0L)
       .validate(boxesToSpend.size == inputs.size) {
         fatal(s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       }
-    lazy val validationState = boxesToSpend.zipWithIndex.foldLeft(initial) {
-      case (validationState, (box, idx)) =>
+    lazy val currentValidation = boxesToSpend.zipWithIndex.foldLeft(initialValidation) {
+      case (boxesValidation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
         def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
-        validationState
+        boxesValidation
           .demandEqualIds(box.id, input.boxId, s"Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
           .map(_ + scriptCost)
     }
 
-    lazy val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
-    lazy val outputSum = outputCandidates.map(_.value).reduce(Math.addExact(_, _))
+    lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
+    lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
     def checkAssetPreservationRules = {
       outAssetsOpt match {
@@ -124,7 +121,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
     }
 
-    validationState
+    currentValidation
+      .demandSuccess(inputSum, s"Overflow in inputs in $this")
+      .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
       .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $this")
       .result
@@ -226,9 +225,10 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
   def validateTransaction(tx: ErgoTransaction, txId: Option[ModifierId])
                          (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     val result = accumulateErrors
-      .validate(txId.forall(id => util.Arrays.equals(id, tx.id))) {
-        fatal(s"Bad identifier ${Algos.encode(txId.get)} for ergo transaction. " +
-          s"Identifier could be skipped, or should be ${Algos.encode(tx.id)}")
+      .validateOrSkip(txId) { id =>
+        accumulateErrors.validateEqualIds(id, tx.id) { detail =>
+          fatal(s"Bad identifier for ergo transaction. $detail. Identifier could also be skipped")
+        }
       }
       .validate(tx.validateStateless)
       .result(tx)
@@ -238,19 +238,19 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
   def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], maybeTxId: Option[ModifierId])
                      (implicit cursor: ACursor): Decoder.Result[IndexedSeq[ErgoBoxCandidate]] = {
-    def toOutputs = outputs.map(_._1)
-    maybeTxId.map { txId =>
+    accumulateErrors.validateOrSkip(maybeTxId) { txId =>
       outputs.zipWithIndex.foldLeft(accumulateErrors) {
         case (validationState, ((candidate, maybeId), index)) =>
-          maybeId.map { boxId =>
+          validationState.validateOrSkip(maybeId) { boxId =>
             val box = candidate.toBox(txId, index.toShort)
-            validationState.validate(util.Arrays.equals(boxId, box.id)) {
-              fatal(s"Bad identifier ${Algos.encode(boxId)} for ergo box." +
-                s"Identifier could be skipped, or should be ${Algos.encode(box.id)}")
+            accumulateErrors.validateEqualIds(boxId, box.id) { detail =>
+              fatal(s"Bad identifier for ergo box. $detail. Identifier could also be skipped")
             }
-          }.getOrElse(validationState)
-      }.result(toOutputs)
-    }.getOrElse(success.apply(toOutputs)).toDecoderResult
+          }
+      }
+    }
+    .result(outputs.map(_._1))
+    .toDecoderResult
   }
 }
 

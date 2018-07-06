@@ -16,7 +16,6 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
-import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -36,12 +35,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = ModifierId @@ Blake2b256.hash(messageToSign)
 
+  /**
+    * Fill a mutable map passed as a parameter with (assets -> total amount) data, based on boxes passed as
+    * a parameter. That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
+    * amount for an asset) and then summarize and group their corresponding amounts.
+    * @param boxes - boxes to
+    * @param map - map to modify
+    * @return
+    */
   private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
                             map: mutable.Map[ByteArrayWrapper, Long]) = Try {
     boxes.foreach { box =>
       require(box.additionalTokens.size <= ErgoBox.MaxTokens, "Output contains too many assets")
       box.additionalTokens.foreach { case (assetId, amount) =>
-        require(amount >= 0, s"negative asset amount for ${Base16.encode(assetId)}")
+        require(amount >= 0, s"negative asset amount for ${Algos.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))

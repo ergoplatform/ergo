@@ -21,9 +21,11 @@ my*.conf
 
 # logs
 *.log
+*.log.gz
 
-# compiled docs
+# binary files
 *.pdf
+*.gz
 
 # db files
 *.data

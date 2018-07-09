@@ -16,6 +16,7 @@ import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import ValidationResult.fromValidationState
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
@@ -24,7 +25,7 @@ import sigmastate.{AvlTreeData, SBoolean, SType}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
@@ -91,50 +92,42 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = {
     lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
-    val initialValidation = failFast
+    lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
+    lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+
+    failFast
       .payload(0L)
-      .validate(boxesToSpend.size == inputs.size) {
-        fatal(s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
-      }
-    lazy val currentValidation = boxesToSpend.zipWithIndex.foldLeft(initialValidation) {
-      case (boxesValidation, (box, idx)) =>
+      .demand(boxesToSpend.size == inputs.size,s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
+      .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
         def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
-        boxesValidation
+        validation
           .demandEqualIds(box.id, input.boxId, s"Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
           .map(_ + scriptCost)
-    }
-
-    lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
-    lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
-
-    def checkAssetPreservationRules = {
-      outAssetsOpt match {
-        case Success(outAssets) =>
-          val inAssets = mutable.Map[ByteArrayWrapper, Long]()
-          fillAssetsMap(boxesToSpend, inAssets)
-          lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-          outAssets.keysIterator.forall { assetId =>
-            val inAmount = inAssets.remove(assetId).getOrElse(-1)
-            val outAmount = outAssets.getOrElse(assetId, 0L)
-            inAmount == outAmount || (assetId == newAssetId && outAmount > 0)
-          }
-        case Failure(_) => false
       }
-    }
-
-    currentValidation
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demand(checkAssetPreservationRules, s"Assets preservation rule is broken in $this")
-      .result
+      .demandTry(outAssetsOpt, s"Assets preservation rule is broken in $this") { (validation, outAssets) =>
+        val inAssets = mutable.Map[ByteArrayWrapper, Long]()
+        fillAssetsMap(boxesToSpend, inAssets)
+        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+        validation.validateSeq(outAssets) {
+          case (validation, (outAssetId, outAmount)) =>
+            val inAmount = inAssets.remove(outAssetId).getOrElse(-1)
+            validation
+              .validate(inAmount == outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+                fatal(s"Assets preservation rule is broken in $this. " +
+                      s"Amount in: $inAmount, out: $outAmount, Asset in: $newAssetId out: $outAssetId")
+              }
+        }
+      }
       .toTry
   }
 
@@ -232,28 +225,23 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
   def validateTransaction(tx: ErgoTransaction, txId: Option[ModifierId])
                          (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
-    val result = accumulateErrors
-      .validateOrSkip(txId) { id =>
-        accumulateErrors.validateEqualIds(id, tx.id) { detail =>
-          fatal(s"Bad identifier for ergo transaction. $detail. Identifier could also be skipped")
-        }
+    accumulateErrors
+      .validateOrSkip(txId) { (validation, id) =>
+        validation.demandEqualIds(id, tx.id,s"Bad identifier for Ergo transaction. It could also be skipped")
       }
       .validate(tx.validateStateless)
       .result(tx)
-    if (!result.isValid) log.info(s"Transaction from json validation failed: ${result.message}")
-    result.toDecoderResult
+      .toDecoderResult
   }
 
   def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], maybeTxId: Option[ModifierId])
                      (implicit cursor: ACursor): Decoder.Result[IndexedSeq[ErgoBoxCandidate]] = {
-    accumulateErrors.validateOrSkip(maybeTxId) { txId =>
-      outputs.zipWithIndex.foldLeft(accumulateErrors) {
-        case (validationState, ((candidate, maybeId), index)) =>
-          validationState.validateOrSkip(maybeId) { boxId =>
+    accumulateErrors.validateOrSkip(maybeTxId) { (validation, txId) =>
+      validation.validateSeq(outputs.zipWithIndex) {
+        case (validation, ((candidate, maybeId), index)) =>
+          validation.validateOrSkip(maybeId) { (validation, boxId) =>
             val box = candidate.toBox(txId, index.toShort)
-            accumulateErrors.validateEqualIds(boxId, box.id) { detail =>
-              fatal(s"Bad identifier for ergo box. $detail. Identifier could also be skipped")
-            }
+            validation.demandEqualIds(boxId, box.id,s"Bad identifier for Ergo box. It could also be skipped")
           }
       }
     }

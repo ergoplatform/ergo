@@ -63,7 +63,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 }
 
 
-case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]){
+case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]) {
   lazy val onChain = heightOpt.isDefined
 }
 
@@ -77,19 +77,18 @@ class ErgoWalletActor(seed: String) extends Actor {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private val secret = prover.dlogSecrets.head
   private val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
 
-  private val quickScan = mutable.Map[ByteArrayWrapper, BoxUncertain]()
+  private val quickScan = mutable.Queue[BoxUncertain]()
 
   private val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   private val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
 
-  private def resolveUncertainty(toScan: mutable.Map[ByteArrayWrapper, BoxUncertain],
-                                 toFill: mutable.Map[ByteArrayWrapper, BoxCertain]): Unit = {
-    toScan.foreach { case (txId, uncertainBoxData) =>
+  private def resolveUncertainty(toFill: mutable.Map[ByteArrayWrapper, BoxCertain]): Unit = {
+    if (quickScan.nonEmpty) {
+      val uncertainBoxData = quickScan.dequeue()
       val tx = uncertainBoxData.tx
       val outIndex = uncertainBoxData.outIndex
       val box = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
@@ -106,9 +105,9 @@ class ErgoWalletActor(seed: String) extends Actor {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
+          val txId = ByteArrayWrapper(tx.id)
           toFill.put(txId, BoxCertain(tx, outIndex, box.value, assets))
-          toScan.remove(txId)
-        case Failure(_) =>
+        case Failure(_) => quickScan.enqueue(uncertainBoxData)
       }
     }
   }
@@ -121,10 +120,10 @@ class ErgoWalletActor(seed: String) extends Actor {
           heightOpt match {
             case Some(h) =>
               val wid = ByteArrayWrapper(tx.id)
-              quickScan.put(wid, bu)
+              quickScan.enqueue(bu)
               confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
             case None =>
-              quickScan.put(ByteArrayWrapper(tx.id), bu)
+              quickScan.enqueue(bu)
           }
         case None =>
       }
@@ -148,9 +147,13 @@ class ErgoWalletActor(seed: String) extends Actor {
 }
 
 object ErgoWalletActor {
+
   case class ScanOffchain(tx: ErgoTransaction)
+
   case class ScanOnchain(bt: BlockTransactions)
+
   case class BestHeader(h: Header)
+
 }
 
 
@@ -222,7 +225,7 @@ object ErgoWallet extends App {
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
     val seed = Base16.decode(seedStr).get
-    (1 to 4).map{i =>
+    (1 to 4).map { i =>
       BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i.toByte +: seed))
     }
   }

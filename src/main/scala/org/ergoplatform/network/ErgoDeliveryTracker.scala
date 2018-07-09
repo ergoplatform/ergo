@@ -72,6 +72,6 @@ class ErgoDeliveryTracker(system: ActorSystem,
   }
 
   def isKnown(mid: ModifierIdAsKey): Boolean = expecting.contains(mid) ||
-    expectingFromRandom.contains(mid)
+    expectingFromRandom.contains(mid) || delivered.contains(mid)
 
 }

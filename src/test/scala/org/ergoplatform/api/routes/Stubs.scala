@@ -144,12 +144,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
+    val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
     val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, scorexSettings)
+      nodeSettings, scorexSettings, walletSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

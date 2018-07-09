@@ -1,7 +1,10 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.math.BigInteger
+
 import akka.actor.{Actor, ActorSystem, Props}
 import io.iohk.iodb.ByteArrayWrapper
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
@@ -15,7 +18,7 @@ import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, ADKey}
-import scorex.crypto.encode.Base58
+import scorex.crypto.encode.{Base16, Base58}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.{AvlTreeData, Values}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter, ProverResult}
@@ -25,7 +28,7 @@ import sigmastate.utxo.CostTable
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-class ErgoProvingInterpreter(override val maxCost: Long = CostTable.ScriptLimit)
+class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
   def hash256(input: Array[Byte]) = Blake2b256(input)
@@ -53,8 +56,7 @@ class ErgoProvingInterpreter(override val maxCost: Long = CostTable.ScriptLimit)
   override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] =
     dlogSecrets ++ dhSecrets
 
-  lazy val dlogSecrets: Seq[DLogProverInput] =
-    (1 to 4).map(_ => DLogProverInput.random())
+  lazy val dlogSecrets: Seq[DLogProverInput] = ErgoWallet.secretsFromSeed(seed).map(DLogProverInput.apply)
 
   lazy val dhSecrets: Seq[DiffieHellmanTupleProverInput] =
     (1 to 4).map(_ => DiffieHellmanTupleProverInput.random())
@@ -65,9 +67,9 @@ case class BoxUncertain(tx: ErgoTransaction, outIndex: Short)
 case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
 
 
-class ErgoWalletActor extends Actor {
+class ErgoWalletActor(seed: String) extends Actor {
 
-  private val prover = new ErgoProvingInterpreter()
+  private val prover = new ErgoProvingInterpreter(seed)
 
   var height = 0
   var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
@@ -150,11 +152,11 @@ object ErgoWalletActor {
 }
 
 
-class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
+class ErgoWallet(seed: String) extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
 
   //todo: pass system from outside
-  val actor = ActorSystem("ff").actorOf(Props(classOf[ErgoWalletActor]))
+  val actor = ActorSystem("ff").actorOf(Props(classOf[ErgoWalletActor], seed))
 
 
   lazy val registry = ??? //keep statuses
@@ -194,8 +196,9 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
 
 
 object ErgoWallet extends App {
-  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
+  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet(settings.walletSettings.seed)
 
+  /*
   def benchmark() = {
     val w = new ErgoWallet
 
@@ -213,6 +216,12 @@ object ErgoWallet extends App {
     var t = System.currentTimeMillis()
     println("time to scan: " + (t - t0))
   }
+  benchmark()*/
 
-  benchmark()
+  def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
+    val seed = Base16.decode(seedStr).get
+    (1 to 4).map{i =>
+      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i.toByte +: seed))
+    }
+  }
 }

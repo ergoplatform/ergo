@@ -1,11 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import akka.actor.{Actor, ActorSystem, Props}
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{BestHeader, ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.{DiffieHellmanTupleProverInput, SigmaProtocolPrivateInput}
@@ -42,7 +44,7 @@ class ErgoProvingInterpreter(override val maxCost: Long = CostTable.ScriptLimit)
     val bth160 = hash160(bt)
 
     //add network identifier
-    val withNetworkByte = (0:Byte) +: bth160
+    val withNetworkByte = (0: Byte) +: bth160
 
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)
@@ -58,21 +60,20 @@ class ErgoProvingInterpreter(override val maxCost: Long = CostTable.ScriptLimit)
     (1 to 4).map(_ => DiffieHellmanTupleProverInput.random())
 }
 
-class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
-  with ScorexLogging {
+
+case class BoxUncertain(tx: ErgoTransaction, outIndex: Short)
+case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
+
+
+class ErgoWalletActor extends Actor {
+
+  private val prover = new ErgoProvingInterpreter()
 
   var height = 0
   var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  val prover = new ErgoProvingInterpreter()
-
   val secret = prover.dlogSecrets.head
-
   val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
-
-  case class BoxUncertain(tx: ErgoTransaction, outIndex: Short)
-  case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
-
 
   val quickScanOffchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
   val quickScanOnchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
@@ -81,34 +82,10 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
   val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
-  lazy val registry = ??? //keep statuses
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
-    tx.outputCandidates.zipWithIndex.foreach{case (outCandidate, outIndex) =>
-      toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
-        case Some(_) =>
-          val bu = BoxUncertain(tx, outIndex.toShort)
-          heightOpt match {
-            case Some(h) =>
-              val wid = ByteArrayWrapper(tx.id)
-              quickScanOnchain.put(wid, bu)
-              confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
-            case None =>
-              quickScanOffchain.put(ByteArrayWrapper(tx.id), bu)
-          }
-        case None =>
-      }
-    }
-  }
-
-  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    scan(tx, None)
-    this
-  }
-
-  def resolveUncertainty(): Unit = {
-    quickScanOffchain.foreach {case (txId, uncertainBoxData) =>
-      println(txId)
+  private def resolveUncertainty(toScan: mutable.Map[ByteArrayWrapper, BoxUncertain],
+                                 toFill: mutable.Map[ByteArrayWrapper, BoxCertain]): Unit = {
+    toScan.foreach { case (txId, uncertainBoxData) =>
       val tx = uncertainBoxData.tx
       val outIndex = uncertainBoxData.outIndex
       val box = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
@@ -125,16 +102,33 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
-          certainOffChain.put(txId, BoxCertain(tx, outIndex, box.value, assets))
-          quickScanOffchain.remove(txId)
+          toFill.put(txId, BoxCertain(tx, outIndex, box.value, assets))
+          toScan.remove(txId)
         case Failure(_) =>
       }
     }
   }
 
-  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
-    txs.foreach(tx => scanOffchain(tx))
-    this
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
+    tx.outputCandidates.zipWithIndex.foreach { case (outCandidate, outIndex) =>
+      toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
+        case Some(_) =>
+          val bu = BoxUncertain(tx, outIndex.toShort)
+          heightOpt match {
+            case Some(h) =>
+              val wid = ByteArrayWrapper(tx.id)
+              quickScanOnchain.put(wid, bu)
+              confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
+            case None =>
+              quickScanOffchain.put(ByteArrayWrapper(tx.id), bu)
+          }
+        case None =>
+      }
+    }
+  }
+
+  private def extractFromTransactions(txs: Seq[ErgoTransaction]): Unit = {
+    txs.foreach(tx => scan(tx, Some(height)))
   }
 
   private def extractFromHeader(h: Header): Unit = {
@@ -142,20 +136,52 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
     lastBlockUtxoRootHash = h.stateRoot
   }
 
-  private def extractFromTransactions(txs: Seq[ErgoTransaction]): Unit = {
-    txs.foreach(tx => scan(tx, Some(height)))
+  override def receive: Receive = {
+    case ScanOffchain(tx) => scan(tx, None)
+    case BestHeader(h) => extractFromHeader(h)
+    case ScanOnchain(bt) => extractFromTransactions(bt.transactions)
+  }
+}
+
+object ErgoWalletActor {
+  case class ScanOffchain(tx: ErgoTransaction)
+  case class ScanOnchain(bt: BlockTransactions)
+  case class BestHeader(h: Header)
+}
+
+
+class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
+  with ScorexLogging {
+
+  //todo: pass system from outside
+  val actor = ActorSystem("ff").actorOf(Props(classOf[ErgoWalletActor]))
+
+
+  lazy val registry = ??? //keep statuses
+
+
+  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
+    actor ! ScanOffchain(tx)
+    this
   }
 
-  //todo: implement
+
+  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
+    txs.foreach(tx => scanOffchain(tx))
+    this
+  }
+
+
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
-      case h: Header => extractFromHeader(h)
+      case h: Header =>
+        actor ! BestHeader(h)
       case bt: BlockTransactions =>
-      //todo: check that this is correct bt
-        extractFromTransactions(bt.transactions)
+        //todo: check that this is correct bt
+        actor ! ScanOnchain(bt)
       case fb: ErgoFullBlock =>
-        extractFromHeader(fb.header)
-        extractFromTransactions(fb.transactions)
+        actor ! BestHeader(fb.header)
+        actor ! ScanOnchain(fb.blockTransactions)
     }
     this
   }
@@ -165,6 +191,7 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
 
   override type NVCT = this.type
 }
+
 
 object ErgoWallet extends App {
   @SuppressWarnings(Array("UnusedMethodParameter"))
@@ -177,7 +204,7 @@ object ErgoWallet extends App {
       ADKey @@ Array.fill(32)(0: Byte),
       ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-    val box = ErgoBox(1L, w.secret.publicImage)
+    val box = ErgoBox(1L, Values.TrueLeaf) //w.secret.publicImage)
     val tx = ErgoTransaction(inputs, IndexedSeq(box))
 
     var t0 = System.currentTimeMillis()
@@ -186,13 +213,6 @@ object ErgoWallet extends App {
     }
     var t = System.currentTimeMillis()
     println("time to scan: " + (t - t0))
-
-    t0 = System.currentTimeMillis()
-    w.resolveUncertainty()
-    t = System.currentTimeMillis()
-    println("time to resolve: " + (t - t0))
-
-    println(w.certainOffChain.size)
   }
 
   benchmark()

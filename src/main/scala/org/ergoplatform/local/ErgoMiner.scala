@@ -20,6 +20,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -31,7 +32,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -49,9 +50,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
+  private val secrets = ErgoWallet.secretsFromSeed(ergoSettings.walletSettings.seed)
+
   private val minerProp: Value[SBoolean.type] = {
-    //TODO extract from wallet when it will be implemented
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
+    require(secrets.nonEmpty, "No seed provided to get miner's secrets from")
+    val secret = secrets(Random.nextInt(secrets.size))
+    DLogProverInput(secret).publicImage
   }
 
   override def preStart(): Unit = {

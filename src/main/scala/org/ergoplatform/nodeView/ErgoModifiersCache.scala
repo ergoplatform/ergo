@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import scorex.core.DefaultModifiersCache
 import scorex.core.validation.MalformedModifierError
 
@@ -10,9 +10,11 @@ import scala.collection.mutable
 import scala.util.Failure
 
 class ErgoModifiersCache(override val maxSize: Int)
-  extends DefaultModifiersCache[ErgoPersistentModifier, ErgoHistory](maxSize) {
+  extends DefaultModifiersCache[ErgoPersistentModifier, ErgoHistoryReader](maxSize) {
 
-  override def findCandidateKey(history: ErgoHistory): Option[K] = {
+  def keys: Iterable[K] = cache.keys.toSeq
+
+  override def findCandidateKey(history: ErgoHistoryReader): Option[K] = {
     def tryToApply(k: K, v: ErgoPersistentModifier): Boolean = {
       history.applicableTry(v) match {
         case Failure(e) if e.isInstanceOf[MalformedModifierError] =>

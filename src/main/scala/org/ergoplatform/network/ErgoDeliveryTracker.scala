@@ -26,12 +26,7 @@ class ErgoDeliveryTracker(system: ActorSystem,
 
   def isExpecting: Boolean = expecting.nonEmpty
 
-  /**
-    * TODO temporary fix until https://github.com/ergoplatform/ergo/issues/342 will be implemented
-    * @return ids we're going to download or already have downloaded
-    */
-  def expectingAndDelivered: (Iterable[ModifierId], Iterable[ModifierId]) =
-    (ModifierId @@ expectingFromRandom.keys.map(_.array), ModifierId @@ delivered.keys.map(_.array))
+  def expectingSize: Int = expecting.size
 
   /**
     * Process download request of modifier of type modifierTypeId with id modifierId
@@ -75,5 +70,8 @@ class ErgoDeliveryTracker(system: ActorSystem,
       super.onReceive(mtid, mid, cp)
     }
   }
+
+  def isKnown(mid: ModifierIdAsKey): Boolean = expecting.contains(mid) ||
+    expectingFromRandom.contains(mid) || delivered.contains(mid)
 
 }

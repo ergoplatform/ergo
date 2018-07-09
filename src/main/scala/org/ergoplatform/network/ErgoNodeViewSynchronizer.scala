@@ -7,13 +7,14 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.{ErgoModifiersCache, ModifiersStatusChecker}
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.{Message, ModifiersSpec}
-import scorex.core.network.{NodeViewSynchronizer, SendToPeers, SendToRandom}
+import scorex.core.network.{NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{ModifierId, ModifierTypeId}
@@ -24,13 +25,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)(implicit ex: ExecutionContext)
+                               timeProvider: NetworkTimeProvider,
+                               modifiersCache: ErgoModifiersCache)(implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction,
     ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
     ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
 
   override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
     self, timeProvider)
+
+  protected val statusCheckerOpt: Option[ModifiersStatusChecker] = None
 
   private val downloadListSize = networkSettings.maxInvObjects
 
@@ -80,9 +84,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val (expecting, delivered) = deliveryTracker.expectingAndDelivered
-        val toExclude = delivered ++ expecting
-        val newIds = h.nextModifiersToDownload(downloadListSize - expecting.size, toExclude)
+        val sc = new ModifiersStatusChecker(h, modifiersCache, deliveryTracker)
+
+        val newIds = h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize, sc.isUnknown)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
@@ -110,27 +114,31 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
-      timeProvider))
-
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
+      timeProvider, cache))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
             timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache)
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, cache))
+
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            networkSettings: NetworkSettings,
+            timeProvider: NetworkTimeProvider,
+            cache: ErgoModifiersCache,
             name: String)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, cache), name)
 
 
   case object CheckModifiersToDownload

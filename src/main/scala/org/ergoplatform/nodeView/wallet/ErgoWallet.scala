@@ -71,27 +71,36 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
   val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
 
   case class BoxUncertain(tx: ErgoTransaction, outIndex: Short)
+  case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
+
 
   val quickScanOffchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
-  val quickScanOnchain = mutable.TreeMap[Height, BoxUncertain]()
+  val quickScanOnchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
+
+  val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
+  val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
+  val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
   lazy val registry = ??? //keep statuses
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]) = {
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
     tx.outputCandidates.zipWithIndex.foreach{case (outCandidate, outIndex) =>
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val bu = BoxUncertain(tx, outIndex.toShort)
           heightOpt match {
-            case Some(h) => quickScanOnchain.put(h, bu)
-            case None => quickScanOffchain.put(ByteArrayWrapper(tx.id), bu)
+            case Some(h) =>
+              val wid = ByteArrayWrapper(tx.id)
+              quickScanOnchain.put(wid, bu)
+              confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
+            case None =>
+              quickScanOffchain.put(ByteArrayWrapper(tx.id), bu)
           }
         case None =>
       }
     }
   }
 
-  //todo: implement
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     scan(tx, None)
     this
@@ -99,6 +108,7 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
 
   def resolveUncertainty(): Unit = {
     quickScanOffchain.foreach {case (txId, uncertainBoxData) =>
+      println(txId)
       val tx = uncertainBoxData.tx
       val outIndex = uncertainBoxData.outIndex
       val box = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
@@ -114,12 +124,14 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
+          val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
+          certainOffChain.put(txId, BoxCertain(tx, outIndex, box.value, assets))
+          quickScanOffchain.remove(txId)
         case Failure(_) =>
       }
     }
   }
 
-  //todo: implement
   override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
     txs.foreach(tx => scanOffchain(tx))
     this
@@ -179,6 +191,8 @@ object ErgoWallet extends App {
     w.resolveUncertainty()
     t = System.currentTimeMillis()
     println("time to resolve: " + (t - t0))
+
+    println(w.certainOffChain.size)
   }
 
   benchmark()

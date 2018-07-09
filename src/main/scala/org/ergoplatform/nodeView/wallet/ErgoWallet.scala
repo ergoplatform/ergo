@@ -74,17 +74,17 @@ class ErgoWalletActor(seed: String) extends Actor {
 
   private val prover = new ErgoProvingInterpreter(seed)
 
-  var height = 0
-  var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
+  private var height = 0
+  private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  val secret = prover.dlogSecrets.head
-  val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
+  private val secret = prover.dlogSecrets.head
+  private val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
 
-  val quickScan = mutable.Map[ByteArrayWrapper, BoxUncertain]()
+  private val quickScan = mutable.Map[ByteArrayWrapper, BoxUncertain]()
 
-  val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
-  val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
-  val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
+  private val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
+  private val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
+  private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
 
   private def resolveUncertainty(toScan: mutable.Map[ByteArrayWrapper, BoxUncertain],

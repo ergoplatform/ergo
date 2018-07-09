@@ -194,7 +194,6 @@ class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWall
 
 
 object ErgoWallet extends App {
-  @SuppressWarnings(Array("UnusedMethodParameter"))
   def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
 
   def benchmark() = {

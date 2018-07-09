@@ -63,7 +63,10 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 }
 
 
-case class BoxUncertain(tx: ErgoTransaction, outIndex: Short)
+case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]){
+  lazy val onChain = heightOpt.isDefined
+}
+
 case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
 
 
@@ -77,8 +80,7 @@ class ErgoWalletActor(seed: String) extends Actor {
   val secret = prover.dlogSecrets.head
   val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
 
-  val quickScanOffchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
-  val quickScanOnchain = mutable.Map[ByteArrayWrapper, BoxUncertain]()
+  val quickScan = mutable.Map[ByteArrayWrapper, BoxUncertain]()
 
   val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
@@ -115,14 +117,14 @@ class ErgoWalletActor(seed: String) extends Actor {
     tx.outputCandidates.zipWithIndex.foreach { case (outCandidate, outIndex) =>
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
-          val bu = BoxUncertain(tx, outIndex.toShort)
+          val bu = BoxUncertain(tx, outIndex.toShort, heightOpt)
           heightOpt match {
             case Some(h) =>
               val wid = ByteArrayWrapper(tx.id)
-              quickScanOnchain.put(wid, bu)
+              quickScan.put(wid, bu)
               confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
             case None =>
-              quickScanOffchain.put(ByteArrayWrapper(tx.id), bu)
+              quickScan.put(ByteArrayWrapper(tx.id), bu)
           }
         case None =>
       }

@@ -106,14 +106,16 @@ class ErgoWalletActor(seed: String) extends Actor {
         case Success(_) =>
           val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
           val txId = ByteArrayWrapper(tx.id)
-          toFill.put(txId, BoxCertain(tx, outIndex, box.value, assets))
+          val certainBox = BoxCertain(tx, outIndex, box.value, assets)
+          println("Received: " + certainBox)
+          toFill.put(txId, certainBox)
         case Failure(_) => quickScan.enqueue(uncertainBoxData)
       }
     }
   }
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
-    tx.outputCandidates.zipWithIndex.foreach { case (outCandidate, outIndex) =>
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    tx.outputCandidates.zipWithIndex.exists { case (outCandidate, outIndex) =>
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val bu = BoxUncertain(tx, outIndex.toShort, heightOpt)
@@ -125,13 +127,15 @@ class ErgoWalletActor(seed: String) extends Actor {
             case None =>
               quickScan.enqueue(bu)
           }
+          true
         case None =>
+          false
       }
     }
   }
 
-  private def extractFromTransactions(txs: Seq[ErgoTransaction]): Unit = {
-    txs.foreach(tx => scan(tx, Some(height)))
+  private def extractFromTransactions(txs: Seq[ErgoTransaction]): Boolean = {
+    txs.exists(tx => scan(tx, Some(height)))
   }
 
   private def extractFromHeader(h: Header): Unit = {
@@ -140,9 +144,14 @@ class ErgoWalletActor(seed: String) extends Actor {
   }
 
   override def receive: Receive = {
-    case ScanOffchain(tx) => scan(tx, None)
-    case BestHeader(h) => extractFromHeader(h)
-    case ScanOnchain(bt) => extractFromTransactions(bt.transactions)
+    case ScanOffchain(tx) =>
+      if (scan(tx, None)) resolveUncertainty(certainOffChain)
+    case BestHeader(h) =>
+      extractFromHeader(h)
+    case ScanOnchain(bt) =>
+      if (extractFromTransactions(bt.transactions)) {
+        resolveUncertainty(certainOnChain)
+      }
   }
 }
 

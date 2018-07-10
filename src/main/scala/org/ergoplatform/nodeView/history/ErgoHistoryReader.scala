@@ -13,6 +13,7 @@ import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.annotation.tailrec
+import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
 
 /**
@@ -70,8 +71,8 @@ trait ErgoHistoryReader
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
   @SuppressWarnings(Array("IsInstanceOf"))
-  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T] = modifierById(id) match {
-    case Some(m: T@unchecked) if m.isInstanceOf[T] => Some(m)
+  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
+    case Some(m: T) => Some(m)
     case _ => None
   }
 

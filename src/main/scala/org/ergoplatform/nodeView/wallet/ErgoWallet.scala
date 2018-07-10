@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ScanOffchain, ScanOnchain}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Resolve, ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.{DiffieHellmanTupleProverInput, SigmaProtocolPrivateInput}
@@ -26,6 +26,8 @@ import sigmastate.serialization.ValueSerializer
 import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
@@ -85,8 +87,14 @@ class ErgoWalletActor(seed: String) extends Actor {
   private val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
+  private val balance: Long = 0
+  private val assetBalances: Map[ByteArrayWrapper, Long] = Map()
 
-  private def resolveUncertainty(toFill: mutable.Map[ByteArrayWrapper, BoxCertain]): Unit = {
+  private val unconfirmedBalance: Long = 0
+  private val unconfirmedAssetBalances: Map[ByteArrayWrapper, Long] = Map()
+
+
+  private def resolveUncertainty(): Unit = {
     if (quickScan.nonEmpty) {
       val uncertainBoxData = quickScan.dequeue()
       val tx = uncertainBoxData.tx
@@ -108,6 +116,8 @@ class ErgoWalletActor(seed: String) extends Actor {
           val txId = ByteArrayWrapper(tx.id)
           val certainBox = BoxCertain(tx, outIndex, box.value, assets)
           println("Received: " + certainBox)
+
+          val toFill = if(uncertainBoxData.onChain) certainOnChain else certainOffChain
           toFill.put(txId, certainBox)
         case Failure(_) => quickScan.enqueue(uncertainBoxData)
       }
@@ -143,18 +153,37 @@ class ErgoWalletActor(seed: String) extends Actor {
     lastBlockUtxoRootHash = h.stateRoot
   }
 
+  //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
+  private def resolveAgain = if(quickScan.nonEmpty){
+    context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
+  }
+
   override def receive: Receive = {
     case ScanOffchain(tx) =>
-      if (scan(tx, None)) resolveUncertainty(certainOffChain)
+      if (scan(tx, None)){
+        resolveUncertainty()
+      }
+      resolveAgain
+
+    case Resolve =>
+      resolveUncertainty()
+      resolveAgain
+
     case ScanOnchain(fullBlock) =>
       extractFromHeader(fullBlock.header)
+      val queueLengthBefore = quickScan.length
       if (extractFromTransactions(fullBlock.transactions)) {
-        resolveUncertainty(certainOnChain)
+        val queueLengthAfter = quickScan.length
+        (1 to (queueLengthAfter - queueLengthBefore)).foreach(_ =>
+          resolveUncertainty()
+        )
       }
+      resolveAgain
   }
 }
 
 object ErgoWalletActor {
+  private[ErgoWalletActor] case object Resolve
   case class ScanOffchain(tx: ErgoTransaction)
   case class ScanOnchain(block: ErgoFullBlock)
 }

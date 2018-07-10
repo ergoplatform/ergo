@@ -18,4 +18,8 @@ class ErgoDeliveryTracker(system: ActorSystem,
 
   def isExpecting: Boolean = expecting.nonEmpty
 
+  def expectingSize: Int = expecting.size
+
+  override def isExpecting(mid: ModifierId): Boolean = expecting.contains(key(mid))
+
 }

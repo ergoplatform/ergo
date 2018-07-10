@@ -12,9 +12,10 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import sigmastate.{NoProof, SByte, SType, SigSerializer}
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf}
+import sigmastate._
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -66,8 +67,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokens <- Gen.sequence(additionalTokensGen(tokensCount))
   } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
 
-  def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)]): Gen[ErgoBox] = for {
-    prop <- trueLeafGen
+  def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
+                          propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
+    prop <- propositionGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
@@ -172,13 +174,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   def validErgoTransactionGenTemplate(minAssets: Int,
                                       maxAssets: Int = -1,
                                       minInputs: Int = 1,
-                                      maxInputs: Int = 100): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
+                                      maxInputs: Int = 100,
+                                      propositionGen: Gen[Value[SBoolean.type]] = trueLeafGen
+                                     ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
       minAssets,
       Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
-    from <- Gen.sequence(tokensDistribution.map(ergoBoxGenForTokens))
+    from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
     tx <- validTransactionGen(from.asScala.toIndexedSeq)
   } yield from.asScala.toIndexedSeq -> tx
 

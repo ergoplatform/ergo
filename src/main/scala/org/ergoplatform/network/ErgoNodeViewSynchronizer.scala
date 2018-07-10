@@ -41,6 +41,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
+  protected val onCheckModifiersToDownload: Receive = {
+    case CheckModifiersToDownload =>
+      historyReaderOpt.foreach { h =>
+        h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize, id => !deliveryTracker.isExpecting(id))
+          .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
+      }
+  }
+
   override protected def modifiersFromRemote: Receive = {
     case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
@@ -76,6 +84,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override protected def viewHolderEvents: Receive =
     onSyntacticallySuccessfulModifier orElse
       onChangedVault orElse
+      onCheckModifiersToDownload orElse
       super.viewHolderEvents
 }
 

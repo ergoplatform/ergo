@@ -39,6 +39,7 @@ class ErgoWalletActor(seed: String) extends Actor {
 
   private val quickScan = mutable.Queue[BoxUncertain]()
 
+  //todo: store spent
   private val certainOffChain = mutable.LongMap[BoxCertain]()
   private val certainOnChain = mutable.LongMap[BoxCertain]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
@@ -128,6 +129,7 @@ class ErgoWalletActor(seed: String) extends Actor {
           val onchain = if(internalId <= Int.MaxValue) true else false
           if(onchain) {
             certainOnChain.remove(internalId)
+            //todo: decrease balances
           } else {
             //todo: what to do with unconfirmed?
           }

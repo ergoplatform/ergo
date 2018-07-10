@@ -166,11 +166,10 @@ object ErgoWalletActor {
 }
 
 
-class ErgoWallet(seed: String) extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
+class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
 
-  //todo: pass system from outside
-  val actor = ActorSystem("ff").actorOf(Props(classOf[ErgoWalletActor], seed))
+  val actor = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
 
 
   lazy val registry = ??? //keep statuses
@@ -181,12 +180,10 @@ class ErgoWallet(seed: String) extends Vault[ErgoTransaction, ErgoPersistentModi
     this
   }
 
-
   override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
     txs.foreach(tx => scanOffchain(tx))
     this
   }
-
 
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
@@ -209,8 +206,9 @@ class ErgoWallet(seed: String) extends Vault[ErgoTransaction, ErgoPersistentModi
 }
 
 
-object ErgoWallet extends App {
-  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet(settings.walletSettings.seed)
+object ErgoWallet {
+  def readOrGenerate(actorSystem: ActorSystem, settings: ErgoSettings): ErgoWallet =
+    new ErgoWallet(actorSystem, settings.walletSettings.seed)
 
   /*
   def benchmark() = {

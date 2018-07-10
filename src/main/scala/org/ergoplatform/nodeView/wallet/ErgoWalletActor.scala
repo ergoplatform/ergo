@@ -6,12 +6,15 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
+import org.ergoplatform.modifiers.ErgoFullBlock
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]) {
@@ -25,6 +28,7 @@ case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, ass
 
 
 class ErgoWalletActor(seed: String) extends Actor {
+  import ErgoWalletActor._
 
   private val prover = new ErgoProvingInterpreter(seed)
 

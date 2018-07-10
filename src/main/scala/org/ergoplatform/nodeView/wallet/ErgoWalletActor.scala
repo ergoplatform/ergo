@@ -39,8 +39,8 @@ class ErgoWalletActor(seed: String) extends Actor {
 
   private val quickScan = mutable.Queue[BoxUncertain]()
 
-  private val certainOffChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
-  private val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
+  private val certainOffChain = mutable.LongMap[BoxCertain]()
+  private val certainOnChain = mutable.LongMap[BoxCertain]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
   private var balance: Long = 0
@@ -49,7 +49,9 @@ class ErgoWalletActor(seed: String) extends Actor {
   private var unconfirmedBalance: Long = 0
   private var unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
-  lazy val registry = ??? //keep statuses
+  var firstUnusedConfirmedId = 0
+  var firstUnusedUnconfirmedId = Int.MaxValue + 1
+  lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
 
   private def increaseBalances(uncertainBox: BoxUncertain): Unit = {
     val box = uncertainBox.box
@@ -74,6 +76,17 @@ class ErgoWalletActor(seed: String) extends Actor {
     }
   }
 
+  private def register(boxId: ByteArrayWrapper, certainBox: BoxCertain, onchain: Boolean) = {
+    val (toFill, internalId) = if(onchain) {
+      certainOnChain -> firstUnusedConfirmedId
+    } else {
+      certainOffChain -> firstUnusedUnconfirmedId
+    }
+    registry.put(boxId, internalId)
+    toFill.put(internalId, certainBox)
+    if(onchain) firstUnusedConfirmedId += 1 else firstUnusedUnconfirmedId += 1
+  }
+
   private def resolveUncertainty(): Unit = {
     if (quickScan.nonEmpty) {
       val uncertainBox = quickScan.dequeue()
@@ -94,12 +107,11 @@ class ErgoWalletActor(seed: String) extends Actor {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
-          val txId = ByteArrayWrapper(tx.id)
+          val boxId = ByteArrayWrapper(box.id)
           val certainBox = BoxCertain(tx, outIndex, box.value, assets)
           println("Received: " + certainBox)
 
-          val toFill = if(uncertainBox.onChain) certainOnChain else certainOffChain
-          toFill.put(txId, certainBox)
+          register(boxId, certainBox, uncertainBox.onChain)
           increaseBalances(uncertainBox)
         case Failure(_) => quickScan.enqueue(uncertainBox)
       }
@@ -124,6 +136,7 @@ class ErgoWalletActor(seed: String) extends Actor {
           false
       }
     }
+    //tx.in
   }
 
   private def extractFromTransactions(txs: Seq[ErgoTransaction]): Boolean = {

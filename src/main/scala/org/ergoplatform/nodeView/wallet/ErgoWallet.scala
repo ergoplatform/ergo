@@ -67,6 +67,8 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
 case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]) {
   lazy val onChain: Boolean = heightOpt.isDefined
+
+  lazy val box = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
 }
 
 case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
@@ -87,19 +89,44 @@ class ErgoWalletActor(seed: String) extends Actor {
   private val certainOnChain = mutable.Map[ByteArrayWrapper, BoxCertain]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
-  private val balance: Long = 0
-  private val assetBalances: Map[ByteArrayWrapper, Long] = Map()
+  private var balance: Long = 0
+  private var assetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
-  private val unconfirmedBalance: Long = 0
-  private val unconfirmedAssetBalances: Map[ByteArrayWrapper, Long] = Map()
+  private var unconfirmedBalance: Long = 0
+  private var unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
+  lazy val registry = ??? //keep statuses
+
+  private def increaseBalances(uncertainBox: BoxUncertain): Unit = {
+    val box = uncertainBox.box
+    val tokenDelta = box.value
+    val assetDeltas = box.additionalTokens
+
+    //todo: reduce boilerplate below?
+    if(uncertainBox.onChain){
+      balance += tokenDelta
+      assetDeltas.foreach{ case (id, amount) =>
+        val wid = ByteArrayWrapper(id)
+        val updBalance = assetBalances.getOrElse(wid, 0L) + amount
+        assetBalances.put(wid, updBalance)
+      }
+    } else {
+      unconfirmedBalance += tokenDelta
+      assetDeltas.foreach{ case (id, amount) =>
+        val wid = ByteArrayWrapper(id)
+        val updBalance = unconfirmedAssetBalances.getOrElse(wid, 0L) + amount
+        unconfirmedAssetBalances.put(wid, updBalance)
+      }
+    }
+  }
 
   private def resolveUncertainty(): Unit = {
     if (quickScan.nonEmpty) {
-      val uncertainBoxData = quickScan.dequeue()
-      val tx = uncertainBoxData.tx
-      val outIndex = uncertainBoxData.outIndex
-      val box = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
+      val uncertainBox = quickScan.dequeue()
+      val tx = uncertainBox.tx
+      val outIndex = uncertainBox.outIndex
+      val box = uncertainBox.box
+
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32) // todo: real impl
 
       val testingTx = UnsignedErgoLikeTransaction(
@@ -117,9 +144,10 @@ class ErgoWalletActor(seed: String) extends Actor {
           val certainBox = BoxCertain(tx, outIndex, box.value, assets)
           println("Received: " + certainBox)
 
-          val toFill = if(uncertainBoxData.onChain) certainOnChain else certainOffChain
+          val toFill = if(uncertainBox.onChain) certainOnChain else certainOffChain
           toFill.put(txId, certainBox)
-        case Failure(_) => quickScan.enqueue(uncertainBoxData)
+          increaseBalances(uncertainBox)
+        case Failure(_) => quickScan.enqueue(uncertainBox)
       }
     }
   }
@@ -193,9 +221,6 @@ class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTrans
   with ScorexLogging {
 
   private lazy val actor = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
-
-  lazy val registry = ??? //keep statuses
-
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     actor ! ScanOffchain(tx)

@@ -41,13 +41,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
-  private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
-    modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
-    val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
-    //todo: Full nodes should be here, not a random peer
-    networkControllerRef ! SendToNetwork(msg, SendToRandom)
-  }
-
   override protected def modifiersFromRemote: Receive = {
     case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
@@ -76,23 +69,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(mod)
   }
 
-  protected val onCheckModifiersToDownload: Receive = {
-    case CheckModifiersToDownload =>
-      historyReaderOpt.foreach { h =>
-        val newIds = h.nextModifiersToDownload(downloadListSize - expecting.size, toExclude)
-        val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
-        (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
-      }
-  }
-
   def onChangedVault: Receive = {
     case ChangedVault(_) =>
   }
 
   override protected def viewHolderEvents: Receive =
     onSyntacticallySuccessfulModifier orElse
-      onDownloadRequest orElse
-      onCheckModifiersToDownload orElse
       onChangedVault orElse
       super.viewHolderEvents
 }

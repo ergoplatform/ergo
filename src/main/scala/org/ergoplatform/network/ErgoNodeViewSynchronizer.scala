@@ -56,7 +56,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
           sendSync(statusTracker, h)
-        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
+        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload
         }
@@ -78,19 +78,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedExpectingFromRandom()
       historyReaderOpt.foreach { h =>
-        val (expecting, delivered) = deliveryTracker.expectingAndDelivered
-        val toExclude = delivered ++ expecting
         val newIds = h.nextModifiersToDownload(downloadListSize - expecting.size, toExclude)
         val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
         (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
-  }
-
-  def onDownloadRequest: Receive = {
-    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      requestDownload(modifierTypeId, Seq(modifierId))
   }
 
   def onChangedVault: Receive = {

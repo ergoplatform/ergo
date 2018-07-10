@@ -35,7 +35,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       }
 
       PayloadValidator.validate(m, header, minimalHeight).toTry
-    }.getOrElse(Failure(RecoverableModifierError(s"Header for modifier $m is not defined")))
+    }.getOrElse(Failure(new RecoverableModifierError(s"Header for modifier $m is not defined")))
   }
 
   /**
@@ -67,7 +67,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult = {
+    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       failFast
         .validate(!historyStorage.contains(m.id)) {
           fatal(s"Modifier ${m.encodedId} is already in history")

@@ -296,7 +296,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   class HeaderValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(header: Header): ValidationResult = {
+    def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
       } else {
@@ -309,7 +309,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    private def validateGenesisBlockHeader(header: Header): ValidationResult = {
+    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       accumulateErrors
         .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
           fatal(s"Genesis block should have genesis parent id. $detail")
@@ -323,7 +323,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .result
     }
 
-    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult = {
+    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       failFast
         .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")

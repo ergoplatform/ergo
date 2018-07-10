@@ -119,6 +119,22 @@ class ErgoWalletActor(seed: String) extends Actor {
   }
 
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    //todo: check uncertain boxes as well?
+    //todo: consider double-spend in an unconfirmed tx
+    tx.inputs.foreach{inp =>
+      val boxId = ByteArrayWrapper(inp.boxId)
+      registry.remove(boxId) match {
+        case Some(internalId) =>
+          val onchain = if(internalId <= Int.MaxValue) true else false
+          if(onchain) {
+            certainOnChain.remove(internalId)
+          } else {
+            //todo: what to do with unconfirmed?
+          }
+        case None   =>
+      }
+    }
+
     tx.outputCandidates.zipWithIndex.exists { case (outCandidate, outIndex) =>
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
@@ -136,7 +152,6 @@ class ErgoWalletActor(seed: String) extends Actor {
           false
       }
     }
-    //tx.in
   }
 
   private def extractFromTransactions(txs: Seq[ErgoTransaction]): Boolean = {

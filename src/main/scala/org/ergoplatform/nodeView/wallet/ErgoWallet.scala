@@ -7,21 +7,21 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{BestHeader, ScanOffchain, ScanOnchain}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.{DiffieHellmanTupleProverInput, SigmaProtocolPrivateInput}
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.encode.{Base16, Base58}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.{AvlTreeData, Values}
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter, ProverResult}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import sigmastate.serialization.ValueSerializer
 import sigmastate.utxo.CostTable
 
@@ -64,7 +64,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
 
 case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[Height]) {
-  lazy val onChain = heightOpt.isDefined
+  lazy val onChain: Boolean = heightOpt.isDefined
 }
 
 case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
@@ -146,31 +146,24 @@ class ErgoWalletActor(seed: String) extends Actor {
   override def receive: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) resolveUncertainty(certainOffChain)
-    case BestHeader(h) =>
-      extractFromHeader(h)
-    case ScanOnchain(bt) =>
-      if (extractFromTransactions(bt.transactions)) {
+    case ScanOnchain(fullBlock) =>
+      extractFromHeader(fullBlock.header)
+      if (extractFromTransactions(fullBlock.transactions)) {
         resolveUncertainty(certainOnChain)
       }
   }
 }
 
 object ErgoWalletActor {
-
   case class ScanOffchain(tx: ErgoTransaction)
-
-  case class ScanOnchain(bt: BlockTransactions)
-
-  case class BestHeader(h: Header)
-
+  case class ScanOnchain(block: ErgoFullBlock)
 }
 
 
 class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
   with ScorexLogging {
 
-  val actor = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
-
+  private lazy val actor = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
 
   lazy val registry = ??? //keep statuses
 
@@ -187,14 +180,10 @@ class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTrans
 
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
-      case h: Header =>
-        actor ! BestHeader(h)
-      case bt: BlockTransactions =>
-        //todo: check that this is correct bt
-        actor ! ScanOnchain(bt)
       case fb: ErgoFullBlock =>
-        actor ! BestHeader(fb.header)
-        actor ! ScanOnchain(fb.blockTransactions)
+        actor ! ScanOnchain(fb)
+      case _ =>
+        log.warn("Only full block is expected in ErgoWallet.scanPersistent")
     }
     this
   }
@@ -207,6 +196,7 @@ class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTrans
 
 
 object ErgoWallet {
+
   def readOrGenerate(actorSystem: ActorSystem, settings: ErgoSettings): ErgoWallet =
     new ErgoWallet(actorSystem, settings.walletSettings.seed)
 

@@ -15,6 +15,7 @@ import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
 import scala.concurrent.duration._
+import scala.util.Random
 
 
 class TransactionGenerator(viewHolder: ActorRef,
@@ -40,8 +41,16 @@ class TransactionGenerator(viewHolder: ActorRef,
         if(fbh > currentFullHeight){
           currentFullHeight = fbh
 
-          //todo: real prop
-          ergoWalletActor ! GenerateTransaction(Seq(new ErgoBoxCandidate(1, Values.TrueLeaf)))
+          //todo: real prop, assets
+
+          val newOutsCount = Random.nextInt(500) + 1
+          val newOuts = (1 to newOutsCount).map{_ =>
+            val value = Random.nextInt(50) + 1
+            val prop = if(Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
+            new ErgoBoxCandidate(value, prop)
+          }
+
+          ergoWalletActor ! GenerateTransaction(newOuts)
         }
       }
 

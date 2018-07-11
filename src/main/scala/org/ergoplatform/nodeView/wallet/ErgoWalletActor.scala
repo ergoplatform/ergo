@@ -207,7 +207,7 @@ class ErgoWalletActor(seed: String) extends Actor {
     case GenerateTransaction(payTo) =>
       //todo: add assets
       val targetBalance = payTo.map(_.value).sum
-      val txOpt = coinSelector.select(certainOnChain.valuesIterator, targetBalance, balance, Map(), Map()).map { r =>
+      val txOpt = coinSelector.select(certainOnChain.valuesIterator, targetBalance, balance, Map(), Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
         val changeAssets = r.changeAssets
         val changeBalance = r.changeBalance
@@ -221,7 +221,7 @@ class ErgoWalletActor(seed: String) extends Actor {
           (payTo :+ changeBoxCandidate).toIndexedSeq)
 
         prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash))
-      }.flatten
+      }
 
       sender() ! txOpt
   }

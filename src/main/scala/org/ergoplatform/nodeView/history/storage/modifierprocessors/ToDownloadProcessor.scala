@@ -53,7 +53,6 @@ trait ToDownloadProcessor extends ScorexLogging {
           case Some(bestHeaderAtThisHeight) =>
             val toDownload = requiredModifiersForHeader(bestHeaderAtThisHeight)
               .filter(m => filter(m._2))
-              .filter(m => !contains(m._2))
             continuation(height + 1, acc ++ toDownload)
           case None => acc
         }

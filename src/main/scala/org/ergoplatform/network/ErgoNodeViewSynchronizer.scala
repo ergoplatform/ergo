@@ -44,9 +44,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
+<<<<<<< HEAD
         def downloadRequired(id: ModifierId): Boolean = statusKeeper.status(id)(h) == Unknown
 
         h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize, downloadRequired)
+=======
+        h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize,
+          id => !deliveryTracker.isExpectingOrDelivered(id))
+>>>>>>> 7e10f562b94b92bc4c8a2693b661a72746caddf7
           .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }

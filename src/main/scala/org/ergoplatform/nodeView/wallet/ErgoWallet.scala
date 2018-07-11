@@ -1,26 +1,40 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.math.BigInteger
+import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
-import scorex.core.transaction.wallet.Vault
+import scorex.core.transaction.wallet.{Vault, VaultReader}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Blake2b256
+
 import scala.util.{Success, Try}
+import akka.pattern.ask
+import akka.util.Timeout
+
+import scala.concurrent.Future
 
 
+trait ErgoWalletReader extends VaultReader {
+  val actor: ActorRef
 
-class ErgoWallet(actorSystem: ActorSystem, seed: String) extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
-  with ScorexLogging {
+  def getBalances(): Future[BalancesSnapshot] = {
+    implicit val timeout = Timeout(5, TimeUnit.SECONDS)
+    (actor ? ErgoWalletActor.ReadBalances).mapTo[BalancesSnapshot]
+  }
+}
 
-  private lazy val actor = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
+class ErgoWallet(actorSystem: ActorSystem, seed: String)
+  extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
+
+  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     actor ! ScanOffchain(tx)

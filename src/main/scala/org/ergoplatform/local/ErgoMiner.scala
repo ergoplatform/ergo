@@ -131,7 +131,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     unknownMessage
 
   private def onReaders: Receive = {
-    case Readers(h, s, m) if s.isInstanceOf[UtxoStateReader] =>
+    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
         case Success(candidate) => procCandidateBlock(candidate)
         case Failure(e) => log.warn("Failed to produce candidate block.", e)

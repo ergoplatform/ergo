@@ -26,6 +26,8 @@ case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[
 case class BoxCertain(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long])
 
 
+case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
+
 
 class ErgoWalletActor(seed: String) extends Actor {
   import ErgoWalletActor._
@@ -50,9 +52,9 @@ class ErgoWalletActor(seed: String) extends Actor {
   private var unconfirmedBalance: Long = 0
   private var unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
-  var firstUnusedConfirmedId = 0
-  var firstUnusedUnconfirmedId = Int.MaxValue + 1
-  lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
+  private var firstUnusedConfirmedId = 0
+  private var firstUnusedUnconfirmedId = Int.MaxValue + 1
+  private lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
 
   private def increaseBalances(uncertainBox: BoxUncertain): Unit = {
     val box = uncertainBox.box
@@ -191,6 +193,9 @@ class ErgoWalletActor(seed: String) extends Actor {
         )
       }
       resolveAgain
+
+    case ReadBalances =>
+      sender() ! BalancesSnapshot(height, balance, assetBalances.toMap)  //todo: avoid .toMap?
   }
 }
 
@@ -198,4 +203,6 @@ object ErgoWalletActor {
   private[ErgoWalletActor] case object Resolve
   case class ScanOffchain(tx: ErgoTransaction)
   case class ScanOnchain(block: ErgoFullBlock)
+
+  case object ReadBalances
 }

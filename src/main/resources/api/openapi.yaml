@@ -935,3 +935,24 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
+
+  /wallet/balances:
+    get:
+      summary: Get total amount of confirmed Ergo tokens and assets
+      operationId: walletBalances
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Get total amount of confirmed Ergo tokens and assets
+          content:
+            application/json:
+              schema:
+                type: string
+                example: todo
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string

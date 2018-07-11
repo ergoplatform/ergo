@@ -3,8 +3,10 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.nodeView.wallet.BalancesSnapshot
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.validation.ValidationResult
@@ -44,6 +46,10 @@ trait ApiCodecs {
   implicit val bytesEncoder: Encoder[Array[Byte]] =  Algos.encode(_).asJson
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
+
+  implicit val bytesWrapperEncoder: Encoder[ByteArrayWrapper] =  _.data.asJson
+
+  implicit val bytesWrapperDecoder: Decoder[ByteArrayWrapper] = bytesDecoder.map(bs => ByteArrayWrapper.apply(bs))
 
   implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>
     Algos.encode(in.toArray).asJson
@@ -90,4 +96,11 @@ trait ApiCodecs {
     }
   }
 
+  implicit val balancesSnapshotEncoder: Encoder[BalancesSnapshot] = { v =>
+    Json.obj(
+      "height" -> v.height.asJson,
+      "balance" ->   v.balance.asJson,
+      "assets" ->   v.assetBalances.toSeq.asJson
+    )
+  }
 }

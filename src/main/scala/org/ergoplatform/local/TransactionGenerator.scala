@@ -32,6 +32,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       if (!isStarted) {
         context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
+      isStarted = true
 
     case FetchBoxes =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
@@ -46,6 +47,7 @@ class TransactionGenerator(viewHolder: ActorRef,
 
     case txOpt: Option[ErgoTransaction]@unchecked =>
       txOpt.foreach { tx =>
+        println("Locally generated tx: " + tx)
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
 

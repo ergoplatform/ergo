@@ -36,21 +36,23 @@ class DefaultCoinSelector extends CoinSelector {
     var currentBalance = 0L
     val currentAssets = mutable.Map[ByteArrayWrapper, Long]()
 
-    def successMet = currentBalance >= targetBalance && targetAssets.forall{case (id, targetAmt) =>
+    def successMet = currentBalance >= targetBalance && targetAssets.forall { case (id, targetAmt) =>
       currentAssets.getOrElse(id, 0L) >= targetAmt
     }
 
-    inputBoxes.dropWhile { bc =>
+    inputBoxes.find { bc =>
       currentBalance = currentBalance + bc.ergoValue
       mergeAssets(currentAssets, bc.assets)
       res += bc.box
       currentBalance < targetBalance
-    }.dropWhile { bc =>
-      if(bc.assets.exists{ case(id, _) =>
+    }
+
+    inputBoxes.find { bc =>
+      if (bc.assets.exists { case (id, _) =>
         val targetAmt = targetAssets.getOrElse(id, 0L)
         lazy val currentAmt = currentAssets.getOrElse(id, 0L)
         targetAmt > 0 && targetAmt > currentAmt
-      }){
+      }) {
         currentBalance = currentBalance + bc.ergoValue
         mergeAssets(currentAssets, bc.assets)
         res += bc.box
@@ -60,10 +62,10 @@ class DefaultCoinSelector extends CoinSelector {
 
     //todo: it could be the case that too many currentAssets to be in 1 Box and we need to add more ergo tokens
 
-    if(successMet){
-      targetAssets.foreach {case (id, targetAmt) =>
+    if (successMet) {
+      targetAssets.foreach { case (id, targetAmt) =>
         val currentAmt = currentAssets(id)
-        if(currentAmt == targetAmt) {
+        if (currentAmt == targetAmt) {
           currentAssets.remove(id)
         } else {
           currentAssets.put(id, currentAmt - targetAmt)

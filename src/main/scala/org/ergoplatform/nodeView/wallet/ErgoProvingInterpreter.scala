@@ -50,8 +50,9 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Option[ErgoTransaction] = Try {
+
     require(unsignedTx.inputs.length == boxesToSpend.length)
-    val inputs = unsignedTx.inputs.zip(boxesToSpend).map{case (unsignedInput, inputBox) =>
+    val inputs = unsignedTx.inputs.zip(boxesToSpend).map { case (unsignedInput, inputBox) =>
       require(unsignedInput.boxId.sameElements(inputBox.id))
 
       val context =

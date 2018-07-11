@@ -213,7 +213,8 @@ class ErgoWalletActor(seed: String) extends Actor {
         val changeBalance = r.changeBalance
 
         //todo: fix proposition, assets and register
-        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, Values.TrueLeaf, Seq(), Map())
+        val changeAddress = prover.dlogSecrets.head.publicImage
+        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, changeAddress, Seq(), Map())
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),

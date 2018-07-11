@@ -1,23 +1,30 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.utils.ScorexLogging
+import sigmastate.Values
 
 import scala.concurrent.duration._
-import scala.util.Random
 
-class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) extends Actor with ScorexLogging {
+
+class TransactionGenerator(viewHolder: ActorRef,
+                           ergoWalletActor: ActorRef,
+                           settings: TestingSettings) extends Actor with ScorexLogging {
   var txGenerator: Cancellable = _
 
   var isStarted = false
+
+  var currentFullHeight = 0
 
   @SuppressWarnings(Array("TraversableHead"))
   override def receive: Receive = {
@@ -27,27 +34,20 @@ class TransactionGenerator(viewHolder: ActorRef, settings: TestingSettings) exte
       }
 
     case FetchBoxes =>
-      /*
-      //todo: testnet1 - fix
+      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        val fbh = v.history.fullBlockHeight
+        if(fbh > currentFullHeight){
+          currentFullHeight = fbh
 
-      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool,
-        Seq[ErgoTransaction]] { v =>
-        if (v.pool.size < settings.keepPoolSize) {
-          (0 until settings.keepPoolSize - v.pool.size).map { _ =>
-            val txBoxes = (1 to Random.nextInt(10) + 1).flatMap(_ => v.state.randomBox())
-            val txInputs = txBoxes.map(_.boxId)
-            val values = txBoxes.map(_.value)
-            val txOutputs = if (values.head % 2 == 0) IndexedSeq.fill(2)(values.head / 2) ++ values.tail else values
-
-            ??? //ErgoTransaction(txInputs, txOutputs)
-          }
-        } else {
-          Seq.empty
+          //todo: real prop
+          ergoWalletActor ! GenerateTransaction(Seq(new ErgoBoxCandidate(1, Values.TrueLeaf)))
         }
-      }*/
+      }
 
-    case tx: ErgoTransaction =>
+    case txOpt: Option[ErgoTransaction]@unchecked =>
+      txOpt.foreach { tx =>
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      }
 
     case StopGeneration =>
       txGenerator.cancel()
@@ -64,14 +64,14 @@ object TransactionGenerator {
 }
 
 object TransactionGeneratorRef {
-  def props(viewHolder: ActorRef, settings: TestingSettings): Props =
-    Props(new TransactionGenerator(viewHolder, settings))
+  def props(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings): Props =
+    Props(new TransactionGenerator(viewHolder, ergoWalletActor, settings))
 
-  def apply(viewHolder: ActorRef, settings: TestingSettings)
+  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, settings))
+    context.actorOf(props(viewHolder, ergoWalletActor, settings))
 
-  def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
+  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, settings), name)
+    context.actorOf(props(viewHolder, ergoWalletActor, settings), name)
 }

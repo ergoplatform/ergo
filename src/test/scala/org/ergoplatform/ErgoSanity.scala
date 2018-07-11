@@ -8,8 +8,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
 import scorex.core.ModifierId

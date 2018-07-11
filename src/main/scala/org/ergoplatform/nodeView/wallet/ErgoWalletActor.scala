@@ -3,10 +3,11 @@ package org.ergoplatform.nodeView.wallet
 import akka.actor.Actor
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
@@ -33,6 +34,9 @@ case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[By
 
 class ErgoWalletActor(seed: String) extends Actor {
   import ErgoWalletActor._
+
+  //todo: pass as parameter, add to config
+  val coinSelector: CoinSelector = new DefaultCoinSelector
 
   private val prover = new ErgoProvingInterpreter(seed)
 
@@ -198,6 +202,27 @@ class ErgoWalletActor(seed: String) extends Actor {
 
     case ReadBalances =>
       sender() ! BalancesSnapshot(height, balance, assetBalances.toMap)  //todo: avoid .toMap?
+
+      //todo: check boxes being spent
+    case GenerateTransaction(payTo) =>
+      //todo: add assets
+      val targetBalance = payTo.map(_.value).sum
+      val txOpt = coinSelector.select(certainOnChain.valuesIterator, targetBalance, balance, Map(), Map()).map { r =>
+        val inputs = r.boxes.toIndexedSeq
+        val changeAssets = r.changeAssets
+        val changeBalance = r.changeBalance
+
+        //todo: fix proposition, assets and register
+        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, Values.TrueLeaf, Seq(), Map())
+
+        val unsignedTx = new UnsignedErgoTransaction(
+          inputs.map(_.id).map(id => new UnsignedInput(id)),
+          (payTo :+ changeBoxCandidate).toIndexedSeq)
+
+        prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash))
+      }.flatten
+
+      sender() ! txOpt
   }
 }
 
@@ -205,6 +230,8 @@ object ErgoWalletActor {
   private[ErgoWalletActor] case object Resolve
   case class ScanOffchain(tx: ErgoTransaction)
   case class ScanOnchain(block: ErgoFullBlock)
+
+  case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case object ReadBalances
 }

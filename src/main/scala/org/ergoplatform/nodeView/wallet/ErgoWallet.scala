@@ -18,6 +18,8 @@ import scorex.crypto.hash.Blake2b256
 import scala.util.{Success, Try}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.local.TransactionGeneratorRef
 
 import scala.concurrent.Future
 
@@ -31,10 +33,20 @@ trait ErgoWalletReader extends VaultReader {
   }
 }
 
-class ErgoWallet(actorSystem: ActorSystem, seed: String)
+class ErgoWallet(actorSystem: ActorSystem,
+                 nodeViewHolderRef: ActorRef,
+                 settings: ErgoSettings)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
+  private lazy val seed = settings.walletSettings.seed
+
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
+
+  implicit val system = actorSystem
+  if (settings.testingSettings.transactionGeneration) {
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
+    txGen ! StartGeneration
+  }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     actor ! ScanOffchain(tx)
@@ -65,28 +77,9 @@ class ErgoWallet(actorSystem: ActorSystem, seed: String)
 
 object ErgoWallet {
 
-  def readOrGenerate(actorSystem: ActorSystem, settings: ErgoSettings): ErgoWallet =
-    new ErgoWallet(actorSystem, settings.walletSettings.seed)
-
-  /*
-  def benchmark() = {
-    val w = new ErgoWallet
-
-    val inputs = (1 to 2).map(_ => Input(
-      ADKey @@ Array.fill(32)(0: Byte),
-      ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-
-    val box = ErgoBox(1L, Values.TrueLeaf) //w.secret.publicImage)
-    val tx = ErgoTransaction(inputs, IndexedSeq(box))
-
-    var t0 = System.currentTimeMillis()
-    (1 to 3000).foreach { _ =>
-      w.scanOffchain(tx)
-    }
-    var t = System.currentTimeMillis()
-    println("time to scan: " + (t - t0))
+  def readOrGenerate(actorSystem: ActorSystem, nodeViewHolderRef: ActorRef, settings: ErgoSettings): ErgoWallet = {
+    new ErgoWallet(actorSystem, nodeViewHolderRef, settings)
   }
-  benchmark()*/
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
     val seed = Base16.decode(seedStr).get

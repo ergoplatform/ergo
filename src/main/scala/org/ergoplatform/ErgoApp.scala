@@ -67,11 +67,6 @@ class ErgoApp(args: Seq[String]) extends Application {
     minerRef ! StartMining
   }
 
-  if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
-    txGen ! StartGeneration
-  }
-
   val actorsToStop = Seq(minerRef,
     peerManagerRef,
     networkControllerRef,

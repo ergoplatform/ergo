@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
-
+import org.ergoplatform.utils.AssetUtils.mergeAssets
 import scala.collection.mutable
 
 case class CoinSelectionResult(boxes: Seq[ErgoBox],
@@ -20,25 +20,17 @@ trait CoinSelector {
              targetBalance: Long,
              availableBalance: Long,
              targetAssets: Map[ByteArrayWrapper, Long],
-             availableAssets: Long): Option[CoinSelectionResult]
+             availableAssets: Map[ByteArrayWrapper, Long]): Option[CoinSelectionResult]
 }
 
 class DefaultCoinSelector extends CoinSelector {
-  //todo: move to utils, reuse in ErgoTransaction / ErgoWalletActor
-  @inline
-  def mergeAssets(into: mutable.Map[ByteArrayWrapper, Long],
-                  from: Map[ByteArrayWrapper, Long]): Unit = {
-    from.foreach { case (id, amount) =>
-      into.put(id, into.getOrElse(id, 0L) + amount)
-    }
-  }
 
   //todo: refactor code below, it is pretty terrible
   override def select(inputBoxes: Iterator[BoxCertain],
                       targetBalance: Long,
                       availableBalance: Long,
                       targetAssets: Map[ByteArrayWrapper, Long],
-                      availableAssets: Long): Option[CoinSelectionResult] = {
+                      availableAssets: Map[ByteArrayWrapper, Long]): Option[CoinSelectionResult] = {
 
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L

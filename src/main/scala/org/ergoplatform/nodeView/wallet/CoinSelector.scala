@@ -16,7 +16,7 @@ trait CoinSelector {
     * @param targetBalance
     * @param targetAssets
     */
-  def select(inputBoxes: Iterator[BoxCertain],
+  def select(inputBoxes: Iterator[BoxUnspent],
              targetBalance: Long,
              availableBalance: Long,
              targetAssets: Map[ByteArrayWrapper, Long],
@@ -26,7 +26,7 @@ trait CoinSelector {
 class DefaultCoinSelector extends CoinSelector {
 
   //todo: refactor code below, it is pretty terrible
-  override def select(inputBoxes: Iterator[BoxCertain],
+  override def select(inputBoxes: Iterator[BoxUnspent],
                       targetBalance: Long,
                       availableBalance: Long,
                       targetAssets: Map[ByteArrayWrapper, Long],

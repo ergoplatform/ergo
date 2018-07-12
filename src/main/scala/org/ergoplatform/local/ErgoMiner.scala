@@ -152,7 +152,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     //only transactions valid from against the current utxo state we take from the mem pool
     // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
-    val maxBlockSize = 500 * 1024 // honest miner is generating a block of no more than 512Kb
+    val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
     var totalSize = 0
     val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).takeWhile { tx =>
       totalSize = totalSize + tx.bytes.length

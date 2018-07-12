@@ -33,9 +33,10 @@ class TransactionGenerator(viewHolder: ActorRef,
       if (!isStarted) {
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
           currentFullHeight = v.history.headersHeight
+
+          txGenerator = context.system.scheduler
+            .schedule(1500.millis, 3000.millis)(self ! FetchBoxes)(context.system.dispatcher)
         }
-        txGenerator = context.system.scheduler
-          .schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
 
       isStarted = true

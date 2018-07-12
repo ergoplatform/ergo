@@ -14,22 +14,15 @@ import sigmastate.utxo.CostTable
 
 import scala.util.Try
 
-class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
-  extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
+object Address {
 
   def hash256(input: Array[Byte]) = Blake2b256(input)
 
   //todo: take Blake2b160 ?
   def hash160(input: Array[Byte]) = hash256(input).take(20)
 
-  def bytesToTrack(secret: DLogProverInput): Array[Byte] = bytesToTrack(secret.publicImage)
-
-  def bytesToTrack(pubkey: ProveDlog): Array[Byte] = {
-    ValueSerializer.serialize(pubkey)
-  }
-
-  def address(pubkey: ProveDlog): String = {
-    val bt = bytesToTrack(pubkey)
+  def p2pkh(pubkey: ProveDlog): String = {
+    val bt = ValueSerializer.serialize(pubkey)
     val bth160 = hash160(bt)
 
     //add network identifier
@@ -38,6 +31,18 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)
   }
+
+}
+
+class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
+  extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
+
+  def bytesToTrack(secret: DLogProverInput): Array[Byte] = bytesToTrack(secret.publicImage)
+
+  def bytesToTrack(pubkey: ProveDlog): Array[Byte] = {
+    ValueSerializer.serialize(pubkey)
+  }
+
 
   override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] =
     dlogSecrets ++ dhSecrets

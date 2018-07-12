@@ -57,13 +57,17 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
   private var balance: Long = 0
-  private var assetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
+  private val assetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
   private var unconfirmedBalance: Long = 0
-  private var unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
+  private val unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
   private var firstUnusedConfirmedId = 0
   private var firstUnusedUnconfirmedId = Int.MaxValue + 1
+
+  /**
+    * We store all the spent and unspent boxes here
+    */
   private lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
 
   private def increaseBalances(uncertainBox: BoxUncertain): Unit = {
@@ -122,14 +126,14 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
   }
 
-  private def register(boxId: ByteArrayWrapper, certainBox: BoxUnspent, onchain: Boolean) = {
+  private def register(boxId: ByteArrayWrapper, unspentBox: BoxUnspent, onchain: Boolean) = {
     val (toFill, internalId) = if(onchain) {
       unspentOnChain -> firstUnusedConfirmedId
     } else {
       unspentOffChain -> firstUnusedUnconfirmedId
     }
     registry.put(boxId, internalId)
-    toFill.put(internalId, certainBox)
+    toFill.put(internalId, unspentBox)
     if(onchain) firstUnusedConfirmedId += 1 else firstUnusedUnconfirmedId += 1
   }
 

@@ -49,7 +49,7 @@ class TransactionGenerator(viewHolder: ActorRef,
 
           //todo: real prop, assets
 
-          val txCount = Random.nextInt(20) + 1
+          val txCount = 1 // Random.nextInt(20) + 1
 
           (1 to txCount).foreach { _ =>
             val newOutsCount = Random.nextInt(50) + 1

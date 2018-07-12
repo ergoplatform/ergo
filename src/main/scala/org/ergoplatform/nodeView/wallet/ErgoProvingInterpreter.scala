@@ -5,8 +5,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.{DiffieHellmanTupleProverInput, SigmaProtocolPrivateInput}
-import scorex.crypto.encode.Base58
-import scorex.crypto.hash.Blake2b256
 import sigmastate.AvlTreeData
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import sigmastate.serialization.ValueSerializer
@@ -14,25 +12,7 @@ import sigmastate.utxo.CostTable
 
 import scala.util.Try
 
-object Address {
 
-  def hash256(input: Array[Byte]) = Blake2b256(input)
-
-  //todo: take Blake2b160 ?
-  def hash160(input: Array[Byte]) = hash256(input).take(20)
-
-  def p2pkh(pubkey: ProveDlog): String = {
-    val bt = ValueSerializer.serialize(pubkey)
-    val bth160 = hash160(bt)
-
-    //add network identifier
-    val withNetworkByte = (0: Byte) +: bth160
-
-    val checksum = hash256(withNetworkByte).take(4)
-    Base58.encode(withNetworkByte ++ checksum)
-  }
-
-}
 
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {

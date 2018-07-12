@@ -151,8 +151,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    // todo: size should be limited, size limit should be chosen by miners votes. fix after voting implementation
-    val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).take(10)
+    // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
+    val maxBlockSize = 500 * 1024 // honest miner is generating a block of no more than 512Kb
+    var totalSize = 0
+    val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).takeWhile { tx =>
+      totalSize = totalSize + tx.bytes.length
+      totalSize <= maxBlockSize
+    }
+
     // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(externalTransactions)._2.filter(_.proposition == TrueLeaf)
     val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)

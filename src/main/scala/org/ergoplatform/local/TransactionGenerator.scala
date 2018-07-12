@@ -31,22 +31,23 @@ class TransactionGenerator(viewHolder: ActorRef,
   override def receive: Receive = {
     case StartGeneration =>
       if (!isStarted) {
-        context.system.scheduler.schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
+        txGenerator = context.system.scheduler
+          .schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
       isStarted = true
 
     case FetchBoxes =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
         val fbh = v.history.fullBlockHeight
-        if(fbh > currentFullHeight){
+        if (fbh > currentFullHeight) {
           currentFullHeight = fbh
 
           //todo: real prop, assets
 
           val newOutsCount = Random.nextInt(500) + 1
-          val newOuts = (1 to newOutsCount).map{_ =>
+          val newOuts = (1 to newOutsCount).map { _ =>
             val value = Random.nextInt(50) + 1
-            val prop = if(Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
+            val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
             new ErgoBoxCandidate(value, prop)
           }
 
@@ -61,6 +62,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
 
     case StopGeneration =>
+      isStarted = false
       txGenerator.cancel()
   }
 }
@@ -72,6 +74,7 @@ object TransactionGenerator {
   case object FetchBoxes
 
   case object StopGeneration
+
 }
 
 object TransactionGeneratorRef {

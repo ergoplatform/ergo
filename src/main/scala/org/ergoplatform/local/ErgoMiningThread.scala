@@ -40,7 +40,8 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       // timestamp is increased for at least 1 as a role of a nonce
       val newTimestamp = Math.max(candidate.timestamp + 1, timeProvider.time())
       candidate = candidate.copy(timestamp = newTimestamp)
-      log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp $newTimestamp")
+      log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp $newTimestamp " +
+        s"containing ${candidate.transactions.size} transactions")
       powScheme.proveBlock(candidate) match {
         case Some(newBlock) =>
           log.info("New block found: " + newBlock)

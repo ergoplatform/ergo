@@ -17,6 +17,7 @@ trait CoinSelector {
     * @param targetAssets
     */
   def select(inputBoxes: Iterator[BoxUnspent],
+             filterFn: BoxUnspent => Boolean,
              targetBalance: Long,
              availableBalance: Long,
              targetAssets: Map[ByteArrayWrapper, Long],
@@ -27,6 +28,7 @@ class DefaultCoinSelector extends CoinSelector {
 
   //todo: refactor code below, it is pretty terrible
   override def select(inputBoxes: Iterator[BoxUnspent],
+                      filterFn: BoxUnspent => Boolean,
                       targetBalance: Long,
                       availableBalance: Long,
                       targetAssets: Map[ByteArrayWrapper, Long],
@@ -41,23 +43,27 @@ class DefaultCoinSelector extends CoinSelector {
     }
 
     inputBoxes.find { bc =>
-      currentBalance = currentBalance + bc.ergoValue
-      mergeAssets(currentAssets, bc.assets)
-      res += bc.box
-      currentBalance < targetBalance
-    }
-
-    inputBoxes.find { bc =>
-      if (bc.assets.exists { case (id, _) =>
-        val targetAmt = targetAssets.getOrElse(id, 0L)
-        lazy val currentAmt = currentAssets.getOrElse(id, 0L)
-        targetAmt > 0 && targetAmt > currentAmt
-      }) {
+      if(filterFn(bc)) {
         currentBalance = currentBalance + bc.ergoValue
         mergeAssets(currentAssets, bc.assets)
         res += bc.box
       }
-      !successMet
+      currentBalance >= targetBalance
+    }
+
+    inputBoxes.find { bc =>
+      if(filterFn(bc)) {
+        if (bc.assets.exists { case (id, _) =>
+          val targetAmt = targetAssets.getOrElse(id, 0L)
+          lazy val currentAmt = currentAssets.getOrElse(id, 0L)
+          targetAmt > 0 && targetAmt > currentAmt
+        }) {
+          currentBalance = currentBalance + bc.ergoValue
+          mergeAssets(currentAssets, bc.assets)
+          res += bc.box
+        }
+      }
+      successMet
     }
 
     //todo: it could be the case that too many currentAssets to be in 1 Box and we need to add more ergo tokens

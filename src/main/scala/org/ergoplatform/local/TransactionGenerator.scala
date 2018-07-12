@@ -31,9 +31,13 @@ class TransactionGenerator(viewHolder: ActorRef,
   override def receive: Receive = {
     case StartGeneration =>
       if (!isStarted) {
+        viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+          currentFullHeight = v.history.headersHeight
+        }
         txGenerator = context.system.scheduler
           .schedule(1500.millis, 1500.millis)(self ! FetchBoxes)(context.system.dispatcher)
       }
+
       isStarted = true
 
     case FetchBoxes =>
@@ -44,14 +48,18 @@ class TransactionGenerator(viewHolder: ActorRef,
 
           //todo: real prop, assets
 
-          val newOutsCount = Random.nextInt(500) + 1
-          val newOuts = (1 to newOutsCount).map { _ =>
-            val value = Random.nextInt(50) + 1
-            val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
-            new ErgoBoxCandidate(value, prop)
-          }
+          val txCount = Random.nextInt(20) + 1
 
-          ergoWalletActor ! GenerateTransaction(newOuts)
+          (1 to txCount).foreach { _ =>
+            val newOutsCount = Random.nextInt(50) + 1
+            val newOuts = (1 to newOutsCount).map { _ =>
+              val value = Random.nextInt(50) + 1
+              val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
+              new ErgoBoxCandidate(value, prop)
+            }
+
+            ergoWalletActor ! GenerateTransaction(newOuts)
+          }
         }
       }
 

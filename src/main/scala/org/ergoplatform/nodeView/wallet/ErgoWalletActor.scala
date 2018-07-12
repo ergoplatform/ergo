@@ -171,11 +171,17 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       val boxId = ByteArrayWrapper(inp.boxId)
       registry.remove(boxId) match {
         case Some(internalId) =>
-          val onchain = if(internalId <= Int.MaxValue) true else false
-          if (onchain) {
+          val boxOnchain = if(internalId <= Int.MaxValue) true else false
+          if (boxOnchain) {
             val removed = unspentOnChain.remove(internalId).map { unspent =>
-              spentOnchain.put(internalId, unspent)
-              decreaseBalances(unspent, onChain = true)
+              val txOnchain = heightOpt.isDefined
+
+              if(txOnchain) {
+                spentOnchain.put(internalId, unspent)
+              } else {
+                spentOffchain.put(internalId, unspent)
+              }
+              decreaseBalances(unspent, txOnchain)
             }.isDefined
             if(!removed) log.warn(s"Registered unspent box id is not found in the unspents: $boxId")
             //todo: decrease balances
@@ -248,7 +254,13 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     case GenerateTransaction(payTo) =>
       //todo: add assets
       val targetBalance = payTo.map(_.value).sum
-      val txOpt = coinSelector.select(unspentOnChain.valuesIterator, targetBalance, balance, Map(), Map()).flatMap { r =>
+
+      def filterFn(bu: BoxUnspent) =
+        registry.get(ByteArrayWrapper(bu.box.id))
+          .map(iid => !spentOffchain.contains(iid))
+          .getOrElse(true)
+
+      val txOpt = coinSelector.select(unspentOnChain.valuesIterator, filterFn, targetBalance, balance, Map(), Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
         val changeAssets = r.changeAssets
         val changeBalance = r.changeBalance

@@ -256,9 +256,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       val targetBalance = payTo.map(_.value).sum
 
       def filterFn(bu: BoxUnspent) =
-        registry.get(ByteArrayWrapper(bu.box.id))
-          .map(iid => !spentOffchain.contains(iid))
-          .getOrElse(true)
+        registry.get(ByteArrayWrapper(bu.box.id)).forall(iid => !spentOffchain.contains(iid))
 
       val txOpt = coinSelector.select(unspentOnChain.valuesIterator, filterFn, targetBalance, balance, Map(), Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq

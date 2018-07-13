@@ -118,7 +118,7 @@ trait ErgoHistory
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(validityKey(modifier.id),
-                Seq(BestHeaderKey -> ByteArrayWrapper(newBestHeader.id)),
+                Seq(BestHeaderKey -> Algos.idToBAW(newBestHeader.id)),
                 Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
@@ -135,8 +135,8 @@ trait ErgoHistory
                   .flatMap(h => getFullBlock(h))
               }
 
-              val changedLinks = Seq(BestFullBlockKey -> ByteArrayWrapper(validChain.last.id),
-                BestHeaderKey -> ByteArrayWrapper(newBestHeader.id))
+              val changedLinks = Seq(BestFullBlockKey -> Algos.idToBAW(validChain.last.id),
+                BestHeaderKey -> Algos.idToBAW(newBestHeader.id))
               val toInsert = validityRow ++ changedLinks
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,

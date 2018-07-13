@@ -30,7 +30,7 @@ class ErgoModifiersCache(override val maxSize: Int)
       history
         .headerIdsAtHeight(history.fullBlockHeight + 1)
         .flatMap(id => history.typedModifierById[Header](id))
-        .flatMap(_.sectionIds.map(id => mutable.WrappedArray.make[Byte](id)))
+        .flatMap(_.sectionIds)
         .flatMap(id => cache.get(id).map(v => id -> v))
         .find(p => tryToApply(p._1, p._2)).map(_._1)
     } orElse {

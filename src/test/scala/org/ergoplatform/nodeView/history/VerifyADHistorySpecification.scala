@@ -40,10 +40,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, fork1)
 
     fork2.foreach{ fb =>
-      modifiersCache.put(new mutable.WrappedArray.ofByte(fb.header.id), fb.header)
+      modifiersCache.put(fb.header.id, fb.header)
     }
     history.applicable(fork2.head.header) shouldBe true
-    modifiersCache.contains(new mutable.WrappedArray.ofByte(fork2.head.header.id)) shouldBe true
+    modifiersCache.contains(fork2.head.header.id) shouldBe true
     modifiersCache.findCandidateKey(history).isDefined shouldBe true
   }
 

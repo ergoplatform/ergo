@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.Header
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId, NodeViewModifier}
+import scorex.core._
 
 import scala.util.Try
 
@@ -27,13 +27,13 @@ object ErgoSyncInfo {
 object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
 
   override def toBytes(obj: ErgoSyncInfo): Array[Byte] = {
-    scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds)
+    scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds.map(idToBytes))
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = Try {
     require(bytes.length <= ErgoSyncInfo.MaxBlockIds * NodeViewModifier.ModifierIdSize + 1)
 
-    val ids = ModifierId @@ bytes.grouped(NodeViewModifier.ModifierIdSize).toSeq
+    val ids = bytes.grouped(NodeViewModifier.ModifierIdSize).toSeq.map(bytesToId)
 
     ErgoSyncInfo(ids)
   }

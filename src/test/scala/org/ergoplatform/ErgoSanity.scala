@@ -12,7 +12,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
-import scorex.core.ModifierId
+import scorex.core.bytesToId
 import scorex.core.transaction.state.MinimalState
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -60,7 +60,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =
-    syntacticallyValidModifier(history).copy(parentId = ModifierId @@ Random.randomBytes(32))
+    syntacticallyValidModifier(history).copy(parentId = bytesToId(Random.randomBytes(32)))
 
 }
 

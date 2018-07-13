@@ -6,16 +6,16 @@ import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scorex.core.ModifierId
+import scorex.core.bytesToId
 import sigmastate.Values.TrueLeaf
 
 class JsonSerializationSpec extends ErgoPropertyTest {
 
   property("TransactionIdsForHeader should be converted into json correctly") {
-    val modifierId = genBytes(Constants.ModifierIdSize).sample.get
+    val modifierId = bytesToId(genBytes(Constants.ModifierIdSize).sample.get)
     val stringId = Algos.encode(modifierId)
     val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
-    val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))
+    val data = TransactionIdsForHeader(Seq(modifierId))
     //todo: after testnet1 - fix
     // data.asJson shouldEqual expected
   }

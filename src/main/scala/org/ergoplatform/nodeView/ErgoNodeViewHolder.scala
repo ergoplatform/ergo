@@ -112,7 +112,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.debug("State and history are both empty on startup")
         stateIn
       case (stateId, Some(block), _) if stateId sameElements block.id =>
-        log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
+        log.debug(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
         log.debug("State and history are inconsistent. History is empty on startup, rollback state to genesis.")

@@ -82,8 +82,8 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
     GetDataFromCurrentView[H, S, W, P, Int](v => v.history.lastHeaders(count).size)
 
 
-  protected def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ByteArrayWrapper]] { v =>
-    v.history.openSurfaceIds().map(ByteArrayWrapper.apply)
+  protected def openSurfaces(c: C) = GetDataFromCurrentView[H, S, W, P, Seq[ModifierId]] { v =>
+    v.history.openSurfaceIds()
   }
 
   protected def bestFullBlock(c: C) = GetDataFromCurrentView[H, S, W, P, Option[ErgoFullBlock]] { v =>

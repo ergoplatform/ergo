@@ -4,7 +4,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core._
+import scorex.core.utils.concatBytes
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 
@@ -13,7 +14,7 @@ import scala.util.Try
 case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.modifierTypeId
 
-  override lazy val id: ModifierId = ModifierId @@ Algos.hash(scorex.core.utils.concatBytes(chunkRootHashes :+ blockId))
+  override lazy val id: ModifierId = bytesToId(Algos.hash(concatBytes(chunkRootHashes :+ idToBytes(blockId))))
 
   override type M = UTXOSnapshotManifest
 

@@ -3,15 +3,16 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
+import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
 import scala.collection.mutable
 
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
-  private def genKey(i: Int): mutable.WrappedArray[Byte] = mutable.WrappedArray.make[Byte](Blake2b256(s"$i"))
+  private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 
-  private def genCachePair(i: Int): (mutable.WrappedArray[Byte], Header) = {
+  private def genCachePair(i: Int): (ModifierId, Header) = {
     val header = invalidHeaderGen.sample.get
     val k = genKey(i)
     k -> header

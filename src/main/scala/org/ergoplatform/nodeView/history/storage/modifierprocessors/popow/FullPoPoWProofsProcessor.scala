@@ -10,6 +10,7 @@ import scorex.core.consensus.History.ProgressInfo
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import ErgoHistory.GenesisHeight
+import org.ergoplatform.settings.Algos
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
@@ -46,8 +47,8 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
         //TODO howto?
         (headerScoreKey(h.id), ByteArrayWrapper((requiredDifficulty * (1 + i)).toByteArray)))
     }
-    val bestHeaderRow = (BestHeaderKey, ByteArrayWrapper(bestHeader.id))
-    historyStorage.insert(ByteArrayWrapper(bestHeader.id), bestHeaderRow +: headersIndexes, headers)
+    val bestHeaderRow = (BestHeaderKey, Algos.idToBAW(bestHeader.id))
+    historyStorage.insert(Algos.idToBAW(bestHeader.id), bestHeaderRow +: headersIndexes, headers)
 
     ProgressInfo(None, toRemove = Seq.empty, toApply = Seq(m.suffix.last), toDownload = Seq.empty)
   }

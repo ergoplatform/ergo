@@ -158,18 +158,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       totalSize <= maxBlockSize
     }
 
-    // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
-    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(externalTransactions)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
-    val txs = externalTransactions :+ coinbase
-
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
     //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
     //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
     // the pool
-    val txsNoConflict = fixTxsConflicts(txs)
+    val txsNoConflict = fixTxsConflicts(externalTransactions)
 
-    val (adProof, adDigest) = state.proofsForTransactions(txsNoConflict).get
+    // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
+    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
+    val txs = txsNoConflict :+ coinbase
+
+    val (adProof, adDigest) = state.proofsForTransactions(txs).get
 
     val timestamp = timeProvider.time()
 
@@ -181,7 +181,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
     val extensionHash = Algos.hash(Array[Byte]())
 
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txsNoConflict, timestamp, extensionHash)
+    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionHash)
   }
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders

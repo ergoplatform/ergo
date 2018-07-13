@@ -32,8 +32,7 @@ case class UncertainBox(tx: ErgoTransaction,
                         outIndex: Short,
                         heightOpt: Option[Height],
                         spendingTxOpt: Option[ErgoTransaction],
-                        heightCreatedOpt: Option[Height]
-                       ) extends TrackedBox {
+                        heightSpentOpt: Option[Height]) extends TrackedBox {
 
   lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
 }
@@ -47,15 +46,20 @@ case class BoxUnspent(tx: ErgoTransaction,
                       ergoValue: Long,
                       assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
   override lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
+
+  def toSpent(spendingTx: ErgoTransaction, heightSpentOpt: Option[Height]): BoxSpent =
+    BoxSpent(box, tx, spendingTx, heightOpt, heightSpentOpt, ergoValue, assets)
 }
 
 case class BoxSpent(override val box: ErgoBox,
                     parentTx: ErgoTransaction,
                     spendingTx: ErgoTransaction,
                     heightOpt: Option[Height],
-                    heightCreated: Option[Height],
+                    heightSpentOpt: Option[Height],
                     ergoValue: Long,
-                    assets: Map[ByteArrayWrapper, Long]) extends CertainBox
+                    assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
+  override lazy val onchain = heightSpentOpt.isDefined
+}
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
@@ -79,10 +83,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private var lastScannedId = Long.MinValue
   private val quickScan = mutable.TreeMap[Long, UncertainBox]()
 
-
-  //todo: make BoxSpent class
-  private val spentOffchain = mutable.LongMap[BoxUnspent]()
-  private val spentOnchain = mutable.LongMap[BoxUnspent]()
+  private val spentOffchain = mutable.LongMap[BoxSpent]()
+  private val spentOnchain = mutable.LongMap[BoxSpent]()
 
   private val unspentOffChain = mutable.LongMap[BoxUnspent]()
   private val unspentOnChain = mutable.LongMap[BoxUnspent]()
@@ -177,7 +179,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
       case _ => log.warn("wrong input")
     }
-    heightOpt.foreach {h =>
+    heightOpt.foreach { h =>
       confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ box.boxId)
     }
   }
@@ -192,7 +194,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       case None =>
         BoxUnspent(tx, outIndex, heightOpt, box.value, assets)
       case Some(spendingTx) =>
-        BoxSpent(box, tx, spendingTx, heightOpt, uncertainBox.heightCreatedOpt, box.value, assets)
+        BoxSpent(box, tx, spendingTx, heightOpt, uncertainBox.heightSpentOpt, box.value, assets)
     }
     println("Received: " + certainBox)
 
@@ -240,30 +242,34 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   }
 
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    //todo: check uncertain boxes as well?
     //todo: consider double-spend in an unconfirmed tx
     tx.inputs.foreach { inp =>
       val boxId = ByteArrayWrapper(inp.boxId)
       registry.remove(boxId) match {
         case Some(internalId) =>
-          val boxOnchain = if (internalId <= Int.MaxValue) true else false
-          if (boxOnchain) {
-            val removed = unspentOnChain.remove(internalId).map { unspent =>
-              val txOnchain = heightOpt.isDefined
+          internalId match {
+            case i: Long if i < 0 =>
+              val uncertainBox = quickScan(i)
+              val updBox = uncertainBox.copy(spendingTxOpt = Some(tx), heightSpentOpt = heightOpt)
+              quickScan.put(i, updBox)
+            case i: Long if i <= Int.MaxValue =>
+              val removed = unspentOnChain.remove(internalId).map { unspent =>
+                val txOnchain = heightOpt.isDefined
+                val spent = unspent.toSpent(tx, heightOpt)
 
-              if (txOnchain) {
-                spentOnchain.put(internalId, unspent)
-              } else {
-                spentOffchain.put(internalId, unspent)
-              }
-              decreaseBalances(unspent, txOnchain)
-            }.isDefined
-            if (!removed) log.warn(s"Registered unspent box id is not found in the unspents: $boxId")
+                if (txOnchain) {
+                  spentOnchain.put(internalId, spent)
+                } else {
+                  spentOffchain.put(internalId, spent)
+                }
+                decreaseBalances(unspent, txOnchain)
+              }.isDefined
+              if (!removed) log.warn(s"Registered unspent box id is not found in the unspents: $boxId")
             //todo: decrease balances
-          } else {
-            //todo: what to do with unconfirmed?
+            case i: Long =>
+            //todo: handle unconfirmed double-spend case
           }
-        case None => // todo: what to do here?
+        case None => // we do not track this box, nothing to do here
       }
     }
 

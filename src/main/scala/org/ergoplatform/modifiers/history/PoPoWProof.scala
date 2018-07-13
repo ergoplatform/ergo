@@ -4,7 +4,7 @@ import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core._
 import scorex.core.serialization.Serializer
 
 import scala.util.{Failure, Success, Try}
@@ -18,7 +18,7 @@ case class PoPoWProof(m: Byte,
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
 
-  override lazy val id: ModifierId = ModifierId @@ Algos.hash(bytes)
+  override lazy val id: ModifierId = bytesToId(Algos.hash(bytes))
 
   override type M = PoPoWProof
 

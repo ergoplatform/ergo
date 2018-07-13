@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.VersionTag
+import scorex.core.{ModifierId, VersionTag, bytesToVersion, versionToBytes}
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -45,7 +45,7 @@ class UtxoState(override val version: VersionTag,
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    store.get(ByteArrayWrapper(version)) match {
+    store.get(Algos.versionToBAW(version)) match {
       case Some(hash) =>
         val rollbackResult = p.rollback(ADDigest @@ hash.data).map { _ =>
           new UtxoState(version, store, constants) {
@@ -110,7 +110,7 @@ class UtxoState(override val version: VersionTag,
 
         log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
           s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(rootHash)}")
-        if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
+        if (!store.get(Algos.idToBAW(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
           throw new Error("Storage kept roothash is not equal to the declared one")
         } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
           throw new Error("Calculated proofHash is not equal to the declared one")
@@ -136,7 +136,7 @@ class UtxoState(override val version: VersionTag,
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions.map { v =>
-    VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data
+    bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
   }
 
 }
@@ -149,9 +149,10 @@ object UtxoState {
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
                        context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
-    val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
-    val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
-    val bestVersion = bestVersionKey -> modId
+    val modIdBytes = versionToBytes(modId)
+    val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
+    val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes
+    val bestVersion = bestVersionKey -> modIdBytes
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
@@ -160,7 +161,7 @@ object UtxoState {
 
   def create(dir: File, constants: StateConstants): UtxoState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
+    val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
     new UtxoState(dbVersion.getOrElse(ErgoState.genesisStateVersion), store, constants)
   }
 

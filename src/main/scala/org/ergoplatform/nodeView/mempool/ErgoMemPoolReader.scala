@@ -12,20 +12,18 @@ import scala.util.Success
 
 trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-  val unconfirmed: TrieMap[TxKey, ErgoTransaction]
+  val unconfirmed: TrieMap[ModifierId, ErgoTransaction]
 
   /**
     * Map stores current state of waiting for query building
     * value - promise of result and set of all transactions of request
     * key - set of transactions that are waiting for the assembly
     */
-  protected[mempool] var waitedForAssembly: Map[Set[TxKey], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
+  protected[mempool] var waitedForAssembly: Map[Set[ModifierId], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
-  protected def key(id: ModifierId): TxKey = new mutable.WrappedArray.ofByte(id)
+  override def getById(id: ModifierId): Option[ErgoTransaction] = unconfirmed.get(id)
 
-  override def getById(id: ModifierId): Option[ErgoTransaction] = unconfirmed.get(key(id))
-
-  override def contains(id: ModifierId): Boolean = unconfirmed.contains(key(id))
+  override def contains(id: ModifierId): Boolean = unconfirmed.contains(id)
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(getById)
 
@@ -36,7 +34,7 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   //TODO rework option.get
   protected def completeAssembly(txs: Iterable[ErgoTransaction]): Unit = synchronized {
-    val txsIds = txs.map(tx => key(tx.id))
+    val txsIds = txs.map(_.id)
     val newMap = waitedForAssembly.flatMap(p => {
       val ids = p._1
       val newKey = ids -- txsIds
@@ -54,7 +52,7 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   def waitForAll(ids: MemPoolRequest): Future[MemPoolResponse] = synchronized {
     val promise = Promise[Seq[ErgoTransaction]]
-    waitedForAssembly = waitedForAssembly.updated(ids.map(id => key(id)).toSet, (promise, ids))
+    waitedForAssembly = waitedForAssembly.updated(ids.toSet, (promise, ids))
     promise.future
   }
 }

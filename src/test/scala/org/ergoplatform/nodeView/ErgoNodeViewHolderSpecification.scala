@@ -64,7 +64,7 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     expectMsg(1)
 
     nodeViewRef ! openSurfaces(nodeViewConfig)
-    expectMsg(Seq(ByteArrayWrapper(block.header.id)))
+    expectMsg(Seq(block.header.id))
 
     nodeViewRef ! bestHeaderOpt(nodeViewConfig)
     expectMsg(Some(block.header))

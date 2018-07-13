@@ -10,6 +10,7 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.settings.Algos
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag}
 
 import scala.util.{Failure, Success, Try}
@@ -27,7 +28,7 @@ class WrappedUtxoState(override val version: VersionTag,
 
   override def rollbackTo(version: VersionTag): Try[WrappedUtxoState] = super.rollbackTo(version) match {
     case Success(us) =>
-      val updHolder = versionedBoxHolder.rollback(ByteArrayWrapper(us.version))
+      val updHolder = versionedBoxHolder.rollback(Algos.versionToBAW(us.version))
       Success(new WrappedUtxoState(version, us.store, updHolder, constants))
     case Failure(e) => Failure(e)
   }
@@ -40,12 +41,12 @@ class WrappedUtxoState(override val version: VersionTag,
 
           val changes = ErgoState.stateChanges(ct.transactions)
           val updHolder = versionedBoxHolder.applyChanges(
-            ByteArrayWrapper(us.version),
+            Algos.versionToBAW(us.version),
             changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
             changes.toAppend.map(_.box))
           Success(new WrappedUtxoState(VersionTag @@ mod.id, us.store, updHolder, constants))
         case _ =>
-          val updHolder = versionedBoxHolder.applyChanges(ByteArrayWrapper(us.version), Seq(), Seq())
+          val updHolder = versionedBoxHolder.applyChanges(Algos.versionToBAW(us.version), Seq(), Seq())
           Success(new WrappedUtxoState(VersionTag @@ mod.id, us.store, updHolder, constants))
       }
     case Failure(e) => Failure(e)
@@ -66,7 +67,7 @@ object WrappedUtxoState {
   def apply(us: UtxoState, boxHolder: BoxHolder, constants: StateConstants): WrappedUtxoState = {
     val boxes = boxHolder.boxes
 
-    val version = ByteArrayWrapper(us.version)
+    val version = Algos.versionToBAW(us.version)
     val vbh = new VersionedInMemoryBoxHolder(
       boxes,
       IndexedSeq(version),

@@ -2,14 +2,14 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.VersionTag
+import scorex.core._
 import scorex.crypto.authds.ADDigest
 
 import scala.util.Random
 
 class DigestStateSpecification extends ErgoPropertyTest {
 
-  private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
+  private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   property("reopen") {

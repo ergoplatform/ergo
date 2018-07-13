@@ -10,19 +10,19 @@ import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierId
+import scorex.core._
 import scorex.core.serialization.Serializer
-import sigmastate.serialization.{Serializer => SSerializer}
 import scorex.core.transaction.Transaction
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
-import ValidationResult.fromValidationState
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.{AvlTreeData, SBoolean, SType}
 import sigmastate.serialization.Serializer.{Consumed, Position}
+import sigmastate.serialization.{Serializer => SSerializer}
+import sigmastate.{AvlTreeData, SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -33,16 +33,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier
     with ModifierValidator with ScorexLogging {
 
-  override type IdType = ModifierId
 
-  override lazy val id: ModifierId = ModifierId @@ Blake2b256.hash(messageToSign)
+  override val serializedId: Array[Byte] = Blake2b256.hash(messageToSign)
+
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
   /**
     * Fill a mutable map passed as a parameter with (assets -> total amount) data, based on boxes passed as
     * a parameter. That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
     * amount for an asset) and then summarize and group their corresponding amounts.
+    *
     * @param boxes - boxes to
-    * @param map - map to modify
+    * @param map   - map to modify
     * @return
     */
   private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
@@ -97,16 +99,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       .payload(0L)
-      .demand(boxesToSpend.size == inputs.size,s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
+      .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
+
         def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
+
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
-          .demandEqualIds(box.id, input.boxId, s"Box id doesn't match input")
+          .demandEqualArrays(box.id, input.boxId, s"Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
           .map(_ + scriptCost)
@@ -124,7 +128,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             validation
               .validate(inAmount == outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                 fatal(s"Assets preservation rule is broken in $this. " +
-                      s"Amount in: $inAmount, out: $outAmount, Asset in: $newAssetId out: $outAssetId")
+                  s"Amount in: $inAmount, out: $outAmount, Asset in: $newAssetId out: $outAssetId")
               }
         }
       }
@@ -227,7 +231,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                          (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     accumulateErrors
       .validateOrSkip(txId) { (validation, id) =>
-        validation.demandEqualIds(id, tx.id,s"Bad identifier for Ergo transaction. It could also be skipped")
+        validation.demandEqualIds(id, tx.id, s"Bad identifier for Ergo transaction. It could also be skipped")
       }
       .validate(tx.validateStateless)
       .result(tx)
@@ -240,13 +244,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       validation.validateSeq(outputs.zipWithIndex) {
         case (validation, ((candidate, maybeId), index)) =>
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
-            val box = candidate.toBox(txId, index.toShort)
-            validation.demandEqualIds(boxId, box.id,s"Bad identifier for Ergo box. It could also be skipped")
+            // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
+            val box = candidate.toBox(idToBytes(txId), index.toShort)
+            validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }
     }
-    .result(outputs.map(_._1))
-    .toDecoderResult
+      .result(outputs.map(_._1))
+      .toDecoderResult
   }
 }
 

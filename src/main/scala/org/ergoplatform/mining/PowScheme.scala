@@ -71,7 +71,7 @@ trait PowScheme {
 
     val version = Header.CurrentVersion
 
-    val parentId: ModifierId = ModifierId @@ parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, version, interlinks, height)
   }

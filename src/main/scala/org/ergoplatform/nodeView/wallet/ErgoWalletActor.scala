@@ -21,15 +21,19 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 trait TrackedBox {
   val box: ErgoBox
-  val onchain: Boolean
+  val heightOpt: Option[Height]
+
+  lazy val onchain: Boolean = heightOpt.isDefined
 
   lazy val boxId = ByteArrayWrapper(box.id)
 }
 
 case class UncertainBox(tx: ErgoTransaction,
                         outIndex: Short,
-                        heightOpt: Option[Height]) extends TrackedBox {
-  override lazy val onchain: Boolean = heightOpt.isDefined
+                        heightOpt: Option[Height],
+                        spendingTxOpt: Option[ErgoTransaction],
+                        heightCreatedOpt: Option[Height]
+                       ) extends TrackedBox {
 
   lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
 }
@@ -39,20 +43,19 @@ trait CertainBox extends TrackedBox
 
 case class BoxUnspent(tx: ErgoTransaction,
                       outIndex: Short,
+                      heightOpt: Option[Height],
                       ergoValue: Long,
                       assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
   override lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
-
-  override lazy val onchain: Boolean = ???
 }
 
 case class BoxSpent(override val box: ErgoBox,
                     parentTx: ErgoTransaction,
                     spendingTx: ErgoTransaction,
+                    heightOpt: Option[Height],
+                    heightCreated: Option[Height],
                     ergoValue: Long,
-                    assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
-  override lazy val onchain: Boolean = ???
-}
+                    assets: Map[ByteArrayWrapper, Long]) extends CertainBox
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
@@ -101,13 +104,13 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
 
 
-  private def increaseBalances(uncertainBox: UncertainBox): Unit = {
-    val box = uncertainBox.box
+  private def increaseBalances(unspentBox: BoxUnspent): Unit = {
+    val box = unspentBox.box
     val tokenDelta = box.value
     val assetDeltas = box.additionalTokens
 
     //todo: reduce boilerplate below?
-    if (uncertainBox.onchain) {
+    if (unspentBox.onchain) {
       balance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = ByteArrayWrapper(id)
@@ -157,25 +160,61 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
   }
 
-  private def register(box: TrackedBox) = box match {
+  private def register(box: TrackedBox, heightOpt: Option[Height]) = {
+    box match {
       case uncertainBox: UncertainBox =>
         quickScan.put(firstUncertaindId, uncertainBox)
         registry.put(box.boxId, firstUncertaindId)
         firstUncertaindId += 1
       case unspentBox: BoxUnspent if unspentBox.onchain =>
-          unspentOnChain.put(firstUnusedConfirmedId, unspentBox)
-          registry.put(box.boxId, firstUnusedConfirmedId)
-          firstUnusedConfirmedId += 1
+        unspentOnChain.put(firstUnusedConfirmedId, unspentBox)
+        registry.put(box.boxId, firstUnusedConfirmedId)
+        firstUnusedConfirmedId += 1
       case unspentBox: BoxUnspent if !unspentBox.onchain =>
-          unspentOffChain.put(firstUnusedUnconfirmedId, unspentBox)
-          registry.put(box.boxId, firstUnusedUnconfirmedId)
-          firstUnusedUnconfirmedId += 1
+        unspentOffChain.put(firstUnusedUnconfirmedId, unspentBox)
+        registry.put(box.boxId, firstUnusedUnconfirmedId)
+        firstUnusedUnconfirmedId += 1
 
       case _ => log.warn("wrong input")
     }
+    heightOpt.foreach {h =>
+      confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ box.boxId)
+    }
+  }
+
+  private def uncertainToCertain(uncertainBox: UncertainBox): CertainBox = {
+    val box = uncertainBox.box
+    val tx = uncertainBox.tx
+    val outIndex = uncertainBox.outIndex
+    val heightOpt = uncertainBox.heightOpt
+    val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
+    val certainBox = uncertainBox.spendingTxOpt match {
+      case None =>
+        BoxUnspent(tx, outIndex, heightOpt, box.value, assets)
+      case Some(spendingTx) =>
+        BoxSpent(box, tx, spendingTx, heightOpt, uncertainBox.heightCreatedOpt, box.value, assets)
+    }
+    println("Received: " + certainBox)
+
+    val removalResult = registry.remove(uncertainBox.boxId).flatMap { internalId =>
+      quickScan.remove(internalId)
+    }
+
+    if (removalResult.isEmpty) log.warn(s"Problem with removing ${uncertainBox.boxId}")
+
+    register(certainBox, heightOpt)
+    certainBox match {
+      case unspent: BoxUnspent => increaseBalances(unspent)
+      case _ =>
+    }
+    certainBox
+  }
+
+  private def enterUncertainBox() = {}
 
   private def resolveUncertainty(): Unit = {
     if (quickScan.nonEmpty) {
+      //todo: check bounds
       val uncertainBox = quickScan.iteratorFrom(firstUncertaindId).next()._2
       val tx = uncertainBox.tx
       val outIndex = uncertainBox.outIndex
@@ -193,14 +232,9 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
-          val assets = box.additionalTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap
-          val boxId = ByteArrayWrapper(box.id)
-          val unspentBox = BoxUnspent(tx, outIndex, box.value, assets)
-          println("Received: " + unspentBox)
-
-          register(unspentBox)
-          increaseBalances(uncertainBox)
-        case Failure(_) => quickScan.enqueue(uncertainBox)
+          uncertainToCertain(uncertainBox)
+        case Failure(_) =>
+        //todo: remove after some time?
       }
     }
   }
@@ -229,22 +263,15 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
           } else {
             //todo: what to do with unconfirmed?
           }
-        case None =>
+        case None => // todo: what to do here?
       }
     }
 
     tx.outputCandidates.zipWithIndex.exists { case (outCandidate, outIndex) =>
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
-          val bu = UncertainBox(tx, outIndex.toShort, heightOpt)
-          heightOpt match {
-            case Some(h) =>
-              val wid = ByteArrayWrapper(tx.id)
-              quickScan.enqueue(bu)
-              confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ wid)
-            case None =>
-              quickScan.enqueue(bu)
-          }
+          val bu = UncertainBox(tx, outIndex.toShort, heightOpt, None, None)
+          register(bu, heightOpt)
           true
         case None =>
           false

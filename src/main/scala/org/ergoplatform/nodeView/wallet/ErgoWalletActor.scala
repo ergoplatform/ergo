@@ -211,15 +211,22 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
     certainBox
   }
-
-  private def enterUncertainBox() = {}
+  
+  private def nextInTheQueue(): UncertainBox = {
+    val iter = quickScan.iteratorFrom(lastScannedId)
+    if (iter.hasNext) {
+      val (newScannedId, res) = iter.next()
+      lastScannedId = newScannedId
+      res
+    } else {
+      lastScannedId = Long.MinValue
+      nextInTheQueue()
+    }
+  }
 
   private def resolveUncertainty(): Unit = {
     if (quickScan.nonEmpty) {
-      //todo: check bounds
-      val uncertainBox = quickScan.iteratorFrom(firstUncertaindId).next()._2
-      val tx = uncertainBox.tx
-      val outIndex = uncertainBox.outIndex
+      val uncertainBox = nextInTheQueue()
       val box = uncertainBox.box
 
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32) // todo: real impl
@@ -363,5 +370,4 @@ object ErgoWalletActor {
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case object ReadBalances
-
 }

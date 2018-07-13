@@ -25,9 +25,18 @@ case class BoxUncertain(tx: ErgoTransaction, outIndex: Short, heightOpt: Option[
   lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
 }
 
-case class BoxUnspent(tx: ErgoTransaction, outIndex: Short, ergoValue: Long, assets: Map[ByteArrayWrapper, Long]){
+case class BoxUnspent(tx: ErgoTransaction,
+                      outIndex: Short,
+                      ergoValue: Long,
+                      assets: Map[ByteArrayWrapper, Long]){
   lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
 }
+
+case class BoxSpent(box: ErgoBox,
+                    parentTx: ErgoTransaction,
+                    spendingTx: ErgoTransaction,
+                    ergoValue: Long,
+                    assets: Map[ByteArrayWrapper, Long])
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])

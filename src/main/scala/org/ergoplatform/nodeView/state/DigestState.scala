@@ -145,7 +145,7 @@ class DigestState protected(override val version: VersionTag,
   }
 
   // DigestState is not initialized yet. Waiting for first full block to apply without checks
-  private lazy val notInitialized = settings.blocksToKeep >= 0 && (version sameElements ErgoState.genesisStateVersion)
+  private lazy val notInitialized = settings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
 
 }
 
@@ -159,7 +159,8 @@ object DigestState extends ScorexLogging with ScorexEncoding {
 
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
-        val state = if (store.lastVersionID.isDefined && store.lastVersionID.forall(_.data sameElements version)) {
+        val state = if (store.lastVersionID.isDefined &&
+          store.lastVersionID.forall(w => bytesToVersion(w.data) == version)) {
           new DigestState(version, rootHash, store, settings.nodeSettings)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)

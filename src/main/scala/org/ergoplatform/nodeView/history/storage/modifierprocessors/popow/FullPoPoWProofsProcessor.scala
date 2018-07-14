@@ -23,7 +23,7 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
       case Some(genesisId) =>
         heightOf(genesisId) match {
           case Some(GenesisHeight) =>
-            if (!(m.suffix ++ m.innerchain).forall(_.interlinks.head sameElements genesisId)) {
+            if (!(m.suffix ++ m.innerchain).forall(_.interlinks.head == genesisId)) {
               Failure(new Error(s"Genesis id is incorrect for $m"))
             } else {
               Success(Unit)

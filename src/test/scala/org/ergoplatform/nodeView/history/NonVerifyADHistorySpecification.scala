@@ -109,7 +109,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     val si = history2.syncInfo
     val continuation = history1.continuationIds(si, BlocksInChain * 100).get
 
-    fork1.headers.foreach(h => continuation.exists(_._2 sameElements h.id) shouldBe true)
+    fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
 
   }
 

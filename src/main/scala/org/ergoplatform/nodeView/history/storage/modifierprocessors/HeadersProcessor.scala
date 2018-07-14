@@ -79,10 +79,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def heightOf(id: ModifierId): Option[Int] = historyStorage.getIndex(headerHeightKey(id))
     .map(b => Ints.fromByteArray(b.data))
 
-  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h))
-    .exists(_ sameElements id)
+  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
 
-  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).exists(_ sameElements h.id)
+  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
   private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
@@ -99,7 +98,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       case Some(bestHeaderId) =>
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (config.verifyTransactions || !(bestHeaderId sameElements h.id)) Seq.empty else Seq(h)
+        val toProcess = if (config.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")
@@ -173,7 +172,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
       .filter(h => !isInBestChain(h))
     val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
-      val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
+      val otherIds = headerIdsAtHeight(header.height).filter(id => id != header.id)
       heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatMap(idToBytes).toArray)
     }
     forkIds :+ self

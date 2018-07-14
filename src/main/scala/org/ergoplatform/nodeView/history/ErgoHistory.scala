@@ -102,8 +102,8 @@ trait ErgoHistory
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
           .map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte))))
         log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId)}")
-        val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedHeaders.exists(_.id sameElements id))
-        val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedHeaders.exists(_.id sameElements id))
+        val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedHeaders.exists(_.id == id))
+        val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedHeaders.exists(_.id == id))
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
@@ -111,7 +111,7 @@ trait ErgoHistory
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
-            val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedHeaders.exists(_.id sameElements id))
+            val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedHeaders.exists(_.id == id))
               .ensuring(_.isDefined, "Where unable to find new best header, can't invalidate genesis block")
               .get
 

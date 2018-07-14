@@ -92,8 +92,8 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     val c2 = modifiersCache.popCandidate(history1).get
     val properCandidate = c2 match {
       case h: Header => h.height == 1
-      case bt: BlockTransactions => bt.id sameElements h1.transactionsId
-      case ap: ADProofs => ap.id sameElements h1.ADProofsId
+      case bt: BlockTransactions => bt.id == h1.transactionsId
+      case ap: ADProofs => ap.id == h1.ADProofsId
     }
     properCandidate shouldBe true
   }

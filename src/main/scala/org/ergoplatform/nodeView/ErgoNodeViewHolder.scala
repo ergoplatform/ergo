@@ -108,10 +108,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
+      case (stateId, None, _) if stateId == ErgoState.genesisStateVersion =>
         log.debug("State and history are both empty on startup")
         stateIn
-      case (stateId, Some(block), _) if stateId sameElements block.id =>
+      case (stateId, Some(block), _) if stateId == block.id =>
         log.debug(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>

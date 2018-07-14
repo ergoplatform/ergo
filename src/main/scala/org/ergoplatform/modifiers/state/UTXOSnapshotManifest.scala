@@ -27,7 +27,7 @@ object UTXOSnapshotManifest {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (106: Byte)
 
   def validate(manifest: UTXOSnapshotManifest, header: Header): Try[Unit] = Try {
-    require(manifest.blockId sameElements header.id)
+    require(manifest.blockId == header.id)
     require(manifest.rootHash sameElements header.stateRoot)
     ???
   }

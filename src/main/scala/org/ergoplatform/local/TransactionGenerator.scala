@@ -49,10 +49,10 @@ class TransactionGenerator(viewHolder: ActorRef,
 
           //todo: real prop, assets
 
-          val txCount = 1 // Random.nextInt(20) + 1
+          val txCount = 10 // Random.nextInt(20) + 1
 
           (1 to txCount).foreach { _ =>
-            val newOutsCount = Random.nextInt(50) + 1
+            val newOutsCount = Random.nextInt(5) + 1
             val newOuts = (1 to newOutsCount).map { _ =>
               val value = Random.nextInt(50) + 1
               val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf

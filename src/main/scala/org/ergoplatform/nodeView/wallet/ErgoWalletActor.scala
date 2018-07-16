@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Actor
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._

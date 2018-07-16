@@ -27,7 +27,7 @@ import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
-class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
+abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
             (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
@@ -53,6 +53,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
+
+  def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String
 
   def initBeforeStart(): Unit = {
     cleanupDanglingIfNeeded()
@@ -152,7 +154,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     val networkingConfig = ContainerConfig.NetworkingConfig
       .create(Map(networkName -> endpointConfigFor(ip)).asJava)
 
-    val knownPeersSetting = seedAddress.fold("")(sa => s" -Dscorex.network.knownPeers.0=$sa")
+    val knownPeersSetting = knownPeers(nodes, nodeConfig)
 
     val configOverrides = renderProperties(asProperties(nodeConfig.withFallback(suiteConfig))) +
                           knownPeersSetting
@@ -335,6 +337,10 @@ object Docker {
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName)
+  def apply(owner: Class[_], knownPeersFunc: (Map[String, Node], Config) => String)(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName){
+    override def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String = {
+      knownPeersFunc(nodes, nodeConfig)
+    }
+  }
 
 }

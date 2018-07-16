@@ -13,12 +13,14 @@ trait IntegrationSuite extends FreeSpec with BeforeAndAfterAll with IntegrationT
   protected def nodeConfigs: Seq[Config]
   protected def nodeSuites(nodes: Seq[Node]): IndexedSeq[Suite]
 
-  protected val docker: Docker = Docker(getClass)
+  protected val docker: Docker = Docker(getClass, knownPeers)
   protected lazy val futureNodes: Future[Seq[Node]] = docker.startNodes(nodeConfigs)
 
   override protected def beforeAll(): Unit = {
     log.debug("Starting tests")
   }
+
+  def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String
 
   override def nestedSuites: IndexedSeq[Suite] = {
     val futureSuits = futureNodes

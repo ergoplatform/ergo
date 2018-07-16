@@ -2,7 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.local.TransactionGenerator.{FetchBoxes, StartGeneration, StopGeneration}
+import org.ergoplatform.local.TransactionGenerator.{Attempt, FetchBoxes, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ModificationOutcome, SuccessfulTransaction}
 import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
@@ -21,11 +22,15 @@ import scala.util.Random
 class TransactionGenerator(viewHolder: ActorRef,
                            ergoWalletActor: ActorRef,
                            settings: TestingSettings) extends Actor with ScorexLogging {
-  var txGenerator: Cancellable = _
 
-  var isStarted = false
 
-  var currentFullHeight = 0
+  private var txGenerator: Cancellable = _
+
+  private var isStarted = false
+
+  private var transactionsPerBlock = 0
+  private var currentFullHeight = 0
+
 
   @SuppressWarnings(Array("TraversableHead"))
   override def receive: Receive = {
@@ -33,6 +38,8 @@ class TransactionGenerator(viewHolder: ActorRef,
       if (!isStarted) {
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
           currentFullHeight = v.history.headersHeight
+
+          context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
           txGenerator = context.system.scheduler
             .schedule(1500.millis, 3000.millis)(self ! FetchBoxes)(context.system.dispatcher)
@@ -46,23 +53,28 @@ class TransactionGenerator(viewHolder: ActorRef,
         val fbh = v.history.fullBlockHeight
         if (fbh > currentFullHeight) {
           currentFullHeight = fbh
+          transactionsPerBlock = Random.nextInt(10) + 1
 
-          //todo: real prop, assets
-
-          val txCount = 10 // Random.nextInt(20) + 1
-
-          (1 to txCount).foreach { _ =>
-            val newOutsCount = Random.nextInt(5) + 1
-            val newOuts = (1 to newOutsCount).map { _ =>
-              val value = Random.nextInt(50) + 1
-              val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
-              new ErgoBoxCandidate(value, prop)
-            }
-
-            ergoWalletActor ! GenerateTransaction(newOuts)
-          }
+          self ! Attempt
         }
       }
+
+    case Attempt =>
+      //todo: real prop, assets
+      transactionsPerBlock = transactionsPerBlock - 1
+      if(transactionsPerBlock >= 0) {
+        val newOutsCount = Random.nextInt(5) + 1
+        val newOuts = (1 to newOutsCount).map { _ =>
+          val value = Random.nextInt(50) + 1
+          val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
+          new ErgoBoxCandidate(value, prop)
+        }
+
+        ergoWalletActor ! GenerateTransaction(newOuts)
+      }
+
+    case SuccessfulTransaction(tx) =>
+      self ! Attempt
 
     case txOpt: Option[ErgoTransaction]@unchecked =>
       txOpt.foreach { tx =>
@@ -84,6 +96,7 @@ object TransactionGenerator {
 
   case object StopGeneration
 
+  case object Attempt
 }
 
 object TransactionGeneratorRef {

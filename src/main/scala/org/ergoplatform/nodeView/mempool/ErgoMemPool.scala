@@ -40,13 +40,13 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransacti
   }
 
   override def filter(condition: (ErgoTransaction) => Boolean): ErgoMemPool = {
-    unconfirmed.retain { (k, v) =>
+    unconfirmed.retain {case (k, v) =>
       condition(v)
     }
     this
   }
-
 }
+
 
 object ErgoMemPool {
   type TxKey = scala.collection.mutable.WrappedArray.ofByte

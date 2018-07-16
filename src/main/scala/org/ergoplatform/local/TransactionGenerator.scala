@@ -2,7 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.local.TransactionGenerator.{Attempt, FetchBoxes, StartGeneration, StopGeneration}
+import org.ergoplatform.local.TransactionGenerator.{Attempt, CheckGeneratingConditions, StartGeneration, StopGeneration}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -42,13 +42,13 @@ class TransactionGenerator(viewHolder: ActorRef,
           context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
           txGenerator = context.system.scheduler
-            .schedule(1500.millis, 3000.millis)(self ! FetchBoxes)(context.system.dispatcher)
+            .schedule(1500.millis, 3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
         }
       }
 
       isStarted = true
 
-    case FetchBoxes =>
+    case CheckGeneratingConditions =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
         val fbh = v.history.fullBlockHeight
         if (fbh > currentFullHeight) {
@@ -63,7 +63,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       //todo: real prop, assets
       transactionsPerBlock = transactionsPerBlock - 1
       if(transactionsPerBlock >= 0) {
-        val newOutsCount = Random.nextInt(5) + 1
+        val newOutsCount = Random.nextInt(50) + 1
         val newOuts = (1 to newOutsCount).map { _ =>
           val value = Random.nextInt(50) + 1
           val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
@@ -92,7 +92,7 @@ object TransactionGenerator {
 
   case object StartGeneration
 
-  case object FetchBoxes
+  case object CheckGeneratingConditions
 
   case object StopGeneration
 

@@ -40,9 +40,11 @@ trait ToDownloadProcessor extends ScorexLogging {
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 
   /**
-    * Next howMany modifiers we should download to synchronize full block chain with headers chain
+    *
+    * @return Next `howMany` modifier ids satisfying `filter` condition our node should download
+    *         to synchronize full block chain with headers chain
     */
-  def nextModifiersToDownload(howMany: Int, excluding: Iterable[ModifierId]): Seq[(ModifierTypeId, ModifierId)] = {
+  def nextModifiersToDownload(howMany: Int, filter: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
     def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
       if (acc.lengthCompare(howMany) >= 0) {
@@ -51,7 +53,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
           case Some(bestHeaderAtThisHeight) =>
             val toDownload = requiredModifiersForHeader(bestHeaderAtThisHeight)
-              .filter(m => !excluding.exists(ex => ex sameElements m._2))
+              .filter(m => filter(m._2))
               .filter(m => !contains(m._2))
             continuation(height + 1, acc ++ toDownload)
           case None => acc

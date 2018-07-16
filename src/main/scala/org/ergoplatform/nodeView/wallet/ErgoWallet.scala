@@ -7,7 +7,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ScanOffchain, ScanOnchain}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.{Vault, VaultReader}
@@ -70,7 +70,10 @@ class ErgoWallet(actorSystem: ActorSystem,
   }
 
   //todo: implement
-  override def rollback(to: VersionTag): Try[ErgoWallet] = Success(this)
+  override def rollback(to: VersionTag): Try[ErgoWallet] = {
+    actor ! Rollback(to)
+    Success(this)
+  }
 
   override type NVCT = this.type
 }

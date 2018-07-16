@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import scorex.core.VersionTag
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
@@ -319,10 +320,11 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       (1 to txsFound).foreach(_ => resolveUncertainty())
       resolveAgain
 
+    case Rollback(to) => log.warn("Rollback in the wallet is not implemented")
+
     case ReadBalances =>
       sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
 
-    //todo: check boxes being spent
     case GenerateTransaction(payTo) =>
       //todo: add assets
       val targetBalance = payTo.map(_.value).sum
@@ -357,8 +359,9 @@ object ErgoWalletActor {
 
   case class ScanOnchain(block: ErgoFullBlock)
 
+  case class Rollback(to: VersionTag)
+
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case object ReadBalances
-
 }

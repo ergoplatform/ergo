@@ -43,6 +43,7 @@ class ErgoWallet(actorSystem: ActorSystem,
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
 
   implicit val system = actorSystem
+
   if (settings.testingSettings.transactionGeneration) {
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
     txGen ! StartGeneration
@@ -77,7 +78,9 @@ class ErgoWallet(actorSystem: ActorSystem,
 
 object ErgoWallet {
 
-  def readOrGenerate(actorSystem: ActorSystem, nodeViewHolderRef: ActorRef, settings: ErgoSettings): ErgoWallet = {
+  def readOrGenerate(actorSystem: ActorSystem,
+                     nodeViewHolderRef: ActorRef,
+                     settings: ErgoSettings): ErgoWallet = {
     new ErgoWallet(actorSystem, nodeViewHolderRef, settings)
   }
 

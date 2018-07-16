@@ -7,6 +7,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
+import scala.reflect.ClassTag
 
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
@@ -27,7 +28,7 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   def headerIdsAtHeight(height: Int): Seq[ModifierId]
 
-  def typedModifierById[T <: ErgoPersistentModifier](id: ModifierId): Option[T]
+  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T]
 
   def contains(id: ModifierId): Boolean
 

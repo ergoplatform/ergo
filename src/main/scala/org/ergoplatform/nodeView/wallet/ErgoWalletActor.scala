@@ -77,12 +77,13 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private val toTrack = prover.dlogSecrets.map(prover.bytesToTrack)
+  private val toTrack = prover.dlogPubkeys.map(prover.bytesToTrack)
 
 
   private var lastScannedId = Long.MinValue
   private val quickScan = mutable.TreeMap[Long, UncertainBox]()
 
+  //todo: clean spent offchain boxes periodically
   private val spentOffchain = mutable.LongMap[BoxSpent]()
   private val spentOnchain = mutable.LongMap[BoxSpent]()
 
@@ -90,20 +91,20 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private val unspentOnChain = mutable.LongMap[BoxUnspent]()
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
-  private var balance: Long = 0
-  private val assetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
+  private var confirmedBalance: Long = 0
+  private val confirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
   private var unconfirmedBalance: Long = 0
   private val unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
-  private var firstUncertaindId = Long.MinValue
+  private var firstUnusedUncertaindId = Long.MinValue
   private var firstUnusedConfirmedId = 0
   private var firstUnusedUnconfirmedId = Int.MaxValue + 1
 
   /**
     * We store all the spent and unspent boxes here
     */
-  private lazy val registry = mutable.Map[ByteArrayWrapper, Long]() //keep statuses
+  private lazy val registry = mutable.Map[ByteArrayWrapper, Long]()
 
 
   private def increaseBalances(unspentBox: BoxUnspent): Unit = {
@@ -113,11 +114,11 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
     //todo: reduce boilerplate below?
     if (unspentBox.onchain) {
-      balance += tokenDelta
+      confirmedBalance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = ByteArrayWrapper(id)
-        val updBalance = assetBalances.getOrElse(wid, 0L) + amount
-        assetBalances.put(wid, updBalance)
+        val updBalance = confirmedAssetBalances.getOrElse(wid, 0L) + amount
+        confirmedAssetBalances.put(wid, updBalance)
       }
     } else {
       unconfirmedBalance += tokenDelta
@@ -129,22 +130,22 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
   }
 
-  private def decreaseBalances(uncertainBox: BoxUnspent, onChain: Boolean): Unit = {
-    val box = uncertainBox.box
+  private def decreaseBalances(unspentBox: BoxUnspent): Unit = {
+    val box = unspentBox.box
     val tokenDelta = box.value
     val assetDeltas = box.additionalTokens
 
     //todo: reduce boilerplate below?
-    if (onChain) {
-      balance -= tokenDelta
+    if (unspentBox.onchain) {
+      confirmedBalance -= tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = ByteArrayWrapper(id)
-        val currentBalance = assetBalances.getOrElse(wid, 0L)
+        val currentBalance = confirmedAssetBalances.getOrElse(wid, 0L)
         if (currentBalance == amount) {
-          assetBalances.remove(wid)
+          confirmedAssetBalances.remove(wid)
         } else {
           val updBalance = currentBalance - amount
-          assetBalances.put(wid, updBalance)
+          confirmedAssetBalances.put(wid, updBalance)
         }
       }
     } else {
@@ -165,9 +166,9 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private def register(box: TrackedBox, heightOpt: Option[Height]) = {
     box match {
       case uncertainBox: UncertainBox =>
-        quickScan.put(firstUncertaindId, uncertainBox)
-        registry.put(box.boxId, firstUncertaindId)
-        firstUncertaindId += 1
+        quickScan.put(firstUnusedUncertaindId, uncertainBox)
+        registry.put(box.boxId, firstUnusedUncertaindId)
+        firstUnusedUncertaindId += 1
       case unspentBox: BoxUnspent if unspentBox.onchain =>
         unspentOnChain.put(firstUnusedConfirmedId, unspentBox)
         registry.put(box.boxId, firstUnusedConfirmedId)
@@ -211,7 +212,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
     certainBox
   }
-  
+
   private def nextInTheQueue(): UncertainBox = {
     val iter = quickScan.iteratorFrom(lastScannedId)
     if (iter.hasNext) {
@@ -269,7 +270,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
                 } else {
                   spentOffchain.put(internalId, spent)
                 }
-                decreaseBalances(unspent, txOnchain)
+                decreaseBalances(unspent)
               }.isDefined
               if (!removed) log.warn(s"Registered unspent box id is not found in the unspents: $boxId")
             //todo: decrease balances
@@ -329,7 +330,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       resolveAgain
 
     case ReadBalances =>
-      sender() ! BalancesSnapshot(height, balance, assetBalances.toMap) //todo: avoid .toMap?
+      sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
 
     //todo: check boxes being spent
     case GenerateTransaction(payTo) =>
@@ -339,13 +340,13 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       def filterFn(bu: BoxUnspent) =
         registry.get(ByteArrayWrapper(bu.box.id)).forall(iid => !spentOffchain.contains(iid))
 
-      val txOpt = coinSelector.select(unspentOnChain.valuesIterator, filterFn, targetBalance, balance, Map(), Map()).flatMap { r =>
+      val txOpt = coinSelector.select(unspentOnChain.valuesIterator, filterFn, targetBalance, confirmedBalance, Map(), Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
         val changeAssets = r.changeAssets
         val changeBalance = r.changeBalance
 
         //todo: fix proposition, assets and register
-        val changeAddress = prover.dlogSecrets.head.publicImage
+        val changeAddress = prover.dlogPubkeys.head
         val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, changeAddress, Seq(), Map())
 
         val unsignedTx = new UnsignedErgoTransaction(

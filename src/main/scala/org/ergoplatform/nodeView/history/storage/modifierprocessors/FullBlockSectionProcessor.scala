@@ -51,8 +51,10 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
           Some(ErgoFullBlock(h, txs, None))
         case txs: BlockTransactions =>
           typedModifierById[ADProofs](h.ADProofsId).map(proofs => ErgoFullBlock(h, txs, Some(proofs)))
-        case proofs: ADProofs =>
+        case proofs: ADProofs if requireProofs =>
           typedModifierById[BlockTransactions](h.transactionsId).map(txs => ErgoFullBlock(h, txs, Some(proofs)))
+        case _ =>
+          None
       }
     }
   }

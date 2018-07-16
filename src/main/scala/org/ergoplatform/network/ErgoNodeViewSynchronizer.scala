@@ -41,22 +41,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
-  private def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
-    modifierIds.foreach(id => deliveryTracker.expectFromRandom(modifierTypeId, id))
-    val msg = Message(requestModifierSpec, Right(modifierTypeId -> modifierIds), None)
-    //todo: Full nodes should be here, not a random peer
-    networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  protected val onCheckModifiersToDownload: Receive = {
+    case CheckModifiersToDownload =>
+      historyReaderOpt.foreach { h =>
+        h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize,
+          id => !deliveryTracker.isExpectingOrDelivered(id))
+          .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
+      }
   }
 
   override protected def modifiersFromRemote: Receive = {
-    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
+    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.MessageCode =>
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>
         if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is not synced yet, but our expecting list is empty - ask for more headers
           sendSync(statusTracker, h)
-        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpectingFromRandom) {
+        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
           // headers chain is synced, but our full block list is empty - request more full blocks
           self ! CheckModifiersToDownload
         }
@@ -76,32 +78,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(mod)
   }
 
-  protected val onCheckModifiersToDownload: Receive = {
-    case CheckModifiersToDownload =>
-      deliveryTracker.removeOutdatedExpectingFromRandom()
-      historyReaderOpt.foreach { h =>
-        val (expecting, delivered) = deliveryTracker.expectingAndDelivered
-        val toExclude = delivered ++ expecting
-        val newIds = h.nextModifiersToDownload(downloadListSize - expecting.size, toExclude)
-        val oldIds = deliveryTracker.idsExpectingFromRandomToRetry()
-        (newIds ++ oldIds).groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
-      }
-  }
-
-  def onDownloadRequest: Receive = {
-    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      requestDownload(modifierTypeId, Seq(modifierId))
-  }
-
   def onChangedVault: Receive = {
     case ChangedVault(_) =>
   }
 
   override protected def viewHolderEvents: Receive =
     onSyntacticallySuccessfulModifier orElse
-      onDownloadRequest orElse
-      onCheckModifiersToDownload orElse
       onChangedVault orElse
+      onCheckModifiersToDownload orElse
       super.viewHolderEvents
 }
 

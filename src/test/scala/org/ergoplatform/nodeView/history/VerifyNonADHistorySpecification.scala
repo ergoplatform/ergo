@@ -63,10 +63,11 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     val missedChain = chain.tail.toList
     val missedBT = missedChain.map(fb => (BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId))
-    history.nextModifiersToDownload(1, Seq()).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.take(1)
-    history.nextModifiersToDownload(BlocksToKeep - 1, Seq()).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT
+    history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.take(1)
+    history.nextModifiersToDownload(BlocksToKeep - 1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT
 
-    history.nextModifiersToDownload(2, Seq(missedChain.head.blockTransactions.id)).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.tail.take(2)
+    history.nextModifiersToDownload(2, id => !(id sameElements missedChain.head.blockTransactions.id))
+      .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.tail.take(2)
   }
 
   property("append header as genesis") {

@@ -213,24 +213,25 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     certainBox
   }
 
-  private def nextInTheQueue(): UncertainBox = {
-    val iter = quickScan.iteratorFrom(lastScannedId)
-    if (iter.hasNext) {
-      val (newScannedId, res) = iter.next()
-      lastScannedId = newScannedId
-      res
-    } else {
-      lastScannedId = Long.MinValue
-      nextInTheQueue()
+  private def nextInTheQueue(): Option[UncertainBox] = {
+    def nextFrom(fromId: Long): Option[UncertainBox] = {
+      val iter = quickScan.iteratorFrom(fromId)
+      if (iter.hasNext) {
+        val (newScannedId, res) = iter.next()
+        lastScannedId = newScannedId
+        Some(res)
+      } else None
     }
+
+    nextFrom(lastScannedId).orElse(nextFrom(Long.MinValue))
   }
 
+  //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
-    if (quickScan.nonEmpty) {
-      val uncertainBox = nextInTheQueue()
+    nextInTheQueue().map {uncertainBox =>
       val box = uncertainBox.box
 
-      val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32) // todo: real impl
+      val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
@@ -244,13 +245,12 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
         case Success(_) =>
           uncertainToCertain(uncertainBox)
         case Failure(_) =>
-        //todo: remove after some time?
+        //todo: remove after some time? remove spent after some time?
       }
     }
   }
 
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    //todo: consider double-spend in an unconfirmed tx
     tx.inputs.foreach { inp =>
       val boxId = ByteArrayWrapper(inp.boxId)
       registry.remove(boxId) match {
@@ -275,7 +275,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
               if (!removed) log.warn(s"Registered unspent box id is not found in the unspents: $boxId")
             //todo: decrease balances
             case i: Long =>
-            //todo: handle unconfirmed double-spend case
+            //todo: handle double-spend case
           }
         case None => // we do not track this box, nothing to do here
       }
@@ -293,13 +293,10 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
   }
 
-  private def extractFromTransactions(txs: Seq[ErgoTransaction]): Boolean = {
-    txs.exists(tx => scan(tx, Some(height)))
-  }
-
-  private def extractFromHeader(h: Header): Unit = {
-    height = h.height
-    lastBlockUtxoRootHash = h.stateRoot
+  private def extractFromBlock(fb: ErgoFullBlock): Int = {
+    height = fb.header.height
+    lastBlockUtxoRootHash = fb.header.stateRoot
+    fb.transactions.count(tx => scan(tx, Some(height)))
   }
 
   //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
@@ -319,14 +316,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       resolveAgain
 
     case ScanOnchain(fullBlock) =>
-      extractFromHeader(fullBlock.header)
-      val queueLengthBefore = quickScan.size
-      if (extractFromTransactions(fullBlock.transactions)) {
-        val queueLengthAfter = quickScan.size
-        (1 to (queueLengthAfter - queueLengthBefore)).foreach(_ =>
-          resolveUncertainty()
-        )
-      }
+      val txsFound = extractFromBlock(fullBlock)
+      (1 to txsFound).foreach(_ => resolveUncertainty())
       resolveAgain
 
     case ReadBalances =>
@@ -371,4 +362,5 @@ object ErgoWalletActor {
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case object ReadBalances
+
 }

@@ -1,7 +1,8 @@
 package org.ergoplatform.modifiers
 
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
@@ -29,13 +30,25 @@ case class ErgoFullBlock(header: Header,
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 }
 
-object ErgoFullBlock {
+object ErgoFullBlock extends ApiCodecs {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
 
   implicit val jsonEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
-    Map(
+    Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
       "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
-    ).asJson
+    )
+
+  val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+    Json.obj(
+      "id" -> b.header.id.asJson,
+      "size" -> size(b).toLong.asJson
+    )
+
+  private def size(block: ErgoFullBlock): Int = {
+    block.header.bytes.length +
+      block.blockTransactions.bytes.length +
+      block.aDProofs.map(_.bytes.length).getOrElse(0)
+  }
 }

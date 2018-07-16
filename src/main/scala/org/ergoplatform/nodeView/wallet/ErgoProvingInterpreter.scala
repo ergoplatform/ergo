@@ -23,14 +23,14 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
     ValueSerializer.serialize(pubkey)
   }
 
+  override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets ++ dhSecrets
 
-  override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] =
-    dlogSecrets ++ dhSecrets
+  private lazy val dlogSecrets: Seq[DLogProverInput] = ErgoWallet.secretsFromSeed(seed).map(DLogProverInput.apply)
 
-  lazy val dlogSecrets: Seq[DLogProverInput] = ErgoWallet.secretsFromSeed(seed).map(DLogProverInput.apply)
-
-  lazy val dhSecrets: Seq[DiffieHellmanTupleProverInput] =
+  private lazy val dhSecrets: Seq[DiffieHellmanTupleProverInput] =
     (1 to 4).map(_ => DiffieHellmanTupleProverInput.random())
+
+  lazy val dlogPubkeys = dlogSecrets.map(_.publicImage)
 
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],

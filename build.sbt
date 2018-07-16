@@ -105,7 +105,6 @@ configs(IntegrationTest extend(Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
-  testOptions += Tests.Filter(_.endsWith("Suite"))
 ))
 
 dockerfile in docker := {

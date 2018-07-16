@@ -5,8 +5,13 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.scalacheck.Gen
+import scapi.sigma.ProveDiffieHellmanTuple
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import sigmastate._
+import sigmastate.Values.GroupElementConstant
+import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
 
@@ -141,11 +146,59 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
     }
   }
 
-  property("too costly transaction is rejected") {
-    //todo: implement
-    //todo: make a transaction which costs more than Constants.MaxBlockCost and check that
-    //todo: wrongTx.statelessValidity.isSuccess shouldBe true
-    //todo: wrongTx.statefulValidity(from, context).isSuccess shouldBe false
+  property("stateful validation should catch false proposition") {
+    val propositionGen = Gen.const(Values.FalseLeaf)
+    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+    forAll(gen) { case (from, tx) =>
+      tx.statelessValidity.isSuccess shouldBe true
+      val validity = tx.statefulValidity(from, context)
+      validity.isSuccess shouldBe false
+      validity.failed.get.getMessage should startWith("Validation failed for input #0")
+    }
+  }
+
+  private def groupElemGen =
+    Gen.const(GroupElementConstant(CryptoConstants.dlogGroup.createRandomGenerator()))
+
+  private def proveDiffieHellmanTupleGen = for {
+    gv <- groupElemGen
+    hv <- groupElemGen
+    uv <- groupElemGen
+    vv <- groupElemGen
+  } yield ProveDiffieHellmanTuple(gv, hv, uv, vv)
+
+  property("too long expressions should be rejected") {
+    val propositionGen = for {
+      proveList <- Gen.listOfN(350, proveDiffieHellmanTupleGen)
+    } yield OR(proveList)
+
+    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+
+    forAll(gen) { case (from, tx) =>
+      tx.statelessValidity.isSuccess shouldBe true
+      val validity = tx.statefulValidity(from, context)
+      validity.isSuccess shouldBe false
+      val cause = validity.failed.get.getCause
+      Option(cause) shouldBe defined
+      cause.getMessage should startWith("requirement failed: Too long expression")
+    }
+  }
+
+  property("too costly transaction should be rejected") {
+    val propositionGen = for {
+      proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
+    } yield OR(proveList)
+
+    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+
+    forAll(gen) { case (from, tx) =>
+      tx.statelessValidity.isSuccess shouldBe true
+      val validity = tx.statefulValidity(from, context)
+      validity.isSuccess shouldBe false
+      val cause = validity.failed.get.getCause
+      Option(cause) shouldBe defined
+      cause.getMessage should startWith("Estimated expression complexity")
+    }
   }
 
   property("output contains too many assets") {

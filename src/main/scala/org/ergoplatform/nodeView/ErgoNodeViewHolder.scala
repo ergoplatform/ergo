@@ -109,22 +109,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
-        log.debug("State and history are both empty on startup")
+        log.info("State and history are both empty on startup")
         stateIn
       case (stateId, Some(block), _) if stateId sameElements block.id =>
-        log.debug(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
+        log.info(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
-        log.debug("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash
-        log.debug(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
+        log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(VersionTag @@ bestFullBlock.id), Some(bestFullBlock.header.stateRoot))
       case (stateId, Some(historyBestBlock), state) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
-        log.debug(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
+        log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
           s"apply ${newChain.length} modifiers")
         val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
           .getOrElse(recreatedState())

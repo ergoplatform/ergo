@@ -51,7 +51,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected def modifiersFromRemote: Receive = {
-    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
+    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.MessageCode =>
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>

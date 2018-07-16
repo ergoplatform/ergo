@@ -12,15 +12,14 @@ class LongChainSpec extends FreeSpec with IntegrationSuite {
     val minerConfig = noDelayConfig.withFallback(Docker.nodeConfigs.head)
     val followerConfig = nonGeneratingPeerConfig.withFallback(Docker.nodeConfigs(1))
     val miner = docker.startNode(minerConfig).success.value
-    val blocksCount = miner.settings.scorexSettings.network.maxInvObjects
-    log.info(s"Config maxInvObjects = $blocksCount")
-    val check = async {
-      await(miner.waitForHeight(blocksCount))
-      val follower = docker.startNode(followerConfig).success.value
-      await(follower.waitForHeight(blocksCount))
+    val blocksCount = 250
+      val check = async {
+        await(miner.waitForHeight(blocksCount))
+        val follower = docker.startNode(followerConfig).success.value
+        await(follower.waitForHeight(blocksCount))
       succeed
     }
-      Await.result(check, 5.minutes)
+      Await.result(check, 10.minutes)
   }
 }
 

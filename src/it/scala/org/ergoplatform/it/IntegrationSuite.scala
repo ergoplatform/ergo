@@ -41,7 +41,7 @@ trait IntegrationSuite
 
   protected val noDelayConfig = ConfigFactory.parseString(
     """
-      |ergo.node.miningDelay=500ms
+      |ergo.node.miningDelay=300ms
     """.stripMargin
   )
 

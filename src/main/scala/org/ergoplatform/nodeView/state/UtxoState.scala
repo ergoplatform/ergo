@@ -35,7 +35,7 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
-  override def rootHash: ADDigest = persistentProver.digest
+  override lazy val rootHash: ADDigest = persistentProver.digest
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
     if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
@@ -101,8 +101,8 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
     case fb: ErgoFullBlock =>
       val height = fb.header.height
 
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height " +
-        s"to UtxoState with root hash ${Algos.encode(rootHash)}")
+      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+      val inRoot = rootHash
 
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
         val emissionBox = extractEmissionBox(fb)
@@ -122,13 +122,13 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
         }
 
         log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-          s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(rootHash)}")
+          s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
         new UtxoState(persistentProver, VersionTag @@ fb.id, store, constants)
       }
       stateTry.recoverWith[UtxoState] { case e =>
         log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-          s" ${Algos.encode(rootHash)}: ", e)
-        persistentProver.rollback(rootHash).ensuring(persistentProver.digest.sameElements(rootHash))
+          s" ${Algos.encode(inRoot)}: ", e)
+        persistentProver.rollback(inRoot).ensuring(persistentProver.digest.sameElements(inRoot))
         Failure(e)
       }
 

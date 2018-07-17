@@ -5,12 +5,8 @@ dependencyOverrides in ThisBuild ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.3.0-alpha4",
   "ch.qos.logback" % "logback-core" % "1.3.0-alpha4",
   "com.chuusai" % "shapeless_2.12" % "2.3.2",
-  "com.github.cb372" % "scalacache-core_2.12" % "0.24.2",
-  "com.github.cb372" % "scalacache-guava_2.12" % "0.24.2",
-  "com.google.code.findbugs" % "jsr305" % "1.3.9",
-  "com.google.errorprone" % "error_prone_annotations" % "2.1.3",
-  "com.google.guava" % "guava" % "25.1-jre",
-  "com.google.j2objc" % "j2objc-annotations" % "1.1",
+  "com.google.code.findbugs" % "jsr305" % "3.0.2",
+  "com.google.guava" % "guava" % "21.0",
   "com.iheart" % "ficus_2.12" % "1.4.3",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
@@ -42,8 +38,6 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.59",
-  "org.checkerframework" % "checker-qual" % "2.0.0",
-  "org.codehaus.mojo" % "animal-sniffer-annotations" % "1.14",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
   "org.rogach" % "scallop_2.12" % "2.1.1",
   "org.rudogma" % "supertagged_2.12" % "1.4",
@@ -67,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 8bb0ca25c7db6df31a36bb390028ea568eb8547b
+// LIBRARY_DEPENDENCIES_HASH 6481de067f686370800c1dc0427c1b7fd6837b7d

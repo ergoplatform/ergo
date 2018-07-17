@@ -17,8 +17,10 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     .maximumSize(config.historyStorageCacheSize)
     .build[String, ErgoPersistentModifier]
 
+  private def keyById(id: ModifierId): String = Algos.encode(id)
+
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    val key = Algos.encode(id)
+    val key = keyById(id)
     Option(modifiersCache.getIfPresent(key)) match {
       case Some(e) =>
         log.trace(s"Got modifier $key from cache")
@@ -55,7 +57,10 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
       indexesToInsert)
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach(id => objectsStore.delete(id))
+  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
+    modifiersCache.invalidate(keyById(id))
+    objectsStore.delete(id)
+  }
 
   override def close(): Unit = {
     log.warn("Closing history storage...")

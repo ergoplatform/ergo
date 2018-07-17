@@ -25,15 +25,14 @@ class WrappedUtxoState(override val version: VersionTag,
                        val versionedBoxHolder: VersionedInMemoryBoxHolder,
                        constants: StateConstants)
   extends {
-    val digest: ADDigest = {
+    val prover: PersistentBatchAVLProver[Digest32, HF] = {
       // todo do not recalculate?
-      implicit val hf = Algos.hash
       val bp: BatchAVLProver[Digest32, HF] = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
       val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)
-      PersistentBatchAVLProver.create(bp, storage).get.digest
+      val storage: VersionedAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+      PersistentBatchAVLProver.create(bp, storage).get
     }
-  } with UtxoState(digest, version, store, constants) {
+  } with UtxoState(prover, version, store, constants) {
 
   def size: Int = versionedBoxHolder.size
 

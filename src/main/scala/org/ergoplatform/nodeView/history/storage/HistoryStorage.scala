@@ -9,29 +9,35 @@ import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.util.Failure
-import scalacache._
-import scalacache.guava._
-import scalacache.modes.try_.mode
 
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
   with AutoCloseable with ScorexEncoding {
 
-  private val underlyingGuavaCache = CacheBuilder.newBuilder()
+  private val modifiersCache = CacheBuilder.newBuilder()
     .maximumSize(config.historyStorageCacheSize)
-    .build[String, Entry[ErgoPersistentModifier]]
-  implicit val modifiersCache: Cache[ErgoPersistentModifier] = GuavaCache(underlyingGuavaCache)
+    .build[String, ErgoPersistentModifier]
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    objectsStore.get(id).flatMap { bBytes =>
-      cachingF(Algos.encode(id))(ttl = None) {
-        HistoryModifierSerializer.parseBytes(bBytes).recoverWith { case e =>
-          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${bBytes.mkString("-")}): ", e)
-          Failure(e)
+    val key = Algos.encode(id)
+    Option(modifiersCache.getIfPresent(key)) match {
+      case Some(e) =>
+        log.trace(s"Got modifier $key from cache")
+        Some(e)
+      case None =>
+        objectsStore.get(id).flatMap { bBytes =>
+          HistoryModifierSerializer.parseBytes(bBytes).recoverWith { case e =>
+            log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
+            Failure(e)
+          }.toOption match {
+            case Some(pm) =>
+              log.trace(s"Cache miss for existing modifier $key")
+              modifiersCache.put(key, pm)
+              Some(pm)
+            case None => None
+          }
         }
-      }.toOption
     }
   }
-
 
   def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = indexStore.get(id)
 

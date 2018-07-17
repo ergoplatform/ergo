@@ -141,7 +141,8 @@ object ErgoState extends ScorexLogging {
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
+      case StateType.Utxo if dir.listFiles().nonEmpty =>
+        UtxoState.create(dir, constants, settings.chainSettings.monetary.afterGenesisStateDigest)
       case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
   }

@@ -10,7 +10,12 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Algos.HF
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag}
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.avltree.batch._
+import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
@@ -19,7 +24,16 @@ class WrappedUtxoState(override val version: VersionTag,
                        store: Store,
                        val versionedBoxHolder: VersionedInMemoryBoxHolder,
                        constants: StateConstants)
-  extends UtxoState(version, store, constants) {
+  extends {
+    val digest: ADDigest = {
+      // todo do not recalculate?
+      implicit val hf = Algos.hash
+      val bp: BatchAVLProver[Digest32, HF] = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
+      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+      val storage: VersionedAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)
+      PersistentBatchAVLProver.create(bp, storage).get.digest
+    }
+  } with UtxoState(digest, version, store, constants) {
 
   def size: Int = versionedBoxHolder.size
 

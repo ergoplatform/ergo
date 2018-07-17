@@ -4,7 +4,7 @@ import com.google.common.cache.CacheBuilder
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
@@ -13,11 +13,12 @@ import scalacache._
 import scalacache.guava._
 import scalacache.modes.try_.mode
 
-class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends ScorexLogging with AutoCloseable
-  with ScorexEncoding {
+class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
+  with AutoCloseable with ScorexEncoding {
 
-  // TODO move size to config?
-  val underlyingGuavaCache = CacheBuilder.newBuilder().maximumSize(100L).build[String, Entry[ErgoPersistentModifier]]
+  private val underlyingGuavaCache = CacheBuilder.newBuilder()
+    .maximumSize(config.historyStorageCacheSize)
+    .build[String, Entry[ErgoPersistentModifier]]
   implicit val modifiersCache: Cache[ErgoPersistentModifier] = GuavaCache(underlyingGuavaCache)
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {

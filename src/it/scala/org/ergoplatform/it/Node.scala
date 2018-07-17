@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 
-class Node(settings: ErgoSettings, val nodeInfo: NodeInfo, override val client: AsyncHttpClient)
+class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val client: AsyncHttpClient)
           (implicit override val ec: ExecutionContext) extends NodeApi with NetworkNodeApi {
 // todo after addresses will added
 //  val privateKey: String = config.getString("private-key")

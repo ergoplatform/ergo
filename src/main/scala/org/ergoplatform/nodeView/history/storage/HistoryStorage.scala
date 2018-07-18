@@ -17,6 +17,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     .maximumSize(config.historyStorageCacheSize)
     .build[String, ErgoPersistentModifier]
 
+
   // TODO remove when modifierId will be string
   private def keyById(id: ModifierId): String = Algos.encode(id)
 

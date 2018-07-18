@@ -32,11 +32,13 @@ object ModifierWriter {
     mod <- modifierSerializers(typeId).parseBytes(bytes).toOption
   } yield mod
 
-  private def readModId(implicit fis: InputStream): Option[ModifierTypeId] =
-    Some(ModifierTypeId @@ fis.read().toByte).filterNot(_ == -1)
+  private def readModId(implicit fis: InputStream): Option[ModifierTypeId] = {
+    val int = fis.read()
+    if (int == -1) { None } else { Some(ModifierTypeId @@ int.toByte) }
+  }
 
   private def readLength(implicit fis: InputStream): Option[Int] =
-    Some(Stream.continually(fis.read().toByte).take(4).toArray).filterNot(_.contains(-1: Byte)).map(Ints.fromByteArray)
+    Some(Stream.continually(fis.read().toByte).take(4).toArray).map(Ints.fromByteArray)
 
   private def readBytes(length: Int)(implicit fis: InputStream): Option[Array[Byte]] =
     Some(Stream.continually(fis.read().toByte).take(length).toArray)

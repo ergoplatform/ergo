@@ -15,7 +15,8 @@ case class ErgoSettings(directory: String,
                         testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings,
-                        walletSettings: WalletSettings)
+                        walletSettings: WalletSettings,
+                        cacheSettings: CacheSettings)
 
 object ErgoSettings extends ScorexLogging
   with PowSchemeReaders
@@ -37,6 +38,7 @@ object ErgoSettings extends ScorexLogging
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
+    val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
@@ -45,7 +47,7 @@ object ErgoSettings extends ScorexLogging
     }
 
     consistentSettings(
-      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings)
+      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings)
     )
   }
 

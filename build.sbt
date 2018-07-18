@@ -17,6 +17,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
 val scorexVersion = "941a63a8-SNAPSHOT"
 
 libraryDependencies ++= Seq(
+  "com.google.guava" % "guava" % "21.0",
   "org.scorexfoundation" %% "scrypto" % "2.1.2",
   "org.scorexfoundation" %% "sigma-state" % "0.9.4",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
@@ -105,7 +106,6 @@ configs(IntegrationTest extend(Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
-  testOptions += Tests.Filter(_.endsWith("Suite"))
 ))
 
 dockerfile in docker := {

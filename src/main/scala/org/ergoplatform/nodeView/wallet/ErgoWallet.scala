@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.VersionTag
+import scorex.core.{ModifierId, VersionTag}
 import scorex.core.transaction.wallet.{Vault, VaultReader}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base16
@@ -20,6 +20,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.TransactionGeneratorRef
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 import scala.concurrent.Future
 
@@ -35,6 +36,7 @@ trait ErgoWalletReader extends VaultReader {
 
 class ErgoWallet(actorSystem: ActorSystem,
                  nodeViewHolderRef: ActorRef,
+                 historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
@@ -69,9 +71,9 @@ class ErgoWallet(actorSystem: ActorSystem,
     this
   }
 
-  //todo: implement
   override def rollback(to: VersionTag): Try[ErgoWallet] = {
-    actor ! Rollback(to)
+    val height = historyReader.heightOf(ModifierId @@ to).get //todo: .get
+    actor ! Rollback(height)
     Success(this)
   }
 
@@ -83,8 +85,9 @@ object ErgoWallet {
 
   def readOrGenerate(actorSystem: ActorSystem,
                      nodeViewHolderRef: ActorRef,
+                     historyReader: ErgoHistoryReader,
                      settings: ErgoSettings): ErgoWallet = {
-    new ErgoWallet(actorSystem, nodeViewHolderRef, settings)
+    new ErgoWallet(actorSystem, nodeViewHolderRef, historyReader, settings)
   }
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {

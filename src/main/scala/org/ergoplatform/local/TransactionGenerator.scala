@@ -53,7 +53,7 @@ class TransactionGenerator(viewHolder: ActorRef,
         val fbh = v.history.fullBlockHeight
         if (fbh > currentFullHeight) {
           currentFullHeight = fbh
-          transactionsPerBlock = Random.nextInt(10) + 1
+          transactionsPerBlock = Random.nextInt(100) + 1
 
           self ! Attempt
         }

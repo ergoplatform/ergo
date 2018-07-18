@@ -7,7 +7,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import scorex.core.VersionTag
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
@@ -26,6 +25,23 @@ trait TrackedBox {
   lazy val onchain: Boolean = heightOpt.isDefined
 
   lazy val boxId = ByteArrayWrapper(box.id)
+}
+
+object TrackedBoxState extends Enumeration {
+  type State = Value
+
+  val UncertainUnspentOffchain: State = Value(0)
+  val UncertainUnspentOnchain: State  = Value(1)
+  val UncertainSpentOffchain: State   = Value(2)
+  val UncertainSpentOnchain: State    = Value(3)
+
+  val UnspentOffchain: State          = Value(4)
+  val UnspentOnchain: State           = Value(5)
+  val SpentOffchain: State            = Value(6)
+  val SpentOnchain: State             = Value(7)
+
+  def trackBox() = ???
+  def transition() = ???
 }
 
 case class UncertainBox(tx: ErgoTransaction,
@@ -89,7 +105,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   private val unspentOffChain = mutable.LongMap[BoxUnspent]()
   private val unspentOnChain = mutable.LongMap[BoxUnspent]()
-  private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
+  private val confirmedIndex = mutable.TreeMap[Height, Seq[Long]]()
 
   private var confirmedBalance: Long = 0
   private val confirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
@@ -105,7 +121,6 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     * We store all the spent and unspent boxes here
     */
   private lazy val registry = mutable.Map[ByteArrayWrapper, Long]()
-
 
   private def increaseBalances(unspentBox: BoxUnspent): Unit = {
     val box = unspentBox.box
@@ -164,24 +179,27 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   }
 
   private def register(box: TrackedBox, heightOpt: Option[Height]) = {
-    box match {
+    val internalId: Long = box match {
       case uncertainBox: UncertainBox =>
         quickScan.put(firstUnusedUncertaindId, uncertainBox)
         registry.put(box.boxId, firstUnusedUncertaindId)
         firstUnusedUncertaindId += 1
+        firstUnusedUncertaindId - 1
       case unspentBox: BoxUnspent if unspentBox.onchain =>
         unspentOnChain.put(firstUnusedConfirmedId, unspentBox)
         registry.put(box.boxId, firstUnusedConfirmedId)
         firstUnusedConfirmedId += 1
+        firstUnusedConfirmedId - 1
       case unspentBox: BoxUnspent if !unspentBox.onchain =>
         unspentOffChain.put(firstUnusedUnconfirmedId, unspentBox)
         registry.put(box.boxId, firstUnusedUnconfirmedId)
         firstUnusedUnconfirmedId += 1
+        firstUnusedUnconfirmedId - 1
 
-      case _ => log.warn("wrong input")
+      case _ => log.warn("wrong input"); ??? //todo: fix
     }
     heightOpt.foreach { h =>
-      confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ box.boxId)
+      confirmedIndex.put(h, confirmedIndex.getOrElse(h, Seq()) :+ internalId)
     }
   }
 
@@ -228,7 +246,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
-    nextInTheQueue().map {uncertainBox =>
+    nextInTheQueue().map { uncertainBox =>
       val box = uncertainBox.box
 
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
@@ -320,7 +338,10 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       (1 to txsFound).foreach(_ => resolveUncertainty())
       resolveAgain
 
-    case Rollback(to) => log.warn("Rollback in the wallet is not implemented")
+    //todo: update utxo root hash
+    case Rollback(heightTo) =>
+      //height = heightTo
+      log.warn("Rollback in the wallet is not implemented")
 
     case ReadBalances =>
       sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
@@ -359,9 +380,10 @@ object ErgoWalletActor {
 
   case class ScanOnchain(block: ErgoFullBlock)
 
-  case class Rollback(to: VersionTag)
+  case class Rollback(height: Int)
 
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case object ReadBalances
+
 }

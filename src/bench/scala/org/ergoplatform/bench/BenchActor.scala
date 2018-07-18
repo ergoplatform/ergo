@@ -33,7 +33,6 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
       start = System.currentTimeMillis()
       log.info(s"start is $start")
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
-      log.error("SENDINF")
       self ! BenchActor.Inc
     case BenchActor.Inc =>
       counter += 1

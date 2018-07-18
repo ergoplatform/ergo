@@ -12,6 +12,7 @@ scala:
 - 2.12.3
 script:
   - sbt clean coverage test coverageReport
+  - sbt bench:compile
 # These directories are cached to S3 at the end of the build
 cache:
   directories:

@@ -18,9 +18,7 @@ trait IntegrationSuite
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  protected val docker: Docker = Docker(getClass, knownPeers)
-
-  def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String
+  protected val docker: Docker = Docker(getClass)
 
   override protected def beforeAll(): Unit = {
     log.debug("Starting tests")

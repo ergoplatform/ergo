@@ -1,5 +1,6 @@
 package org.ergoplatform.it
 
+import com.typesafe.config.Config
 import org.scalatest.FreeSpec
 
 import scala.concurrent.duration._
@@ -30,6 +31,15 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
       headerIdsAtSameHeight should contain only sample
     }
     Await.result(result, 10.minutes)
+  }
+
+  def knownPeers(nodes: Map[String, Node], nodeConfig: Config) = {
+    val node01 = nodes.map(_._2).find(_.settings.scorexSettings.network.nodeName == "node01")
+    node01 match {
+      case Some(n) if n != nodeConfig.getString("scorex.network.nodeName")=>
+        s" -Dscorex.network.knownPeers.0=${n.nodeInfo.networkIpAddress}:${n.nodeInfo.containerNetworkPort}"
+      case None => ""
+    }
   }
 }
 

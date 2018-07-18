@@ -3,6 +3,7 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.state.StateType
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.ScorexLogging
 
@@ -10,7 +11,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class BenchActor(threshold: Int) extends Actor with ScorexLogging {
+class BenchActor(threshold: Int, state: StateType) extends Actor with ScorexLogging {
 
   implicit val ec: ExecutionContext = context.dispatcher
 
@@ -20,7 +21,8 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 
   val timeout = 2 hours
 
-  val fileName = "target/bench/result"
+
+  val fileName = s"target/bench/result_${state.stateTypeName}"
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -53,8 +55,8 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 }
 
 object BenchActor {
-  def apply(threshold: Int)(implicit ac: ActorSystem): ActorRef =
-    ac.actorOf(Props.apply(classOf[BenchActor], threshold))
+  def apply(threshold: Int, state: StateType)(implicit ac: ActorSystem): ActorRef =
+    ac.actorOf(Props.apply(classOf[BenchActor], threshold, state))
 
   case object Timeout
 

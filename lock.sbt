@@ -61,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 20410da74eb095d244152f4fabc1f8990cdda9c9
+// LIBRARY_DEPENDENCIES_HASH 6481de067f686370800c1dc0427c1b7fd6837b7d

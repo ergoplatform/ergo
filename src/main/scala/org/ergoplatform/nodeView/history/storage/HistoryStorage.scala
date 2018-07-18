@@ -1,26 +1,45 @@
 package org.ergoplatform.nodeView.history.storage
 
+import com.google.common.cache.CacheBuilder
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
-import scala.util.{Failure, Success}
+import scala.util.Failure
 
-class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends ScorexLogging with AutoCloseable
-  with ScorexEncoding {
+class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
+  with AutoCloseable with ScorexEncoding {
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = objectsStore.get(id)
-    .flatMap { bBytes =>
-      HistoryModifierSerializer.parseBytes(bBytes) match {
-        case Success(b) =>
-          Some(b)
-        case Failure(e) =>
-          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${bBytes.mkString("-")}): ", e)
-          None
-      }
+  private val modifiersCache = CacheBuilder.newBuilder()
+    .maximumSize(config.historyStorageCacheSize)
+    .build[String, ErgoPersistentModifier]
+
+  private def keyById(id: ModifierId): String = Algos.encode(id)
+
+  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
+    val key = keyById(id)
+    Option(modifiersCache.getIfPresent(key)) match {
+      case Some(e) =>
+        log.trace(s"Got modifier $key from cache")
+        Some(e)
+      case None =>
+        objectsStore.get(id).flatMap { bBytes =>
+          HistoryModifierSerializer.parseBytes(bBytes).recoverWith { case e =>
+            log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
+            Failure(e)
+          }.toOption match {
+            case Some(pm) =>
+              log.trace(s"Cache miss for existing modifier $key")
+              modifiersCache.put(key, pm)
+              Some(pm)
+            case None => None
+          }
+        }
     }
+  }
 
   def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = indexStore.get(id)
 
@@ -38,7 +57,10 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore) extends Scor
       indexesToInsert)
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach(id => objectsStore.delete(id))
+  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
+    modifiersCache.invalidate(keyById(id))
+    objectsStore.delete(id)
+  }
 
   override def close(): Unit = {
     log.warn("Closing history storage...")

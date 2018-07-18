@@ -8,6 +8,8 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object HistoryExtractor extends ScorexLogging {
 
   def main(args: Array[String]): Unit = {

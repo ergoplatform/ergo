@@ -6,6 +6,7 @@ import java.nio.file.{Files, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{Collections, Properties, UUID, List => JList, Map => JMap}
 
+import cats.implicits._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.google.common.collect.ImmutableMap
@@ -23,7 +24,8 @@ import scorex.core.utils.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{Await, ExecutionContext, Future, blocking}
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
@@ -63,15 +65,20 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
     }
   }
 
-  def startNodes(nodeConfigs: Seq[Config]): Future[Seq[Node]] = {
+  def startNodes(nodeConfigs: List[Config]): Try[List[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-    val tryNodes: Seq[Try[Node]] = nodeConfigs.map(startNode)
+    val nodes: Try[List[Node]] = nodeConfigs.map(startNode).sequence
+    blocking(Thread.sleep(nodeConfigs.size * 5000))
+    nodes
+  }
+
+  def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
     log.debug("Waiting for nodes to start")
-    blocking(Thread.sleep(tryNodes.size * 5000))
-    val futureNodes: Seq[Future[Node]] = tryNodes map { tryNode =>
-      Future.fromTry(tryNode.map(node => node.waitForStartup)).flatten
-    }
-    Future.sequence(futureNodes)
+    Await.result(waitForStartup(nodes), nodes.size * 90.seconds)
+  }
+
+  def waitForStartup(nodes: List[Node]): Future[List[Node]] = {
+    Future.sequence(nodes map { _.waitForStartup })
   }
 
   def startNode(nodeConfig: Config): Try[Node] = {
@@ -332,7 +339,7 @@ object Docker {
 
   val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
-  val nodeConfigs: Seq[Config] = nodesJointConfig.getConfigList("nodes").asScala
+  val nodeConfigs: List[Config] = nodesJointConfig.getConfigList("nodes").asScala.toList
 
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper

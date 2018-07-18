@@ -1,6 +1,6 @@
 package org.ergoplatform.it
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Suite, TryValues}

@@ -29,7 +29,7 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
-class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
+abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
             (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
@@ -42,7 +42,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     .setRequestTimeout(10000))
 
   private val client = DefaultDockerClient.fromEnv().build()
-  private var nodes = Map.empty[String, Node]
+  private var nodes = Seq.empty[(String, Node)]
   private var seedAddress = Option.empty[String]
   private val isStopped = new AtomicBoolean(false)
 
@@ -55,6 +55,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
+
+  def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String
 
   def initBeforeStart(): Unit = {
     cleanupDanglingIfNeeded()
@@ -114,7 +116,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       if (seedAddress.isEmpty) {
         seedAddress = Some(s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}")
       }
-      nodes += containerId -> node
+      nodes = nodes :+ (containerId -> node)
       node
     } recoverWith {
       case e: ImageNotFoundException =>
@@ -159,7 +161,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     val networkingConfig = ContainerConfig.NetworkingConfig
       .create(Map(networkName -> endpointConfigFor(ip)).asJava)
 
-    val knownPeersSetting = seedAddress.fold("")(sa => s" -Dscorex.network.knownPeers.0=$sa")
+    val knownPeersSetting = knownPeersConfig(nodes, nodeConfig)
 
     val configOverrides = renderProperties(asProperties(nodeConfig.withFallback(suiteConfig))) +
                           knownPeersSetting
@@ -269,7 +271,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
       saveLogs()
 
-      nodes.keys.foreach(id => client.removeContainer(id, RemoveContainerParam.forceKill()))
+      nodes.foreach{ case (id,_) => client.removeContainer(id, RemoveContainerParam.forceKill()) }
       client.removeNetwork(innerNetwork.id())
       client.close()
     }
@@ -278,7 +280,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   private def saveLogs(): Unit = {
     val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
-    nodes.values.foreach { node =>
+    nodes.foreach { case (_, node) =>
       import node.nodeInfo.containerId
 
       val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"
@@ -342,6 +344,28 @@ object Docker {
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName)
+  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = starTopology(owner)(ec)
 
+  def starTopology(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName){
+    override def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String = {
+      nodes.headOption.map(_._2) match {
+        case Some(n) if n.settings.scorexSettings.network.nodeName != nodeConfig.getString("scorex.network.nodeName")  =>
+          s" -Dscorex.network.knownPeers.0=${n.nodeInfo.networkIpAddress}:${n.nodeInfo.containerNetworkPort}"
+        case None => ""
+      }
+    }
+  }
+
+  def sequentialTopology(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName) {
+    override def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String = {
+      val nodeName = nodeConfig.getString("scorex.network.nodeName")
+      val previusNode = nodes.takeWhile(_._2.settings.scorexSettings.network.nodeName != nodeName).lastOption
+
+      previusNode match {
+        case Some((_, n)) =>
+          s" -Dscorex.network.knownPeers.0=${n.nodeInfo.networkIpAddress}:${n.nodeInfo.containerNetworkPort}"
+        case None => ""
+      }
+    }
+  }
 }

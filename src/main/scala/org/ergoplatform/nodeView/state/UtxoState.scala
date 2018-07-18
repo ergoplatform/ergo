@@ -147,17 +147,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
 object UtxoState {
 
-  def apply(version: VersionTag, store: Store, constants: StateConstants): UtxoState = {
-    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
-      val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
-      PersistentBatchAVLProver.create(bp, storage).get
-    }
-    new UtxoState(persistentProver, version: VersionTag, store: Store, constants: StateConstants)
-
-  }
-
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey = Algos.hash("emission box id key")
 
@@ -174,11 +163,17 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants, genesisDigest: ADDigest): UtxoState = {
+  def create(dir: File, constants: StateConstants): UtxoState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val dbVersion = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
+    val version = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
       .getOrElse(ErgoState.genesisStateVersion)
-    UtxoState(dbVersion, store, constants)
+    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+      val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
+      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+      val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+      PersistentBatchAVLProver.create(bp, storage).get
+    }
+    new UtxoState(persistentProver, version, store, constants)
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))

@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
@@ -38,16 +38,21 @@ object BenchRunner extends ScorexLogging {
 
     val threshold = args.headOption.getOrElse("1000").toInt
     val fileName = args.lift(1).get
+    val isUtxo = args.lift(2).isEmpty
 
-    val benchRef = BenchActor(threshold)
+    val state = if (isUtxo) StateType.Utxo else StateType.Digest
+
+    val benchRef = BenchActor(threshold, state)
     val userDir = TempDir.createTempDir
 
     log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
     val settings = ErgoSettings.read(None)
+    val nodeSettings = settings.nodeSettings.copy(stateType = state)
 
-    lazy val ergoSettings: ErgoSettings = settings.copy(directory =  userDir.getAbsolutePath)
+    lazy val ergoSettings: ErgoSettings = settings
+      .copy(directory =  userDir.getAbsolutePath, nodeSettings = nodeSettings)
 
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
@@ -62,7 +67,7 @@ object BenchRunner extends ScorexLogging {
       * It's a hack to set minimalFullBlockHeightVar to 0, cause in our case we are considering
       * only locally pre-generated modifiers.
       */
-    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit]{ v =>
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit]{ v =>
       import scala.reflect.runtime.{universe => ru}
       val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
       val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])

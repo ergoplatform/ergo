@@ -27,7 +27,7 @@ import scala.util.{Failure, Success, Try}
   * @param version - current state version
   * @param constants - constants, that do not change with state version changes
   */
-class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
+class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: Store,
                 override val constants: StateConstants)
@@ -35,7 +35,8 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
-  override lazy val rootHash: ADDigest = persistentProver.digest
+
+  override def rootHash: ADDigest = persistentProver.digest
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
     if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
@@ -53,9 +54,7 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash.data
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants) {
-            override protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = p
-          }
+          new UtxoState(p, version, store, constants)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -108,7 +107,6 @@ class UtxoState(persistentProver: PersistentBatchAVLProver[Digest32, HF],
         val emissionBox = extractEmissionBox(fb)
         val newStateContext = stateContext.appendHeader(fb.header)
         val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox, newStateContext)
-
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))

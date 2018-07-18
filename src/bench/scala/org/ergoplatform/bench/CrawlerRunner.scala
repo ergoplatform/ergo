@@ -22,45 +22,6 @@ import scala.io.Source
 
 class CrawlerRunner(args: Array[String]) extends Application {
 
-//  override type TX = ErgoTransaction
-//  override type PMOD = ErgoPersistentModifier
-//  override type NVHT = ErgoNodeViewHolder[_]
-//
-//  lazy val fileToSave = args.headOption.getOrElse("/")
-//  lazy val threshold: Int = args.lift(1).getOrElse("15000").toInt
-//  lazy val cfgPath: Option[String] = args.lift(2)
-//  lazy val benchConfig = CrawlerConfig(fileToSave, threshold)
-//  lazy val tempDir = TempDir.createTempDir
-//
-//  log.info(s"Temp dir is ${tempDir.getAbsolutePath}")
-//  log.info(s"Config is $benchConfig")
-//
-//  implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
-//
-//  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
-//
-//  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
-//
-//  val crawlerRef = actorSystem.actorOf(Props.apply(classOf[CrawlerActor], benchConfig))
-//
-//  val ce = new CoinsEmission(ergoSettings.chainSettings.monetary)
-//
-//  override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-//  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, ce)
-//
-//  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-//
-//  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
-//
-//  override val apiRoutes: Seq[ApiRoute] = Seq.empty
-//  override val features: Seq[PeerFeature] = Seq()
-//
-//  override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-//
-//  override val nodeViewSynchronizer: ActorRef = ErgoNodeViewSynchronizer(
-//    networkControllerRef,
-//    nodeViewHolderRef, ErgoSyncInfoMessageSpec, settings.network, timeProvider)
-
   override type TX = ErgoTransaction
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]

@@ -42,7 +42,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
     .setRequestTimeout(10000))
 
   private val client = DefaultDockerClient.fromEnv().build()
-  private var nodes = Map.empty[String, Node]
+  private var nodes = Seq.empty[(String, Node)]
   private var seedAddress = Option.empty[String]
   private val isStopped = new AtomicBoolean(false)
 
@@ -56,7 +56,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
 
-  def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String
+  def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String
 
   def initBeforeStart(): Unit = {
     cleanupDanglingIfNeeded()
@@ -116,7 +116,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
       if (seedAddress.isEmpty) {
         seedAddress = Some(s"${nodeInfo.networkIpAddress}:${nodeInfo.containerNetworkPort}")
       }
-      nodes += containerId -> node
+      nodes = nodes :+ (containerId -> node)
       node
     } recoverWith {
       case e: ImageNotFoundException =>
@@ -161,7 +161,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
     val networkingConfig = ContainerConfig.NetworkingConfig
       .create(Map(networkName -> endpointConfigFor(ip)).asJava)
 
-    val knownPeersSetting = knownPeers(nodes, nodeConfig)
+    val knownPeersSetting = knownPeersConfig(nodes, nodeConfig)
 
     val configOverrides = renderProperties(asProperties(nodeConfig.withFallback(suiteConfig))) +
                           knownPeersSetting
@@ -271,7 +271,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
 
       saveLogs()
 
-      nodes.keys.foreach(id => client.removeContainer(id, RemoveContainerParam.forceKill()))
+      nodes.foreach{ case (id,_) => client.removeContainer(id, RemoveContainerParam.forceKill()) }
       client.removeNetwork(innerNetwork.id())
       client.close()
     }
@@ -280,7 +280,7 @@ abstract class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "
   private def saveLogs(): Unit = {
     val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
-    nodes.values.foreach { node =>
+    nodes.foreach { case (_, node) =>
       import node.nodeInfo.containerId
 
       val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"
@@ -344,10 +344,28 @@ object Docker {
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
-  def apply(owner: Class[_], knownPeersFunc: (Map[String, Node], Config) => String)(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName){
-    override def knownPeers(nodes: Map[String, Node], nodeConfig: Config): String = {
-      knownPeersFunc(nodes, nodeConfig)
+  def apply(owner: Class[_])(implicit ec: ExecutionContext): Docker = starTopology(owner)(ec)
+
+  def starTopology(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName){
+    override def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String = {
+      nodes.headOption.map(_._2) match {
+        case Some(n) if n.settings.scorexSettings.network.nodeName != nodeConfig.getString("scorex.network.nodeName")  =>
+          s" -Dscorex.network.knownPeers.0=${n.nodeInfo.networkIpAddress}:${n.nodeInfo.containerNetworkPort}"
+        case None => ""
+      }
     }
   }
 
+  def sequentialTopology(owner: Class[_])(implicit ec: ExecutionContext): Docker = new Docker(tag = owner.getSimpleName) {
+    override def knownPeersConfig(nodes: Seq[(String, Node)], nodeConfig: Config): String = {
+      val nodeName = nodeConfig.getString("scorex.network.nodeName")
+      val previusNode = nodes.takeWhile(_._2.settings.scorexSettings.network.nodeName != nodeName).lastOption
+
+      previusNode match {
+        case Some((_, n)) =>
+          s" -Dscorex.network.knownPeers.0=${n.nodeInfo.networkIpAddress}:${n.nodeInfo.containerNetworkPort}"
+        case None => ""
+      }
+    }
+  }
 }

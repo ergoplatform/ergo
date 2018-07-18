@@ -2,12 +2,13 @@ package org.ergoplatform.bench
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.bench.protocol.Start
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class BenchActor(threshold: Int) extends Actor with ScorexLogging {
 
@@ -22,7 +23,7 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
   val fileName = "target/bench/result"
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoPersistentModifier]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
 
   }
@@ -31,8 +32,10 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
     case Start =>
       start = System.currentTimeMillis()
       log.info(s"start is $start")
-    case _: SemanticallySuccessfulModifier[ErgoPersistentModifier] => self ! "increase"
-    case "increase" =>
+    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
+      log.error("SENDINF")
+      self ! BenchActor.Inc
+    case BenchActor.Inc =>
       counter += 1
       if (counter % 100 == 0 ) {log.error(s"counter is $counter")}
       if (counter >= threshold) {
@@ -55,5 +58,7 @@ object BenchActor {
     ac.actorOf(Props.apply(classOf[BenchActor], threshold))
 
   case object Timeout
+
+  case object Inc
 }
 

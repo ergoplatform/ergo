@@ -8,6 +8,7 @@ import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoNodeViewRef
@@ -16,12 +17,13 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPr
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 object BenchRunner extends ScorexLogging {
 
@@ -43,19 +45,22 @@ object BenchRunner extends ScorexLogging {
     log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
+    val settings = ErgoSettings.read(None)
+
+    lazy val ergoSettings: ErgoSettings = settings.copy(
       directory =  userDir.getAbsolutePath,
-      chainSettings = ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar))
+      chainSettings =
+        ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar), settings.chainSettings.monetary)
     )
 
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-
+    val ce = new CoinsEmission(ergoSettings.chainSettings.monetary)
     val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
     val timeProvider = new NetworkTimeProvider(ntpSettings)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, ce)
 
     /**
       * It's a hack to set minimalFullBlockHeightVar to 0, cause in our case we are considering

@@ -8,20 +8,22 @@ import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
+import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 object BenchRunner extends ScorexLogging {
 
@@ -36,32 +38,36 @@ object BenchRunner extends ScorexLogging {
 
     val threshold = args.headOption.getOrElse("1000").toInt
     val fileName = args.lift(1).get
+    val isUtxo = args.lift(2).isEmpty
 
-    val benchRef = BenchActor(threshold)
+    val state = if (isUtxo) StateType.Utxo else StateType.Digest
+
+    val benchRef = BenchActor(threshold, state)
     val userDir = TempDir.createTempDir
 
     log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(None).copy(
-      directory =  userDir.getAbsolutePath,
-      chainSettings = ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar))
-    )
+    val settings = ErgoSettings.read(None)
+    val nodeSettings = settings.nodeSettings.copy(stateType = state)
+
+    lazy val ergoSettings: ErgoSettings = settings
+      .copy(directory =  userDir.getAbsolutePath, nodeSettings = nodeSettings)
 
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-
+    val ce = new CoinsEmission(ergoSettings.chainSettings.monetary)
     val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
     val timeProvider = new NetworkTimeProvider(ntpSettings)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, ce)
 
     /**
       * It's a hack to set minimalFullBlockHeightVar to 0, cause in our case we are considering
       * only locally pre-generated modifiers.
       */
-    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit]{ v =>
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit]{ v =>
       import scala.reflect.runtime.{universe => ru}
       val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
       val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])

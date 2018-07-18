@@ -47,11 +47,7 @@ object BenchRunner extends ScorexLogging {
 
     val settings = ErgoSettings.read(None)
 
-    lazy val ergoSettings: ErgoSettings = settings.copy(
-      directory =  userDir.getAbsolutePath,
-      chainSettings =
-        ChainSettings(1 minute, 1, 100, new EquihashPowScheme(96.toChar, 5.toChar), settings.chainSettings.monetary)
-    )
+    lazy val ergoSettings: ErgoSettings = settings.copy(directory =  userDir.getAbsolutePath)
 
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")

@@ -150,7 +150,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, scorexSettings, walletSettings)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

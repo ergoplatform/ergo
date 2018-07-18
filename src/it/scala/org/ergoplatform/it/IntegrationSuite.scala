@@ -1,34 +1,27 @@
 package org.ergoplatform.it
 
-import com.typesafe.config.{Config, ConfigFactory}
-import org.ergoplatform.it.util.IntegrationTest
-import org.scalatest.{BeforeAndAfterAll, FreeSpec, Suite}
+import com.typesafe.config.ConfigFactory
+import org.ergoplatform.utils.ErgoTestHelpers
+import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import org.scalatest.{BeforeAndAfterAll, Suite, TryValues}
+import scorex.core.utils.ScorexLogging
 
-import scala.collection.immutable.IndexedSeq
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
 
-trait IntegrationSuite extends FreeSpec with BeforeAndAfterAll with IntegrationTest {
+trait IntegrationSuite
+  extends  BeforeAndAfterAll
+  with ErgoTestHelpers
+  with TryValues
+  with ScalaFutures
+  with IntegrationPatience
+  with ScorexLogging { this: Suite =>
 
-  protected def nodeConfigs: Seq[Config]
-  protected def nodeSuites(nodes: Seq[Node]): IndexedSeq[Suite]
+  implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
   protected val docker: Docker = Docker(getClass)
-  protected lazy val futureNodes: Future[Seq[Node]] = docker.startNodes(nodeConfigs)
 
   override protected def beforeAll(): Unit = {
     log.debug("Starting tests")
-  }
-
-  override def nestedSuites: IndexedSeq[Suite] = {
-    val futureSuits = futureNodes
-      .map(nodeSuites)
-      .recover {
-        case e =>
-          fail(e)
-          IndexedSeq.empty
-      }
-    Await.result(futureSuits, 3.minutes)
   }
 
   override protected def afterAll(): Unit = docker.close()
@@ -43,6 +36,12 @@ trait IntegrationSuite extends FreeSpec with BeforeAndAfterAll with IntegrationT
     """
       |ergo.node.mining=true
       |ergo.node.offlineGeneration=false
+    """.stripMargin
+  )
+
+  protected val noDelayConfig = ConfigFactory.parseString(
+    """
+      |ergo.node.miningDelay=300ms
     """.stripMargin
   )
 

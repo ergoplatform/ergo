@@ -22,11 +22,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
-
-  protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
-    val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-    PersistentBatchAVLProver.create(bp, storage).get
-  }
+  protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
     .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))

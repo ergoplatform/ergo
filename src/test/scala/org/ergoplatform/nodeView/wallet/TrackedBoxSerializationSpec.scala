@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTransactionGenerators, WalletGenerators}
+import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
 import scorex.core.ModifierId
 
 import scala.util.{Success, Try}
@@ -23,11 +23,10 @@ class TrackedBoxSerializationSpec extends ErgoPropertyTest with WalletGenerators
     }
   }
 
-  private def transactionLookup(txs: ErgoTransaction *)(id: ModifierId): Try[ErgoTransaction] = {
+  private def transactionLookup(txs: ErgoTransaction *)(id: ModifierId): Option[ErgoTransaction] = {
     val txMap = txs.map { tx => ByteArrayWrapper(tx.id) -> tx }.toMap
     log.info(ByteArrayWrapper(id).toString)
     log.info(txMap.toString)
-    Try(txMap(ByteArrayWrapper(id)))
+    txMap.get(ByteArrayWrapper(id))
   }
-
 }

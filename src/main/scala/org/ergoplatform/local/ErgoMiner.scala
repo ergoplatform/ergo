@@ -183,15 +183,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
 
-  private def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
-    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
-      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
-      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-        (s :+ tx) -> (keys ++ bxsBaw)
-      } else {
-        (s, keys)
-      }
-    }._1
 }
 
 
@@ -243,6 +234,16 @@ object ErgoMiner extends ScorexLogging {
       IndexedSeq(newEmissionBox, minerBox)
     )
   }
+
+  def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
+    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
+      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
+      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+        (s :+ tx) -> (keys ++ bxsBaw)
+      } else {
+        (s, keys)
+      }
+    }._1
 
 
   case object StartMining

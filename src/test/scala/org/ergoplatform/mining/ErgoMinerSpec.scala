@@ -6,17 +6,18 @@ import akka.testkit.TestKit
 import akka.util.Timeout
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
+import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Algos, ErgoSettings, TestingSettings}
+import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.FlatSpecLike
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.language.postfixOps
 
 class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTestHelpers {
 
@@ -25,7 +26,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  it should "not freeze while generating candidate block with large amount of txs" in {
+  ignore should "not freeze while generating candidate block with large amount of txs" in {
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
@@ -60,6 +61,19 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
       blocksGenerated should be > 1
       blocksGenerated should be >= height
     }
+  }
+
+  ignore should "filter out double spend txs" in {
+    val tx = validErgoTransactionGen.sample.get._2
+    ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
+
+    val inputs = validErgoTransactionGenTemplate(0, -1, 100, 100).sample.get._1
+    val (l, r) = inputs.splitAt(50)
+    val tx_1 = validTransactionGen(l).sample.get
+    val tx_2 = validTransactionGen(r :+ l.last).sample.get
+
+    ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
+    ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 }
 

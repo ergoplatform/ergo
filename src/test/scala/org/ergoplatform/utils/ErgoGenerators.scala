@@ -4,7 +4,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -18,8 +18,8 @@ import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate._
 import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 
@@ -72,6 +72,19 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     val x = SerializedAdProof @@ genBoundedBytes(32, 32 * 1024)
     x
   }
+
+  def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
+    key <- genBytes(keySize)
+    value <- genBytes(valuesSize)
+  } yield (key, value)
+
+  lazy val extensionGen: Gen[Extension] = for {
+    headerId <- modifierIdGen
+    mandatoryElements <- Gen.nonEmptyListOf(kvGen(4, 6).map(kv => (kv._1, kv._2)))
+    optionalElementsElements <- Gen.nonEmptyListOf(kvGen(32, 6).map(kv => (kv._1, kv._2)))
+  } yield Extension(headerId,
+    mandatoryElements.filter(e => !(e._1 sameElements ExtensionSerializer.Delimeter)),
+    optionalElementsElements)
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]

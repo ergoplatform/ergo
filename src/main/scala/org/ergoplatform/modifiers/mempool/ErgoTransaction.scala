@@ -179,6 +179,13 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     }.asJson
   }
 
+  implicit private val assetEncoder: Encoder[Tuple2[ErgoBox.TokenId, Long]] = { asset =>
+    Json.obj(
+      "tokenId" -> asset._1.asJson,
+      "amount" -> asset._2.asJson
+    )
+  }
+
   implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
     Json.obj(
       "boxId" -> box.id.asJson,
@@ -193,6 +200,13 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     ErgoBox.registerByName.get(key).collect {
       case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
     }
+  }
+
+  implicit private val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
+    for {
+      tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]
+      amount <- cursor.downField("amount").as[Long]
+    } yield (tokenId, amount)
   }
 
   implicit private val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>

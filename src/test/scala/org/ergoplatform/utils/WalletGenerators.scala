@@ -1,8 +1,6 @@
 package org.ergoplatform.utils
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.{BoxSpent, BoxUnspent}
 import org.scalacheck.Gen
 

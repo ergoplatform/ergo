@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Actor
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import scorex.core.VersionTag
 import scorex.core.utils.ScorexLogging
@@ -14,56 +14,9 @@ import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
 import scala.collection.mutable
-import scala.util.{Failure, Success}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-
-
-trait TrackedBox {
-  val box: ErgoBox
-  val heightOpt: Option[Height]
-
-  lazy val onchain: Boolean = heightOpt.isDefined
-
-  lazy val boxId = ByteArrayWrapper(box.id)
-}
-
-case class UncertainBox(tx: ErgoTransaction,
-                        outIndex: Short,
-                        heightOpt: Option[Height],
-                        spendingTxOpt: Option[ErgoTransaction],
-                        heightSpentOpt: Option[Height]) extends TrackedBox {
-
-  lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
-}
-
-
-trait CertainBox extends TrackedBox
-
-case class BoxUnspent(tx: ErgoTransaction,
-                      outIndex: Short,
-                      heightOpt: Option[Height],
-                      ergoValue: Long,
-                      assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
-  override lazy val box: ErgoBox = tx.outputCandidates.apply(outIndex).toBox(tx.id, outIndex)
-
-  def toSpent(spendingTx: ErgoTransaction, heightSpentOpt: Option[Height]): BoxSpent =
-    BoxSpent(box, tx, spendingTx, heightOpt, heightSpentOpt, ergoValue, assets)
-}
-
-case class BoxSpent(override val box: ErgoBox,
-                    parentTx: ErgoTransaction,
-                    spendingTx: ErgoTransaction,
-                    heightOpt: Option[Height],
-                    heightSpentOpt: Option[Height],
-                    ergoValue: Long,
-                    assets: Map[ByteArrayWrapper, Long]) extends CertainBox {
-  override lazy val onchain = heightSpentOpt.isDefined
-}
-
-
-case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
-
+import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 

@@ -60,6 +60,11 @@ components:
           example: 147
         proposition:
           $ref: '#/components/schemas/Proposition'
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
         additionalRegisters:
           description: Additional registers
           type: object
@@ -371,6 +376,21 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
+
+    Asset:
+      description: Token detail in the transaction
+      type: object
+      required:
+        - tokenId
+        - amount
+      properties:
+        tokenId:
+          $ref: '#/components/schemas/Digest32'
+        amount:
+          description: Amount of the token
+          type: long
+          format: int64
+          example: 1000
 
     SValue:
       description: Base-16 envoded serialized Sigma-state value

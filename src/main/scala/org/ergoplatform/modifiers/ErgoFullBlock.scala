@@ -3,13 +3,14 @@ package org.ergoplatform.modifiers
 import io.circe.{Encoder, Json}
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
+                         extension: Extension,
                          aDProofs: Option[ADProofs])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
@@ -28,6 +29,8 @@ case class ErgoFullBlock(header: Header,
     throw new Error("Should never try to serialize ErgoFullBlock")
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+
+  lazy val blockSections: Seq[BlockSection] = Seq(aDProofs, Some(blockTransactions), Some(extension)).flatten
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -37,7 +40,8 @@ object ErgoFullBlock extends ApiCodecs {
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+      "extension" -> b.extension.asJson,
+      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse("null".asJson)
     )
 
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>

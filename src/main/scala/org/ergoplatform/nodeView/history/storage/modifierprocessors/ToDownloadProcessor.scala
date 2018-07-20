@@ -48,7 +48,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     @tailrec
     def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
       if (acc.lengthCompare(howMany) >= 0) {
-        acc
+        acc.take(howMany)
       } else {
         headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
           case Some(bestHeaderAtThisHeight) =>
@@ -97,9 +97,9 @@ trait ToDownloadProcessor extends ScorexLogging {
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {
-      Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
+      h.sectionIds
     } else {
-      Seq((BlockTransactions.modifierTypeId, h.transactionsId))
+      h.sectionIds.tail
     }
   }
 

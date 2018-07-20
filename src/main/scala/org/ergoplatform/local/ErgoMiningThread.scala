@@ -46,12 +46,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           log.info("New block found: " + newBlock)
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-          viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-          if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-            newBlock.aDProofs.foreach { adp =>
-              viewHolderRef ! LocallyGeneratedModifier(adp)
-            }
-          }
+          newBlock.blockSections.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
           mineCmd(Random.nextLong())
         case _ =>
           self ! MineBlock

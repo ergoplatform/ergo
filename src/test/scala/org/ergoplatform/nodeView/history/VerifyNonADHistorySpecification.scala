@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderChain, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, HeaderChain, HeaderSerializer}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistorySpecification
@@ -11,13 +11,14 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
-  property("proofs and transactions application in incorrect order") {
+  property("block sections application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
     if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    chain.foreach(fb => history.append(fb.extension).get)
 
     history = history.append(chain.tail.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
@@ -50,24 +51,25 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val fullBlocksToApply = chain
 
     history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history = history.append(fullBlocksToApply.head.extension).get._1
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
   }
 
   property("nextModifiersToDownload") {
     var history = genHistory()
     val chain = genChain(BlocksToKeep)
-    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-    history.append(chain.head.blockTransactions)
-    history.append(chain.head.aDProofs.get)
+    history = applyBlock(history, chain.head)
     history.bestFullBlockOpt.get shouldBe chain.head
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header).tail))
 
     val missedChain = chain.tail.toList
-    val missedBT = missedChain.map(fb => (BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId))
-    history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.take(1)
-    history.nextModifiersToDownload(BlocksToKeep - 1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT
+    val missedBS = missedChain.flatMap(fb => Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId),
+      (Extension.modifierTypeId, fb.extension.encodedId)))
+    history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
+    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS
 
     history.nextModifiersToDownload(2, id => !(id sameElements missedChain.head.blockTransactions.id))
-      .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBT.tail.take(2)
+      .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.tail.take(2)
   }
 
   property("append header as genesis") {
@@ -114,17 +116,22 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
+      val extension = fullBlock.extension
       history.contains(header) shouldBe false
       history.contains(txs) shouldBe false
+      history.contains(extension) shouldBe false
       history.applicable(header) shouldBe true
       history.applicable(txs) shouldBe false
+      history.applicable(extension) shouldBe false
 
       history = history.append(header).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe false
+      history.contains(extension) shouldBe false
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe true
+      history.applicable(extension) shouldBe true
       history.bestHeaderOpt.get shouldBe header
 
       history.bestFullBlockOpt.get shouldBe startFullBlock
@@ -132,11 +139,14 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.openSurfaceIds().head shouldBe startFullBlock.header.id
 
       history = history.append(txs).get._1
+      history = history.append(extension).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe true
+      history.contains(extension) shouldBe true
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe false
+      history.applicable(extension) shouldBe false
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get.header shouldBe fullBlock.header
     }

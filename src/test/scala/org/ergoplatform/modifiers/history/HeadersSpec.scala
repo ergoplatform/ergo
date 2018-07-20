@@ -20,7 +20,7 @@ class HeadersSpec extends ErgoPropertyTest {
       header.copy(timestamp = header.timestamp + 1).id should not equal initialId
       header.copy(nBits = header.nBits + 1).id should not equal initialId
       header.copy(height = header.height + 1).id should not equal initialId
-      header.copy(extensionHash = Blake2b256(header.extensionHash)).id should not equal initialId
+      header.copy(extensionRoot = Blake2b256(header.extensionRoot)).id should not equal initialId
       header.copy(equihashSolution = EquihashSolution(Seq.fill(header.equihashSolution.ints.length)(0x0B0B0B0B))).id should not equal initialId
     }
   }

@@ -1,13 +1,14 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity.Invalid
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult}
 
+import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
 
 /**
@@ -17,11 +18,17 @@ import scala.util.{Failure, Try}
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
-    getFullBlockByBlockSection(m) match {
-      case Some(fb: ErgoFullBlock) =>
-        processFullBlock(fb, m)
-      case _ =>
+    m match {
+      case _: ADProofs if !requireProofs =>
+        // got proofs in UTXO mode. Don't need to try to update better chain
         justPutToHistory(m)
+      case _ =>
+        getFullBlockByBlockSection(m) match {
+          case Some(fb: ErgoFullBlock) =>
+            processFullBlock(fb, m)
+          case _ =>
+            justPutToHistory(m)
+        }
     }
   }
 
@@ -45,19 +52,26 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     * @return Some(ErgoFullBlock) if block construction is possible, None otherwise
     */
   private def getFullBlockByBlockSection(m: BlockSection): Option[ErgoFullBlock] = {
+    def getOrRead[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = m match {
+      case mod: T if m.id sameElements id => Some(mod)
+      case _ => typedModifierById[T](id)
+    }
+
     typedModifierById[Header](m.headerId).flatMap { h =>
-      m match {
-        case txs: BlockTransactions if !requireProofs =>
-          Some(ErgoFullBlock(h, txs, None))
-        case txs: BlockTransactions =>
-          typedModifierById[ADProofs](h.ADProofsId).map(proofs => ErgoFullBlock(h, txs, Some(proofs)))
-        case proofs: ADProofs if requireProofs =>
-          typedModifierById[BlockTransactions](h.transactionsId).map(txs => ErgoFullBlock(h, txs, Some(proofs)))
-        case _ =>
-          None
+      getOrRead[BlockTransactions](h.transactionsId).flatMap { txs =>
+        getOrRead[Extension](h.extensionId).flatMap { e =>
+          if (!requireProofs) {
+            Some(ErgoFullBlock(h, txs, e, None))
+          } else {
+            getOrRead[ADProofs](h.ADProofsId).flatMap { p =>
+              Some(ErgoFullBlock(h, txs, e, Some(p)))
+            }
+          }
+        }
       }
     }
   }
+
 
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, Seq(m))
@@ -69,19 +83,19 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
+    def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       failFast
-        .validate(!historyStorage.contains(m.id)) {
-          fatal(s"Modifier ${m.encodedId} is already in history")
-        }
-        .validate(header.isCorrespondingModifier(m)) {
+        .validate(header.sectionIds.exists(_._2 sameElements m.id)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
-        }
-        .validateSemantics(isSemanticallyValid(header.id)) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
         }
         .validate(header.height >= minimalHeight) {
           fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        }
+        .validate(!historyStorage.contains(m.id)) {
+          fatal(s"Modifier ${m.encodedId} is already in history")
+        }
+        .validateSemantics(isSemanticallyValid(header.id)) {
+          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
         }
         .result
     }

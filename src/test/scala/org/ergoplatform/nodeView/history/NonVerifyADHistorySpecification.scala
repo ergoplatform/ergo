@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.{HistorySpecification, NoShrink}
+import org.ergoplatform.utils.HistorySpecification
 import scorex.core.consensus.History.{Equal, Unknown, Younger}
 import scorex.crypto.hash.Digest32
 
@@ -193,7 +193,6 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     history = ensureMinimalHeight(history, BlocksInChain + 1)
 
     val forkDepth = BlocksInChain / 2
-    implicit val noShrink = NoShrink[Array[Byte]]
     forAll(smallInt, digest32Gen) { (forkLength: Int, extensionHash: Digest32) =>
       whenever(forkLength > forkDepth) {
 

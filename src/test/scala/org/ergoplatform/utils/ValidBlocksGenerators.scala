@@ -7,7 +7,7 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.state._
@@ -154,9 +154,9 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
     val time = System.currentTimeMillis()
-    val extensionHash: Digest32 = Algos.hash(utxoState.rootHash)
+    val extension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extensionHash).get
+      transactions, time, extension).get
   }
 }

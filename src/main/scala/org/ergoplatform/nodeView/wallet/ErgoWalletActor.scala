@@ -59,23 +59,23 @@ object TrackedBox {
   private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
 
   //todo: build indexes instead of iteration
-  def unspentBoxes = registry.valuesIterator.flatMap { tb =>
+  def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.flatMap { tb =>
     tb match {
-      case _: UnspentBox => Some(tb)
-      case _ => None
-    }
-  }.map(_.asInstanceOf[UnspentBox])
-
-  def uncertainBoxes = registry.valuesIterator.flatMap { tb =>
-    tb match {
-      case _: UncertainBox => Some(tb)
+      case ub: UnspentBox => Some(ub)
       case _ => None
     }
   }
 
-  def nextUncertain(): Option[UncertainBox] = uncertainBoxes.toSeq.headOption.map(_.asInstanceOf[UncertainBox])
+  def uncertainBoxes: Iterator[UncertainBox] = registry.valuesIterator.flatMap { tb =>
+    (tb match {
+      case ub: UncertainBox => Some(ub)
+      case _ => None
+    }): Option[UncertainBox]
+  }
 
-  def registryContains(boxId: ByteArrayWrapper) = registry.contains(boxId)
+  def nextUncertain(): Option[UncertainBox] = uncertainBoxes.toSeq.headOption
+
+  def registryContains(boxId: ByteArrayWrapper): Boolean = registry.contains(boxId)
 
   def putToRegistry(trackedBox: TrackedBox) = synchronized {
     registry.put(trackedBox.boxId, trackedBox)
@@ -464,10 +464,6 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   private val toTrack = prover.dlogPubkeys.map(prover.bytesToTrack)
 
-  private def uncertainToCertain(uncertainBox: UncertainBox) = {
-    TrackedBox.makeTransition(uncertainBox, uncertainBox.makeCertain())
-  }
-
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
@@ -486,7 +482,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
-          uncertainToCertain(uncertainBox)
+          TrackedBox.makeTransition(uncertainBox, uncertainBox.makeCertain())
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }

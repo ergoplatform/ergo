@@ -208,6 +208,7 @@ trait OnchainBox extends TrackedBox {
 trait UnspentOffchainTrackedBox extends UnspentBox with OffchainBox {
   override def register(): Unit = {
     super.register()
+    log.info("New offchain box arrived: " + this)
     if (this.isInstanceOf[CertainBox]) TrackedBox.increaseBalances(this)
   }
 
@@ -222,6 +223,7 @@ trait UnspentOnchainTrackedBox extends UnspentBox with OnchainBox {
 
   override def register(): Unit = {
     super.register()
+    log.info("New onchain box arrived: " + this)
     TrackedBox.putToConfirmedIndex(creationHeight, boxId)
     if (this.isInstanceOf[CertainBox]) TrackedBox.increaseBalances(this)
   }

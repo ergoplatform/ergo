@@ -14,7 +14,7 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "941a63a8-SNAPSHOT"
+val scorexVersion = "0972c88d-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",

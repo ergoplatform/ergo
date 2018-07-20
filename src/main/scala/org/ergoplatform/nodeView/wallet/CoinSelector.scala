@@ -16,8 +16,8 @@ trait CoinSelector {
     * @param targetBalance
     * @param targetAssets
     */
-  def select(inputBoxes: Iterator[BoxUnspent],
-             filterFn: BoxUnspent => Boolean,
+  def select(inputBoxes: Iterator[UnspentBox],
+             filterFn: UnspentBox => Boolean,
              targetBalance: Long,
              availableBalance: Long,
              targetAssets: Map[ByteArrayWrapper, Long],

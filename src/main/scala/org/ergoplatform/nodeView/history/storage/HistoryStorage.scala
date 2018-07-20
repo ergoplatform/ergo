@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
-import scala.util.Failure
+import scala.util.{Failure, Try}
 
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
   with AutoCloseable with ScorexEncoding {
@@ -51,12 +51,15 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
-    objectsToInsert.foreach(o => objectsStore.put(o))
+             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = Try {
+    objectsToInsert.foreach(o => objectsStore.put(o).get)
     indexStore.update(
       id,
       Seq.empty,
       indexesToInsert)
+  }.recoverWith { case e =>
+    log.error("Unable to perform insert", e)
+    Failure(e)
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>

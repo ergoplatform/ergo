@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -29,7 +29,7 @@ case class Header(version: Version,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
-                  extensionHash: Digest32,
+                  extensionRoot: Digest32,
                   equihashSolution: EquihashSolution
                  ) extends ErgoPersistentModifier {
 
@@ -64,22 +64,16 @@ case class Header(version: Version,
 
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  lazy val sectionIds: Seq[ModifierId] = Seq(ADProofsId, transactionsId)
+  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+
+  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
+    (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
   override lazy val serializer: Serializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
-
-  /**
-    * Checks, that modifier m corresponds t this header
-    */
-  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = m match {
-    case p: ADProofs => ADProofsRoot sameElements p.digest
-    case t: BlockTransactions => transactionsRoot sameElements t.digest
-    case _ => false
-  }
 
 }
 
@@ -100,7 +94,7 @@ object Header {
       "stateRoot" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
-      "extensionHash" -> Algos.encode(h.extensionHash).asJson,
+      "extensionHash" -> Algos.encode(h.extensionRoot).asJson,
       "equihashSolutions" -> Algos.encode(h.equihashSolution.bytes).asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
@@ -119,7 +113,7 @@ object HeaderSerializer extends Serializer[Header] {
       h.transactionsRoot,
       h.stateRoot,
       Longs.toByteArray(h.timestamp),
-      h.extensionHash,
+      h.extensionRoot,
       RequiredDifficulty.toBytes(h.nBits),
       Ints.toByteArray(h.height))
 

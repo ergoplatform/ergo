@@ -12,7 +12,7 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -175,10 +175,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
-    val extensionHash = Algos.hash(Array[Byte]())
+    // todo fill with interlinks and other useful values after nodes update
+    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
 
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionHash)
+    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate)
   }
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders

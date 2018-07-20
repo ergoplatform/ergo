@@ -95,8 +95,9 @@ trait ChainGenerator {
     prefix ++: blocks
   }
 
-  def nextBlock(prev: Option[ErgoFullBlock], txs: Seq[ErgoTransaction],
-                extensionHash: Digest32 = EmptyDigest32,
+  def nextBlock(prev: Option[ErgoFullBlock],
+                txs: Seq[ErgoTransaction],
+                extension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq()),
                 nBits: Long = Constants.InitialNBits): ErgoFullBlock =
     powScheme.proveBlock(
       prev.map(_.header),
@@ -105,7 +106,7 @@ trait ChainGenerator {
       emptyProofs,
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      extensionHash
+      extension
     ).get
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {
@@ -118,10 +119,12 @@ trait ChainGenerator {
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
     blocks.foldLeft(historyIn) { (history, block) =>
-      val historyWithBlockHeader = history.append(block.header).get._1
+      val historyWithBlockHeader = history.append(block.header).map(_._1).getOrElse(historyIn)
       val historyWithTxs = historyWithBlockHeader.append(block.blockTransactions).get._1
-        .ensuring(_.contains(block.blockTransactions.id))
-      block.aDProofs.map(p => historyWithTxs.append(p).get._1).getOrElse(historyWithTxs)
+      val historyWithExtension = historyWithTxs.append(block.extension).get._1
+      block.aDProofs.map(p => historyWithExtension.append(p).get._1).getOrElse(historyWithExtension)
     }
   }
+
+  def applyBlock(historyIn: ErgoHistory, block: ErgoFullBlock): ErgoHistory = applyChain(historyIn, Seq(block))
 }

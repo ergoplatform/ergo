@@ -28,15 +28,18 @@ trait PowScheme {
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
-                 extensionHash: Digest32): Option[ErgoFullBlock] = {
+                 extensionCandidate: ExtensionCandidate): Option[ErgoFullBlock] = {
 
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
+    val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionHash).map { h =>
+      timestamp, extensionRoot).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+      val blockTransactions = BlockTransactions(h.id, transactions)
+      val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
+      new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }
 
@@ -48,14 +51,16 @@ trait PowScheme {
     val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
     val transactions: Seq[ErgoTransaction] = candidateBlock.transactions
     val timestamp: Timestamp = candidateBlock.timestamp
-    val extensionHash: Digest32 = candidateBlock.extensionHash
 
+    val extensionRoot: Digest32 = Extension.rootHash(candidateBlock.extension)
     val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionHash).map { h =>
+    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionRoot).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-      new ErgoFullBlock(h, BlockTransactions(h.id, transactions), Some(adProofs))
+      val blockTransactions = BlockTransactions(h.id, transactions)
+      val extension = Extension(h.id, candidateBlock.extension.mandatoryFields, candidateBlock.extension.optionalFields)
+      new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }
 

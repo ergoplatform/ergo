@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
+import io.circe.Encoder
+import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.LeafData
-import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
@@ -26,12 +27,7 @@ case class Extension(headerId: ModifierId,
                      optionalFields: Seq[(Array[Byte], Array[Byte])]) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
-  override def digest: Digest32 = {
-    val elements: Seq[Array[Byte]] = (mandatoryFields ++ optionalFields).map { f =>
-      Bytes.concat(Array(f._1.length.toByte), f._1, f._2)
-    }
-    Algos.merkleTreeRoot(LeafData @@ elements)
-  }
+  override def digest: Digest32 = Extension.rootHash(mandatoryFields, optionalFields)
 
   override type M = Extension
 
@@ -45,8 +41,35 @@ case class Extension(headerId: ModifierId,
 
 }
 
+case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
+                              optionalFields: Seq[(Array[Byte], Array[Byte])])
+
 object Extension {
+
+  def apply(headerId: ModifierId): Extension = Extension(headerId, Seq(), Seq())
+
+  def rootHash(e: Extension): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
+
+  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
+
+  def rootHash(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
+               optionalFields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
+    val elements: Seq[Array[Byte]] = (mandatoryFields ++ optionalFields).map { f =>
+      Bytes.concat(Array(f._1.length.toByte), f._1, f._2)
+    }
+    Algos.merkleTreeRoot(LeafData @@ elements)
+  }
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
+
+  implicit val jsonEncoder: Encoder[Extension] = (e: Extension) => {
+    Map(
+      "headerId" -> Algos.encode(e.headerId).asJson,
+      "digest" -> Algos.encode(e.digest).asJson,
+      "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
+      "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
+    ).asJson
+  }
 
 }
 

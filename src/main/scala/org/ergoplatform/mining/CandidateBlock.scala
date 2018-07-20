@@ -2,12 +2,11 @@ package org.ergoplatform.mining
 
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Algos
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.Digest32
 
 case class CandidateBlock(parentOpt: Option[Header],
                           nBits: Long,
@@ -15,7 +14,7 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[ErgoTransaction],
                           timestamp: Timestamp,
-                          extensionHash: Digest32) {
+                          extension: ExtensionCandidate) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
 }
@@ -30,7 +29,7 @@ object CandidateBlock {
       "timestamp" -> c.timestamp.asJson,
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
-      "extensionHash" -> Algos.encode(c.extensionHash).asJson
+      "extensionHash" -> Algos.encode(Extension.rootHash(c.extension)).asJson
     ).asJson
 
 }

@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -27,7 +28,7 @@ class EquihashPowSchemeSpecification extends ErgoPropertyTest {
         SerializedAdProof @@ Array.emptyByteArray,
         Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, TrueLeaf)))),
         ts,
-        Algos.hash(Array.emptyByteArray)
+        ExtensionCandidate(Seq(), Seq())
       ).getOrElse(loop(ts + 1))
     }
 

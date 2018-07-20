@@ -9,8 +9,8 @@ import scala.collection.mutable
 class DefaultCoinSelector extends CoinSelector {
 
   //todo: refactor code below, it is pretty terrible
-  override def select(inputBoxes: Iterator[BoxUnspent],
-                      filterFn: BoxUnspent => Boolean,
+  override def select(inputBoxes: Iterator[UnspentBox],
+                      filterFn: UnspentBox => Boolean,
                       targetBalance: Long,
                       availableBalance: Long,
                       targetAssets: Map[ByteArrayWrapper, Long],
@@ -26,7 +26,7 @@ class DefaultCoinSelector extends CoinSelector {
 
     inputBoxes.find { bc =>
       if(filterFn(bc)) {
-        currentBalance = currentBalance + bc.ergoValue
+        currentBalance = currentBalance + bc.value
         mergeAssets(currentAssets, bc.assets)
         res += bc.box
       }
@@ -40,7 +40,7 @@ class DefaultCoinSelector extends CoinSelector {
           lazy val currentAmt = currentAssets.getOrElse(id, 0L)
           targetAmt > 0 && targetAmt > currentAmt
         }) {
-          currentBalance = currentBalance + bc.ergoValue
+          currentBalance = currentBalance + bc.value
           mergeAssets(currentAssets, bc.assets)
           res += bc.box
         }

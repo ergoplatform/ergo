@@ -43,9 +43,9 @@ sealed trait TrackedBox extends ScorexLogging {
 
   lazy val boxId = ByteArrayWrapper(box.id)
 
-  def register(): Unit = TrackedBox.putToRegistry(this)
+  def register(): Unit = Registry.putToRegistry(this)
 
-  def deregister(): Unit = TrackedBox.removeFromRegistry(boxId)
+  def deregister(): Unit = Registry.removeFromRegistry(boxId)
 
   def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox]
 
@@ -54,7 +54,7 @@ sealed trait TrackedBox extends ScorexLogging {
   def transitionBack(toHeight: Int): Option[TrackedBox]
 }
 
-object TrackedBox {
+object Registry {
 
   private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
 
@@ -73,6 +73,7 @@ object TrackedBox {
     }): Option[UncertainBox]
   }
 
+  //todo: extract a random element, not head
   def nextUncertain(): Option[UncertainBox] = uncertainBoxes.toSeq.headOption
 
   def registryContains(boxId: ByteArrayWrapper): Boolean = registry.contains(boxId)
@@ -209,12 +210,12 @@ trait UnspentOffchainTrackedBox extends UnspentBox with OffchainBox {
   override def register(): Unit = {
     super.register()
     log.info("New offchain box arrived: " + this)
-    if (this.isInstanceOf[CertainBox]) TrackedBox.increaseBalances(this)
+    if (this.isInstanceOf[CertainBox]) Registry.increaseBalances(this)
   }
 
   override def deregister(): Unit = {
     super.deregister()
-    if (this.isInstanceOf[CertainBox]) TrackedBox.decreaseBalances(this)
+    if (this.isInstanceOf[CertainBox]) Registry.decreaseBalances(this)
   }
 }
 
@@ -224,13 +225,13 @@ trait UnspentOnchainTrackedBox extends UnspentBox with OnchainBox {
   override def register(): Unit = {
     super.register()
     log.info("New onchain box arrived: " + this)
-    TrackedBox.putToConfirmedIndex(creationHeight, boxId)
-    if (this.isInstanceOf[CertainBox]) TrackedBox.increaseBalances(this)
+    Registry.putToConfirmedIndex(creationHeight, boxId)
+    if (this.isInstanceOf[CertainBox]) Registry.increaseBalances(this)
   }
 
   override def deregister(): Unit = {
     super.deregister()
-    if (this.isInstanceOf[CertainBox]) TrackedBox.decreaseBalances(this)
+    if (this.isInstanceOf[CertainBox]) Registry.decreaseBalances(this)
   }
 }
 
@@ -245,7 +246,7 @@ trait SpentOnchainTrackedBox extends SpentBox with OnchainBox {
 
   override def register(): Unit = {
     super.register()
-    TrackedBox.putToConfirmedIndex(spendingHeight, boxId)
+    Registry.putToConfirmedIndex(spendingHeight, boxId)
   }
 }
 
@@ -452,7 +453,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
 
-  import TrackedBox._
+  import Registry._
 
   //todo: pass as parameter, add to config
   val coinSelector: CoinSelector = new DefaultCoinSelector
@@ -467,7 +468,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
-    TrackedBox.nextUncertain().map { uncertainBox =>
+    Registry.nextUncertain().map { uncertainBox =>
       val box = uncertainBox.box
 
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
@@ -482,7 +483,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
-          TrackedBox.makeTransition(uncertainBox, uncertainBox.makeCertain())
+          Registry.makeTransition(uncertainBox, uncertainBox.makeCertain())
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }
@@ -492,8 +493,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.foreach { inp =>
       val boxId = ByteArrayWrapper(inp.boxId)
-      if (TrackedBox.registryContains(boxId)) {
-        TrackedBox.makeTransition(boxId, ProcessSpending(tx, heightOpt))
+      if (Registry.registryContains(boxId)) {
+        Registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
       }
     }
 
@@ -521,7 +522,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   }
 
   //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
-  private def resolveAgain = if (TrackedBox.uncertainBoxes.nonEmpty) {
+  private def resolveAgain = if (Registry.uncertainBoxes.nonEmpty) {
     context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
   }
 

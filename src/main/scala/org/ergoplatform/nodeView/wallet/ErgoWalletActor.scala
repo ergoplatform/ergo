@@ -546,8 +546,12 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       //height = heightTo
       log.warn("Rollback in the wallet is not implemented")
 
-    case ReadBalances =>
-      sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
+    case ReadBalances(confirmed) =>
+      if(confirmed) {
+        sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
+      } else {
+        sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances.toMap) //todo: avoid .toMap?
+      }
 
     case GenerateTransaction(payTo) =>
       //todo: add assets
@@ -588,5 +592,5 @@ object ErgoWalletActor {
 
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
-  case object ReadBalances
+  case class ReadBalances(confirmed: Boolean)
 }

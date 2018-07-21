@@ -9,11 +9,11 @@ import sigmastate.serialization.ValueSerializer
 
 object ErgoAddress {
 
-  val MainnetByte = 0: Byte
-  val TestnetByte = 16: Byte
+  val MainnetOffset = 0: Byte
+  val TestnetOffset = 16: Byte
 
   //todo: put in configs which network we're running
-  val NetworkByte = TestnetByte
+  val NetworkOffset = TestnetOffset
 
   val P2PKH = 0: Byte
   val P2PK = 1: Byte
@@ -31,7 +31,7 @@ object ErgoAddress {
     val bth160 = hash160(bt)
 
     //add network identifier
-    val withNetworkByte = (NetworkByte + P2PKH).toByte +: bth160
+    val withNetworkByte = (NetworkOffset + P2PKH).toByte +: bth160
 
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)
@@ -41,7 +41,7 @@ object ErgoAddress {
     val bt = ValueSerializer.serialize(pubkey)
 
     //add network identifier
-    val withNetworkByte = (NetworkByte + P2PK).toByte +: bt
+    val withNetworkByte = (NetworkOffset + P2PK).toByte +: bt
 
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)
@@ -52,7 +52,7 @@ object ErgoAddress {
     val bth160 = hash160(bt)
 
     //add network identifier
-    val withNetworkByte = (NetworkByte + P2SH).toByte +: bth160
+    val withNetworkByte = (NetworkOffset + P2SH).toByte +: bth160
 
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)
@@ -63,7 +63,7 @@ object ErgoAddress {
     val bt = ValueSerializer.serialize(script)
 
     //add network identifier
-    val withNetworkByte = (NetworkByte + P2S).toByte +: bt
+    val withNetworkByte = (NetworkOffset + P2S).toByte +: bt
 
     val checksum = hash256(withNetworkByte).take(4)
     Base58.encode(withNetworkByte ++ checksum)

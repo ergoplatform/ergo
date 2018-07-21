@@ -27,7 +27,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, s
   }
 
   def balancesR: Route = (path("balances") & get) {
-    val balances = getWallet.flatMap(wr => wr.getBalances())
+    val balances = getWallet.flatMap(wr => wr.unconfirmedBalances())
     ApiResponse(balances)
   }
 }

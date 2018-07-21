@@ -521,26 +521,23 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     fb.transactions.count(tx => scan(tx, Some(height)))
   }
 
-  //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
-  private def resolveAgain = if (Registry.uncertainBoxes.nonEmpty) {
-    context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
-  }
-
   override def receive: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
-        resolveUncertainty()
+        self ! Resolve
       }
-      resolveAgain
+
 
     case Resolve =>
       resolveUncertainty()
-      resolveAgain
+      //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
+      if (Registry.uncertainBoxes.nonEmpty) {
+        context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
+      }
 
     case ScanOnchain(fullBlock) =>
       val txsFound = extractFromBlock(fullBlock)
-      (1 to txsFound).foreach(_ => resolveUncertainty())
-      resolveAgain
+      (1 to txsFound).foreach(_ => self ! Resolve)
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>

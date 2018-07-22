@@ -8,6 +8,8 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import scala.concurrent.duration._
+import scala.concurrent.Await
 
 class ErgoWalletActorSpecification extends ErgoPropertyTest {
 
@@ -27,7 +29,12 @@ class ErgoWalletActorSpecification extends ErgoPropertyTest {
 
     nodeViewHolderRef ! GetDataFromCurrentView[H, S, W, P, Any] { v =>
       val w = v.vault
-       val bf = w.unconfirmedBalances()
+      val bf0 = w.unconfirmedBalances()
+
+      val bs0 = Await.result(bf0, 1.second)
+
+      bs0.balance shouldBe 0
+      bs0.assetBalances.isEmpty shouldBe true
 
       //todo: check before and after resolving
     }

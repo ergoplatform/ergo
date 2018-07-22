@@ -30,7 +30,6 @@ object ErgoAddress {
     val bt = ValueSerializer.serialize(pubkey)
     val bth160 = hash160(bt)
 
-    //add network identifier
     val withNetworkByte = (NetworkOffset + P2PKH).toByte +: bth160
 
     val checksum = hash256(withNetworkByte).take(4)
@@ -51,7 +50,6 @@ object ErgoAddress {
     val bt = ValueSerializer.serialize(script)
     val bth160 = hash160(bt)
 
-    //add network identifier
     val withNetworkByte = (NetworkOffset + P2SH).toByte +: bth160
 
     val checksum = hash256(withNetworkByte).take(4)
@@ -62,7 +60,6 @@ object ErgoAddress {
   def p2s(script: Value[SBoolean.type]): String = {
     val bt = ValueSerializer.serialize(script)
 
-    //add network identifier
     val withNetworkByte = (NetworkOffset + P2S).toByte +: bt
 
     val checksum = hash256(withNetworkByte).take(4)

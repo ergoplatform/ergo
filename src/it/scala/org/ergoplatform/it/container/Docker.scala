@@ -42,9 +42,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     .setRequestTimeout(10000))
 
   private val client = DefaultDockerClient.fromEnv().build()
-  private var nodeRepository = Seq.empty[(String, Node)]
-  def nodes: Seq[(String, Node)] = nodeRepository
-  private var seedNode = Option.empty[NodeInfo]
+  private var nodeRepository = Seq.empty[Node]
   private val isStopped = new AtomicBoolean(false)
 
   // This should be called after client is ready but before network created.
@@ -56,6 +54,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   private val networkSeed = Random.nextInt(0x100000) << 4 | 0x0A000000
   private val networkPrefix = s"${InetAddress.getByAddress(Ints.toByteArray(networkSeed)).getHostAddress}/28"
   private val innerNetwork: Network = createNetwork(3)
+
+  def nodes: Seq[Node] = nodeRepository
 
   def initBeforeStart(): Unit = {
     cleanupDanglingIfNeeded()
@@ -111,10 +111,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
       log.info(s"Started node: $nodeInfo")
 
-      if (seedNode.isEmpty) seedNode = Some(nodeInfo)
-
       val node = new Node(settings, nodeInfo, http)
-      nodeRepository = nodeRepository :+ (containerId -> node)
+      nodeRepository = nodeRepository :+ node
       node
     } recoverWith {
       case e: ImageNotFoundException =>
@@ -145,8 +143,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
   private def enrichNodeConfig(nodeConfig: Config, extraConfig: ExtraConfig, ip: String, port: Int) = {
     val publicPeerConfig = nodeConfig//.withFallback(declaredAddressConfig(ip, port))
-    val withPeerConfig = seedNode.fold(publicPeerConfig) { knownPeer =>
-      knownPeersConfig(Seq(knownPeer)).withFallback(publicPeerConfig)
+    val withPeerConfig = nodeRepository.headOption.fold(publicPeerConfig) { node =>
+      knownPeersConfig(Seq(node.nodeInfo)).withFallback(publicPeerConfig)
     }
     val enrichedConfig = extraConfig(this, nodeConfig).fold(withPeerConfig)(_.withFallback(withPeerConfig))
     val actualConfig = enrichedConfig.withFallback(suiteConfig).withFallback(defaultConfigTemplate)
@@ -267,16 +265,17 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   override def close(): Unit = {
     if (isStopped.compareAndSet(false, true)) {
       log.info("Stopping containers")
-      nodeRepository.foreach {
-        case (id, n) =>
-          n.close()
-          client.stopContainer(id, 0)
+      nodeRepository foreach { node =>
+        node.close()
+        client.stopContainer(node.containerId, 0)
       }
       http.close()
 
       saveLogs()
 
-      nodeRepository.foreach{ case (id,_) => client.removeContainer(id, RemoveContainerParam.forceKill()) }
+      nodeRepository foreach { node =>
+        client.removeContainer(node.containerId, RemoveContainerParam.forceKill())
+      }
       client.removeNetwork(innerNetwork.id())
       client.close()
     }
@@ -285,7 +284,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   private def saveLogs(): Unit = {
     val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
-    nodeRepository.foreach { case (_, node) =>
+    nodeRepository.foreach { node =>
       import node.nodeInfo.containerId
 
       val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"

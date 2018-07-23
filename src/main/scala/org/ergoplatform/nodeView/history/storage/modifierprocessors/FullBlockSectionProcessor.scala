@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentMo
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult}
+import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult, ValidationState}
 
 import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
@@ -84,7 +84,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
     def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
-      failFast
+      modifierSpecificValidation(m, header)
         .validate(header.sectionIds.exists(_._2 sameElements m.id)) {
           fatal(s"Modifier ${m.modifierTypeId}|${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
@@ -99,6 +99,28 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         }
         .result
     }
+
+    /**
+      * Validation specific to concrete type of block payload
+      */
+    private def modifierSpecificValidation(m: BlockSection, header: Header): ValidationState[Unit] = {
+      m match {
+        case e: Extension =>
+          // todo checks that all required mandatory fields are set
+          // todo checks number of mandatory fields
+          // todo checks number of optional fields
+          failFast
+            .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
+              fatal(s"Extension ${m.encodedId} mandatory field key is not ${Extension.MandatoryFieldKeySize}")
+            }
+            .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
+              fatal(s"Extension ${m.encodedId} mandatory field key is not ${Extension.OptionalFieldKeySize}")
+            }
+        case _ => failFast
+      }
+    }
+
+
   }
 
 }

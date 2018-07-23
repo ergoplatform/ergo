@@ -14,7 +14,8 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 /**
-  * Extension section of Ergo block. Contains two maps with mandatory and optional fields, keys are Base16 encoded
+  * Extension section of Ergo block. Contains two key-value storages,
+  * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
   *
   * @param headerId        - id of corresponding header
   * @param mandatoryFields - fields, that are known to all node in the network and may be changed
@@ -45,6 +46,10 @@ case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
                               optionalFields: Seq[(Array[Byte], Array[Byte])])
 
 object Extension {
+
+  val MandatoryFieldKeySize: Int = 4
+
+  val OptionalFieldKeySize: Int = 32
 
   def apply(headerId: ModifierId): Extension = Extension(headerId, Seq(), Seq())
 

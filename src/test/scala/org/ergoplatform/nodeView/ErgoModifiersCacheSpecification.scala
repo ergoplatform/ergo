@@ -97,7 +97,7 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     properCandidate shouldBe true
   }
 
-  property("cache is proposing proper candidate during forking") {
+  ignore("cache is proposing proper candidate during forking") {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)
 
@@ -105,31 +105,20 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
 
     val chain = genChain(1, history)
 
-    chain.foreach{fb =>
-      history = history.append(fb.header).get._1
-      history = history.append(fb.blockTransactions).get._1
-    }
-
+    chain.foreach(fb => history = applyBlock(history, fb))
 
     val chain1 = genChain(5, history).tail
 
     val chain2 = genChain(10, history).tail
 
-    chain1.foreach{fb =>
-      history = history.append(fb.header).get._1
-      history = history.append(fb.blockTransactions).get._1
-    }
+    chain1.foreach(fb => history = applyBlock(history, fb))
 
     history.fullBlockHeight shouldBe history.headersHeight
 
 
-    chain2.foreach{fb =>
+    chain2.foreach { fb =>
       history = history.append(fb.header).get._1
-      //history = history.append(fb.blockTransactions).get._1
     }
-
-    println(history.fullBlockHeight)
-
-    println(history.headersHeight)
+    // TODO complete test
   }
 }

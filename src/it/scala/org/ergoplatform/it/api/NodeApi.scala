@@ -71,13 +71,19 @@ trait NodeApi {
     ergoJsonAnswerAs[Seq[Peer]](r.getResponseBody)
   }
 
+  def allPeers: Future[Seq[Peer]] = get("/peers/all").map { r =>
+    ergoJsonAnswerAs[Seq[Peer]](r.getResponseBody)
+  }
+
   def blacklistedPeers: Future[Seq[BlacklistedPeer]] = get("/peers/blacklisted").map { r =>
     ergoJsonAnswerAs[Seq[BlacklistedPeer]](r.getResponseBody)
   }
 
   def connect(addressAndPort: String): Future[Unit] = post("/peers/connect", addressAndPort).map(_ => ())
 
-  def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
+  def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = {
+    waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
+  }
 
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)

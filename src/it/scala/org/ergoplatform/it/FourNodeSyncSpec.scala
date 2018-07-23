@@ -1,5 +1,6 @@
 package org.ergoplatform.it
 
+import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
 import scala.concurrent.duration._
@@ -10,10 +11,10 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val blocksCount = 5
 
   val forkDepth = blocksCount
-  val minerConfig = Docker.nodeConfigs.head
+  val minerConfig = nodeSeedConfigs.head
 
-  val nonGeneratingConfig = nonGeneratingPeerConfig.withFallback(Docker.nodeConfigs(1))
-  val onlineGeneratingConfigs = Docker.nodeConfigs.slice(2, 2).map(onlineGeneratingPeerConfig.withFallback)
+  val nonGeneratingConfig = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
+  val onlineGeneratingConfigs = nodeSeedConfigs.slice(2, 2).map(onlineGeneratingPeerConfig.withFallback)
   val nodeConfigs = minerConfig +: nonGeneratingConfig +: onlineGeneratingConfigs
 
   val nodes: List[Node] = docker.startNodes(nodeConfigs).success.value
@@ -31,5 +32,6 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
     }
     Await.result(result, 10.minutes)
   }
+
 }
 

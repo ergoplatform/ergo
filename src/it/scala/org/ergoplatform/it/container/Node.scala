@@ -1,4 +1,4 @@
-package org.ergoplatform.it
+package org.ergoplatform.it.container
 
 import org.asynchttpclient._
 import org.ergoplatform.it.api.{NetworkNodeApi, NodeApi}
@@ -20,8 +20,10 @@ class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val clie
   override protected val log: Logger =
     LoggerFactory.getLogger(s"${getClass.getName}.${settings.scorexSettings.network.nodeName}")
 
+  def nodeName: String = settings.scorexSettings.network.nodeName
+  def containerId: String = nodeInfo.containerId
   override val chainId: Char = 'I'
-  override val nodeName: String = s"it-test-client-to-${nodeInfo.networkIpAddress}"
+  override val networkNodeName: String = s"it-test-client-to-${nodeInfo.networkIpAddress}"
   override val restAddress: String = "localhost"
   override val networkAddress: String = "localhost"
   override val nodeRestPort: Int = nodeInfo.hostRestApiPort

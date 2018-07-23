@@ -27,9 +27,9 @@ case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
 object P2PKHAddress {
   val addressTypePrefix: Byte = 0: Byte
 
-  def apply(pubkey: ProveDlog) = {
+  def apply(pubkey: ProveDlog): P2PKHAddress = {
     val bt = ValueSerializer.serialize(pubkey)
-    ErgoAddressEncoder.hash160(bt)
+    P2PKHAddress(ErgoAddressEncoder.hash160(bt))
   }
 }
 
@@ -77,7 +77,7 @@ class ErgoAddressEncoder(settings: ErgoSettings) {
     case ScriptAddress(_, scriptBytes) => scriptBytes
   }
 
-  def definitiveBytes(address: ErgoAddress) = bodyBytes(address)
+  def definitiveBytes(address: ErgoAddress): Array[Byte] = bodyBytes(address)
 
   def toString(address: ErgoAddress): String = {
     val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: bodyBytes(address)

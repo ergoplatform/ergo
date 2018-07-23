@@ -11,7 +11,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scala.concurrent.duration._
 import scala.concurrent.Await
 
-class ErgoWalletActorSpecification extends ErgoPropertyTest {
+class ErgoWalletSpecification extends ErgoPropertyTest {
 
   type H = ErgoHistory
   type S = ErgoState[_]

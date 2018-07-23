@@ -48,7 +48,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private val toTrack = prover.dlogPubkeys.map(prover.bytesToTrack)
+  private val toTrack = mutable.Seq(prover.dlogPubkeys.map(prover.bytesToTrack): _ *)
 
 
   //todo: make resolveUncertainty(boxId, witness)
@@ -107,11 +107,13 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   }
 
   override def receive: Receive = {
+    case WatchFor(address) =>
+      toTrack :+ address
+
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
         self ! Resolve
       }
-
 
     case Resolve =>
       resolveUncertainty()
@@ -166,6 +168,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 object ErgoWalletActor {
 
   private[ErgoWalletActor] case object Resolve
+
+  case class WatchFor(address: ErgoAddress)
 
   case class ScanOffchain(tx: ErgoTransaction)
 

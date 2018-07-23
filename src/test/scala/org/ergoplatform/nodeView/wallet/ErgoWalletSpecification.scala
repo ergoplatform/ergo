@@ -33,6 +33,14 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     val ergoSettings = ErgoSettings.read(None)
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
 
+    val prover = new ErgoProvingInterpreter("ec8a4d6f")
+    val pubKey = prover.dlogPubkeys.head
+
+    def makeTx(balance: Int) = {
+      val input = Input(ADKey @@ Array.fill(32)(0: Byte), ProverResult(Array.emptyByteArray, ContextExtension(Map())))
+      new ErgoTransaction(IndexedSeq(input), IndexedSeq(new ErgoBoxCandidate(balance, pubKey)))
+    }
+
     nodeViewHolderRef ! GetDataFromCurrentView[H, S, W, P, Any] { v =>
       val w = v.vault
       val bf0 = w.unconfirmedBalances()
@@ -42,26 +50,25 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       bs0.balance shouldBe 0
       bs0.assetBalances.isEmpty shouldBe true
 
-      val prover = new ErgoProvingInterpreter("hello world")
-      val pubKey = prover.dlogPubkeys.head
-
       val address = P2PKAddress(pubKey)
       w.watchFor(address)
 
-      val balance = Random.nextInt(1000) + 1
-
-      val input = Input(ADKey @@ Array.fill(32)(0: Byte), ProverResult(Array.emptyByteArray, ContextExtension(Map())))
-      val tx = new ErgoTransaction(IndexedSeq(input), IndexedSeq(new ErgoBoxCandidate(balance, pubKey)))
-
-      w.scanOffchain(tx)
+      val balance1 = Random.nextInt(1000) + 1
+      w.scanOffchain(makeTx(balance1))
 
       val bf1 = w.unconfirmedBalances()
-
       val bs1 = Await.result(bf1, 1.second)
-
-      bs1.balance shouldBe balance
+      bs1.balance shouldBe balance1
       bs1.assetBalances.isEmpty shouldBe true
 
+
+      val balance2 = Random.nextInt(1000) + 1
+      w.scanOffchain(makeTx(balance2))
+
+      val bf2 = w.unconfirmedBalances()
+      val bs2 = Await.result(bf2, 1.second)
+      bs2.balance shouldBe (balance1 + balance2)
+      bs2.assetBalances.isEmpty shouldBe true
       //todo: enhance the test, e.g. add assets
     }
   }

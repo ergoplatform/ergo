@@ -110,8 +110,11 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
       .fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
     ).publicImage
 
+    val fakeProp = DLogProverInput(BigIntegers.fromUnsignedByteArray("hey hey hey".getBytes())).publicImage
+
     val emissionBox = state.emissionBoxOpt.get
     val tx_1 = ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, Seq.empty, minerProp, emission)
+    val tx_1_1 = ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, Seq.empty, fakeProp, emission)
     val oCandidates = tx_1.outputCandidates
     val c1 = oCandidates.head
     val c2 = oCandidates.drop(1).head
@@ -123,20 +126,37 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     val tx_2 = tx_1.copy(outputCandidates = newCandidates)
 
-
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_2)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_1)
-    expectNoMessage(5 seconds)
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_1_1)
+    expectNoMessage(1 seconds)
 
     val unconfirmedSize = await(
       (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Int]
-        (v => v.pool.unconfirmed.values.size)).mapTo[Int]
+        {v =>
+          v.pool.unconfirmed.values.size
+        }).mapTo[Int]
     )
 
-    unconfirmedSize shouldBe 1
+    unconfirmedSize shouldBe 2
 
+    minerRef ! StartMining
+
+    //wait for block to be mined
+    expectNoMessage(9 seconds)
+
+    val unconfirmedSize2 = await(
+      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Int]
+        {v =>
+          v.pool.unconfirmed.values.size
+        }).mapTo[Int]
+    )
+
+    //mempool should eliminate double spent tx in case if first spent heppened
+    unconfirmedSize2 shouldBe 0
   }
+
 }
 
 class Listener extends Actor {

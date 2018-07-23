@@ -28,7 +28,7 @@ import scala.concurrent.Future
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
 
-  def balances(confirmed: Boolean) = {
+  def balances(confirmed: Boolean): Future[BalancesSnapshot] = {
     implicit val timeout = Timeout(5, TimeUnit.SECONDS)
     (actor ? ErgoWalletActor.ReadBalances(confirmed)).mapTo[BalancesSnapshot]
   }

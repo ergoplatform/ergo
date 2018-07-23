@@ -13,7 +13,7 @@ import scorex.core.utils.ScorexLogging
 import scala.concurrent.{Future, Promise}
 
 class NetworkClient(chainId: Char,
-                    nodeName: String,
+                    networkNodeName: String,
                     nonce: Long,
                     allChannels: ChannelGroup) extends ScorexLogging {
 

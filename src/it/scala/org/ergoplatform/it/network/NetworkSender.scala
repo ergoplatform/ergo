@@ -12,10 +12,10 @@ import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.{Future, Promise}
 
-class NetworkSender(chainId: Char, name: String, nonce: Long) extends ScorexLogging {
+class NetworkSender(chainId: Char, networkNodeName: String, nonce: Long) extends ScorexLogging {
 
   private val allChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
-  private val client = new NetworkClient(chainId, name, nonce, allChannels)
+  private val client = new NetworkClient(chainId, networkNodeName, nonce, allChannels)
 
   def connect(address: InetSocketAddress): Future[Channel] = {
     client.connect(address)

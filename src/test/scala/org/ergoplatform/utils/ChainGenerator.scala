@@ -1,6 +1,5 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.{ErgoBox, Input}
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -9,11 +8,13 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.Values.TrueLeaf
+import sigmastate.interpreter.{ContextExtension, ProverResult}
+
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -25,6 +26,8 @@ trait ChainGenerator {
   private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
+  val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
+  val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
@@ -76,28 +79,32 @@ trait ChainGenerator {
   def genChain(height: Int, prefix: ErgoFullBlock): Seq[ErgoFullBlock] =
     blockStream(Option(prefix)).take(height + 1)
 
-  def genChain(height: Int, history: ErgoHistory,
-               nBits: Long = Constants.InitialNBits): Seq[ErgoFullBlock] = {
+  def genChain(height: Int,
+               history: ErgoHistory,
+               nBits: Long = Constants.InitialNBits,
+               extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
-    blockStream(prefix, nBits).take(height + prefix.size)
+    blockStream(prefix, nBits, extension).take(height + prefix.size)
   }
 
   protected def blockStream(prefix: Option[ErgoFullBlock],
-                            nBits: Long = Constants.InitialNBits): Stream[ErgoFullBlock] = {
+                            nBits: Long = Constants.InitialNBits,
+                            extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val outputs = IndexedSeq(ErgoBox(1, TrueLeaf))
+
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, txs(1), nBits = nBits) #::
-        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i), nBits = nBits) })
+      nextBlock(prefix, txs(1), extension, nBits) #::
+        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i), extension, nBits) })
     prefix ++: blocks
   }
 
   def nextBlock(prev: Option[ErgoFullBlock],
                 txs: Seq[ErgoTransaction],
-                extension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq()),
+                extension: ExtensionCandidate,
                 nBits: Long = Constants.InitialNBits): ErgoFullBlock =
     powScheme.proveBlock(
       prev.map(_.header),
@@ -119,7 +126,7 @@ trait ChainGenerator {
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
     blocks.foldLeft(historyIn) { (history, block) =>
-      val historyWithBlockHeader = history.append(block.header).map(_._1).getOrElse(historyIn)
+      val historyWithBlockHeader = if (history.contains(block.header)) history else history.append(block.header).get._1
       val historyWithTxs = historyWithBlockHeader.append(block.blockTransactions).get._1
       val historyWithExtension = historyWithTxs.append(block.extension).get._1
       block.aDProofs.map(p => historyWithExtension.append(p).get._1).getOrElse(historyWithExtension)

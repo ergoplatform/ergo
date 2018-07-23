@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -94,12 +94,13 @@ trait ToDownloadProcessor extends ScorexLogging {
   }
 
   private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+    lazy val emptyExtensionId: ModifierId = Extension(h.id).id
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {
-      h.sectionIds
+      h.sectionIds.filter(id => !(id._2 sameElements emptyExtensionId))
     } else {
-      h.sectionIds.tail
+      h.sectionIds.tail.filter(id => !(id._2 sameElements emptyExtensionId))
     }
   }
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -28,6 +28,15 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
     } else {
       (inHistory, Seq.empty)
     }
+  }
+
+  property("Should generate empty extension on fly") {
+    var (history, _) = genHistory()
+    val block = genChain(1, history, extension = emptyExtension).head
+    block.extension shouldBe Extension(block.header.id, Seq(), Seq())
+    history.bestFullBlockOpt shouldBe None
+    history.append(block.header).get
+    history.contains(block.extension) shouldBe true
   }
 
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {

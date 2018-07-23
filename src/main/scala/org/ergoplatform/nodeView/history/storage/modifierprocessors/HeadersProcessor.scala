@@ -18,7 +18,6 @@ import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
 import scala.util.Try
 
 /**
@@ -90,9 +89,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
+    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = toInsert(h)
 
-    historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
+    historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, dataToInsert._2)
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>
@@ -109,7 +108,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Data, we should add and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
       genesisToInsert(h, requiredDifficulty)
@@ -132,7 +131,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifiersToInsert(h))
   }
 
   /**
@@ -145,9 +144,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      h)
+      modifiersToInsert(h))
   }
 
+  private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
+    if (header.extensionRoot sameElements Algos.emptyMerkleTreeRoot) {
+      // extension is empty, generate it and insert to history
+      Seq(header, Extension(header.id, Seq(), Seq()))
+    } else {
+      Seq(header)
+    }
+  }
 
   /**
     * Row to storage, that put this orphaned block id to the end of header ids at this height

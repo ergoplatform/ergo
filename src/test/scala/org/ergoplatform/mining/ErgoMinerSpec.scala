@@ -26,7 +26,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  ignore should "not freeze while generating candidate block with large amount of txs" in {
+  it should "not freeze while generating candidate block with large amount of txs" in {
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
@@ -63,7 +63,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     }
   }
 
-  ignore should "filter out double spend txs" in {
+  it should "filter out double spend txs" in {
     val tx = validErgoTransactionGen.sample.get._2
     ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
 

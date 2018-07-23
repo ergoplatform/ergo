@@ -1,4 +1,4 @@
-package org.ergoplatform.it
+package org.ergoplatform.it.container
 
 case class NodeInfo(
   hostRestApiPort: Int,

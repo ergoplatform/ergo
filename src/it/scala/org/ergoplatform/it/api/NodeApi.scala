@@ -81,7 +81,9 @@ trait NodeApi {
 
   def connect(addressAndPort: String): Future[Unit] = post("/peers/connect", addressAndPort).map(_ => ())
 
-  def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = waitFor[Seq[Peer]](_.allPeers, _.length >= targetPeersCount, 1.second)
+  def waitForPeers(targetPeersCount: Int): Future[Seq[Peer]] = {
+    waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
+  }
 
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)

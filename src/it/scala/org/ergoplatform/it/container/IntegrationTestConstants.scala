@@ -14,16 +14,14 @@ trait IntegrationTestConstants {
 
   def starTopologyConfig: ExtraConfig = { (docker, nodeConfig) =>
     docker.nodes.headOption collect {
-      case (_, n) if n.nodeName != nodeNameFromConfig(nodeConfig) => knownPeersConfig(Seq(n.nodeInfo))
+      case node if node.nodeName != nodeNameFromConfig(nodeConfig) => knownPeersConfig(Seq(node.nodeInfo))
     }
   }
 
   def sequentialTopologyConfig: ExtraConfig = { (docker, nodeConfig) =>
     val nodeName = nodeNameFromConfig(nodeConfig)
-    val previousNode = docker.nodes.takeWhile(_._2.nodeName != nodeName).lastOption
-    previousNode map {
-      case (_, n) => knownPeersConfig(Seq(n.nodeInfo))
-    }
+    val previousNode = docker.nodes.takeWhile(_.nodeName != nodeName).lastOption
+    previousNode map { node => knownPeersConfig(Seq(node.nodeInfo)) }
   }
 
   def nodeNameFromConfig(nodeConfig: Config): String = {

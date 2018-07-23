@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
 class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
-            (implicit ec: ExecutionContext) extends IntegrationTestConstants with AutoCloseable with ScorexLogging {
+            (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
 
@@ -336,7 +336,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   }
 }
 
-object Docker {
+object Docker extends IntegrationTestConstants {
 
   val dockerImageLabel = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

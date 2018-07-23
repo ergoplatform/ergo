@@ -4,15 +4,23 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
+import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.FlatSpecLike
+import scapi.sigma.DLogProtocol.DLogProverInput
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 
 import scala.concurrent.duration._
@@ -74,6 +82,60 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
+  }
+
+  it should "not add double spend txs to pool" in {
+    val tmpDir = createTempDir
+
+    val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
+
+    val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
+      stateType = StateType.Utxo,
+      miningDelay = defaultAwaitDuration,
+      offlineGeneration = true,
+      verifyTransactions = true)
+    val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
+    val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
+
+    val state: UtxoState = await(
+      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, UtxoState]
+        (v => v.state)).mapTo[UtxoState]
+    )
+
+    val minerProp = DLogProverInput(BigIntegers
+      .fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
+    ).publicImage
+
+    val emissionBox = state.emissionBoxOpt.get
+    val tx_1 = ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, Seq.empty, minerProp, emission)
+    val oCandidates = tx_1.outputCandidates
+    val c1 = oCandidates.head
+    val c2 = oCandidates.drop(1).head
+
+    val newCandidates = IndexedSeq(
+      new ErgoBoxCandidate(c1.value - 1L, c1.proposition, c1.additionalTokens, c1.additionalRegisters),
+      new ErgoBoxCandidate(c2.value + 1L, c2.proposition, c2.additionalTokens, c2.additionalRegisters)
+    )
+
+    val tx_2 = tx_1.copy(outputCandidates = newCandidates)
+
+
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_1)
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_2)
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx_1)
+    expectNoMessage(5 seconds)
+
+    val unconfirmedSize = await(
+      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Int]
+        (v => v.pool.unconfirmed.values.size)).mapTo[Int]
+    )
+
+    unconfirmedSize shouldBe 1
+
   }
 }
 

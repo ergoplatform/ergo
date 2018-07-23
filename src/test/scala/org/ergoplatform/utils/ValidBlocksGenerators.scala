@@ -154,7 +154,7 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
     val time = System.currentTimeMillis()
-    val extension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
+    val extension: ExtensionCandidate = defaultExtension
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
       transactions, time, extension).get

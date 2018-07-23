@@ -86,16 +86,16 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       failFast
         .validate(header.sectionIds.exists(_._2 sameElements m.id)) {
-          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
+          fatal(s"Modifier ${m.modifierTypeId}|${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
         .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+          fatal(s"Too old modifier ${m.modifierTypeId}|${m.encodedId}: ${header.height} < $minimalHeight")
         }
         .validate(!historyStorage.contains(m.id)) {
-          fatal(s"Modifier ${m.encodedId} is already in history")
+          fatal(s"Modifier ${m.modifierTypeId}|${m.encodedId} is already in history")
         }
         .validateSemantics(isSemanticallyValid(header.id)) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
+          fatal(s"Header ${header.encodedId} for modifier ${m.modifierTypeId}|${m.encodedId} is semantically invalid")
         }
         .result
     }

@@ -7,7 +7,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain, WatchFor}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierId, VersionTag}
 import scorex.core.transaction.wallet.{Vault, VaultReader}
@@ -53,6 +53,11 @@ class ErgoWallet(actorSystem: ActorSystem,
   if (settings.testingSettings.transactionGeneration) {
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
     txGen ! StartGeneration
+  }
+
+  def watchFor(address: ErgoAddress): ErgoWallet = {
+    actor ! WatchFor(address)
+    this
   }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {

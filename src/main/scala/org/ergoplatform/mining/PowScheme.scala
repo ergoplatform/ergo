@@ -44,24 +44,13 @@ trait PowScheme {
   }
 
   def proveBlock(candidateBlock: CandidateBlock): Option[ErgoFullBlock] = {
-
-    val parentOpt: Option[Header] = candidateBlock.parentOpt
-    val nBits: Long = candidateBlock.nBits
-    val stateRoot: ADDigest = candidateBlock.stateRoot
-    val adProofBytes: SerializedAdProof = candidateBlock.adProofBytes
-    val transactions: Seq[ErgoTransaction] = candidateBlock.transactions
-    val timestamp: Timestamp = candidateBlock.timestamp
-
-    val extensionRoot: Digest32 = Extension.rootHash(candidateBlock.extension)
-    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
-    val adProofsRoot = ADProofs.proofDigest(adProofBytes)
-
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionRoot).map { h =>
-      val adProofs = ADProofs(h.id, adProofBytes)
-      val blockTransactions = BlockTransactions(h.id, transactions)
-      val extension = Extension(h.id, candidateBlock.extension.mandatoryFields, candidateBlock.extension.optionalFields)
-      new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
-    }
+    proveBlock(candidateBlock.parentOpt,
+      candidateBlock.nBits,
+      candidateBlock.stateRoot,
+      candidateBlock.adProofBytes,
+      candidateBlock.transactions,
+      candidateBlock.timestamp,
+      candidateBlock.extension)
   }
 
   def verify(header: Header): Boolean

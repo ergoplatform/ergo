@@ -115,7 +115,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
   private def applyPayload(nodeViewRef: ActorRef, fb: ErgoFullBlock, nodeViewConfig: NodeViewHolderConfig): Unit = {
     if (nodeViewConfig.verifyTransactions) {
       nodeViewRef ! LocallyGeneratedModifier(fb.blockTransactions)
-      nodeViewRef ! LocallyGeneratedModifier(fb.aDProofs.get)
+      nodeViewRef ! LocallyGeneratedModifier(fb.adProofs.get)
       nodeViewRef ! LocallyGeneratedModifier(fb.extension)
     }
   }
@@ -218,7 +218,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
     if (nodeViewConfig.verifyTransactions) {
       nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
       expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
-      nodeViewRef ! LocallyGeneratedModifier(genesis.aDProofs.get)
+      nodeViewRef ! LocallyGeneratedModifier(genesis.adProofs.get)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
       nodeViewRef ! LocallyGeneratedModifier(genesis.extension)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
@@ -317,7 +317,7 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
       .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlockIn.blockTransactions.txs.tail)
     val brokenHeader = brokenBlockIn.header.copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
     val brokenTransactions = brokenTransactionsIn.copy(headerId = brokenHeader.id)
-    val brokenProofs = brokenBlockIn.aDProofs.get.copy(headerId = brokenHeader.id)
+    val brokenProofs = brokenBlockIn.adProofs.get.copy(headerId = brokenHeader.id)
     val extension = extensionIn.copy(headerId = brokenHeader.id)
     ErgoFullBlock(brokenHeader, brokenTransactions, extension, Some(brokenProofs))
   }
@@ -387,8 +387,8 @@ class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with BeforeAndAft
       nodeViewRef ! bestFullBlock(nodeViewConfig)
       expectMsg(Some(genesis))
 
-      nodeViewRef ! modifierById(genesis.aDProofs.get.id)
-      expectMsg(genesis.aDProofs)
+      nodeViewRef ! modifierById(genesis.adProofs.get.id)
+      expectMsg(genesis.adProofs)
     }
   }
 

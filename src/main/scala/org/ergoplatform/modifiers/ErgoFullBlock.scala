@@ -11,11 +11,11 @@ import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNo
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          extension: Extension,
-                         aDProofs: Option[ADProofs])
+                         adProofs: Option[ADProofs])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
+  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ adProofs.toSeq
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
@@ -30,7 +30,7 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 
-  lazy val blockSections: Seq[BlockSection] = Seq(aDProofs, Some(blockTransactions), Some(extension)).flatten
+  lazy val blockSections: Seq[BlockSection] = Seq(adProofs, Some(blockTransactions), Some(extension)).flatten
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -41,7 +41,7 @@ object ErgoFullBlock extends ApiCodecs {
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
       "extension" -> b.extension.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse("null".asJson)
+      "adProofs" -> b.adProofs.asJson
     )
 
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
@@ -53,6 +53,6 @@ object ErgoFullBlock extends ApiCodecs {
   private def size(block: ErgoFullBlock): Int = {
     block.header.bytes.length +
       block.blockTransactions.bytes.length +
-      block.aDProofs.map(_.bytes.length).getOrElse(0)
+      block.adProofs.map(_.bytes.length).getOrElse(0)
   }
 }

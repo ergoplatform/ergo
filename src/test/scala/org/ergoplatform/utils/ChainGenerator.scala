@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.Input
+import org.ergoplatform.{ErgoBox, Input}
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -12,8 +12,8 @@ import org.ergoplatform.settings.Constants.hashLength
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
-import sigmastate.interpreter.{ContextExtension, SerializedProverResult}
-
+import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.Values.TrueLeaf
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -84,9 +84,9 @@ trait ChainGenerator {
 
   protected def blockStream(prefix: Option[ErgoFullBlock],
                             nBits: Long = Constants.InitialNBits): Stream[ErgoFullBlock] = {
-    val proof = SerializedProverResult(IndexedSeq(0x7c.toByte), ContextExtension.empty)
+    val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val outputs = IndexedSeq()
+    val outputs = IndexedSeq(ErgoBox(1, TrueLeaf))
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 
     lazy val blocks: Stream[ErgoFullBlock] =

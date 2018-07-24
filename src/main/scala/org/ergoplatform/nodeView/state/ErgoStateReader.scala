@@ -6,7 +6,7 @@ import scorex.core.transaction.state.StateReader
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 
-trait ErgoStateReader extends StateReader  with ScorexLogging {
+trait ErgoStateReader extends StateReader with ScorexLogging {
 
   def rootHash: ADDigest
   val store: Store

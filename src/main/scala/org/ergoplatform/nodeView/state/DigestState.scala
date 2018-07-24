@@ -66,7 +66,7 @@ class DigestState protected(override val version: VersionTag,
               }
               tx.statefulValidity(boxesToSpend, stateContext).get
             }.sum
-            if (totalCost > Constants.MaxTransactionCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+            if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
           }
         case None =>

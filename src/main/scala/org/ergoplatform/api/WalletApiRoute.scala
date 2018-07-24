@@ -17,7 +17,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, s
   private def getWallet: Future[ErgoWalletReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.w)
 
   override val route: Route = (pathPrefix("wallet") & withCors) {
-    balancesR ~ sendTransactionR
+    balancesR ~ sendTransactionR ~ unconfirmedBalanceR
   }
 
   def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
@@ -27,7 +27,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, s
   }
 
   def balancesR: Route = (path("balances") & get) {
-    val balances = getWallet.flatMap(wr => wr.unconfirmedBalances())
-    ApiResponse(balances)
+    ApiResponse(getWallet.flatMap(_.confirmedBalances()))
   }
+
+  def unconfirmedBalanceR: Route = (path("balances" / "unconfirmed") & get) {
+    ApiResponse(getWallet.flatMap(_.unconfirmedBalances()))
+  }
+
 }

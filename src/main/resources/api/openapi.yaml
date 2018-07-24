@@ -60,6 +60,11 @@ components:
           example: 147
         proposition:
           $ref: '#/components/schemas/Proposition'
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
         additionalRegisters:
           description: Additional registers
           type: object
@@ -372,6 +377,21 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
+    Asset:
+      description: Token detail in the transaction
+      type: object
+      required:
+        - tokenId
+        - amount
+      properties:
+        tokenId:
+          $ref: '#/components/schemas/Digest32'
+        amount:
+          description: Amount of the token
+          type: long
+          format: int64
+          example: 1000
+
     SValue:
       description: Base-16 envoded serialized Sigma-state value
       type: string
@@ -620,6 +640,43 @@ paths:
                 type: string
                 # Provided header id is invalid
                 example: invalid.block.id
+
+  /blocks/{headerId}/size:
+    get:
+      summary: Get the block size info by a given id
+      operationId: getBlockSizeByHeaderIdR
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: headerId
+          required: true
+          description: identifier of a block
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Block size object
+          content:
+            application/json:
+              schema:
+                properties:
+                  id:
+                    $ref: '#/components/schemas/ModifierId'
+                  size:
+                     type: integer
+                     format: int32
+        '404':
+          description: Block with this id doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided header id is invalid
+                example: invalid.block.id
+
 
   /blocks/candidateBlock:
     get:

@@ -573,16 +573,16 @@ are to be formed as follows:
 
 
 
-\subsection{\Coin{} template}
-\label{coin-template}
+\subsection{\Coin{} candidate}
+\label{coin-candidate}
 
-Here we describe difference between a \coin{} and a \coin{} template. A \coin{} has a unique identifier to be defined
+Here we describe difference between a \coin{} and a \coin{} candidate. A \coin{} has a unique identifier to be defined
 deterministically from its contents. Thus we need to have different identifiers for \coin{}s of the same meaning, even
 if they are created by the same transaction. We also require a \coin{} to have an identifier which is derived solely
 from \coin{} contents, thus we can not use {\em (transaction\_id, output\_id)} pair as Bitcoin Core implementation is
 doing.
 
-To solve the issue we split concepts of a \coin{} and a \coin{} template. A \coin{} template is defining semantics of
+To solve the issue we split concepts of a \coin{} and a \coin{} candidate. A \coin{} candidate is defining semantics of
 the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_2$ which is set to
 $null$.
 
@@ -591,13 +591,13 @@ $null$.
 \label{tx-format}
 
 A transaction simply refers to a set of \coin{}s, by providing their identifiers and also spending proofs for
-them; the transaction also providing set of new \coin{} templates. A \coin{} template becomes a \coin{} in result of
+them; the transaction also providing set of new \coin{} candidates. A \coin{} candidate becomes a \coin{} in result of
 transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
 coin is also known before the application).
 
-We now introduce two functions to extract a \coin{} or a \coin{} template which a transaction is trying to spend.
+We now introduce two functions to extract a \coin{} or a \coin{} candidate which a transaction is trying to spend.
  In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
- returns a \coin{} template . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
+ returns a \coin{} candidate . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
 
 We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
 to preserve overall monetary value:
@@ -647,8 +647,8 @@ as follows. We concatenate the following fields:
     \ref{coin-format} for details).
     \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
     transaction can not create more than 65,536 \coin{}s).
-    \item{\em transaction outputs.} In this section we store serialized \coin{} templates, with no delimiters. A \coin{}
-    template is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
+    \item{\em transaction outputs.} In this section we store serialized \coin{} candidates, with no delimiters. A \coin{}
+    candidate is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
     identifier and index of the \coin{} in transaction outputs).
 \end{itemize}
 

@@ -354,10 +354,8 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: @todo
         fullBlocksScore:
           type: integer
-          description: @todo
 
     TransactionBoxId:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long

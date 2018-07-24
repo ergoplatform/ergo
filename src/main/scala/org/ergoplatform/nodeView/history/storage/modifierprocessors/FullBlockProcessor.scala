@@ -37,6 +37,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
+    // TODO this is very inefficient - in most cases we do not need to calculate `bestFullChain`
     val bestFullChain = calculateBestFullChain(fullBlock)
     val newBestAfterThis = bestFullChain.last.header
     processing(ToProcess(fullBlock, newMod, newBestAfterThis, config.blocksToKeep, bestFullChain))

@@ -43,7 +43,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
 
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)

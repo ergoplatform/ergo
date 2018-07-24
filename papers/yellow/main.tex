@@ -560,7 +560,9 @@ are to be formed as follows:
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
     \item{\em number of assets } which box is carrying.
-    \item{\em assets}. A box can carry multiple assets
+    \item{\em assets}. A box can carry multiple assets. A single record in this field is represented as a tuple
+    $asset\_identifier -> amount$, where identifier is of 32 bytes and amount is of 8 bytes. The tuple is serialized as
+    a fixed-sized sequence of bytes.  
     \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.

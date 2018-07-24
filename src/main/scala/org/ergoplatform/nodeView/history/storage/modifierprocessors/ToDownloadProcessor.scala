@@ -98,9 +98,9 @@ trait ToDownloadProcessor extends ScorexLogging {
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {
-      h.sectionIds.filter(id => !(id._2 sameElements emptyExtensionId))
+      h.sectionIds.filterNot(_._2 sameElements emptyExtensionId)
     } else {
-      h.sectionIds.tail.filter(id => !(id._2 sameElements emptyExtensionId))
+      h.sectionIds.tail.filterNot(_._2 sameElements emptyExtensionId)
     }
   }
 

@@ -74,7 +74,7 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     chain.foreach { fb =>
       modifiersCache.put(fb.header.id, fb.header)
       modifiersCache.put(fb.header.transactionsId, fb.blockTransactions)
-      modifiersCache.put(fb.header.ADProofsId, fb.aDProofs.get)
+      modifiersCache.put(fb.header.ADProofsId, fb.adProofs.get)
     }
 
     //The history is empty - we can apply only a header at height == 0 at this moment.

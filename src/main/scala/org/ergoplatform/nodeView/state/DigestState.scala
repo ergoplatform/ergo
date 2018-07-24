@@ -39,7 +39,7 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock if notInitialized => Success(Unit)
 
     case fb: ErgoFullBlock =>
-      fb.aDProofs match {
+      fb.adProofs match {
         case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>

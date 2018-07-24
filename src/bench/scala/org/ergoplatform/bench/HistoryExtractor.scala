@@ -31,7 +31,7 @@ object HistoryExtractor extends ScorexLogging {
       val b = h.getFullBlock(header).get
       ModifierWriter.write(b.header)(os)
       ModifierWriter.write(b.blockTransactions)(os)
-      b.aDProofs.foreach { p => ModifierWriter.write(p)(os) }
+      b.adProofs.foreach { p => ModifierWriter.write(p)(os) }
       os.flush()
     }
     os.close()

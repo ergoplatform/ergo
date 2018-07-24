@@ -129,7 +129,7 @@ trait ChainGenerator {
       val historyWithBlockHeader = if (history.contains(block.header)) history else history.append(block.header).get._1
       val historyWithTxs = historyWithBlockHeader.append(block.blockTransactions).get._1
       val historyWithExtension = historyWithTxs.append(block.extension).get._1
-      block.aDProofs.map(p => historyWithExtension.append(p).get._1).getOrElse(historyWithExtension)
+      block.adProofs.map(p => historyWithExtension.append(p).get._1).getOrElse(historyWithExtension)
     }
   }
 

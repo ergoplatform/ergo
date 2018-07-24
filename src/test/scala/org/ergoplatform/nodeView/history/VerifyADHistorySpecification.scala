@@ -35,7 +35,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
     val block = genChain(1, history, extension = emptyExtension).head
     block.extension shouldBe Extension(block.header.id, Seq(), Seq())
     history.bestFullBlockOpt shouldBe None
-    history.append(block.header).get
+    history.append(block.header) shouldBe 'success
     history.contains(block.extension) shouldBe true
   }
 
@@ -233,7 +233,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
     chain.reverse.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Unknown
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
 
@@ -241,7 +241,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       history.reportModifierIsInvalid(fullBlock.header, progressInfo)
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
@@ -261,13 +261,13 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
     fork1.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
 
     fork2.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
@@ -364,7 +364,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       .append(lastBlock.blockTransactions).get._1
       .append(lastBlock.extension).get._1
 
-    val changes = history.append(lastBlock.aDProofs.get).get
+    val changes = history.append(lastBlock.adProofs.get).get
     history = changes._1
     history.bestHeaderOpt.get shouldBe fork2.last.header
 
@@ -394,7 +394,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
           .append(lastBlock.extension).get._1
           .append(lastBlock.blockTransactions).get._1
 
-        val changes = history.append(lastBlock.aDProofs.get).get
+        val changes = history.append(lastBlock.adProofs.get).get
         history = changes._1
         history.bestHeaderOpt.get shouldBe fork2.last.header
 
@@ -415,7 +415,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       val startFullBlock = history.bestFullBlockOpt.get
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
-      val proofs = fullBlock.aDProofs.get
+      val proofs = fullBlock.adProofs.get
       val extension = fullBlock.extension
       history.contains(header) shouldBe false
       history.contains(txs) shouldBe false

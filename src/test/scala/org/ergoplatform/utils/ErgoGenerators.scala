@@ -80,8 +80,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
-    mandatoryElements <- Gen.nonEmptyListOf(kvGen(Extension.MandatoryFieldKeySize, 6).map(kv => (kv._1, kv._2)))
-    optionalElementsElements <- Gen.nonEmptyListOf(kvGen(Extension.OptionalFieldKeySize, 6).map(kv => (kv._1, kv._2)))
+    mandatoryElements <- Gen.nonEmptyListOf(kvGen(Extension.MandatoryFieldKeySize, 6))
+    optionalElementsElements <- Gen.nonEmptyListOf(kvGen(Extension.OptionalFieldKeySize, 6))
   } yield Extension(headerId,
     mandatoryElements.filter(e => !(e._1 sameElements ExtensionSerializer.Delimeter)),
     optionalElementsElements)

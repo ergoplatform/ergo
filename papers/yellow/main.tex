@@ -535,7 +535,7 @@ in a \coin{} is disappearing from the state during transaction application: mone
 guard script, contents of all the registers, all the bytes and also an identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
-\label{coin-format}
+\label{box-format}
 
 A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
@@ -559,10 +559,10 @@ are to be formed as follows:
     \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
-    \item{\em number of assets } which box is carrying.
+    \item{\em number of assets } which box is carrying. Represented as a one-byte signed integer.
     \item{\em assets}. A box can carry multiple assets. A single record in this field is represented as a tuple
     $asset\_identifier -> amount$, where identifier is of 32 bytes and amount is of 8 bytes. The tuple is serialized as
-    a fixed-sized sequence of bytes.  
+    a fixed-sized sequence of bytes.
     \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.
@@ -724,10 +724,42 @@ from the tree:
 
 
 
-\subsection{Verifying A Transaction}
+\subsection{Transaction Validation Rules}
 
+We split validation of a single transaction into two stages. There are $stateless checks$ which could be done by the
+transaction only being presented. Stateful checks are requiring knowledge of the current state, in the form of the whole
+UTXO set or a part of it, namely concrete boxes a transaction is destroying along with proof of authenticity for them~(
+against a root hash included into a last block header).
+
+Stateless checks are:
+
+\begin{itemize}
+    \item{} a transaction must spend at a least one input and create at least one output. A transaction spends no more
+    than $32767$ inputs and creates no more than $32767$ outputs.
+    \item{} all the output amounts must be non-negative.
+    \item{} an output can not contain more than 4 assets. All the assets amounts must be positive.
+    \item{} transaction outputs collectively could not contain more than 16 assets.
+\end{itemize}
+
+\knote{Check box and transaction sizes.}
+
+Stateful checks are:
+
+\begin{itemize}
+    \item{} total input and output ergo amounts must be the same. Adding up should be done with overflow checks.
+    \item{} all the inputs have valid spending proofs. Total cost to verify all the spending proofs should be no more
+            than a limit per block~(adjustable via miners voting).
+    \item{} inputs should have no more than 16 assets collectively. An input can not contain more than 4 assets.
+    \item{} for each kind of asset in the outputs, total output amount for the asset should be no more than the total
+            input amount, if the asset identifier is not equals to identifier of the first input; otherwise, the total
+            output amount must be positive. The latter case corresponds to issuance of a new asset, while the former
+            sets asset preservation rule. Please note that for total input amount of an asset we do not require for
+            strict equality of the input and output amounts: the output amount could be less than input amount~(or zero).
+\end{itemize}
 
 \subsection{Unified Transactions}
+
+\subsection{Block Validation Rules}
 
 \subsection{Token Emission}
 \input{tokens.tex}

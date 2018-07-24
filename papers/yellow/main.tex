@@ -529,20 +529,19 @@ Two infinite loops in different threads with the following functions inside:
 \section{Transactions}
 
 
-A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16} - 1$ if block size
+A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{15} - 1$ if a block size
 limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
-in a \coin{} is disappearing
-from the state during transaction application: monetary value, guard script, contents of all the registers,
-all the bytes and also an identifier of the \coin{}.
+in a \coin{} is disappearing from the state during transaction application: monetary value, assets,
+guard script, contents of all the registers, all the bytes and also an identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
 \label{coin-format}
 
 A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
-From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
-serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
-the coin in the transaction.
+From these registers, four are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
+serialized guard script, $R_2$ contains assets, $R_3$ contains unique identifier of transaction which created the
+coin and also an index of the coin in the transaction.
 
 Each register is an expression in \sigm language. Thus the registers are typed: every register contains a value of
 some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
@@ -560,6 +559,8 @@ are to be formed as follows:
     \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
+    \item{\em number of assets } which box is carrying.
+    \item{\em assets}. A box can carry multiple assets
     \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.

@@ -1,0 +1,99 @@
+\section{Blockchain synchronization}
+Blockchain synchronization algorithm is implemented in `ErgoNodeViewSynchronizer`(NVS) class and consist of few parts.
+\dnote{Branch for PR https://github.com/ScorexFoundation/Scorex/pull/280 is described}
+
+\subsection{Headers synchronization}
+
+First, node should synchronize it's headers chain with the network.
+In order to achieve this every `syncInterval` seconds node calculates `ErgoSyncInfo` message,
+containing ids of last N headers and send it to peers, defined by function `peersToSyncWith()`.
+If there are outdated peers (peers, which status
+was last updated earlier than `syncStatusRefresh` seconds ego) `peersToSyncWith()` return outdated peers,
+otherwise it returns one random peer which blockchain is Older and all peers with status Unknown
+\footnote{peersToSyncWith() logic is not intuitive, it's better to write description, why this choice?}.
+
+On receiving `ErgoSyncInfo` message fro other node, current one calculates `OtherNodeSyncingStatus`,
+which contains node status (`Younger`, `Older`, `Equal`, `Nonsense` or `Unknown`) and extension -
+`Inv` for next `maxInvObjects` Headers required for other node to sync with the current one.
+After that node sends this `Inv` to other node and other node will sync headers to the current one
+using Inv algorithm described in \ref{sync:inv}.
+
+\subsection{Block section synchronization}
+
+After Headers chain application, a node should synchronize block sections
+(BlockTransactions, Extension and ADProofs), which amount and composition
+may vary on node settings (e.g. node with UTXO state does not need to download ADProofs,
+as soon as it can generate it locally by itself).
+
+In order to achieve this, every `syncInterval` seconds node calculate `nextModifiersToDownload()` -
+block sections for headers starting at height of bestFullBlock, that are in `Unknown` status.
+These modifiers are requested from random peers(since we does not know a peer who have it),
+\footnote{we can keep a separate modifierId->peers map for modifiers, that are not received yet and try to download from this peers first}.
+they switch to status `Requested` and further processing is described in \ref{sync:st}.
+
+When headers chain is already synced and node applies block Header, it return `ProgressInfo` with `ToDownload` section,
+that contains modifiers our node should download and apply to update full block chain.
+When NVS receives this ToDownload request, it requests these modifiers from random peers.
+These modifiers goes to status `Requested` and further processing is described in \ref{sync:st}.
+
+\subsection{Inv algorithm}
+\label{sync:inv}
+
+`Inv` (inventory) message contains a pair: `(ModifierTypeId, Seq[ModifierId])`. When node A sends `Inv` message
+to node B it tells to node B, that it contains modifiers of specified ids and type and ready to send them to
+node B on request.
+
+Node broadcasts Inv message in 2 cases:
+\begin{itemize}
+    \item - When it successfully applies a modifier to `History`. This is useful to propogate new modifiers
+    as fast as possible when nodes are already synced with the network
+    \item - When it receives `SyncInfo` message. On receiving `SyncInfo` message, node calculates
+    `OtherNodeSyncingStatus`, which contains node status (`Younger`, `Older`, `Equal`, `Nonsense` or `Unknown`)
+    and extension - `Inv` for next `maxInvObjects` modifiers required for other node to sync with
+    the current one and send this `Inv` to other node (if it is not empty)
+\end{itemize}
+
+When node received `Inv` message it
+\begin{itemize}
+    \item - filter modifiers, that are already in `History` or in `ModifiersCache`
+    \item - request remaining modifiers from other peer. Modifier goes into `Requested` state
+    and further processing is described in \ref{sync:st}..
+\end{itemize}
+
+\subsection{Modifiers state machine}
+\label{sync:st}
+
+Ergo modifiers can be in one of the following states:
+
+\begin{itemize}
+    \item{\em Unknown} - id of modifier is not known to current peer
+    \item{\em Requested} - modifier with corresponding id is requested from other peer.
+    \item{\em Received} - modifier was received from other peer, but is not applied to history yet.
+    \item{\em Applied} - modifier was applied to history.
+\end{itemize}
+
+State transitions works as follows:
+\begin{itemize}
+    \item{\em Unknown} - Modifier may transit form Unknown status to Requested by different ways, see
+    sections below.
+    \item{\em Requested} - When our node requests a modifier from other peer, it puts this modifier and
+    corresponding peer to special map `expecting` in `DeliveryTracker` and sends `CheckDelivery` to self
+    with `deliveryTimeout` delay.
+    When a node receives modifier from peer in `expecting` map - NVS removes it from map `expecting`,
+    puts it to map `delivered`, set status to `Received` and send to NodeViewHolder.
+    When `CheckDelivery` message comes, node check for modifier - if it is already in `delivered` map,
+    just remove it from `delivered` map (it should be already in status different from expecting). If
+    modifier is not delivered yet, node reexpect it up to `maxDeliveryChecks` times and penalize peer
+    (if not expecting from random peer) and stop expecting after that (modifier goes to Unknown status).
+
+    \item{\em Received} - Whe NVH receives modifier, it parse modifier bytes and check that bytes
+    really corresponds to declared id.
+    If not - NVH sends `IncorrectModifierFromRemote` to NVS, NVS penalize peer and remove modifier id
+    form all maps (mode to status `Unknown`).
+    If modifier id is correct - NVH put it to modifiersCache,
+    and try to apply as much modifiers from cache as possible. Modifier may stay in cache for some time,
+    and will be applied to History or removed from cache id cache is overloaded \dnote{we should switch
+    modifier status to `Unknown` here}.
+    \item{\em Applied} - When modifier is applied to history, it's status may never change (while it's validity
+    may change later)
+\end{itemize}

@@ -5,28 +5,33 @@ import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.scalatest.FlatSpecLike
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import sigmastate.{OR, SBoolean}
+import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTestHelpers {
+class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTestHelpers with ValidBlocksGenerators {
 
   val defaultAwaitDuration: FiniteDuration = 5.seconds
   implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
@@ -83,6 +88,10 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
+  ignore should "create own coinbase transaction, if there is already a transaction, that spends emission box" in {
+    // TODO
+  }
+
   it should "work correctly with 2 coinbase txs in pool" in {
     val tmpDir = createTempDir
 
@@ -98,48 +107,37 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+    // todo make minerProp a parameter of miner, pass TrueLeaf there
     val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
-
-    val state: UtxoState = await(
-      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, UtxoState]
-        (v => v.state)).mapTo[UtxoState]
-    )
-
-    val minerProp = DLogProverInput(BigIntegers
-      .fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
-    ).publicImage
-
-    val fakeProp = DLogProverInput(BigIntegers.fromUnsignedByteArray("ttttttttt".getBytes())).publicImage
-
-    val emissionBox = state.emissionBoxOpt.get
-    val tx = ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, Seq.empty, fakeProp, emission)
-
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
     expectNoMessage(1 seconds)
+    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
-    val unconfirmedSize = await(
-      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Int]
-        {v =>
-          logger.error(v.pool.unconfirmed.toString)
-          v.pool.unconfirmed.values.size
-        }).mapTo[Int]
-    )
-
-    unconfirmedSize shouldBe 1
+    val state: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]
+    val history: ErgoHistoryReader = r.h
+    val startBlock = history.bestHeaderOpt
 
     minerRef ! StartMining
+    do {
+      // TODO more elegant wait for the next block
+      Thread.sleep(1000)
+    } while (r.h.bestHeaderOpt == startBlock)
 
-    expectNoMessage(6 seconds)
 
-    val unconfirmedSize2 = await(
-      (nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Int]
-        {v =>
-          logger.error(v.pool.unconfirmed.toString)
-          v.pool.unconfirmed.values.size
-        }).mapTo[Int]
-    )
+    val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, TrueLeaf))
+    val tx1 = new ErgoTransaction(IndexedSeq(input), outputs1)
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, OR(TrueLeaf, TrueLeaf)))
+    val tx2 = new ErgoTransaction(IndexedSeq(input), outputs2)
 
-    unconfirmedSize2 shouldBe 0
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
+    expectNoMessage(1 seconds)
+
+    r.m.unconfirmed.size shouldBe 2
+
+    //TODO wait for the next block mined, ensure that one transaction is in this box, another one is removed from mempool
+
   }
 
 }

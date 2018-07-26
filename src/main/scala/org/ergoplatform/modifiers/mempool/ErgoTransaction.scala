@@ -173,36 +173,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield Input(boxId, proof)
   }
 
-  implicit private val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
-    _.map { case (key, value) =>
-      s"R${key.number}" -> valueEncoder(value)
-    }.asJson
-  }
 
-  implicit private val assetEncoder: Encoder[Tuple2[ErgoBox.TokenId, Long]] = { asset =>
-    Json.obj(
-      "tokenId" -> asset._1.asJson,
-      "amount" -> asset._2.asJson
-    )
-  }
-
-  implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
-    Json.obj(
-      "boxId" -> box.id.asJson,
-      "value" -> box.value.asJson,
-      "proposition" -> valueEncoder(box.proposition),
-      "assets" -> box.additionalTokens.asJson,
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
-    )
-  }
-
-  implicit private val identifierDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
+  implicit val identifierDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
     ErgoBox.registerByName.get(key).collect {
       case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
     }
   }
 
-  implicit private val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
+  implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
     for {
       tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]
       amount <- cursor.downField("amount").as[Long]

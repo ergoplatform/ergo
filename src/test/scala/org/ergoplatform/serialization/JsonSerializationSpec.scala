@@ -1,32 +1,166 @@
 package org.ergoplatform.serialization
 
-import io.circe.parser._
+import io.circe.ACursor
+import io.circe.syntax._
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
+import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.scalacheck.Gen
+import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
 import scorex.core.ModifierId
-import sigmastate.Values.TrueLeaf
+import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.{SBoolean, SType}
 
-class JsonSerializationSpec extends ErgoPropertyTest {
+class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
   property("TransactionIdsForHeader should be converted into json correctly") {
     val modifierId = genBytes(Constants.ModifierIdSize).sample.get
     val stringId = Algos.encode(modifierId)
-    val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
     val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))
-    //todo: after testnet1 - fix
-    // data.asJson shouldEqual expected
+    val c = data.asJson.hcursor
+    c.downField("ids").downArray.as[String] shouldBe Right(stringId)
   }
 
-  property("AnyoneCanSpendNoncedBox should be converted into json correctly") {
-    val value: Long = Gen.chooseNum(1, Long.MaxValue).sample.get
-    val box = ErgoBox(value, TrueLeaf)
-    val stringId = Algos.encode(box.id)
-    val Right(expected) = parse(s"""{"id": "$stringId", "value" : $value}""")
-    //todo: after testnet1 - fix
-    // box.asJson shouldEqual expected
+  property("ErgoBox should be converted into json correctly") {
+    forAll(ergoBoxGen) { box =>
+      validateErgoBox(box.asJson.hcursor, box)
+    }
+  }
+
+  property("Unspent Offchain Box should be serialized to json") {
+    forAll(unspentOffchainBoxGen) { b =>
+      validateTrackedBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateTrackedBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Uncertain Unspent Offchain Box should be serialized to json") {
+    forAll(uncertainUnspentOffchainBoxGen) { b =>
+      validateTrackedBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateTrackedBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Unspent Onchain Box should be serialized to json") {
+    forAll(unspentOnchainBoxGen) { b =>
+      validateUnspentOnchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateUnspentOnchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Uncertain Unspent Onchain Box should be serialized to json") {
+    forAll(uncertainUnspentOnchainBoxGen) { b =>
+      validateUnspentOnchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateUnspentOnchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Spent Offchain Box should be serialized to json") {
+    forAll(spentOffchainBoxGen) { b =>
+      validateSpentOffchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateSpentOffchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Uncertain Spent Offchain Box should be serialized to json") {
+    forAll(uncertainSpentOffchainBoxGen) { b =>
+      validateSpentOffchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateSpentOffchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Spent Onchain Box should be serialized to json") {
+    forAll(spentOnchainBoxGen) { b =>
+      validateSpentOnchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateSpentOnchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Uncertain Spent Onchain Box should be serialized to json") {
+    forAll(uncertainSpentOnchainBoxGen) { b =>
+      validateSpentOnchainBox(b.asJson.hcursor, b)
+      import ShowDetails.implicitValue
+      validateSpentOnchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  private def validateSpentOnchainBox(c: ACursor, b: SpentOnchainTrackedBox)(implicit opts: Detalization) = {
+    validateSpentBox(c, b)(opts)
+    c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
+    c.downField("spendingHeight").as[Int] shouldBe Right(b.spendingHeight)
+  }
+
+  private def validateSpentOffchainBox(c: ACursor, b: SpentOffchainTrackedBox)(implicit opts: Detalization) = {
+    validateSpentBox(c, b)(opts)
+    c.downField("creationHeight").as[Option[Int]] shouldBe Right(b.creationHeight)
+  }
+
+  private def validateSpentBox(c: ACursor, b: SpentBox)(implicit opts: Detalization) = {
+    validateTrackedBox(c, b)(opts)
+    if (opts.showDetails) {
+      validateTransaction(c.downField("spendingTransaction"), b.spendingTx)
+    } else {
+      c.downField("spendingTransactionId").as[String] shouldBe Right(Algos.encode(b.spendingTx.id))
+    }
+  }
+
+  private def validateUnspentOnchainBox(c: ACursor, b: UnspentOnchainTrackedBox)(implicit opts: Detalization) = {
+    validateTrackedBox(c, b)(opts)
+    c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
+  }
+
+  private def validateTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
+    import b._
+    c.downField("creationOutIndex").as[Short] shouldBe Right(creationOutIndex)
+    c.downField("onchain").as[Boolean] shouldBe Right(onchain)
+    validateErgoBox(c.downField("box"), box)
+    if (opts.showDetails) {
+      validateTransaction(c.downField("creationTransaction"), creationTx)
+    } else {
+      c.downField("creationTransactionId").as[String] shouldBe Right(Algos.encode(creationTx.id))
+    }
+  }
+
+  private def validateErgoBox(c: ACursor, b: ErgoBox): Unit = {
+    c.downField("boxId").as[String] shouldBe Right(Algos.encode(b.id))
+    c.downField("value").as[Long] shouldBe Right(b.value)
+    c.downField("proposition").as[Value[SBoolean.type]] shouldBe Right(b.proposition)
+    validateAssets(c.downField("assets"), b.additionalTokens)
+    validateRegisters(c.downField("additionalRegisters"), b.additionalRegisters)
+  }
+
+  private def validateAssets(c: ACursor, assets: Seq[(ErgoBox.TokenId, Long)]) = {
+    def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
+      assets map { case(tokenId, value) => (Algos.encode(tokenId), value) }
+    }
+    import ErgoTransaction.assetDecoder
+    val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
+    stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
+  }
+
+  private def validateRegisters(c: ACursor, registers: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]]) = {
+    import ErgoTransaction.identifierDecoder
+    val Right(decodedRegs) = c.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
+    decodedRegs should contain theSameElementsAs registers
+  }
+
+  private def validateTransaction(c: ACursor, tx: ErgoTransaction) = {
+    import ErgoTransaction.transactionDecoder
+    val Right(decoded) = c.as[ErgoTransaction]
+    decoded.id should contain theSameElementsInOrderAs tx.id
+    decoded.inputs should contain theSameElementsInOrderAs tx.inputs
+    decoded.outputs should contain theSameElementsInOrderAs tx.outputs
   }
 
 }

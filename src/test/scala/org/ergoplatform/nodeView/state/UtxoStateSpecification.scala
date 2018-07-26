@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.ErgoBox
 import scorex.core.VersionTag
 import sigmastate.Values.TrueLeaf
 

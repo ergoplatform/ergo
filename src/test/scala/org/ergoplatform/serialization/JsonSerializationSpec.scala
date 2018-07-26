@@ -39,24 +39,8 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Uncertain Unspent Offchain Box should be serialized to json") {
-    forAll(uncertainUnspentOffchainBoxGen) { b =>
-      validateTrackedBox(b.asJson.hcursor, b)
-      import ShowDetails.implicitValue
-      validateTrackedBox(b.asJson.hcursor, b)
-    }
-  }
-
   property("Unspent Onchain Box should be serialized to json") {
     forAll(unspentOnchainBoxGen) { b =>
-      validateUnspentOnchainBox(b.asJson.hcursor, b)
-      import ShowDetails.implicitValue
-      validateUnspentOnchainBox(b.asJson.hcursor, b)
-    }
-  }
-
-  property("Uncertain Unspent Onchain Box should be serialized to json") {
-    forAll(uncertainUnspentOnchainBoxGen) { b =>
       validateUnspentOnchainBox(b.asJson.hcursor, b)
       import ShowDetails.implicitValue
       validateUnspentOnchainBox(b.asJson.hcursor, b)
@@ -71,14 +55,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Uncertain Spent Offchain Box should be serialized to json") {
-    forAll(uncertainSpentOffchainBoxGen) { b =>
-      validateSpentOffchainBox(b.asJson.hcursor, b)
-      import ShowDetails.implicitValue
-      validateSpentOffchainBox(b.asJson.hcursor, b)
-    }
-  }
-
   property("Spent Onchain Box should be serialized to json") {
     forAll(spentOnchainBoxGen) { b =>
       validateSpentOnchainBox(b.asJson.hcursor, b)
@@ -87,21 +63,13 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Uncertain Spent Onchain Box should be serialized to json") {
-    forAll(uncertainSpentOnchainBoxGen) { b =>
-      validateSpentOnchainBox(b.asJson.hcursor, b)
-      import ShowDetails.implicitValue
-      validateSpentOnchainBox(b.asJson.hcursor, b)
-    }
-  }
-
-  private def validateSpentOnchainBox(c: ACursor, b: SpentOnchainTrackedBox)(implicit opts: Detalization) = {
+  private def validateSpentOnchainBox(c: ACursor, b: SpentOnchainBox)(implicit opts: Detalization) = {
     validateSpentBox(c, b)(opts)
     c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
     c.downField("spendingHeight").as[Int] shouldBe Right(b.spendingHeight)
   }
 
-  private def validateSpentOffchainBox(c: ACursor, b: SpentOffchainTrackedBox)(implicit opts: Detalization) = {
+  private def validateSpentOffchainBox(c: ACursor, b: SpentOffchainBox)(implicit opts: Detalization) = {
     validateSpentBox(c, b)(opts)
     c.downField("creationHeight").as[Option[Int]] shouldBe Right(b.creationHeight)
   }
@@ -115,7 +83,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  private def validateUnspentOnchainBox(c: ACursor, b: UnspentOnchainTrackedBox)(implicit opts: Detalization) = {
+  private def validateUnspentOnchainBox(c: ACursor, b: UnspentOnchainBox)(implicit opts: Detalization) = {
     validateTrackedBox(c, b)(opts)
     c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
   }

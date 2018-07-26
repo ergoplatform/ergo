@@ -118,6 +118,25 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("proofsForTransactions() fails if a transaction is spending an output created by a follow-up transaction") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+
+      val boxToSpend = txsFromHolder.last.outputs.head
+
+      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTx = ErgoTransaction(
+        IndexedSeq(spendingTxInput),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+
+      val txs = spendingTx +: txsFromHolder
+
+      val us = createUtxoState(bh)
+      us.proofsForTransactions(txs).isSuccess shouldBe false
+    }
+  }
+
+
   property("applyModifier() for real genesis state") {
     var (us: UtxoState, bh) = createUtxoState()
     var height = 0

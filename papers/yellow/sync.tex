@@ -11,12 +11,13 @@ Ergo modifiers can be in one of the following states:
     \item{\em Requested} - modifier was requested from another peer.
     \item{\em Received} - modifier was received from another peer, but is not applied to history yet.
     \item{\em Applied} - modifier was applied to history.
+    \item{\em Invalid} - modifier is permanently invalid.
 \end{itemize}
 
 The goal of NVS is to escort modifier step by step from \term{Unknown} state to \term{Applied},
 however in case of some errors (presumably because of some misbehaviour of another
 peer that should be penalized) it can go back to \term{Unknown} state again to retry to
-perform this process again.
+perform this process again or to \term{Invalid} state to prevent further modifier downloads.
 
 \subsection{From \term{Unknown} to \term{Requested}}
 
@@ -89,7 +90,9 @@ with \term{deliveryTimeout} delay.
 When a node receives modifier in \term{expecting} map
 (and peer delivered this modifier is the same as written in \term{expecting}) -
 NVS parse it and perform initial validation.
-If something is wrong, NVS penalize peer and move modifier back to state \term{Unknown}.
+If modifier is invalid (and we know, that this modifier will always be invalid) NVS penalize peer and move modifier to state \term{Invalid}.
+If the peer have provided incorrect modifier bytes (we can not check,
+that these bytes corresponds to current id) penalize peer and move modifier to state \term{Unknown}.
 If everything is fine, NVS add modifier to modifiersCache, sends modifiersCache to
 NodeViewHolder(NVH) and set modifier to state \term{Received}.
 

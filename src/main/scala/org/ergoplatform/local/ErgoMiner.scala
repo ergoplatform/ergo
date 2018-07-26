@@ -38,7 +38,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: CoinsEmission) extends Actor with ScorexLogging {
+                emission: CoinsEmission,
+                minerPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -49,7 +50,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val minerProp: Value[SBoolean.type] = {
+  private val minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse{
     //TODO extract from wallet when it will be implemented
     DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
   }
@@ -266,8 +267,9 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
+            emission: CoinsEmission,
+            minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
@@ -276,6 +278,15 @@ object ErgoMinerRef {
             emission: CoinsEmission)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
+
+  def apply(ergoSettings: ErgoSettings,
+            viewHolderRef: ActorRef,
+            readersHolderRef: ActorRef,
+            timeProvider: NetworkTimeProvider,
+            emission: CoinsEmission,
+            minerProp: Value[SBoolean.type])
+           (implicit context: ActorRefFactory): ActorRef =
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, Some(minerProp)))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,

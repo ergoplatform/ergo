@@ -2,29 +2,26 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
-import akka.testkit.TestKit
+import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef, TransactionGeneratorRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{StateType, UtxoState, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpecLike
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.{OR, SBoolean}
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -95,6 +92,11 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
   it should "work correctly with 2 coinbase txs in pool" in {
     val tmpDir = createTempDir
 
+    type msgType = SemanticallySuccessfulModifier[_]
+    val msgClass = classOf[msgType]
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, msgClass)
+
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
 
     val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
@@ -107,27 +109,31 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    // todo make minerProp a parameter of miner, pass TrueLeaf there
-    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
-    expectNoMessage(1 seconds)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
+    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission, TrueLeaf)
+    expectNoMessage(1 second)
+    val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
     val state: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]
     val history: ErgoHistoryReader = r.h
     val startBlock = history.bestHeaderOpt
 
-    minerRef ! StartMining
-    do {
-      // TODO more elegant wait for the next block
-      Thread.sleep(1000)
-    } while (r.h.bestHeaderOpt == startBlock)
+    val newBLockDuration = 30 seconds
 
+    minerRef ! StartMining
+
+    testProbe.expectMsgClass(newBLockDuration, msgClass)
+
+    val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, TrueLeaf))
+
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
     val tx1 = new ErgoTransaction(IndexedSeq(input), outputs1)
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, OR(TrueLeaf, TrueLeaf)))
+
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
     val tx2 = new ErgoTransaction(IndexedSeq(input), outputs2)
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
@@ -136,7 +142,16 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
 
     r.m.unconfirmed.size shouldBe 2
 
-    //TODO wait for the next block mined, ensure that one transaction is in this box, another one is removed from mempool
+    testProbe.expectMsgClass(newBLockDuration, msgClass)
+    testProbe.expectMsgClass(newBLockDuration, msgClass)
+    testProbe.expectMsgClass(newBLockDuration, msgClass)
+
+    r.m.unconfirmed.size shouldBe 0
+
+    val blocks = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
+    val txs: Seq[ErgoTransaction]  = blocks.flatMap(_.blockTransactions.transactions)
+    //Make sure that only tx got into chain
+    txs.filter(tx => tx.id.sameElements(tx1.id) || tx.id.sameElements(tx2.id)) should have length 1
 
   }
 

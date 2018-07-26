@@ -4,11 +4,14 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core.VersionTag
 import sigmastate.Values.TrueLeaf
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
@@ -79,7 +82,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-  property("applyTransactions()") {
+  property("applyTransactions() - simple case") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -91,6 +94,25 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
+      val digest = us.proofsForTransactions(txs).get._2
+      us.applyTransactions(txs, digest, height = 1).get
+    }
+  }
+
+  property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+
+      val boxToSpend = txsFromHolder.last.outputs.head
+
+      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTx = ErgoTransaction(
+        IndexedSeq(spendingTxInput),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+
+      val txs = txsFromHolder :+ spendingTx
+
+      val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
       us.applyTransactions(txs, digest, height = 1).get
     }

@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.scalatest.FlatSpecLike
+import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
@@ -29,14 +29,14 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTestHelpers with ValidBlocksGenerators {
+class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   val defaultAwaitDuration: FiniteDuration = 5.seconds
   implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  it should "not freeze while generating candidate block with large amount of txs" in {
+  it should "not freeze while generating candidate block with large amount of txs" in new TestKit(ActorSystem()){
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
@@ -71,6 +71,8 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
       blocksGenerated should be > 1
       blocksGenerated should be >= height
     }
+
+    system.terminate()
   }
 
   it should "filter out double spend txs" in {
@@ -86,7 +88,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in {
+  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in new TestKit(ActorSystem()){
     val tmpDir = createTempDir
 
     type msgType = SemanticallySuccessfulModifier[_]
@@ -131,9 +133,10 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     val txIds: Seq[ModifierId]  = blocks.flatMap(_.blockTransactions.txs.map(_.id))
     //Make sure that this tx wasn't mined
     txIds.contains(tx.id) shouldBe false
+    system.terminate()
   }
 
-  it should "work correctly with 2 coinbase txs in pool" in {
+  it should "work correctly with 2 coinbase txs in pool" in new TestKit(ActorSystem()){
     val tmpDir = createTempDir
 
     type msgType = SemanticallySuccessfulModifier[_]
@@ -194,6 +197,7 @@ class ErgoMinerSpec extends TestKit(ActorSystem()) with FlatSpecLike with ErgoTe
     val txs: Seq[ErgoTransaction]  = blocks.flatMap(_.blockTransactions.transactions)
     //Make sure that only tx got into chain
     txs.filter(tx => tx.id.sameElements(tx1.id) || tx.id.sameElements(tx2.id)) should have length 1
+    system.terminate()
   }
 
 }

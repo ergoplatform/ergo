@@ -185,7 +185,7 @@ object ErgoHistory extends ScorexLogging {
     historyFolder.mkdirs()
     val indexStore = new LSMStore(historyFolder, keepVersions = 0)
     val objectsStore = new FilesObjectsStore(historyFolder.getAbsolutePath)
-    val db = new HistoryStorage(indexStore, objectsStore)
+    val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
     val nodeSettings = settings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {

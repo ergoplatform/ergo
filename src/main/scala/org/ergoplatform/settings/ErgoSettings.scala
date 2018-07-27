@@ -14,6 +14,7 @@ case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
                         testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
+                        cacheSettings: CacheSettings,
                         scorexSettings: ScorexSettings)
 
 object ErgoSettings extends ScorexLogging
@@ -35,6 +36,7 @@ object ErgoSettings extends ScorexLogging
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
+    val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
@@ -42,7 +44,7 @@ object ErgoSettings extends ScorexLogging
       ErgoApp.forceStopApplication()
     }
 
-    consistentSettings(ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings))
+    consistentSettings(ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, cacheSettings, scorexSettings))
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

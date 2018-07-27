@@ -28,7 +28,7 @@ object TransactionIdsForHeader {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (103: Byte)
 
   def validate(txIds: TransactionIdsForHeader, header: Header): Boolean = {
-    header.transactionsRoot sameElements txIds.rootHash
+    java.util.Arrays.equals(header.transactionsRoot, txIds.rootHash)
   }
 
   implicit val jsonEncoder: Encoder[TransactionIdsForHeader] = (t: TransactionIdsForHeader) =>

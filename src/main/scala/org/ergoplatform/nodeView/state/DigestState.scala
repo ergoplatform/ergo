@@ -40,7 +40,7 @@ class DigestState protected(override val version: VersionTag,
 
     case fb: ErgoFullBlock =>
       fb.aDProofs match {
-        case Some(proofs) if !ADProofs.proofDigest(proofs.proofBytes).sameElements(fb.header.ADProofsRoot) =>
+        case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
           Try {
@@ -127,7 +127,7 @@ class DigestState protected(override val version: VersionTag,
   def close(): Unit = store.close()
 
   private def update(header: Header): Try[DigestState] = {
-    val version: VersionTag = VersionTag @@ header.id
+    val version: VersionTag = idToVersion(header.id)
     val newContext = stateContext.appendHeader(header)
     val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
     update(version, header.stateRoot, Seq(cb))

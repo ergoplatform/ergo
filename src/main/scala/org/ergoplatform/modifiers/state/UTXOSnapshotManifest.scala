@@ -28,7 +28,7 @@ object UTXOSnapshotManifest {
 
   def validate(manifest: UTXOSnapshotManifest, header: Header): Try[Unit] = Try {
     require(manifest.blockId == header.id)
-    require(manifest.rootHash sameElements header.stateRoot)
+    require(java.util.Arrays.equals(manifest.rootHash, header.stateRoot))
     ???
   }
 }

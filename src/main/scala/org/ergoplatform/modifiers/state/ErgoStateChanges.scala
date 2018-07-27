@@ -7,7 +7,7 @@ import scorex.crypto.authds.ADKey
 
 abstract class StateChangeOperation {
   override def equals(that: scala.Any): Boolean = (this, that) match {
-    case (Removal(i1), Removal(i2)) => i1 sameElements i2
+    case (Removal(i1), Removal(i2)) => java.util.Arrays.equals(i1, i2)
     case (Insertion(b1), Insertion(b2)) => b1 == b2
     case _ => false
   }

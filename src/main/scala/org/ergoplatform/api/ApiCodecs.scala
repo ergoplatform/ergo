@@ -134,42 +134,18 @@ trait ApiCodecs {
     trackedBoxFields(b).asJson
   }
 
-  implicit def uncertUnspentOffchainBoxEnc(implicit opts: Detalization): Encoder[UncertainUnspentOffchainBox] = { b =>
-    trackedBoxFields(b).asJson
-  }
-
   implicit def unspentOnchainBoxEncoder(implicit opts: Detalization): Encoder[UnspentOnchainBox] = { b =>
-    unspentOnchainBoxFields(b).asJson
-  }
-
-  implicit def uncertUnspentOnchainBoxEnc(implicit opts: Detalization): Encoder[UncertainUnspentOnchainBox] = { b =>
-    unspentOnchainBoxFields(b).asJson
+    (trackedBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)).asJson
   }
 
   implicit def spentOffchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOffchainBox] = { b =>
-    spentOffchainBoxFields(b).asJson
-  }
-
-  implicit def uncertainSpentOffchainBoxEnc(implicit opts: Detalization): Encoder[UncertainSpentOffchainBox] = { b =>
-    spentOffchainBoxFields(b).asJson
+    (spentBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)).asJson
   }
 
   implicit def spentOnchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOnchainBox] = { b =>
-    spentOnchainBoxFields(b).asJson
-  }
-
-  implicit def uncertainSpentOnchainBoxEncoder(implicit opts: Detalization): Encoder[UncertainSpentOnchainBox] = { b =>
-    spentOnchainBoxFields(b).asJson
-  }
-
-  private def spentOnchainBoxFields(b: SpentOnchainTrackedBox)(implicit opts: Detalization): Map[String, Json] = {
-    spentBoxFields(b) +
+    (spentBoxFields(b) +
       ("creationHeight" -> b.creationHeight.asJson) +
-      ("spendingHeight" -> b.spendingHeight.asJson)
-  }
-
-  private def spentOffchainBoxFields(b: SpentOffchainTrackedBox)(implicit opts: Detalization): Map[String, Json] = {
-    spentBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)
+      ("spendingHeight" -> b.spendingHeight.asJson)).asJson
   }
 
   private def spentBoxFields(b: SpentBox)(implicit opts: Detalization): Map[String, Json] = {
@@ -180,10 +156,6 @@ trait ApiCodecs {
       "spendingTransactionId" -> spendingTx.id.asJson
     }
     trackedBoxFields(b) + txField
-  }
-
-  private def unspentOnchainBoxFields(b: UnspentOnchainTrackedBox)(implicit opts: Detalization): Map[String, Json] = {
-    trackedBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)
   }
 
   private def trackedBoxFields(b: TrackedBox)(implicit opts: Detalization): Map[String, Json] = {

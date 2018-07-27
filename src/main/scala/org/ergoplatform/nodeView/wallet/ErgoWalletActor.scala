@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
@@ -89,8 +90,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
           val idxShort = outIndex.toShort
           val box = outCandidate.toBox(tx.id, idxShort)
           val bu = heightOpt match {
-            case Some(h) => UncertainUnspentOnchainBox(tx, idxShort, h, box)
-            case None => UncertainUnspentOffchainBox(tx, idxShort, box)
+            case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
+            case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
           }
           bu.register()
           true

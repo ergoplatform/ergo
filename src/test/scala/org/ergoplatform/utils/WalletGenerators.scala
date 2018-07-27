@@ -11,15 +11,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       (boxes, tx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
-    } yield UnspentOffchainBox(tx, outIndex, ergoBox)
-  }
-
-  def uncertainUnspentOffchainBoxGen: Gen[UncertainUnspentOffchainBox] = {
-    for {
-      (boxes, tx) <- validErgoTransactionGen
-      outIndex <- outIndexGen(tx)
-      ergoBox <- Gen.oneOf(boxes)
-    } yield UncertainUnspentOffchainBox(tx, outIndex, ergoBox)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield UnspentOffchainBox(tx, outIndex, ergoBox, certainty)
   }
 
   def unspentOnchainBoxGen: Gen[UnspentOnchainBox] = {
@@ -28,16 +21,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
-    } yield UnspentOnchainBox(tx, outIndex, height, ergoBox)
-  }
-
-  def uncertainUnspentOnchainBoxGen: Gen[UncertainUnspentOnchainBox] = {
-    for {
-      (boxes, tx) <- validErgoTransactionGen
-      outIndex <- outIndexGen(tx)
-      height <- heightGen()
-      ergoBox <- Gen.oneOf(boxes)
-    } yield UncertainUnspentOnchainBox(tx, outIndex, height, ergoBox)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield UnspentOnchainBox(tx, outIndex, height, ergoBox, certainty)
   }
 
 
@@ -48,17 +33,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       heightOpt <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
-    } yield SpentOffchainBox(tx, outIndex, heightOpt, spendingTx, ergoBox)
-  }
-
-  def uncertainSpentOffchainBoxGen: Gen[UncertainSpentOffchainBox] = {
-    for {
-      (boxes, tx) <- validErgoTransactionGen
-      (_, spendingTx) <- validErgoTransactionGen
-      outIndex <- outIndexGen(tx)
-      heightOpt <- Gen.option(heightGen())
-      ergoBox <- Gen.oneOf(boxes)
-    } yield UncertainSpentOffchainBox(tx, outIndex, heightOpt, spendingTx, ergoBox)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield SpentOffchainBox(tx, outIndex, heightOpt, spendingTx, ergoBox, certainty)
   }
 
   def spentOnchainBoxGen: Gen[SpentOnchainBox] = {
@@ -69,18 +45,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       height <- heightGen()
       spendingHeight <- heightGen(height)
       ergoBox <- Gen.oneOf(boxes)
-    } yield SpentOnchainBox(tx, outIndex, height, spendingTx, spendingHeight, ergoBox)
-  }
-
-  def uncertainSpentOnchainBoxGen: Gen[UncertainSpentOnchainBox] = {
-    for {
-      (boxes, tx) <- validErgoTransactionGen
-      (_, spendingTx) <- validErgoTransactionGen
-      outIndex <- outIndexGen(tx)
-      height <- heightGen()
-      spendingHeight <- heightGen(height)
-      ergoBox <- Gen.oneOf(boxes)
-    } yield UncertainSpentOnchainBox(tx, outIndex, height, spendingTx, spendingHeight, ergoBox)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield SpentOnchainBox(tx, outIndex, height, spendingTx, spendingHeight, ergoBox, certainty)
   }
 
   private def outIndexGen(tx: ErgoTransaction) =

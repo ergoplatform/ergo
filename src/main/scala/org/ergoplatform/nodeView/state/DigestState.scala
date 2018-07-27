@@ -159,8 +159,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
 
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
-        val state = if (store.lastVersionID.isDefined &&
-          store.lastVersionID.forall(w => bytesToVersion(w.data) == version)) {
+        val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
           new DigestState(version, rootHash, store, settings.nodeSettings)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)

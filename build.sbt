@@ -89,6 +89,10 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
+excludeDependencies ++= Seq(
+  ExclusionRule("javax.activation", "activation")
+)
+
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}

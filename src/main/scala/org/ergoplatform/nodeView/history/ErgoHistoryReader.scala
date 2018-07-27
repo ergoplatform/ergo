@@ -145,7 +145,7 @@ trait ErgoHistoryReader
       val heightFrom = Math.min(headersHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(size, startHeader, h => h.parentId sameElements lastHeaderInOurBestChain)
+      val headerIds = headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)
         .headers.map(h => Header.modifierTypeId -> h.id)
       headerIds
     }

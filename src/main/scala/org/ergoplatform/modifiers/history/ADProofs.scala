@@ -60,7 +60,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
     applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
-          if (digest sameElements expectedHash) {
+          if (java.util.Arrays.equals(digest, expectedHash)) {
             Success(oldValues)
           } else {
             Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))

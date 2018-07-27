@@ -69,7 +69,7 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
   )
 
   protected def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
-    v.state.rootHash.sameElements(settings.chainSettings.monetary.afterGenesisStateDigest)
+    java.util.Arrays.equals(v.state.rootHash, settings.chainSettings.monetary.afterGenesisStateDigest)
   }
 
   protected def bestHeaderOpt(c: C) = GetDataFromCurrentView[H, S, W, P, Option[Header]](v => v.history.bestHeaderOpt)

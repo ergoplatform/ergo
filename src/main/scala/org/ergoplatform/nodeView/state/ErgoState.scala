@@ -121,7 +121,7 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      us.rootHash.sameElements(constants.emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+      java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 

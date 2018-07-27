@@ -76,8 +76,8 @@ case class Header(version: Version,
     * Checks, that modifier m corresponds t this header
     */
   def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = m match {
-    case p: ADProofs => ADProofsRoot sameElements p.digest
-    case t: BlockTransactions => transactionsRoot sameElements t.digest
+    case p: ADProofs => java.util.Arrays.equals(ADProofsRoot, p.digest)
+    case t: BlockTransactions => java.util.Arrays.equals(transactionsRoot, t.digest)
     case _ => false
   }
 

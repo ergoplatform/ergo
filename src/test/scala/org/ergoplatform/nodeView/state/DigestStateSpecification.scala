@@ -82,7 +82,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds2.rollbackVersions.size shouldEqual 2
 
-      ds2.rootHash.sameElements(ds.rootHash) shouldBe false
+      java.util.Arrays.equals(ds2.rootHash, ds.rootHash) shouldBe false
 
       val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash

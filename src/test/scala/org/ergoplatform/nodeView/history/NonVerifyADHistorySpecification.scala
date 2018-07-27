@@ -124,11 +124,11 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     val biggerLimit = BlocksInChain + 2
     val ci1 = history.continuationIds(ErgoSyncInfo(Seq()), biggerLimit).get
-    chain.headers.map(_.encodedId) should contain theSameElementsAs ci1.map(c => Algos.encode(c._2))
+    chain.headers.map(_.id) should contain theSameElementsAs ci1.map(_._2)
 
     val ci = history.continuationIds(ErgoSyncInfo(Seq()), BlocksInChain).get
     ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
-    chain.headers.map(_.encodedId) should contain theSameElementsAs ci.map(c => Algos.encode(c._2))
+    chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 
   property("continuationIds() for light history should contain ids of next headers in our chain") {

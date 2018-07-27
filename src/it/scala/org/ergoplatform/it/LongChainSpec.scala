@@ -8,7 +8,7 @@ import scala.concurrent.duration._
 
 class LongChainSpec extends FreeSpec with IntegrationSuite {
 
-    s"Synchronize long blocks" in {
+    s"Synchronize long blocks" ignore {
     val minerConfig = noDelayConfig.withFallback(Docker.nodeConfigs.head)
     val followerConfig = nonGeneratingPeerConfig.withFallback(Docker.nodeConfigs(1))
     val miner = docker.startNode(minerConfig).success.value

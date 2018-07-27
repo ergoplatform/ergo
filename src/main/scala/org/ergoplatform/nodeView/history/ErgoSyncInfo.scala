@@ -21,6 +21,7 @@ case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
 }
 
 object ErgoSyncInfo {
+  // TODO move to config?
   val MaxBlockIds = 1000
 }
 

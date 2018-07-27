@@ -60,6 +60,11 @@ components:
           example: 147
         proposition:
           $ref: '#/components/schemas/Proposition'
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
         additionalRegisters:
           description: Additional registers
           type: object
@@ -347,6 +352,10 @@ components:
           description: Time when the node was started
           allOf:
             - $ref: '#/components/schemas/Timestamp'
+        headersScore:
+          type: integer
+        fullBlocksScore:
+          type: integer
 
     TransactionBoxId:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long
@@ -371,6 +380,21 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
+
+    Asset:
+      description: Token detail in the transaction
+      type: object
+      required:
+        - tokenId
+        - amount
+      properties:
+        tokenId:
+          $ref: '#/components/schemas/Digest32'
+        amount:
+          description: Amount of the token
+          type: integer
+          format: int64
+          example: 1000
 
     SValue:
       description: Base-16 envoded serialized Sigma-state value

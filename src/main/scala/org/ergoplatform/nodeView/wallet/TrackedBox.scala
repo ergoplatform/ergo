@@ -4,23 +4,24 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
 import scorex.core.utils.ScorexLogging
 
 sealed trait TrackedBox extends ScorexLogging {
-  val creationTx: ErgoTransaction
-  val creationOutIndex: Short
+  def certainty: BoxCertainty
+  def creationTx: ErgoTransaction
+  def creationOutIndex: Short
 
-  val onchain: Boolean
+  def onchain: Boolean
+  def certain: Boolean = certainty.certain
 
   val box: ErgoBox
+  lazy val boxId = ByteArrayWrapper(box.id)
+  def value: Long = box.value
 
-  lazy val value = box.value
   lazy val assets = box.additionalTokens.map { case (id, amt) =>
     ByteArrayWrapper(id) -> amt
   }.toMap
-
-
-  lazy val boxId = ByteArrayWrapper(box.id)
 
   def register(): Unit = Registry.putToRegistry(this)
 
@@ -31,15 +32,10 @@ sealed trait TrackedBox extends ScorexLogging {
   def transition(creationHeight: Height): Option[TrackedBox]
 
   def transitionBack(toHeight: Int): Option[TrackedBox]
-}
 
-
-
-trait UncertainBox extends TrackedBox {
   def makeCertain(): TrackedBox
-}
 
-trait CertainBox extends TrackedBox
+}
 
 trait UnspentBox extends TrackedBox
 
@@ -55,242 +51,146 @@ trait OnchainBox extends TrackedBox {
   override val onchain = true
 }
 
-
-trait UnspentOffchainTrackedBox extends UnspentBox with OffchainBox {
+case class UnspentOffchainBox(creationTx: ErgoTransaction,
+                              creationOutIndex: Short,
+                              box: ErgoBox,
+                              certainty: BoxCertainty) extends UnspentBox with OffchainBox {
   override def register(): Unit = {
     super.register()
     log.info("New offchain box arrived: " + this)
-    if (this.isInstanceOf[CertainBox]) Registry.increaseBalances(this)
+    if (certain) Registry.increaseBalances(this)
   }
 
   override def deregister(): Unit = {
     super.deregister()
-    if (this.isInstanceOf[CertainBox]) Registry.decreaseBalances(this)
+    if (certain) Registry.decreaseBalances(this)
   }
+
+  def transition(creationHeight: Height): Option[TrackedBox] =
+    Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box, certainty))
+
+  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
+    heightOpt match {
+      case Some(_) => log.warn(s"Onchain transaction ${spendingTransaction.id} is spending offchain box $box"); None
+      case None => Some(SpentOffchainBox(creationTx, creationOutIndex, None, spendingTransaction, box, certainty))
+    }
+  }
+
+  def transitionBack(toHeight: Int): Option[TrackedBox] = None
+
+  def makeCertain(): UnspentOffchainBox = if (certain) this else copy(certainty = Certain)
 }
 
-trait UnspentOnchainTrackedBox extends UnspentBox with OnchainBox {
-  val creationHeight: Int
+case class UnspentOnchainBox(creationTx: ErgoTransaction,
+                             creationOutIndex: Short,
+                             creationHeight: Int,
+                             box: ErgoBox,
+                             certainty: BoxCertainty) extends UnspentBox with OnchainBox {
 
   override def register(): Unit = {
     super.register()
     log.info("New onchain box arrived: " + this)
     Registry.putToConfirmedIndex(creationHeight, boxId)
-    if (this.isInstanceOf[CertainBox]) Registry.increaseBalances(this)
+    if (certain) Registry.increaseBalances(this)
   }
 
   override def deregister(): Unit = {
     super.deregister()
-    if (this.isInstanceOf[CertainBox]) Registry.decreaseBalances(this)
+    if (certain) Registry.decreaseBalances(this)
   }
+
+  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
+    Some(heightOpt match {
+      case Some(h) =>
+        SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box, certainty)
+      case None =>
+        SpentOffchainBox(creationTx, creationOutIndex, Some(creationHeight), spendingTransaction, box, certainty)
+    })
+  }
+
+  def transition(creationHeight: Height): Option[TrackedBox] = {
+    log.warn(s"Double creation of UncertainUnspentOnchainBox for $boxId")
+    None
+  }
+
+  def transitionBack(toHeight: Int): Option[TrackedBox] = {
+    if (creationHeight > toHeight) {
+      Some(UnspentOffchainBox(creationTx, creationOutIndex, box, certainty))
+    } else {
+      None
+    }
+  }
+
+  def makeCertain(): UnspentOnchainBox = if (certain) this else copy(certainty = Certain)
+
 }
 
-trait SpentOffchainTrackedBox extends SpentBox with OffchainBox {
-  val creationHeight: Option[Int]
+case class SpentOffchainBox(creationTx: ErgoTransaction,
+                            creationOutIndex: Short,
+                            creationHeight: Option[Int],
+                            spendingTx: ErgoTransaction,
+                            box: ErgoBox,
+                            certainty: BoxCertainty) extends SpentBox with OffchainBox {
+
+  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
+    heightOpt match {
+      case Some(h) =>
+        require(creationHeight.isDefined)
+        Some(SpentOnchainBox(creationTx, creationOutIndex, creationHeight.get, spendingTransaction, h, box, certainty))
+      case None =>
+        log.warn(s"Double spending of an unconfirmed box $boxId")
+        //todo: handle double-spending strategy for an unconfirmed tx
+        None
+    }
+  }
+
+  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeight match {
+    case Some(_) => log.warn(s"Double creation of $boxId"); None
+    case None => Some(copy(creationHeight = Some(creationHeight)))
+  }
+
+  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeight match {
+    case Some(h) if h < toHeight => Some(copy(creationHeight = None))
+    case _ => None
+  }
+
+  def makeCertain(): SpentOffchainBox = if (certain) this else copy(certainty = Certain)
+
 }
 
-trait SpentOnchainTrackedBox extends SpentBox with OnchainBox {
-  val creationHeight: Int
-  val spendingHeight: Int
-
+case class SpentOnchainBox(creationTx: ErgoTransaction,
+                           creationOutIndex: Short,
+                           creationHeight: Height,
+                           spendingTx: ErgoTransaction,
+                           spendingHeight: Height,
+                           box: ErgoBox,
+                           certainty: BoxCertainty) extends SpentBox with OnchainBox {
 
   override def register(): Unit = {
     super.register()
     Registry.putToConfirmedIndex(spendingHeight, boxId)
   }
-}
 
-
-case class UncertainUnspentOffchainBox(override val creationTx: ErgoTransaction,
-                                       override val creationOutIndex: Short,
-                                       override val box: ErgoBox) extends UncertainBox with UnspentOffchainTrackedBox {
-  override def transition(creationHeight: Height): Option[TrackedBox] =
-    Some(UncertainUnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box))
-
-  override def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(h) => log.warn(s"Onchain transaction ${spendingTransaction.id} is spending offchain box $box"); None
-      case None => Some(UncertainSpentOffchainBox(creationTx, creationOutIndex, None, spendingTransaction, box))
-    }
-  }
-
-  override def transitionBack(toHeight: Int): Option[TrackedBox] = None
-
-  override def makeCertain(): TrackedBox = UnspentOffchainBox(creationTx, creationOutIndex, box)
-}
-
-case class UncertainUnspentOnchainBox(override val creationTx: ErgoTransaction,
-                                      override val creationOutIndex: Short,
-                                      override val creationHeight: Int,
-                                      override val box: ErgoBox) extends UncertainBox with UnspentOnchainTrackedBox {
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    Some(heightOpt match {
-      case Some(h) =>
-        UncertainSpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box)
-      case None =>
-        UncertainSpentOffchainBox(creationTx, creationOutIndex, Some(creationHeight), spendingTransaction, box)
-    })
-  }
-
-  def transition(creationHeight: Height): Option[TrackedBox] = {
-    log.warn(s"Double creation of UncertainUnspentOnchainBox for $boxId")
-    None
-  }
-
-  def transitionBack(toHeight: Int): Option[TrackedBox] = {
-    if (creationHeight > toHeight) {
-      Some(UncertainUnspentOffchainBox(creationTx, creationOutIndex, box))
-    } else None
-  }
-
-  override def makeCertain(): TrackedBox = {
-    UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box)
-  }
-}
-
-case class UncertainSpentOffchainBox(override val creationTx: ErgoTransaction,
-                                     override val creationOutIndex: Short,
-                                     override val creationHeight: Option[Int],
-                                     override val spendingTx: ErgoTransaction,
-                                     override val box: ErgoBox) extends UncertainBox with SpentOffchainTrackedBox {
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(h) =>
-        require(creationHeight.isDefined)
-        Some(UncertainSpentOnchainBox(creationTx, creationOutIndex, creationHeight.get, spendingTransaction, h, box))
-      case None =>
-        log.warn(s"Double spending of an unconfirmed box $boxId")
-        //todo: handle double-spending strategy for an unconfirmed tx
-        None
-    }
-  }
-
-  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeight match {
-    case Some(_) => log.warn(s"Double creation of $boxId"); None
-    case None => Some(this.copy(creationHeight = Some(creationHeight)))
-  }
-
-  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeight match {
-    case Some(h) if h < toHeight => Some(UncertainSpentOffchainBox(creationTx, creationOutIndex, None, spendingTx, box))
-    case _ => None
-  }
-
-  override def makeCertain(): TrackedBox = {
-    SpentOffchainBox(creationTx, creationOutIndex, creationHeight, spendingTx, box)
-  }
-}
-
-case class UncertainSpentOnchainBox(override val creationTx: ErgoTransaction,
-                                    override val creationOutIndex: Short,
-                                    override val creationHeight: Int,
-                                    override val spendingTx: ErgoTransaction,
-                                    override val spendingHeight: Int,
-                                    override val box: ErgoBox) extends UncertainBox with SpentOnchainTrackedBox {
-  def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox] = None
+  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = None
 
   def transition(creationHeight: Height): Option[TrackedBox] = None
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = (toHeight < spendingHeight, toHeight < creationHeight) match {
-    case (false, false) => None
-    case (true, false) => Some(UncertainUnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box))
-    case (true, true) => Some(UncertainUnspentOffchainBox(creationTx, creationOutIndex, box))
-    case (false, true) => log.warn("Wrong state"); None
-  }
-
-  override def makeCertain(): TrackedBox =
-    SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTx, spendingHeight, box)
-}
-
-
-case class UnspentOffchainBox(override val creationTx: ErgoTransaction,
-                              override val creationOutIndex: Short,
-                              override val box: ErgoBox) extends UnspentOffchainTrackedBox with CertainBox {
-
-  override def transition(creationHeight: Height): Option[TrackedBox] =
-    Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box))
-
-  override def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(h) => log.warn(s"Onchain transaction ${spendingTransaction.id} is spending offchain box $box"); None
-      case None => Some(SpentOffchainBox(creationTx, creationOutIndex, None, spendingTransaction, box))
-    }
-  }
-
-  override def transitionBack(toHeight: Int): Option[TrackedBox] = None
-}
-
-case class UnspentOnchainBox(override val creationTx: ErgoTransaction,
-                             override val creationOutIndex: Short,
-                             override val creationHeight: Int,
-                             override val box: ErgoBox) extends UnspentOnchainTrackedBox with CertainBox {
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    Some(heightOpt match {
-      case Some(h) =>
-        SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box)
-      case None =>
-        SpentOffchainBox(creationTx, creationOutIndex, Some(creationHeight), spendingTransaction, box)
-    })
-  }
-
-  def transition(creationHeight: Height): Option[TrackedBox] = {
-    log.warn(s"Double creation of UncertainUnspentOnchainBox for $boxId")
-    None
-  }
-
   def transitionBack(toHeight: Int): Option[TrackedBox] = {
-    if (creationHeight > toHeight) {
-      Some(UnspentOffchainBox(creationTx, creationOutIndex, box))
-    } else None
-  }
-}
-
-case class SpentOffchainBox(override val creationTx: ErgoTransaction,
-                            override val creationOutIndex: Short,
-                            override val creationHeight: Option[Int],
-                            override val spendingTx: ErgoTransaction,
-                            override val box: ErgoBox) extends SpentOffchainTrackedBox with CertainBox {
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(h) =>
-        require(creationHeight.isDefined)
-        Some(SpentOnchainBox(creationTx, creationOutIndex, creationHeight.get, spendingTransaction, h, box))
-      case None =>
-        log.warn(s"Double spending of an unconfirmed box $boxId")
-        //todo: handle double-spending strategy for an unconfirmed tx
-        None
+    (toHeight < spendingHeight, toHeight < creationHeight) match {
+      case (false, false) => None
+      case (true, false) => Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box, certainty))
+      case (true, true) => Some(UnspentOffchainBox(creationTx, creationOutIndex, box, certainty))
+      case (false, true) => log.warn(s"Wrong heights. Spending: $spendingHeight, creation: $creationHeight"); None
     }
   }
 
-  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeight match {
-    case Some(_) => log.warn(s"Double creation of $boxId"); None
-    case None => Some(this.copy(creationHeight = Some(creationHeight)))
-  }
+  def makeCertain(): SpentOnchainBox = if (certain) this else copy(certainty = Certain)
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeight match {
-    case Some(h) if h < toHeight => Some(SpentOffchainBox(creationTx, creationOutIndex, None, spendingTx, box))
-    case _ => None
-  }
 }
 
-case class SpentOnchainBox(override val creationTx: ErgoTransaction,
-                           override val creationOutIndex: Short,
-                           override val creationHeight: Int,
-                           override val spendingTx: ErgoTransaction,
-                           override val spendingHeight: Int,
-                           override val box: ErgoBox) extends SpentOnchainTrackedBox with CertainBox {
+sealed class BoxCertainty(val certain: Boolean)
 
-  def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox] = None
-
-  def transition(creationHeight: Height): Option[TrackedBox] = None
-
-  def transitionBack(toHeight: Int): Option[TrackedBox] = (toHeight < spendingHeight, toHeight < creationHeight) match {
-    case (false, false) => None
-    case (true, false) => Some(UncertainUnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box))
-    case (true, true) => Some(UncertainUnspentOffchainBox(creationTx, creationOutIndex, box))
-    case (false, true) => log.warn("Wrong state"); None
-  }
+object BoxCertainty {
+  object Certain extends BoxCertainty(true)
+  object Uncertain extends BoxCertainty(false)
 }

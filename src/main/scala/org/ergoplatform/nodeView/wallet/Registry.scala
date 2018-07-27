@@ -10,22 +10,14 @@ object Registry {
   private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
 
   //todo: build indexes instead of iteration
-  def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.flatMap { tb =>
-    tb match {
-      case ub: UnspentBox => Some(ub)
-      case _ => None
-    }
+  def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.collect {
+    case ub: UnspentBox => ub
   }
 
-  def uncertainBoxes: Iterator[UncertainBox] = registry.valuesIterator.flatMap { tb =>
-    (tb match {
-      case ub: UncertainBox => Some(ub)
-      case _ => None
-    }): Option[UncertainBox]
-  }
+  def uncertainBoxes: Iterator[TrackedBox] = registry.valuesIterator.filterNot(_.certain)
 
   //todo: extract a random element, not head
-  def nextUncertain(): Option[UncertainBox] = uncertainBoxes.toSeq.headOption
+  def nextUncertain(): Option[TrackedBox] = uncertainBoxes.toSeq.headOption
 
   def registryContains(boxId: ByteArrayWrapper): Boolean = registry.contains(boxId)
 

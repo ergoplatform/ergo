@@ -127,7 +127,7 @@ class DigestState protected(override val version: VersionTag,
   def close(): Unit = store.close()
 
   private def update(header: Header): Try[DigestState] = {
-    val version: VersionTag = VersionTag @@ header.id
+    val version: VersionTag = idToVersion(header.id)
     val newContext = stateContext.appendHeader(header)
     val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
     update(version, header.stateRoot, Seq(cb))

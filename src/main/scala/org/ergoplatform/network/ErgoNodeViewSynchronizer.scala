@@ -9,7 +9,6 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder._
-import scorex.core.network.ModifiersStatusKeeper.Unknown
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
 import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
@@ -44,7 +43,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        def downloadRequired(id: ModifierId): Boolean = statusKeeper.status(id)(h) == Unknown
+        // todo use status keeper here after scorex #280 merge
+        def downloadRequired(id: ModifierId): Boolean = !h.contains(id) && !deliveryTracker.isExpectingOrDelivered(id)
 
         h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize, downloadRequired)
           .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
@@ -52,7 +52,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected def modifiersFromRemote: Receive = {
-    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.messageCode =>
+    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.MessageCode =>
       super.modifiersFromRemote(DataFromPeer(spec, data, remote))
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>

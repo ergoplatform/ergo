@@ -30,7 +30,8 @@ dependencyOverrides in ThisBuild ++= Seq(
   "io.circe" % "circe-numbers_2.12" % "0.9.0",
   "io.circe" % "circe-parser_2.12" % "0.8.0",
   "javax.activation" % "activation" % "1.1",
-  "javax.xml.bind" % "jaxb-api" % "2.3.0",
+  "javax.activation" % "javax.activation-api" % "1.2.0",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180725.0427",
   "jline" % "jline" % "2.14.3",
   "net.jpountz.lz4" % "lz4" % "1.3.0",
   "org.bitbucket.inkytonik.dsinfo" % "dsinfo_2.12" % "0.4.0",
@@ -49,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.14",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "1c054e1c-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "6451f17d-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.2",
   "org.scorexfoundation" % "sigma-state_2.12" % "0.9.5-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.8.0-beta1",
@@ -61,4 +62,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 1e3327065c887defb5a95dcf099c93c6969a536a
+// LIBRARY_DEPENDENCIES_HASH b8c3d38456880fea66e2b7b16f6ff92ccf8d9488

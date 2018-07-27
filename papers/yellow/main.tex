@@ -762,7 +762,20 @@ Stateful checks are:
 
 \subsection{Unified Transactions}
 
-\subsection{Block Validation Rules}
+\subsection{Full-Block Validation Rules}
+
+Below are rules for
+
+\begin{itemize}
+    \item{} every transaction in a block is referencing to inputs from the UTXO set or created by previous transactions
+    in the block. Please note that it is not possible for an input to refer to an output of some follow-up transaction
+    of the block.
+    \item{} every transaction in a block is valid.
+    \item{} total cost of validation of all the inputs of all the transactions in the block is no more than
+    allowed limit.
+    \item{} root hash of the authenticated UTXO set after application of the block transactions is the same as
+    in the header.
+\end{itemize}
 
 \knote{extension validation rules}
 

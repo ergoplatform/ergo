@@ -20,6 +20,8 @@ case class ErgoFullBlock(header: Header,
 
   override val parentId: ModifierId = header.parentId
 
+  override def serializedId: Array[Byte] = header.serializedId
+
   override lazy val id: ModifierId = header.id
 
   override type M = ErgoFullBlock

@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core.{ModifierId, ModifierTypeId, bytesToId}
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
@@ -15,7 +15,11 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
 
   //TODO implement correctly
-  override lazy val id: ModifierId = ModifierId @@ Random.randomBytes(32)
+  override lazy val id: ModifierId = bytesToId(Random.randomBytes(32))
+
+  override def parentId: ModifierId = ???
+
+  override def serializedId: Array[Byte] = ???
 
   override type M = UTXOSnapshotChunk
 

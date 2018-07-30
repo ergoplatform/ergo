@@ -45,16 +45,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
+  // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ id))
+    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ idToBytes(id)))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ id))
+    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ idToBytes(id)))
 
-  protected def validityKey(id: Array[Byte]): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ id))
+  protected def validityKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(ModifierId @@ _.data)
+  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -78,10 +79,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def heightOf(id: ModifierId): Option[Int] = historyStorage.getIndex(headerHeightKey(id))
     .map(b => Ints.fromByteArray(b.data))
 
-  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h))
-    .exists(_ sameElements id)
+  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
 
-  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).exists(_ sameElements h.id)
+  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
   private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
@@ -92,13 +92,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
 
-    historyStorage.insert(ByteArrayWrapper(h.id), dataToInsert._1, Seq(dataToInsert._2))
+    historyStorage.insert(Algos.idToBAW(h.id), dataToInsert._1, Seq(dataToInsert._2))
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (config.verifyTransactions || !(bestHeaderId sameElements h.id)) Seq.empty else Seq(h)
+        val toProcess = if (config.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")
@@ -124,7 +124,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   private def nonGenesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
     val score = scoreOf(h.parentId).get + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
-      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> ByteArrayWrapper(h.id)) else Seq.empty
+      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> Algos.idToBAW(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
     val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
     val headerIdsRow = if (score > bestHeadersChainScore) {
@@ -141,8 +141,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   private def genesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
     log.info(s"Initialize header chain with genesis header ${h.encodedId}")
     (Seq(
-      BestHeaderKey -> ByteArrayWrapper(h.id),
-      heightIdsKey(GenesisHeight) -> ByteArrayWrapper(h.id),
+      BestHeaderKey -> Algos.idToBAW(h.id),
+      heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
       h)
@@ -154,7 +154,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   private def orphanedBlockHeaderIdsRow(h: Header, score: Difficulty) = {
     log.info(s"New orphaned header ${h.encodedId} at height ${h.height} with score $score")
-    Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatten.toArray))
+    Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatMap(idToBytes).toArray))
   }
 
 
@@ -166,14 +166,14 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     val prevHeight = headersHeight
     log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, ByteArrayWrapper) =
-      heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatten.toArray)
+      heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
       .filter(h => !isInBestChain(h))
     val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
-      val otherIds = headerIdsAtHeight(header.height).filter(id => !(id sameElements header.id))
-      heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatten.toArray)
+      val otherIds = headerIdsAtHeight(header.height).filter(id => id != header.id)
+      heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatMap(idToBytes).toArray)
     }
     forkIds :+ self
   }
@@ -186,16 +186,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
     val modifierId = header.id
     val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
-      .map(id => ByteArrayWrapper(id))
+      .map(id => Algos.idToBAW(id))
 
-    val toRemove = Seq(headerScoreKey(modifierId), ByteArrayWrapper(modifierId)) ++ payloadModifiers
-    val bestHeaderKeyUpdate = if (bestHeaderIdOpt.exists(_ sameElements modifierId)) {
-      Seq(BestHeaderKey -> ByteArrayWrapper(header.parentId))
+    val toRemove = Seq(headerScoreKey(modifierId), Algos.idToBAW(modifierId)) ++ payloadModifiers
+    val bestHeaderKeyUpdate = if (bestHeaderIdOpt.contains(modifierId)) {
+      Seq(BestHeaderKey -> Algos.idToBAW(header.parentId))
     } else {
       Seq.empty
     }
-    val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.exists(_ sameElements modifierId)) {
-      Seq(BestFullBlockKey -> ByteArrayWrapper(header.parentId))
+    val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.contains(modifierId)) {
+      Seq(BestFullBlockKey -> Algos.idToBAW(header.parentId))
     } else {
       Seq.empty
     }
@@ -228,7 +228,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     *         First id is always from the best headers chain.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    ModifierId @@ historyStorage.getIndex(heightIdsKey(height: Int)).map(_.data).getOrElse(Array()).grouped(32).toSeq
+    historyStorage.getIndex(heightIdsKey(height: Int))
+      .map(w => w.data).getOrElse(Array()).grouped(32).map(bytesToId).toSeq
 
   /**
     * @param limit       - maximum length of resulting HeaderChain

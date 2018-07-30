@@ -13,30 +13,28 @@ object Algos extends ScorexEncoding {
 
   type HF = Blake2b256.type
 
-  def versionToBAW(id: VersionTag): ByteArrayWrapper = ByteArrayWrapper(versionToBytes(id))
+  val hash: HF = Blake2b256
 
-  def idToBAW(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(idToBytes(id))
+  val initialDifficulty = 1
 
-  // TODO may be redundant if id is already in encoded form
-  @inline
-  def encode(id: ModifierId): String = encoder.encode(id)
+  lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
-  def encode(bytes: Array[Byte]): String = encoder.encode(bytes)
+  @inline def versionToBAW(id: VersionTag): ByteArrayWrapper = ByteArrayWrapper(versionToBytes(id))
 
-  def decode(str: String): Try[Array[Byte]] = encoder.decode(str)
+  @inline def idToBAW(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(idToBytes(id))
+
+  @inline def encode(id: ModifierId): String = encoder.encode(id)
+
+  @inline def encode(bytes: Array[Byte]): String = encoder.encode(bytes)
+
+  @inline def decode(str: String): Try[Array[Byte]] = encoder.decode(str)
 
   def blockIdDifficulty(id: Array[Byte]): BigInt = {
     val blockTarget = BigInt(1, id).ensuring(_ <= Constants.MaxTarget)
     Constants.MaxTarget / blockTarget
   }
 
-  val hash: HF = Blake2b256
-
-  val initialDifficulty = 1
-
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
-
-  lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
 }

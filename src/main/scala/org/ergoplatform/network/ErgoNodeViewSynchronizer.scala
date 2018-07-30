@@ -1,25 +1,23 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
-import scorex.core.ModifierId
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
-import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
-import scorex.core.network.message.ModifiersSpec
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SyntacticallySuccessfulModifier}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.{ModifierId, PersistentNodeViewModifier}
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
@@ -55,41 +53,55 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  override protected def modifiersFromRemote: Receive = {
-    case DataFromPeer(spec, data: ModifiersData@unchecked, remote) if spec.messageCode == ModifiersSpec.MessageCode =>
-      super.modifiersFromRemote(DataFromPeer(spec, data, remote))
+  /**
+    * Put modifier to applied status
+    * Request more modifiers, if expecting queue is small enough
+    */
+  private val onSyntacticallySuccessfulModifier: Receive = {
+    case SyntacticallySuccessfulModifier(mod) =>
+      deliveryTracker.toApplied(mod.id)
+
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>
-        if (!h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
-          // headers chain is not synced yet, but our expecting list is empty - ask for more headers
-          sendSync(statusTracker, h)
-        } else if (h.isHeadersChainSynced && !deliveryTracker.isExpecting) {
-          // headers chain is synced, but our full block list is empty - request more full blocks
-          self ! CheckModifiersToDownload
+        mod match {
+          case _: Header if !h.isHeadersChainSynced && !deliveryTracker.isExpecting =>
+            // headers chain is not synced yet, but our expecting list is empty - ask for more headers
+            sendSync(statusTracker, h)
+          case _: BlockSection if downloadListSize - deliveryTracker.expectingSize > downloadListSize / 2 =>
+            // our expecting list list is is half empty - request more missed modifiers
+            self ! CheckModifiersToDownload
+          case _ =>
         }
       }
   }
 
   /**
-    * Broadcast inv on successful Header and BlockTransactions application
-    * Do not broadcast Inv messages during initial synchronization (the rest of the network should already have all
-    * this messages)
-    *
+    * Broadcast inv if modifier is new enough
     */
-  protected val onSyntacticallySuccessfulModifier: Receive = {
-    case SyntacticallySuccessfulModifier(mod) if (mod.isInstanceOf[Header] || mod.isInstanceOf[BlockTransactions]) &&
-      historyReaderOpt.exists(_.isHeadersChainSynced) =>
-
-      broadcastModifierInv(mod)
+  private val onSemanticallySuccessfulModifier: Receive = {
+    case SemanticallySuccessfulModifier(mod) =>
+      broadcastInvForNewModifier(mod)
   }
 
-  def onChangedVault: Receive = {
-    case ChangedVault(_) =>
+
+  private def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+    historyReaderOpt foreach { h =>
+      val modifierHeader: Option[Header] = mod match {
+        case header: Header => Some(header)
+        case s: BlockSection => h.typedModifierById[Header](s.headerId)
+        case _ => None
+      }
+      modifierHeader.foreach { header =>
+        if (header.isNew(timeProvider, 1.hour)) {
+          broadcastModifierInv(mod)
+        }
+      }
+    }
   }
 
   override protected def viewHolderEvents: Receive =
     onSyntacticallySuccessfulModifier orElse
-      onChangedVault orElse
+      onSemanticallySuccessfulModifier orElse
       onCheckModifiersToDownload orElse
       super.viewHolderEvents
 }

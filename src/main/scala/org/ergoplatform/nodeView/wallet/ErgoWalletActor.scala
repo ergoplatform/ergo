@@ -88,7 +88,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val idxShort = outIndex.toShort
-          val box = outCandidate.toBox(tx.id, idxShort)
+          val box = outCandidate.toBox(tx.serializedId, idxShort)
           val bu = heightOpt match {
             case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
             case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)

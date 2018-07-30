@@ -68,7 +68,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
     )
 
 
-  override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.powHash)
+  override def realDifficulty(header: Header): Difficulty = Constants.MaxTarget / BigInt(1, header.serializedId)
 
   override def toString: String = s"EquihashPowScheme(n = ${n.toInt}, k = ${k.toInt})"
 }

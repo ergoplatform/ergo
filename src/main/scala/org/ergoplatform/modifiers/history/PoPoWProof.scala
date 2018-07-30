@@ -4,7 +4,7 @@ import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core._
 import scorex.core.serialization.Serializer
 
 import scala.util.{Failure, Success, Try}
@@ -18,7 +18,11 @@ case class PoPoWProof(m: Byte,
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
 
-  override lazy val id: ModifierId = ModifierId @@ Algos.hash(bytes)
+  override def parentId: ModifierId = ???
+
+  override def serializedId: Array[Byte] = Algos.hash(bytes)
+
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
   override type M = PoPoWProof
 
@@ -46,16 +50,16 @@ class PoPoWProofUtils(powScheme: PowScheme) {
       Failure(new Error(s"k should positive, ${proof.k} given"))
     } else if (proof.m < 1) {
       Failure(new Error(s"m should positive, ${proof.m} given"))
-    } else if (!(proof.suffix.head.interlinks(proof.i) sameElements proof.innerchain.last.id)) {
+    } else if (!(proof.suffix.head.interlinks(proof.i) == proof.innerchain.last.id)) {
       Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
     } else if (proof.innerchain.length < proof.m) {
       Failure(new Error(s"Innerchain length is not enough in $proof"))
     } else if (!proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
       Failure(new Error(s"Innerchain difficulty is not enough in $proof"))
-    } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId sameElements s.head.id)) {
+    } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {
       Failure(new Error(s"Suffix links are incorrect in $proof"))
     } else if (!proof.innerchain.sliding(2).filter(_.length == 2)
-      .forall(s => s(1).interlinks(proof.i) sameElements s.head.id)) {
+      .forall(s => s(1).interlinks(proof.i) == s.head.id)) {
       Failure(new Error(s"Innerchain links are incorrect in $proof"))
     } else {
       Success(Unit)

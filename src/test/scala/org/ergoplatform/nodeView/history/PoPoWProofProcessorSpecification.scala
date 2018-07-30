@@ -96,24 +96,24 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
 
     h10.interlinks.length shouldBe 3
 
-    h10.interlinks(0).sameElements(h1.id) shouldBe true
-    h10.interlinks(1).sameElements(h9.id) shouldBe true
-    h10.interlinks(2).sameElements(h9.id) shouldBe true
+    h10.interlinks.head shouldBe h1.id
+    h10.interlinks(1) shouldBe h9.id
+    h10.interlinks(2) shouldBe h9.id
 
     val h11 = zeroLevelPowScheme.prove(Some(h10), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
       11L, emptyDigest32).get
 
     h11.interlinks.length shouldBe 3
 
-    h11.interlinks(0).sameElements(h1.id) shouldBe true
-    h11.interlinks(1).sameElements(h10.id) shouldBe true
-    h11.interlinks(2).sameElements(h9.id) shouldBe true
+    h11.interlinks.head shouldBe h1.id
+    h11.interlinks(1) shouldBe h10.id
+    h11.interlinks(2) shouldBe h9.id
 
     val history = applyHeaderChain(genHistory(), HeaderChain(Seq(h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11)))
     val proof = history.constructPoPoWProof(m = 2, k = 1).get
 
     proof.suffix.size shouldBe 1
-    proof.suffix.head.id.sameElements(h11.id) shouldBe true
+    proof.suffix.head.id shouldBe h11.id
 
 
     proof.i shouldBe 2

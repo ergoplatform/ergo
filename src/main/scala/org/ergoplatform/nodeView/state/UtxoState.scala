@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.VersionTag
+import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -50,7 +50,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def rollbackTo(version: VersionTag): Try[UtxoState] = {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    store.get(ByteArrayWrapper(version)) match {
+    store.get(Algos.versionToBAW(version)) match {
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash.data
         val rollbackResult = p.rollback(rootHash).map { _ =>
@@ -89,7 +89,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       })
     }.get
 
-    if (!expectedDigest.sameElements(persistentProver.digest)) {
+    if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
       throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
         s"${Algos.encode(persistentProver.digest)} given")
     }
@@ -106,32 +106,33 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
         val emissionBox = extractEmissionBox(fb)
         val newStateContext = stateContext.appendHeader(fb.header)
-        val md = metadata(VersionTag @@ fb.id, fb.header.stateRoot, emissionBox, newStateContext)
+        val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
         val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
         val proofHash = ADProofs.proofDigest(proofBytes)
         if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-        if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
+        if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
           throw new Error("Storage kept roothash is not equal to the declared one")
-        } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
+        } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
           throw new Error("Calculated proofHash is not equal to the declared one")
-        } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
+        } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
           throw new Error("Calculated stateRoot is not equal to the declared one")
         }
 
         log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
           s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-        new UtxoState(persistentProver, VersionTag @@ fb.id, store, constants)
+        new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
       }
       stateTry.recoverWith[UtxoState] { case e =>
         log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
           s" ${Algos.encode(inRoot)}: ", e)
-        persistentProver.rollback(inRoot).ensuring(persistentProver.digest.sameElements(inRoot))
+        persistentProver.rollback(inRoot)
+          .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
         Failure(e)
       }
 
     case h: Header =>
-      Success(new UtxoState(persistentProver, VersionTag @@ h.id, this.store, constants))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -140,7 +141,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions.map { v =>
-    VersionTag @@ store.get(ByteArrayWrapper(Algos.hash(v))).get.data
+    bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
   }
 
 }
@@ -154,9 +155,10 @@ object UtxoState {
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
                        context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
-    val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
-    val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modId
-    val bestVersion = bestVersionKey -> modId
+    val modIdBytes = versionToBytes(modId)
+    val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
+    val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes
+    val bestVersion = bestVersionKey -> modIdBytes
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
@@ -165,7 +167,7 @@ object UtxoState {
 
   def create(dir: File, constants: StateConstants): UtxoState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val version = store.get(ByteArrayWrapper(bestVersionKey)).map(VersionTag @@ _.data)
+    val version = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)

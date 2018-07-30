@@ -40,10 +40,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history = applyChain(history, fork1)
 
     fork2.foreach{ fb =>
-      modifiersCache.put(new mutable.WrappedArray.ofByte(fb.header.id), fb.header)
+      modifiersCache.put(fb.header.id, fb.header)
     }
     history.applicable(fork2.head.header) shouldBe true
-    modifiersCache.contains(new mutable.WrappedArray.ofByte(fork2.head.header.id)) shouldBe true
+    modifiersCache.contains(fork2.head.header.id) shouldBe true
     modifiersCache.findCandidateKey(history).isDefined shouldBe true
   }
 
@@ -101,7 +101,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
         def findBestBlock(appendedToCheck: Seq[ErgoFullBlock]): ErgoFullBlock = {
           def firstInAppended(h: Header): Header = {
-            appended.find(_.header.id sameElements h.parentId).map(_.header) match {
+            appended.find(_.header.id == h.parentId).map(_.header) match {
               case Some(prev) => firstInAppended(prev)
               case None => h
             }
@@ -111,10 +111,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
             genesis
           } else {
             val best = appendedToCheck.maxBy(_.header.height)
-            if (firstInAppended(best.header).parentId sameElements genesis.id) {
+            if (firstInAppended(best.header).parentId == genesis.id) {
               best
             } else {
-              findBestBlock(appendedToCheck.filterNot(_.id sameElements best.id))
+              findBestBlock(appendedToCheck.filterNot(_.id == best.id))
             }
           }
         }
@@ -230,7 +230,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt should not be None
 
     val chain = genChain(BlocksInChain, history.bestFullBlockOpt.get).tail
-    (chain.head.header.parentId sameElements Header.GenesisParentId) shouldBe false
+    (chain.head.header.parentId == Header.GenesisParentId) shouldBe false
 
     history = applyChain(history, chain)
 

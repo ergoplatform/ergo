@@ -34,7 +34,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
-      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(_.boxId sameElements id)) match {
+      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
         case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
           Some(tx.outputs.head)
         case Some(_) =>
@@ -75,7 +75,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     log.debug(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
-    } else if (!storage.version.exists(_.sameElements(rootHash))) {
+    } else if (!storage.version.exists(t => java.util.Arrays.equals(t, rootHash))) {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         s"Possible reason - state update is in process."))
     } else {

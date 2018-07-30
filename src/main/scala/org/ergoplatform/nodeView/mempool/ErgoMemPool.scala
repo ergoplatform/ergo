@@ -17,7 +17,7 @@ import scala.util.Try
   * - validate transactions when put (is called)
   * - clean transactions, that become invalid
   */
-class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransaction])
+class ErgoMemPool private[mempool](val unconfirmed: TrieMap[ModifierId, ErgoTransaction])
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   override type NVCT = ErgoMemPool
@@ -25,17 +25,17 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransacti
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
   override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
-    putWithoutCheck(txs.filterNot(tx => unconfirmed.contains(key(tx.id))))
+    putWithoutCheck(txs.filterNot(tx => unconfirmed.contains(tx.id)))
   }
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
-    txs.foreach(tx => unconfirmed.put(key(tx.id), tx))
+    txs.foreach(tx => unconfirmed.put(tx.id, tx))
     completeAssembly(txs)
     this
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
-    unconfirmed.remove(key(tx.id))
+    unconfirmed.remove(tx.id)
     this
   }
 
@@ -49,7 +49,6 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[TxKey, ErgoTransacti
 }
 
 object ErgoMemPool {
-  type TxKey = scala.collection.mutable.WrappedArray.ofByte
 
   type MemPoolRequest = Seq[ModifierId]
 

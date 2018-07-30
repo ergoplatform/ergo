@@ -19,6 +19,4 @@ class ErgoDeliveryTracker(system: ActorSystem,
 
   def expectingSize: Int = expecting.size
 
-  def isExpectingOrDelivered(mid: ModifierId): Boolean = expecting.contains(mid) || delivered.contains(mid)
-
 }

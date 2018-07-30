@@ -5,15 +5,17 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
+import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.settings.Constants
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder._
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
-import scorex.core.network.NodeViewSynchronizer
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedVault, SyntacticallySuccessfulModifier}
 import scorex.core.network.message.BasicMsgDataTypes.ModifiersData
 import scorex.core.network.message.ModifiersSpec
+import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 
@@ -23,10 +25,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)(implicit ex: ExecutionContext)
-  extends NodeViewSynchronizer[ErgoTransaction,
-    ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier, ErgoHistory,
-    ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider) {
+                               timeProvider: NetworkTimeProvider)
+                              (implicit ex: ExecutionContext)
+  extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
+    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
+    Constants.modifierSerializers) {
+
+  override protected lazy val modifiersCache = new ErgoModifiersCache(networkSettings.maxModifiersCacheSize)
 
   override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
     self, timeProvider)
@@ -43,8 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        // todo use status keeper here after scorex #280 merge
-        def downloadRequired(id: ModifierId): Boolean = !h.contains(id) && !deliveryTracker.isExpectingOrDelivered(id)
+        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
 
         h.nextModifiersToDownload(downloadListSize - deliveryTracker.expectingSize, downloadRequired)
           .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))

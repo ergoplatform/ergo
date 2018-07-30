@@ -39,31 +39,6 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     modifiersCache.remove(genKey(1)).isEmpty shouldBe true
   }
 
-  property("cache is remembering removed modifier ids if rememberKey = true") {
-    val limit = 3
-    val modifiersCache = new ErgoModifiersCache(limit)
-
-    (1 to limit).foreach { i =>
-      val (k, h) = genCachePair(i)
-      modifiersCache.put(k, h)
-    }
-
-    val k1 = genKey(1)
-    modifiersCache.contains(k1) shouldBe true
-    modifiersCache.remove(k1, rememberKey = true)
-    modifiersCache.contains(k1) shouldBe true
-
-    val k2 = genKey(2)
-    modifiersCache.contains(k2) shouldBe true
-    modifiersCache.remove(k2, rememberKey = false)
-    modifiersCache.contains(k2) shouldBe false
-
-    val k3 = genKey(3)
-    modifiersCache.contains(k3) shouldBe true
-    modifiersCache.remove(k3)
-    modifiersCache.contains(k3) shouldBe false
-  }
-
   property("cache is proposing a reasonable candidate to enhance history") {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)

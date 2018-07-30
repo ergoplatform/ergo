@@ -38,4 +38,5 @@ object Algos extends ScorexEncoding {
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
+
 }

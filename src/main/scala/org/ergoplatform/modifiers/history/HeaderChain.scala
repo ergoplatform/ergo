@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.history
 
 case class HeaderChain(headers: IndexedSeq[Header]) {
   headers.indices.foreach { i =>
-    if (i > 0) require(headers(i).parentId sameElements headers(i - 1).id,
+    if (i > 0) require(headers(i).parentId == headers(i - 1).id,
       s"Incorrect chain: ${headers(i - 1)},${headers(i)}")
   }
 
@@ -22,7 +22,7 @@ case class HeaderChain(headers: IndexedSeq[Header]) {
   def drop(i: Int): HeaderChain = HeaderChain(headers.drop(i))
 
   def takeAfter(h: Header): HeaderChain = {
-    val commonIndex = headers.indexWhere(_.id sameElements h.id)
+    val commonIndex = headers.indexWhere(_.id == h.id)
     val commonBlockThenSuffixes = headers.takeRight(headers.length - commonIndex)
     HeaderChain(commonBlockThenSuffixes)
   }

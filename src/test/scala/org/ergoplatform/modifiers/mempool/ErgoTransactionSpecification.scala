@@ -30,10 +30,10 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
   private def modifyAsset(boxCandidate: ErgoBoxCandidate,
                           deltaFn: Long => Long,
                           idToskip: TokenId): ErgoBoxCandidate = {
-    val assetId = boxCandidate.additionalTokens.find(_._1.sameElements(idToskip) == false).get._1
+    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
 
     val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (id.sameElements(assetId)) assetId -> deltaFn(amount) else assetId -> amount
+      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
     }
 
     new ErgoBoxCandidate(
@@ -90,7 +90,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       if (modified) {
         (seq :+ ebc) -> true
       } else {
-        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(_._1.sameElements(from.head.id) == false)) {
+        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
           (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
         } else {
           (seq :+ ebc) -> false
@@ -211,7 +211,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
             case Some((assetId, amount)) =>
               val updAmount = amount - (ErgoBox.MaxTokens + 1)
               val updTokens = Seq(assetId -> amount) ++ (1 to (amount - updAmount).toInt).map(_ => assetId -> 1L) ++
-                c.additionalTokens.filterNot(_._1 sameElements assetId)
+                c.additionalTokens.filterNot(t => java.util.Arrays.equals(t._1, assetId))
                 modified = true
               new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
             case None => c

@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import java.nio.ByteBuffer
 import java.util
 
-import org.ergoplatform.settings.ErgoSettings
+import com.google.common.primitives.Ints
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
@@ -50,6 +51,15 @@ object ErgoAddressTester extends App {
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = P2PKHAddress.addressTypePrefix
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case P2PKHAddress(otherHash) => util.Arrays.equals(addressHash, otherHash)
+    case _ => false
+  }
+
+  override def hashCode(): Int = Ints.fromByteArray(addressHash.takeRight(4))
+
+  override def toString = s"P2PKH(${Algos.encode(addressHash)})"
 }
 
 object P2PKHAddress {
@@ -103,6 +113,7 @@ object ScriptAddress {
 
 
 case class ErgoAddressEncoder(settings: ErgoSettings) {
+
   import ErgoAddressEncoder._
 
   val ChecksumLength = 4
@@ -125,14 +136,18 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
     Base58.encode(withNetworkByte ++ checksum)
   }
 
-  def fromString(addrStr: String): Try[ErgoAddress] = Base58.decode(addrStr).flatMap{ bytes =>
+  def fromString(addrStr: String): Try[ErgoAddress] = Base58.decode(addrStr).flatMap { bytes =>
     Try {
       val headByte = bytes.head
       require(headByte >= networkPrefix)
       val addressType = headByte - networkPrefix
-      val (bs, checksum) = bytes.splitAt(bytes.length - ChecksumLength)
+      val (withoutChecksum, checksum) = bytes.splitAt(bytes.length - ChecksumLength)
 
-      if(!util.Arrays.equals(hash256(bs), checksum)) throw new Exception(s"Checksum check fails for $addrStr")
+      if (!util.Arrays.equals(hash256(withoutChecksum).take(ChecksumLength), checksum)) {
+        throw new Exception(s"Checksum check fails for $addrStr")
+      }
+
+      val bs = withoutChecksum.tail
 
       addressType match {
         case b: Int if b == P2PKHAddress.addressTypePrefix =>

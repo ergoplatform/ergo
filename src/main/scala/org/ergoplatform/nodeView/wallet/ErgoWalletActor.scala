@@ -19,14 +19,6 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
-sealed trait Transition
-
-case class ProcessRollback(toHeight: Int) extends Transition
-
-case class CreationConfirmation(creationHeight: Height) extends Transition
-
-case class ProcessSpending(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]) extends Transition
-
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 

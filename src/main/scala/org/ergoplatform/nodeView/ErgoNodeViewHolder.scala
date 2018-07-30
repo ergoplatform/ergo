@@ -101,7 +101,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           ErgoState.readOrGenerate(settings, StateConstants(Some(self), emission, settings.nodeSettings.keepVersions))
       }
     }.asInstanceOf[State]
-      .ensuring(_.rootHash sameElements digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest),
+      .ensuring(t => java.util.Arrays.equals(t.rootHash, digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest)),
         "State root is incorrect")
   }
 
@@ -109,11 +109,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (stateId, None, _) if stateId sameElements ErgoState.genesisStateVersion =>
+      case (ErgoState.genesisStateVersion, None, _)  =>
         log.info("State and history are both empty on startup")
         stateIn
-      case (stateId, Some(block), _) if stateId sameElements block.id =>
-        log.info(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
+      case (stateId, Some(block), _) if stateId == block.id =>
+        log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
       case (_, None, state) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
@@ -121,13 +121,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (_, Some(bestFullBlock), state: DigestState) =>
         // Just update state root hash
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
-        recreatedState(Some(VersionTag @@ bestFullBlock.id), Some(bestFullBlock.header.stateRoot))
+        recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))
       case (stateId, Some(historyBestBlock), state) =>
-        val stateBestHeaderOpt = history.typedModifierById[Header](ModifierId @@ stateId)
+        val stateBestHeaderOpt = history.typedModifierById[Header](versionToId(stateId))
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
           s"apply ${newChain.length} modifiers")
-        val startState = rollbackId.map(id => state.rollbackTo(VersionTag @@ id).get)
+        val startState = rollbackId.map(id => state.rollbackTo(idToVersion(id)).get)
           .getOrElse(recreatedState())
         val toApply = newChain.headers.map { h =>
           history.getFullBlock(h) match {

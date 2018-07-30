@@ -3,15 +3,16 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
+import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
 import scala.collection.mutable
 
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
-  private def genKey(i: Int): mutable.WrappedArray[Byte] = mutable.WrappedArray.make[Byte](Blake2b256(s"$i"))
+  private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 
-  private def genCachePair(i: Int): (mutable.WrappedArray[Byte], Header) = {
+  private def genCachePair(i: Int): (ModifierId, Header) = {
     val header = invalidHeaderGen.sample.get
     val k = genKey(i)
     k -> header
@@ -91,8 +92,8 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     val c2 = modifiersCache.popCandidate(history1).get
     val properCandidate = c2 match {
       case h: Header => h.height == 1
-      case bt: BlockTransactions => bt.id sameElements h1.transactionsId
-      case ap: ADProofs => ap.id sameElements h1.ADProofsId
+      case bt: BlockTransactions => bt.id == h1.transactionsId
+      case ap: ADProofs => ap.id == h1.ADProofsId
     }
     properCandidate shouldBe true
   }

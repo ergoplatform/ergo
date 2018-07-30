@@ -62,7 +62,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
         // second transaction input should be be an input, created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
-        txs.head.outputs.find(_.id sameElements inputToDoubleSpend.boxId) should not be None
+        txs.head.outputs.find(b => java.util.Arrays.equals(b.id, inputToDoubleSpend.boxId)) should not be None
         val doubleSpendTx = txs.last.copy(inputs = inputToDoubleSpend +: txs.last.inputs.tail)
         val invalidTxs = txs.dropRight(1) :+ doubleSpendTx
         invalidTxs.length shouldBe txs.length

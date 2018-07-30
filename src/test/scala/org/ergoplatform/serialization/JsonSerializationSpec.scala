@@ -1,6 +1,7 @@
 package org.ergoplatform.serialization
 
 import io.circe.ACursor
+import io.circe.parser.parse
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
@@ -20,7 +21,8 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   property("TransactionIdsForHeader should be converted into json correctly") {
     val modifierId = genBytes(Constants.ModifierIdSize).sample.get
     val stringId = Algos.encode(modifierId)
-    val data = TransactionIdsForHeader(ModifierId @@ Seq(modifierId))
+    val Right(expected) = parse(s"""{ "ids" : ["$stringId"]}""")
+    val data = TransactionIdsForHeader(Seq(modifierId))
     val c = data.asJson.hcursor
     c.downField("ids").downArray.as[String] shouldBe Right(stringId)
   }

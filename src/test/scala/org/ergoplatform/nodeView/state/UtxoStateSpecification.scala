@@ -6,8 +6,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.ErgoBox
-import scorex.core.VersionTag
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import scorex.core._
 import sigmastate.Values.TrueLeaf
 
 import scala.util.Random
@@ -171,11 +171,11 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     state = state.applyModifier(chain1block1).get
 
-    state = state.rollbackTo(VersionTag @@ genesis.id).get
+    state = state.rollbackTo(idToVersion(genesis.id)).get
     state = state.applyModifier(chain2block1).get
     state = state.applyModifier(chain2block2).get
 
-    state = state.rollbackTo(VersionTag @@ genesis.id).get
+    state = state.rollbackTo(idToVersion(genesis.id)).get
     state = state.applyModifier(chain1block1).get
     state = state.applyModifier(chain1block2).get
 
@@ -199,7 +199,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
         val finalRoot = finalState.rootHash
         finalRoot shouldEqual chain.last.header.stateRoot
 
-        val rollbackedState = finalState.rollbackTo(VersionTag @@ genesis.id).get
+        val rollbackedState = finalState.rollbackTo(idToVersion(genesis.id)).get
         rollbackedState.rootHash shouldEqual genesis.header.stateRoot
 
         val finalState2: WrappedUtxoState = chain.tail.foldLeft(rollbackedState) { (state, block) =>

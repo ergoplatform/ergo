@@ -7,8 +7,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
-import sigmastate.SBoolean
-import sigmastate.SGroupElement
+import sigmastate.{SBoolean, SGroupElement, Values}
 import sigmastate.Values.Value
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
@@ -16,8 +15,37 @@ import sigmastate.utils.ByteBufferReader
 import scala.util.Try
 
 
+/**
+  * An address is a short string which integrity could be checked. A prefix of address is showing network and
+  * address type. An address type is showing a script used to protect a box. Possible prefixes and address types for
+  * testnet:
+  *
+  * 7   - P2PKH (7aqf1Do41Vw4fEKYhbWwohQrtHoMRSVCZx)
+  * 3NP - P2PK (3NPoGuXAhh1BqGXhdWpzi6kQQ7r8iPGZLL1J32eXPYPrLTM2w7aW)
+  *     - SHA ()
+  *     - SA (imdaM2NzX)
+  *
+  * for mainnet:
+  *
+  *   - P2PKH
+  *   - P2PK
+  *   - SHA
+  *   - SA (7bwdkU5V8)
+  */
 sealed trait ErgoAddress {
   val addressTypePrefix: Byte
+}
+
+object ErgoAddressTester extends App {
+  val prover = new ErgoProvingInterpreter("6abb44c6f5")
+
+  val pk = prover.dlogPubkeys.head
+
+  val settings = ErgoSettings.read(None)
+
+  val encoder = ErgoAddressEncoder(settings)
+
+  println(encoder.toString(ScriptHashAddress(Values.TrueLeaf)))
 }
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
@@ -51,6 +79,12 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 }
 
 object ScriptHashAddress {
+  def apply(script: Value[SBoolean.type]): ScriptHashAddress = {
+    val sb = ValueSerializer.serialize(script)
+    val sbh = ErgoAddressEncoder.hash160(sb)
+    ScriptHashAddress(sbh)
+  }
+
   val addressTypePrefix: Byte = 2: Byte
 }
 
@@ -59,11 +93,16 @@ case class ScriptAddress(script: Value[SBoolean.type], scriptBytes: Array[Byte])
 }
 
 object ScriptAddress {
+  def apply(script: Value[SBoolean.type]): ScriptAddress = {
+    val sb = ValueSerializer.serialize(script)
+    ScriptAddress(script, sb)
+  }
+
   val addressTypePrefix: Byte = 3: Byte
 }
 
 
-class ErgoAddressEncoder(settings: ErgoSettings) {
+case class ErgoAddressEncoder(settings: ErgoSettings) {
   import ErgoAddressEncoder._
 
   val ChecksumLength = 4

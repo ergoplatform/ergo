@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+import java.util
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
@@ -89,7 +90,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       })
     }.get
 
-    if (!expectedDigest.sameElements(persistentProver.digest)) {
+    if (!util.Arrays.equals(expectedDigest, persistentProver.digest)) {
       throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
         s"${Algos.encode(persistentProver.digest)} given")
     }
@@ -113,9 +114,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         if (!store.get(ByteArrayWrapper(fb.id)).exists(_.data sameElements fb.header.stateRoot)) {
           throw new Error("Storage kept roothash is not equal to the declared one")
-        } else if (!(fb.header.ADProofsRoot sameElements proofHash)) {
+        } else if (!util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
           throw new Error("Calculated proofHash is not equal to the declared one")
-        } else if (!(fb.header.stateRoot sameElements persistentProver.digest)) {
+        } else if (!util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
           throw new Error("Calculated stateRoot is not equal to the declared one")
         }
 
@@ -126,7 +127,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       stateTry.recoverWith[UtxoState] { case e =>
         log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
           s" ${Algos.encode(inRoot)}: ", e)
-        persistentProver.rollback(inRoot).ensuring(persistentProver.digest.sameElements(inRoot))
+        persistentProver.rollback(inRoot).ensuring(util.Arrays.equals(persistentProver.digest, inRoot))
         Failure(e)
       }
 

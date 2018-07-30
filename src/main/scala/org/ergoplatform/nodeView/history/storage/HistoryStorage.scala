@@ -18,14 +18,10 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     .build[String, ErgoPersistentModifier]
 
 
-  // TODO remove when modifierId will be string
-  private def keyById(id: ModifierId): String = Algos.encode(id)
-
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    val key = keyById(id)
-    Option(modifiersCache.getIfPresent(key)) match {
+    Option(modifiersCache.getIfPresent(id)) match {
       case Some(e) =>
-        log.trace(s"Got modifier $key from cache")
+        log.trace(s"Got modifier $id from cache")
         Some(e)
       case None =>
         objectsStore.get(id).flatMap { bBytes =>
@@ -34,8 +30,8 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
             Failure(e)
           }.toOption match {
             case Some(pm) =>
-              log.trace(s"Cache miss for existing modifier $key")
-              modifiersCache.put(key, pm)
+              log.trace(s"Cache miss for existing modifier $id")
+              modifiersCache.put(id, pm)
               Some(pm)
             case None => None
           }
@@ -52,7 +48,10 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
-    objectsToInsert.foreach(o => objectsStore.put(o))
+    objectsToInsert.foreach{o =>
+      modifiersCache.put(o.id, o)
+      objectsStore.put(o)
+    }
     indexStore.update(
       id,
       Seq.empty,
@@ -60,7 +59,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
-    modifiersCache.invalidate(keyById(id))
+    modifiersCache.invalidate(id)
     objectsStore.delete(id)
   }
 

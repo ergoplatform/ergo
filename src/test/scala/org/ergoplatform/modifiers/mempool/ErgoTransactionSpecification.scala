@@ -33,7 +33,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
     val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
 
     val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (id.sameElements(assetId)) assetId -> deltaFn(amount) else assetId -> amount
+      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
     }
 
     new ErgoBoxCandidate(

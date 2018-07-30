@@ -22,7 +22,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
-  override def digest: Digest32 = BlockTransactions.rootHash(txs.map(_.id))
+  override def digest: Digest32 = BlockTransactions.transactionsRoot(txs)
 
   override type M = BlockTransactions
 
@@ -46,7 +46,9 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
 object BlockTransactions {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
-  def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(LeafData @@ ids.map(idToBytes))
+  def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = rootHash(txs.map(_.serializedId))
+
+  def rootHash(serializedIds: Seq[Array[Byte]]): Digest32 = Algos.merkleTreeRoot(LeafData @@ serializedIds)
 
   implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
     Map(

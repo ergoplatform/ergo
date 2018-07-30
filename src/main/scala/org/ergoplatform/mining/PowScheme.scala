@@ -30,7 +30,7 @@ trait PowScheme {
                  timestamp: Timestamp,
                  extensionHash: Digest32): Option[ErgoFullBlock] = {
 
-    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
@@ -50,7 +50,7 @@ trait PowScheme {
     val timestamp: Timestamp = candidateBlock.timestamp
     val extensionHash: Digest32 = candidateBlock.extensionHash
 
-    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionHash).map { h =>

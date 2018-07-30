@@ -47,7 +47,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield ErgoSyncInfo(ids)
 
   lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
-    idGenerator <- modifierIdGen
+    idGenerator <- genBytes(32)
     maxLength = 100
     toTake <- Gen.chooseNum(1, 100)
     ids <- Gen.listOfN(maxLength, idGenerator).map(_.take(toTake))

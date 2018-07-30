@@ -18,7 +18,11 @@ case class PoPoWProof(m: Byte,
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
 
-  override lazy val id: ModifierId = bytesToId(Algos.hash(bytes))
+  override def parentId: ModifierId = ???
+
+  override def serializedId: Array[Byte] = Algos.hash(bytes)
+
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
   override type M = PoPoWProof
 

@@ -8,6 +8,7 @@ import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
 import scorex.core._
@@ -30,9 +31,8 @@ import scala.util.Try
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
-  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier
+  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ErgoNodeViewModifier
     with ModifierValidator with ScorexLogging {
-
 
   override val serializedId: Array[Byte] = Blake2b256.hash(messageToSign)
 

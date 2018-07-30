@@ -93,7 +93,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def shouldStartMine(b: ErgoFullBlock): Boolean = {
-    ergoSettings.nodeSettings.mining && b.header.timestamp >= startTime
+    ergoSettings.nodeSettings.mining && b.header.isNew(timeProvider, ergoSettings.chainSettings.blockInterval)
   }
 
   private def receiveSemanticallySuccessfulModifier: Receive = {

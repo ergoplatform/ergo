@@ -7,17 +7,19 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.core._
+import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 case class Header(version: Version,
@@ -79,6 +81,13 @@ case class Header(version: Version,
     case p: ADProofs => java.util.Arrays.equals(ADProofsRoot, p.digest)
     case t: BlockTransactions => java.util.Arrays.equals(transactionsRoot, t.digest)
     case _ => false
+  }
+
+  /**
+    * Estimate, that this Header is new enough to possibly be the best header
+    */
+  def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
+    timeProvider.time() - timestamp < timeDiff.toMillis
   }
 
 }

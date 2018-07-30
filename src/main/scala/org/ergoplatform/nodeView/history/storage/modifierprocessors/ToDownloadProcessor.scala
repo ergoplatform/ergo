@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.core.{ModifierId, ModifierTypeId}
 
@@ -81,7 +81,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (header.height >= pruningProcessor.minimalFullBlockHeight) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && isNewHeader(header)) {
+    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       isHeadersChainSyncedVar = true
@@ -100,14 +100,6 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else {
       Seq((BlockTransactions.modifierTypeId, h.transactionsId))
     }
-  }
-
-  /**
-    * Estimate, that this block is new enough.
-    * TODO use the same function to start mining
-    */
-  private def isNewHeader(h: Header): Boolean = {
-    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis * 5
   }
 
 }

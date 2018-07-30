@@ -728,6 +728,7 @@ from the tree:
 
 
 \subsection{Transaction Validation Rules}
+\label{tx-validation}
 
 We split validation of a single transaction into two stages. There are $stateless checks$ which could be done by the
 transaction only being presented. Stateful checks are requiring knowledge of the current state, in the form of the whole
@@ -764,19 +765,23 @@ Stateful checks are:
 
 \subsection{Full-Block Validation Rules}
 
-Below are rules for
+Below are rules for block validation when a node is verifying transactions ($VerifyTransactions = 1$)
 
 \begin{itemize}
     \item{} every transaction in a block is referencing to inputs from the UTXO set or created by previous transactions
     in the block. Please note that it is not possible for an input to refer to an output of some follow-up transaction
     of the block.
-    \item{} every transaction in a block is valid.
+    \item{} every transaction in a block is valid~(see Section~\ref{tx-validation} for transaction validation rules).
     \item{} total cost of validation of all the inputs of all the transactions in the block is no more than
     allowed limit.
     \item{} root hash of the authenticated UTXO set after application of the block transactions is the same as
     in the header.
+    \item{} for a node keeping UTXO, hash of the calcualted state transformations proof is the same as announced
+    in the header of the block.
+    \item{} header is valid~\knote{link to header validation rules}.
 \end{itemize}
 
+\knote{mention emission rules. extractEmissionBox is buggy probably.}
 \knote{extension validation rules}
 
 \subsection{Token Emission}

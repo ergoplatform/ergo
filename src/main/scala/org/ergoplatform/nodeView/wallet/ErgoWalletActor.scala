@@ -28,10 +28,6 @@ case class CreationConfirmation(creationHeight: Height) extends Transition
 case class ProcessSpending(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]) extends Transition
 
 
-
-
-
-
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 
 
@@ -129,7 +125,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>
-      //height = heightTo
+      height = heightTo
+
       log.warn("Rollback in the wallet is not implemented")
 
     case ReadBalances(confirmed) =>

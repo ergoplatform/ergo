@@ -25,13 +25,15 @@ object Registry {
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ByteArrayWrapper) = registry(boxId)
+  def removeFromRegistry(boxId: ByteArrayWrapper) = registry.remove(boxId)
 
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
 
   def putToConfirmedIndex(height: Height, boxId: ByteArrayWrapper) = synchronized {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq()) :+ boxId)
   }
+
+  def confirmedAt(height: Height): Seq[ByteArrayWrapper] = confirmedIndex.getOrElse(height, Seq())
 
   private var _confirmedBalance: Long = 0
   private val _confirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()

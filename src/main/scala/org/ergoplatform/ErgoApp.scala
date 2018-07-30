@@ -3,7 +3,6 @@ package org.ergoplatform
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute, WalletApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier

@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
-import scorex.core.VersionTag
+import scorex.core.{VersionTag, bytesToVersion}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -121,7 +121,7 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      us.rootHash.sameElements(constants.emission.settings.afterGenesisStateDigest) && us.version.sameElements(genesisStateVersion)
+      java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
@@ -132,7 +132,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
-  lazy val genesisStateVersion: VersionTag = VersionTag @@ Array.fill(32)(1: Byte)
+  lazy val genesisStateVersion: VersionTag = bytesToVersion(Array.fill(32)(1: Byte))
 
   def readOrGenerate(settings: ErgoSettings,
                      constants: StateConstants): ErgoState[_] = {

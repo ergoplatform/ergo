@@ -62,7 +62,7 @@ trait ErgoHistoryReader
     } else {
       None
     }
-  }.ensuring(_.forall(_.id sameElements id), s"Modifier ${Algos.encode(id)} id is incorrect")
+  }.ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
 
   /** Get modifier of expected type by its identifier
     * @param id - modifier id
@@ -94,10 +94,10 @@ trait ErgoHistoryReader
     */
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     bestHeaderIdOpt match {
-      case Some(id) if info.lastHeaderIds.lastOption.exists(_ sameElements id) =>
+      case Some(id) if info.lastHeaderIds.lastOption.contains(id) =>
         //Our best header is the same as other node best header
         Equal
-      case Some(id) if info.lastHeaderIds.exists(_ sameElements id) =>
+      case Some(id) if info.lastHeaderIds.contains(id) =>
         //Our best header is in other node best chain, but not at the last position
         Older
       case Some(_) if info.lastHeaderIds.isEmpty =>
@@ -145,7 +145,7 @@ trait ErgoHistoryReader
       val heightFrom = Math.min(headersHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(size, startHeader, h => h.parentId sameElements lastHeaderInOurBestChain)
+      val headerIds = headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)
         .headers.map(h => Header.modifierTypeId -> h.id)
       headerIds
     }
@@ -168,9 +168,9 @@ trait ErgoHistoryReader
         acc.map(chain => chain.reverse)
       } else {
         val updatedChains = nextLevelHeaders.flatMap { h =>
-          acc.find(chain => chain.nonEmpty && (h.parentId sameElements chain.head.id)).map(c => h +: c)
+          acc.find(chain => chain.nonEmpty && (h.parentId == chain.head.id)).map(c => h +: c)
         }
-        val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId sameElements chain.head.id))
+        val nonUpdatedChains = acc.filter(chain => !nextLevelHeaders.exists(_.parentId == chain.head.id))
         loop(currentHeight.map(_ + 1), updatedChains ++ nonUpdatedChains)
       }
     }
@@ -274,7 +274,7 @@ trait ErgoHistoryReader
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
                                                  startHeader: Header,
                                                  limit: Int): (HeaderChain, HeaderChain) = {
-    def until(h: Header): Boolean = otherChain.exists(_.id sameElements h.id)
+    def until(h: Header): Boolean = otherChain.exists(_.id == h.id)
 
     val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head

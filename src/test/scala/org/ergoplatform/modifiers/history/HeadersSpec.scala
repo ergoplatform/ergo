@@ -27,7 +27,7 @@ class HeadersSpec extends ErgoPropertyTest {
 
   property("Header.interlinks.tail should not contain genesis id") {
     chain.headers.tail.foreach { r =>
-      r.interlinks.tail.find(_ sameElements genesisId) shouldBe None
+      r.interlinks.tail should not contain genesisId
     }
   }
 

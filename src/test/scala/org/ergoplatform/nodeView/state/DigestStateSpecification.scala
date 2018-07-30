@@ -2,14 +2,14 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.VersionTag
+import scorex.core._
 import scorex.crypto.authds.ADDigest
 
 import scala.util.Random
 
 class DigestStateSpecification extends ErgoPropertyTest {
 
-  private val emptyVersion: VersionTag = VersionTag @@ Array.fill(32)(0: Byte)
+  private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   property("reopen") {
@@ -82,7 +82,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds2.rollbackVersions.size shouldEqual 2
 
-      ds2.rootHash.sameElements(ds.rootHash) shouldBe false
+      java.util.Arrays.equals(ds2.rootHash, ds.rootHash) shouldBe false
 
       val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash

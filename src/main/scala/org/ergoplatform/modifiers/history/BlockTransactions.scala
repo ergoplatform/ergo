@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
-import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.core._
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 
@@ -22,7 +22,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
-  override def digest: Digest32 = BlockTransactions.rootHash(txs.map(_.id))
+  override def digest: Digest32 = BlockTransactions.transactionsRoot(txs)
 
   override type M = BlockTransactions
 
@@ -46,7 +46,9 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
 object BlockTransactions {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
-  def rootHash(ids: Seq[ModifierId]): Digest32 = Algos.merkleTreeRoot(LeafData @@ ids)
+  def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = rootHash(txs.map(_.serializedId))
+
+  def rootHash(serializedIds: Seq[Array[Byte]]): Digest32 = Algos.merkleTreeRoot(LeafData @@ serializedIds)
 
   implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
     Map(
@@ -61,11 +63,11 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
       val txBytes = ErgoTransactionSerializer.toBytes(tx)
       Bytes.concat(Ints.toByteArray(txBytes.length), txBytes)
     })
-    Bytes.concat(obj.headerId, txsBytes)
+    Bytes.concat(idToBytes(obj.headerId), txsBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[BlockTransactions] = Try {
-    val headerId: ModifierId = ModifierId @@ bytes.slice(0, Constants.ModifierIdSize)
+    val headerId: ModifierId = bytesToId(bytes.slice(0, Constants.ModifierIdSize))
 
     def parseTransactions(index: Int, acc: Seq[ErgoTransaction]): BlockTransactions = {
       if (index == bytes.length) {

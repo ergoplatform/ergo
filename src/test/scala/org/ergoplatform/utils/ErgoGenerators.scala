@@ -13,7 +13,7 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scapi.sigma.DLogProtocol.DLogProverInput
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -31,9 +31,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
+  lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
+
+  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = proveDlogGen
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     height <- positiveIntGen

@@ -18,6 +18,7 @@ object Algos extends ScorexEncoding {
   def idToBAW(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(idToBytes(id))
 
   // TODO may be redundant if id is already in encoded form
+  @inline
   def encode(id: ModifierId): String = encoder.encode(id)
 
   def encode(bytes: Array[Byte]): String = encoder.encode(bytes)

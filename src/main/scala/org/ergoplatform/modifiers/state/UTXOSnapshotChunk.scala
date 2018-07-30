@@ -17,6 +17,10 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
   //TODO implement correctly
   override lazy val id: ModifierId = bytesToId(Random.randomBytes(32))
 
+  override def parentId: ModifierId = ???
+
+  override def serializedId: Array[Byte] = ???
+
   override type M = UTXOSnapshotChunk
 
   override lazy val serializer: Serializer[UTXOSnapshotChunk] = ???

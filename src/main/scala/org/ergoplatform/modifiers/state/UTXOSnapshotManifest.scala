@@ -14,11 +14,15 @@ import scala.util.Try
 case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.modifierTypeId
 
-  override lazy val id: ModifierId = bytesToId(Algos.hash(concatBytes(chunkRootHashes :+ idToBytes(blockId))))
+  override def serializedId: Array[Byte] = Algos.hash(concatBytes(chunkRootHashes :+ idToBytes(blockId)))
+
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
   override type M = UTXOSnapshotManifest
 
   override lazy val serializer: Serializer[UTXOSnapshotManifest] = ???
+
+  override def parentId: ModifierId = ???
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(LeafData @@ chunkRootHashes)
 }

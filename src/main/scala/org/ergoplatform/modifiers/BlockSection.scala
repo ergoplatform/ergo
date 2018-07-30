@@ -8,14 +8,22 @@ import scorex.core._
   */
 trait BlockSection extends ErgoPersistentModifier {
 
-  override lazy val id: ModifierId = BlockSection.computeId(modifierTypeId, headerId, digest)
+
+  override lazy val serializedId: Array[Byte] = BlockSection.computeIdBytes(modifierTypeId, headerId, digest)
+
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
   def digest: Array[Byte]
 
   def headerId: ModifierId
+
+  override def parentId: ModifierId = headerId
 }
 
 object BlockSection {
   def computeId(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): ModifierId =
     bytesToId(Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest))
+
+  def computeIdBytes(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
+    Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest)
 }

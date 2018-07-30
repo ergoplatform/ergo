@@ -7,7 +7,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
-import sigmastate.{SBoolean, SGroupElement, Values}
+import sigmastate.{SBoolean, SGroupElement}
 import sigmastate.Values.Value
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
@@ -22,14 +22,14 @@ import scala.util.Try
   *
   * 7   - P2PKH (7aqf1Do41Vw4fEKYhbWwohQrtHoMRSVCZx)
   * 3NP - P2PK (3NPoGuXAhh1BqGXhdWpzi6kQQ7r8iPGZLL1J32eXPYPrLTM2w7aW)
-  *     - SHA ()
+  *     - SHA (8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC)
   *     - SA (imdaM2NzX)
   *
   * for mainnet:
   *
-  *   - P2PKH
-  *   - P2PK
-  *   - SHA
+  *   - P2PKH (1Eh8BMYDG16PB4cAfUg3KQR3NSoJAYN3RG)
+  *   - P2PK (17Xtw9ZTz1jE92UDq4j19jKi8fUkdzoaB4UsmnXYdJejzpZvX1F)
+  *   - SHA (25qGdVWg2yyYho8uC1pLtc7KxFn4nEEAwD, 23NL9a8ngN28ovtLiKLgHexcdTKBbUMLhH)
   *   - SA (7bwdkU5V8)
   */
 sealed trait ErgoAddress {
@@ -45,7 +45,7 @@ object ErgoAddressTester extends App {
 
   val encoder = ErgoAddressEncoder(settings)
 
-  println(encoder.toString(ScriptHashAddress(Values.TrueLeaf)))
+  println(encoder.toString(ScriptAddress(pk)))
 }
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {

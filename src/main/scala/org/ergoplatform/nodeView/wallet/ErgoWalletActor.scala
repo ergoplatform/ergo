@@ -117,8 +117,22 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>
-      height = heightTo
 
+      height.until(heightTo, -1).foreach{h =>
+        val toRemove = Registry.confirmedAt(h)
+        toRemove.foreach{boxId =>
+          Registry.removeFromRegistry(boxId).foreach{tb =>
+            tb.transitionBack(heightTo) match {
+              case Some(newBox) =>
+                newBox.register()
+              case None =>
+                //todo: should we be here at all?
+            }
+          }
+        }
+      }
+
+      height = heightTo
       log.warn("Rollback in the wallet is not implemented")
 
     case ReadBalances(confirmed) =>

@@ -108,7 +108,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (stateId, None, _) if stateId == ErgoState.genesisStateVersion =>
+      case (ErgoState.genesisStateVersion, None, _)  =>
         log.info("State and history are both empty on startup")
         stateIn
       case (stateId, Some(block), _) if stateId == block.id =>

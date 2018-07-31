@@ -45,7 +45,7 @@ class ErgoWallet(actorSystem: ActorSystem,
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
   private lazy val seed = settings.walletSettings.seed
-  
+
   private lazy val addressEncoder = new ErgoAddressEncoder(settings)
 
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed, addressEncoder))

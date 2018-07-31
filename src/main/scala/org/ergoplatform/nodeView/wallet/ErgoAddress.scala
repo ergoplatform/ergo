@@ -166,14 +166,12 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 
   val networkPrefix = settings.chainSettings.addressPrefix
 
-  private def contentBytes(address: ErgoAddress): Array[Byte] = address match {
+  def contentBytes(address: ErgoAddress): Array[Byte] = address match {
     case P2PKHAddress(addressHash) => addressHash
     case P2PKAddress(_, pubkeyBytes) => pubkeyBytes
     case ScriptHashAddress(scriptHash) => scriptHash
     case ScriptAddress(_, scriptBytes) => scriptBytes
   }
-
-  def definitiveBytes(address: ErgoAddress): Array[Byte] = contentBytes(address)
 
   def toString(address: ErgoAddress): String = {
     val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: contentBytes(address)

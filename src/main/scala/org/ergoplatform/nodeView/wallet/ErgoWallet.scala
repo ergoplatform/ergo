@@ -75,7 +75,7 @@ class ErgoWallet(actorSystem: ActorSystem,
       case fb: ErgoFullBlock =>
         actor ! ScanOnchain(fb)
       case _ =>
-        log.warn("Only full block is expected in ErgoWallet.scanPersistent")
+        log.warn("Only a full block is expected in ErgoWallet.scanPersistent")
     }
     this
   }

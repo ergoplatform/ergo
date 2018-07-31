@@ -13,40 +13,59 @@ import sigmastate.Values.Value
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 
 /**
   * An address is a short string which integrity could be checked. A prefix of address is showing network and
-  * address type. An address type is showing a script used to protect a box. Possible prefixes and address types for
-  * testnet:
+  * address type. An address type is showing a script used to protect a box.
+  *
+  * An address is encoding network type, address type, checksum, and enough information to watch for a particular
+  * script.
+  *
+  * Possible network types are:
+  * Mainnet - 0x00
+  * Testnet - 0x10
+  *
+  * //todo: write concrete ErgoScript scripts
+  * Address types are:
+  * 0x00 - Pay-to-PublicKey-Hash(P2PKH) address which is corresponding to the script ???
+  * 0x01 - Pay-to-PublicKey(P2PK) address which is corresponding to the script ???
+  * 0x02 - Pay-to-Script-Hash(P2SH) which is corresponding to the script ???
+  * 0x03 - Pay-to-Script(P2S) which is representing a script as is
+  *
+  * For an address type, we form content bytes as follows:
+  *
+  * P2PKH - 160-bit hash of the publicKey
+  * P2PK - serialized (compressed) public key
+  * P2sH - 160 bit of the script
+  * P2S  - serialized script
+  *
+  * Address examples for testnet:
   *
   * 7   - P2PKH (7aqf1Do41Vw4fEKYhbWwohQrtHoMRSVCZx)
-  * 3NP - P2PK (3NPoGuXAhh1BqGXhdWpzi6kQQ7r8iPGZLL1J32eXPYPrLTM2w7aW)
-  *     - SHA (8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC)
-  *     - SA (imdaM2NzX)
+  * 3   - P2PK (3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN)
+  * 8   - P2SH (8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC, 8LnSX95GAWdbDZWJZQ73Uth4uE8HqN3emJ)
+  * ?   - P2S (imdaM2NzX, z4hAmfvfSnQJPChMWzfBzJjpB8ei2HoLCZ2RHTaNArMNHFirdJTc7E)
   *
   * for mainnet:
   *
-  *   - P2PKH (1Eh8BMYDG16PB4cAfUg3KQR3NSoJAYN3RG)
-  *   - P2PK (17Xtw9ZTz1jE92UDq4j19jKi8fUkdzoaB4UsmnXYdJejzpZvX1F)
-  *   - SHA (25qGdVWg2yyYho8uC1pLtc7KxFn4nEEAwD, 23NL9a8ngN28ovtLiKLgHexcdTKBbUMLhH)
-  *   - SA (7bwdkU5V8)
+  * 1  - P2PKH (1H1Z9V7mmhnARuFNrig3jMPmAWEirSKHza)
+  * 9  - P2PK (9fRAWhdxEsTcdb8PhGNrZfwqa65zfkuYHAMmkQLcic1gdLSV5vA)
+  * 2  - P2SH (25qGdVWg2yyYho8uC1pLtc7KxFn4nEEAwD, 23NL9a8ngN28ovtLiKLgHexcdTKBbUMLhH)
+  * ?  - P2S (7bwdkU5V8, BxKBaHkvrTvLZrDcZjcsxsF7aSsrN73ijeFZXtbj4CXZHHcvBtqSxQ)
+  *
+  *
+  * Prefix byte = network type + address type
+  *
+  * checksum = hash256(prefix byte ++ content bytes)
+  *
+  * address = prefix byte ++ content bytes ++ checksum
+  *
   */
+
 sealed trait ErgoAddress {
   val addressTypePrefix: Byte
-}
-
-object ErgoAddressTester extends App {
-  val prover = new ErgoProvingInterpreter(Algos.encode(Random.nextString(5).getBytes))
-
-  val pk = prover.dlogPubkeys.head
-
-  val settings = ErgoSettings.read(None)
-
-  val encoder = ErgoAddressEncoder(settings)
-
-  println(encoder.toString(ScriptAddress(pk)))
 }
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
@@ -147,17 +166,17 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 
   val networkPrefix = settings.chainSettings.addressPrefix
 
-  private def bodyBytes(address: ErgoAddress): Array[Byte] = address match {
+  private def contentBytes(address: ErgoAddress): Array[Byte] = address match {
     case P2PKHAddress(addressHash) => addressHash
     case P2PKAddress(_, pubkeyBytes) => pubkeyBytes
     case ScriptHashAddress(scriptHash) => scriptHash
     case ScriptAddress(_, scriptBytes) => scriptBytes
   }
 
-  def definitiveBytes(address: ErgoAddress): Array[Byte] = bodyBytes(address)
+  def definitiveBytes(address: ErgoAddress): Array[Byte] = contentBytes(address)
 
   def toString(address: ErgoAddress): String = {
-    val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: bodyBytes(address)
+    val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: contentBytes(address)
 
     val checksum = hash256(withNetworkByte).take(ChecksumLength)
     Base58.encode(withNetworkByte ++ checksum)
@@ -170,9 +189,8 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
       val addressType = headByte - networkPrefix
       val (withoutChecksum, checksum) = bytes.splitAt(bytes.length - ChecksumLength)
 
-      if (!util.Arrays.equals(hash256(withoutChecksum).take(ChecksumLength), checksum)) {
+      if (!util.Arrays.equals(hash256(withoutChecksum).take(ChecksumLength), checksum))
         throw new Exception(s"Checksum check fails for $addrStr")
-      }
 
       val bs = withoutChecksum.tail
 
@@ -189,6 +207,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
           ScriptHashAddress(bs)
         case b: Int if b == ScriptAddress.addressTypePrefix =>
           ScriptAddress(ValueSerializer.deserialize(bs).asInstanceOf[Value[SBoolean.type]], bs)
+        case _ => throw new Exception("Unsupported address type: " + addressType)
       }
     }
   }

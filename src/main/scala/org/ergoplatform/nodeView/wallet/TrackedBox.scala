@@ -5,16 +5,21 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
+import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import scorex.core.utils.ScorexLogging
 
 sealed trait TrackedBox extends ScorexLogging {
   def certainty: BoxCertainty
+  def onchainStatus: OnchainStatus
+  def spendingStatus: SpendingStatus
+
+  final def certain: Boolean = certainty.certain
+  final def onchain: Boolean = onchainStatus.onchain
+  final def spent: Boolean = spendingStatus.spent
+
   def creationTx: ErgoTransaction
   def creationOutIndex: Short
-
-  def onchain: Boolean
-  def certain: Boolean = certainty.certain
-
   val box: ErgoBox
   lazy val boxId = ByteArrayWrapper(box.id)
   def value: Long = box.value
@@ -37,18 +42,21 @@ sealed trait TrackedBox extends ScorexLogging {
 
 }
 
-trait UnspentBox extends TrackedBox
+sealed trait UnspentBox extends TrackedBox {
+  final def spendingStatus: SpendingStatus = Unspent
+}
 
-trait SpentBox extends TrackedBox {
+sealed trait SpentBox extends TrackedBox {
+  final def spendingStatus: SpendingStatus = Spent
   val spendingTx: ErgoTransaction
 }
 
-trait OffchainBox extends TrackedBox {
-  override val onchain = false
+sealed trait OffchainBox extends TrackedBox {
+  final def onchainStatus: OnchainStatus = Offchain
 }
 
-trait OnchainBox extends TrackedBox {
-  override val onchain = true
+sealed trait OnchainBox extends TrackedBox {
+  final def onchainStatus: OnchainStatus = Onchain
 }
 
 case class UnspentOffchainBox(creationTx: ErgoTransaction,
@@ -186,11 +194,4 @@ case class SpentOnchainBox(creationTx: ErgoTransaction,
 
   def makeCertain(): SpentOnchainBox = if (certain) this else copy(certainty = Certain)
 
-}
-
-sealed class BoxCertainty(val certain: Boolean)
-
-object BoxCertainty {
-  object Certain extends BoxCertainty(true)
-  object Uncertain extends BoxCertainty(false)
 }

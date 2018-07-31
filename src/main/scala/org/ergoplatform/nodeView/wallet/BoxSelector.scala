@@ -12,11 +12,16 @@ case class BoxSelectionResult(boxes: Seq[ErgoBox],
   * assets and possible user-defined filter.
   */
 trait BoxSelector {
+
   /**
     *
-    * @param inputBoxes sorted chronologically
+    * @param inputBoxes
+    * @param filterFn
     * @param targetBalance
+    * @param availableBalance
     * @param targetAssets
+    * @param availableAssets
+    * @return None if select() is failing to
     */
   def select(inputBoxes: Iterator[UnspentBox],
              filterFn: UnspentBox => Boolean,
@@ -25,4 +30,3 @@ trait BoxSelector {
              targetAssets: Map[ByteArrayWrapper, Long],
              availableAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult]
 }
-

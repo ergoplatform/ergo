@@ -2,33 +2,29 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.scalatest.Assertion
 
 class ErgoAddressSpecification extends ErgoPropertyTest {
-  property("P2PKH roundtrip") { forAll(proveDlogGen) { pk =>
+
+  def addressRoundtrip(addr:ErgoAddress): Assertion = {
     val settings = ErgoSettings.read(None)
-    val p2pkh = P2PKHAddress(pk)
     val encoder = ErgoAddressEncoder(settings)
-    encoder.fromString(encoder.toString(p2pkh)).get shouldBe p2pkh
+    encoder.fromString(encoder.toString(addr)).get shouldBe addr
+  }
+
+  property("P2PKH roundtrip") { forAll(proveDlogGen) { pk =>
+    addressRoundtrip(P2PKHAddress(pk))
   }}
 
   property("P2PK roundtrip") { forAll(proveDlogGen) { pk =>
-    val settings = ErgoSettings.read(None)
-    val p2pk = P2PKAddress(pk)
-    val encoder = ErgoAddressEncoder(settings)
-    encoder.fromString(encoder.toString(p2pk)).get shouldBe p2pk
+    addressRoundtrip(P2PKAddress(pk))
   }}
 
   property("SHA roundtrip") { forAll(ergoPropositionGen) { pk =>
-    val settings = ErgoSettings.read(None)
-    val sha = ScriptHashAddress(pk)
-    val encoder = ErgoAddressEncoder(settings)
-    encoder.fromString(encoder.toString(sha)).get shouldBe sha
+    addressRoundtrip(ScriptHashAddress(pk))
   }}
 
   property("SA roundtrip") { forAll(ergoPropositionGen) { pk =>
-    val settings = ErgoSettings.read(None)
-    val sa = ScriptAddress(pk)
-    val encoder = ErgoAddressEncoder(settings)
-    encoder.fromString(encoder.toString(sa)).get shouldBe sa
+    addressRoundtrip(ScriptAddress(pk))
   }}
 }

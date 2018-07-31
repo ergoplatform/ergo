@@ -99,6 +99,18 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("applyTransactions() - double spending") {
+    forAll(boxesHolderGen) { bh =>
+      val txs_ = validTransactionsFromBoxHolder(bh)._1
+
+      val txs = txs_ ++ txs_
+
+      val us = createUtxoState(bh)
+      val digest = us.proofsForTransactions(txs).get._2
+      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
+    }
+  }
+
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1

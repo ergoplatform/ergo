@@ -13,7 +13,7 @@ import sigmastate.Values.Value
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
 
-import scala.util.Try
+import scala.util.{Random, Try}
 
 
 /**
@@ -38,7 +38,7 @@ sealed trait ErgoAddress {
 }
 
 object ErgoAddressTester extends App {
-  val prover = new ErgoProvingInterpreter("6abb44c6f5")
+  val prover = new ErgoProvingInterpreter(Algos.encode(Random.nextString(5).getBytes))
 
   val pk = prover.dlogPubkeys.head
 

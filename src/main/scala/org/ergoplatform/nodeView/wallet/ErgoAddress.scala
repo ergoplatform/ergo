@@ -122,7 +122,7 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 
   override def hashCode(): Int = Ints.fromByteArray(scriptHash.takeRight(4))
 
-  override def toString = s"SH(${Algos.encode(scriptHash)})"
+  override def toString = s"P2SH(${Algos.encode(scriptHash)})"
 }
 
 object ScriptHashAddress {
@@ -145,7 +145,7 @@ case class ScriptAddress(script: Value[SBoolean.type], scriptBytes: Array[Byte])
 
   override def hashCode(): Int = Ints.fromByteArray(scriptBytes.takeRight(4))
 
-  override def toString = s"SA(${Algos.encode(scriptBytes)})"
+  override def toString = s"P2S(${Algos.encode(scriptBytes)})"
 }
 
 object ScriptAddress {

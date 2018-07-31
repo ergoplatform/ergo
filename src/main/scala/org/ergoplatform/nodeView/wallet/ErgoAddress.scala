@@ -75,11 +75,13 @@ case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends Ergo
   override val addressTypePrefix: Byte = P2PKAddress.addressTypePrefix
 
   override def equals(obj: scala.Any): Boolean = obj match {
-    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
+    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb) && pk == pubkey
     case _ => false
   }
 
   override def hashCode(): Int = Ints.fromByteArray(pubkeyBytes.takeRight(4))
+
+  override def toString = s"P2PK(${Algos.encode(pubkeyBytes)})"
 }
 
 object P2PKAddress {
@@ -93,6 +95,15 @@ object P2PKAddress {
 
 case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = ScriptHashAddress.addressTypePrefix
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case ScriptHashAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
+    case _ => false
+  }
+
+  override def hashCode(): Int = Ints.fromByteArray(scriptHash.takeRight(4))
+
+  override def toString = s"SH(${Algos.encode(scriptHash)})"
 }
 
 object ScriptHashAddress {
@@ -107,6 +118,15 @@ object ScriptHashAddress {
 
 case class ScriptAddress(script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = ScriptAddress.addressTypePrefix
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case ScriptAddress(_, sb) => util.Arrays.equals(scriptBytes, sb)
+    case _ => false
+  }
+
+  override def hashCode(): Int = Ints.fromByteArray(scriptBytes.takeRight(4))
+
+  override def toString = s"SA(${Algos.encode(scriptBytes)})"
 }
 
 object ScriptAddress {

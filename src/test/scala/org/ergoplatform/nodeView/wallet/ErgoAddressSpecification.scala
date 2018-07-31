@@ -17,4 +17,18 @@ class ErgoAddressSpecification extends ErgoPropertyTest {
     val encoder = ErgoAddressEncoder(settings)
     encoder.fromString(encoder.toString(p2pk)).get shouldBe p2pk
   }}
+
+  property("SHA roundtrip") { forAll(ergoPropositionGen) { pk =>
+    val settings = ErgoSettings.read(None)
+    val sha = ScriptHashAddress(pk)
+    val encoder = ErgoAddressEncoder(settings)
+    encoder.fromString(encoder.toString(sha)).get shouldBe sha
+  }}
+
+  property("SA roundtrip") { forAll(ergoPropositionGen) { pk =>
+    val settings = ErgoSettings.read(None)
+    val sa = ScriptAddress(pk)
+    val encoder = ErgoAddressEncoder(settings)
+    encoder.fromString(encoder.toString(sa)).get shouldBe sa
+  }}
 }

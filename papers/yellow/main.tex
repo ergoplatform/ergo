@@ -518,18 +518,6 @@ Two infinite loops in different threads with the following functions inside:
 \end{minted}
 
 
-%
-%\section{Components}
-%\subsection{History}
-%\subsection{State}
-%\subsection{Memory Pool}
-%
-%\section{Transactional Language}
-%
-%\section{Protocol Updates}
-%
-%\section{Peer-to-Peer Network}
-
 \include{sync}
 
 \include{emission}
@@ -545,7 +533,7 @@ guard script, contents of all the registers, all the bytes and also an identifie
 \subsection{\Coin{} Format}
 \label{box-format}
 
-A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
+A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 10 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
 From these registers, four are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
 serialized guard script, $R_2$ contains assets, $R_3$ contains unique identifier of transaction which created the

@@ -1,0 +1,67 @@
+\section{Ergo Block Structure}
+Ergo block consists of 4 parts:
+
+\begin{itemize}
+    \item{\em Header } - minimal amount of data required to synchronize the chain and check PoW correctness.
+    Also contains hashes of other sections.
+    \item{\em BlockTransactions } - sequence of transactions, included in this block.
+    \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
+    Allows light clients to verify all the transactions and calculate new root hash.
+    \item{\em Extension } - additional data, that does not correspond to previous sections.
+          May contain interlinks, current miner votes and (sometimes) current parameters of the chain.
+\end{itemize}
+
+\subsection{Header}
+\vspace{1em}
+\begin{tabular}{ |p{2.5cm}||p{0.5cm}|p{7.5cm}|  }
+    \hline
+    \hline
+    Field & Size & Description  \\
+    \hline
+    version  &  1 &  block version, to be increased on every soft- and hardfork  \\
+    \hline
+    parentId &  32 &  id of parent block  \\
+    \hline
+    ADProofsRoot &  32 &  hash of ADProofs for transactions in a block \\
+    \hline
+    stateRoot &  32 &  root hash (for an AVL+ tree) of a state after block application  \\
+    \hline
+    transactionsRoot  &  32 &  root hash (for a Merkle tree) of transactions in a block  \\
+    \hline
+    timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
+    \hline
+    nBits &  8 & current difficulty in a compressed view  \\
+    \hline
+    height &  4 & block height  \\
+    \hline
+    extensionRoot & 32 & root hash of extension section  \\
+    \hline
+    equihashSolution & 128 & solution of equihash PoW puzzle  \\
+    \hline
+\end{tabular}
+
+\vspace{1em}
+Some of these fields may be calculated by node by itself if it is in a certain mode:
+
+\begin{itemize}
+    \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
+    \item interlinksRoot: if(PoPoWBootstrap == false).
+    \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
+    \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
+\end{itemize}
+
+\subsection{Extension}
+
+Extension is a key-value storage for a variety of data.
+It contains 2 parts:
+\begin{itemize}
+    \item{\em Mandatory fields } - fields which keys are set via consensus rules and may be changed
+    via soft/hard forks only. This fields have 4 bytes key and at most 64 bytes value.
+    Value length is known for all peers and this limit only important due to soft forks -
+    it is allowed to add at most 1 new key to this section per epoch (256 blocks between
+    difficulty recalculation), if key is not known to a peer it assumes that soft fork that
+    added this key was performed.
+    \item{\em Optional fields } - random data miner may add to a block. This section contains at most 2
+    elements with 32 byte key size and at most 32 byte value size.
+\end{itemize}
+

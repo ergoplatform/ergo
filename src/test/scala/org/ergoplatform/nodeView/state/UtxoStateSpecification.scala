@@ -4,11 +4,14 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.core._
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import sigmastate.Values.TrueLeaf
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
@@ -79,7 +82,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-  property("applyTransactions()") {
+  property("applyTransactions() - simple case") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -95,6 +98,70 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       us.applyTransactions(txs, digest, height = 1).get
     }
   }
+
+  //todo: FIX is needed before any new major release!!!
+  ignore("applyTransactions() - double spending") {
+    forAll(boxesHolderGen) { bh =>
+      val txs_ = validTransactionsFromBoxHolder(bh)._1
+
+      val txs = txs_ ++ txs_
+
+      val us = createUtxoState(bh)
+      val digest = us.proofsForTransactions(txs).get._2
+      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
+    }
+  }
+
+  //todo: FIX is needed before any new major release!!!
+  ignore("applyTransactions() - double spending #2") {
+    forAll(boxesHolderGen) { bh =>
+      val txs_ = validTransactionsFromBoxHolder(bh)._1
+
+      val us = createUtxoState(bh)
+      val digest = us.proofsForTransactions(txs_).get._2
+
+      val txs = txs_ ++ txs_
+      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
+    }
+  }
+
+  property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+
+      val boxToSpend = txsFromHolder.last.outputs.head
+
+      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTx = ErgoTransaction(
+        IndexedSeq(spendingTxInput),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+
+      val txs = txsFromHolder :+ spendingTx
+
+      val us = createUtxoState(bh)
+      val digest = us.proofsForTransactions(txs).get._2
+      us.applyTransactions(txs, digest, height = 1).get
+    }
+  }
+
+  property("proofsForTransactions() fails if a transaction is spending an output created by a follow-up transaction") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+
+      val boxToSpend = txsFromHolder.last.outputs.head
+
+      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTx = ErgoTransaction(
+        IndexedSeq(spendingTxInput),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+
+      val txs = spendingTx +: txsFromHolder
+
+      val us = createUtxoState(bh)
+      us.proofsForTransactions(txs).isSuccess shouldBe false
+    }
+  }
+
 
   property("applyModifier() for real genesis state") {
     var (us: UtxoState, bh) = createUtxoState()

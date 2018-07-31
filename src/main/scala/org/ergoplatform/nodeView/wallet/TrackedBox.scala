@@ -14,9 +14,9 @@ sealed trait TrackedBox extends ScorexLogging {
   def onchainStatus: OnchainStatus
   def spendingStatus: SpendingStatus
 
-  final def certain: Boolean = certainty.certain
-  final def onchain: Boolean = onchainStatus.onchain
   final def spent: Boolean = spendingStatus.spent
+  final def onchain: Boolean = onchainStatus.onchain
+  final def certain: Boolean = certainty.certain
 
   def creationTx: ErgoTransaction
   def creationOutIndex: Short

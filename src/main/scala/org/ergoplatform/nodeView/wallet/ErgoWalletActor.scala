@@ -30,7 +30,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   import Registry._
 
   //todo: pass as parameter, add to config
-  val coinSelector: CoinSelector = new DefaultCoinSelector
+  val coinSelector: BoxSelector = new DefaultBoxSelector
 
   private val prover = new ErgoProvingInterpreter(seed)
 

@@ -6,7 +6,7 @@ import org.ergoplatform.utils.AssetUtils.mergeAssets
 
 import scala.collection.mutable
 
-class DefaultCoinSelector extends CoinSelector {
+class DefaultBoxSelector extends BoxSelector {
 
   //todo: refactor code below, it is pretty terrible
   override def select(inputBoxes: Iterator[UnspentBox],
@@ -14,7 +14,7 @@ class DefaultCoinSelector extends CoinSelector {
                       targetBalance: Long,
                       availableBalance: Long,
                       targetAssets: Map[ByteArrayWrapper, Long],
-                      availableAssets: Map[ByteArrayWrapper, Long]): Option[CoinSelectionResult] = {
+                      availableAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult] = {
 
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L
@@ -59,7 +59,7 @@ class DefaultCoinSelector extends CoinSelector {
           currentAssets.put(id, currentAmt - targetAmt)
         }
       }
-      Some(CoinSelectionResult(res, currentBalance - targetBalance, currentAssets.toMap))
+      Some(BoxSelectionResult(res, currentBalance - targetBalance, currentAssets.toMap))
     } else {
       None
     }

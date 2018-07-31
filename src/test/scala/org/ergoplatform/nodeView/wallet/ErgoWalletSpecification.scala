@@ -3,10 +3,6 @@ package org.ergoplatform.nodeView.wallet
 import akka.actor.ActorSystem
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADKey
 import sigmastate.{SBoolean, Values}
@@ -20,20 +16,9 @@ import scala.util.Random
 
 class ErgoWalletSpecification extends ErgoPropertyTest {
 
-  type H = ErgoHistory
-  type S = ErgoState[_]
-  type D = DigestState
-  type U = UtxoState
-  type W = ErgoWallet
-  type P = ErgoMemPool
-
-
   property("successfully scans an offchain transaction") {
 
     implicit val actorSystem = ActorSystem()
-    val ergoSettings = ErgoSettings.read(None)
-
-
     val w: ErgoWallet = new ErgoWallet(actorSystem, null, null, settings)
 
     val bf0 = w.unconfirmedBalances()
@@ -56,7 +41,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     val balance1 = Random.nextInt(1000) + 1
     w.scanOffchain(makeTx(balance1))
 
-    Thread.sleep(100)
+    Thread.sleep(1000)
 
     val bf1 = w.unconfirmedBalances()
     val bs1 = Await.result(bf1, 1.second)
@@ -66,6 +51,8 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     val balance2 = Random.nextInt(1000) + 1
     w.scanOffchain(makeTx(balance2))
 
+    Thread.sleep(1000)
+
     val bf2 = w.unconfirmedBalances()
     val bs2 = Await.result(bf2, 1.second)
     bs2.balance shouldBe (balance1 + balance2)
@@ -74,6 +61,8 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     w.watchFor(ScriptAddress(Values.TrueLeaf))
     val balance3 = Random.nextInt(1000) + 1
     w.scanOffchain(makeTx(balance3, Values.TrueLeaf))
+
+    Thread.sleep(1000)
 
     val bf3 = w.unconfirmedBalances()
     val bs3 = Await.result(bf3, 1.second)

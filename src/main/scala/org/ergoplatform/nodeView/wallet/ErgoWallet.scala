@@ -39,7 +39,7 @@ trait ErgoWalletReader extends VaultReader {
   def unconfirmedBalances(): Future[BalancesSnapshot] = balances(confirmed = false)
 
   def walletAddresses(): Future[Seq[ErgoAddress]] = {
-    (actor ? ErgoWalletActor.ReadWalletAddresses()).mapTo[Seq[ErgoAddress]]
+    (actor ? ErgoWalletActor.ReadWalletAddresses).mapTo[Seq[ErgoAddress]]
   }
 }
 

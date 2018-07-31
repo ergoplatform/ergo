@@ -6,6 +6,10 @@ import org.scalacheck.Gen
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
+  def trackedBoxGen: Gen[TrackedBox] = {
+    Gen.oneOf(unspentOffchainBoxGen, unspentOnchainBoxGen, spentOffchainBoxGen, spentOnchainBoxGen)
+  }
+
   def unspentOffchainBoxGen: Gen[UnspentOffchainBox] = {
     for {
       (boxes, tx) <- validErgoTransactionGen

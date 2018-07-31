@@ -59,6 +59,7 @@ class ErgoWalletActor(seed: String,
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
+          log.info(s"Uncertain box is mine! $uncertainBox")
           Registry.makeTransition(uncertainBox, uncertainBox.makeCertain())
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
@@ -145,6 +146,9 @@ class ErgoWalletActor(seed: String,
         sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances.toMap) //todo: avoid .toMap?
       }
 
+    case ReadWalletAddresses() =>
+      sender() ! trackedAddresses.toIndexedSeq
+
     case GenerateTransaction(payTo) =>
       //todo: add assets
       val targetBalance = payTo.map(_.value).sum
@@ -187,4 +191,6 @@ object ErgoWalletActor {
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
 
   case class ReadBalances(confirmed: Boolean)
+
+  case class ReadWalletAddresses()
 }

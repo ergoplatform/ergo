@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.util
+
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -10,7 +12,6 @@ import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import sigmastate.utxo.CostTable
 
 import scala.util.Try
-
 
 
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
@@ -31,7 +32,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
     val inputs = unsignedTx.inputs.zip(boxesToSpend).map { case (unsignedInput, inputBox) =>
-      require(unsignedInput.boxId.sameElements(inputBox.id))
+      require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
       val context =
         ErgoLikeContext(

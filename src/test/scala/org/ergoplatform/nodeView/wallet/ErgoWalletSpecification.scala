@@ -1,17 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
-import akka.util.Timeout
+import akka.actor.ActorSystem
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.crypto.authds.ADKey
 import sigmastate.{SBoolean, Values}
 import sigmastate.Values.Value
@@ -36,15 +32,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
 
     implicit val actorSystem = ActorSystem()
     val ergoSettings = ErgoSettings.read(None)
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
 
-    val prover = new ErgoProvingInterpreter(Algos.encode(Random.nextString(10).getBytes("UTF-8")))
-    val pubKey = prover.dlogPubkeys.head
-
-    def makeTx(balance: Int, script: Value[SBoolean.type] = pubKey) = {
-      val input = Input(ADKey @@ Array.fill(32)(0: Byte), ProverResult(Array.emptyByteArray, ContextExtension(Map())))
-      new ErgoTransaction(IndexedSeq(input), IndexedSeq(new ErgoBoxCandidate(balance, script)))
-    }
 
     val w: ErgoWallet = new ErgoWallet(actorSystem, null, null, settings)
 
@@ -55,11 +43,20 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     bs0.balance shouldBe 0
     bs0.assetBalances.isEmpty shouldBe true
 
-    val address = P2PKAddress(pubKey)
-    w.watchFor(address)
+    val af = w.walletAddresses()
+    val as = Await.result(af, 1.second)
+
+    val pubKey = as.head.asInstanceOf[P2PKAddress].pubkey
+
+    def makeTx(balance: Int, script: Value[SBoolean.type] = pubKey) = {
+      val input = Input(ADKey @@ Array.fill(32)(0: Byte), ProverResult(Array.emptyByteArray, ContextExtension(Map())))
+      new ErgoTransaction(IndexedSeq(input), IndexedSeq(new ErgoBoxCandidate(balance, script)))
+    }
 
     val balance1 = Random.nextInt(1000) + 1
     w.scanOffchain(makeTx(balance1))
+
+    Thread.sleep(100)
 
     val bf1 = w.unconfirmedBalances()
     val bs1 = Await.result(bf1, 1.second)
@@ -84,14 +81,11 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     bs3.assetBalances.isEmpty shouldBe true
 
     //todo: enhance the test, e.g. add assets
-
   }
 
   property("Successfully scans an onchain transaction") {
-
   }
 
   property("Successfully doing a rollback") {
-
   }
 }

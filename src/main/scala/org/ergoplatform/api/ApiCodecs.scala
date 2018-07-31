@@ -166,9 +166,11 @@ trait ApiCodecs {
       "creationTransactionId" -> creationTx.id.asJson
     }
     Map(txField,
+      "spent" -> spent.asJson,
+      "onchain" -> onchain.asJson,
+      "certain" -> certain.asJson,
       "creationOutIndex" -> creationOutIndex.asJson,
-      "box" -> box.asJson,
-      "onchain" -> onchain.asJson
+      "box" -> box.asJson
     )
   }
 

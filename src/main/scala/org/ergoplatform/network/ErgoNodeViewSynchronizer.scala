@@ -64,8 +64,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>
         mod match {
-          case _: Header if !h.isHeadersChainSynced && !deliveryTracker.isExpecting =>
-            // headers chain is not synced yet, but our expecting list is empty - ask for more headers
+          case _: Header if !h.isHeadersChainSynced && !deliveryTracker.isExpecting && modifiersCache.size == 0 =>
+            // headers chain is not synced yet, but our expecting list and cache are empty - ask for more headers
             sendSync(statusTracker, h)
           case _: BlockSection if downloadListSize - deliveryTracker.expectingSize > downloadListSize / 2 =>
             // our expecting list list is is half empty - request more missed modifiers

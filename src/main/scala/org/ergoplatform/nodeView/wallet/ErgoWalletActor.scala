@@ -23,10 +23,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 
 
-class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
+class ErgoWalletActor(seed: String,
+                      addressEncoder: ErgoAddressEncoder) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
-
   import Registry._
 
   //todo: pass as parameter, add to config
@@ -37,12 +37,14 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private val toTrack = mutable.Seq(prover.dlogPubkeys.map(prover.bytesToTrack): _ *)
+  private val trackedAddresses: mutable.Buffer[ErgoAddress] =
+    mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(addressEncoder.contentBytes)
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
-    Registry.nextUncertain().map { uncertainBox =>
+    Registry.nextUncertain().foreach { uncertainBox =>
       val box = uncertainBox.box
 
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
@@ -73,7 +75,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
     }
 
     tx.outputCandidates.zipWithIndex.exists { case (outCandidate, outIndex) =>
-      toTrack.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
+      trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val idxShort = outIndex.toShort
           val box = outCandidate.toBox(tx.serializedId, idxShort)
@@ -97,7 +99,8 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   override def receive: Receive = {
     case WatchFor(address) =>
-      toTrack :+ address
+      trackedAddresses.append(address)
+      trackedBytes.append(addressEncoder.contentBytes(address))
 
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {

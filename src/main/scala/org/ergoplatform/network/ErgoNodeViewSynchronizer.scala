@@ -34,7 +34,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
     self, timeProvider)
 
-  private val downloadListSize = networkSettings.maxInvObjects
+  /**
+    * Approximate number of modifiers to be downloaded in parallel
+    * TODO check the best choice for this number, move to config
+    */
+  private val downloadListSize = 10
 
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -59,15 +63,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val onSyntacticallySuccessfulModifier: Receive = {
     case SyntacticallySuccessfulModifier(mod) =>
-      deliveryTracker.toApplied(mod.id)
+      deliveryTracker.onApply(mod.id)
 
       //If queue is empty - check, whether there are more modifiers to download
       historyReaderOpt foreach { h =>
         mod match {
-          case _: Header if !h.isHeadersChainSynced && !deliveryTracker.isExpecting && modifiersCache.size == 0 =>
+          case _: Header if !h.isHeadersChainSynced && deliveryTracker.inProcessSize == 0 =>
             // headers chain is not synced yet, but our expecting list and cache are empty - ask for more headers
             sendSync(statusTracker, h)
-          case _: BlockSection if downloadListSize - deliveryTracker.expectingSize > downloadListSize / 2 =>
+          case _: BlockSection if downloadListSize - deliveryTracker.inProcessSize > downloadListSize / 2 =>
             // our expecting list list is is half empty - request more missed modifiers
             self ! CheckModifiersToDownload
           case _ =>

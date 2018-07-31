@@ -750,6 +750,8 @@ Stateless checks are:
 Stateful checks are:
 
 \begin{itemize}
+    \item{} all the input boxes are members of the UTXO set or UTXO set transformation proof
+     provided by a miner in a dedicated section of a block~(if stateType="digest").
     \item{} total input and output ergo amounts must be the same. Adding up should be done with overflow checks.
     \item{} all the inputs have valid spending proofs. Total cost to verify all the spending proofs should be no more
             than a limit per block~(adjustable via miners voting).

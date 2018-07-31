@@ -19,13 +19,15 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate._
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.Values.{TrueLeaf, FalseLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
+  lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
+
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
   lazy val noProofGen: Gen[ProverResult] =
@@ -35,7 +37,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = proveDlogGen
+  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     height <- positiveIntGen

@@ -72,7 +72,14 @@ object P2PKHAddress {
 }
 
 case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends ErgoAddress {
-  override val addressTypePrefix: Byte = P2PKHAddress.addressTypePrefix
+  override val addressTypePrefix: Byte = P2PKAddress.addressTypePrefix
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
+    case _ => false
+  }
+
+  override def hashCode(): Int = Ints.fromByteArray(pubkeyBytes.takeRight(4))
 }
 
 object P2PKAddress {
@@ -153,7 +160,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
         case b: Int if b == P2PKHAddress.addressTypePrefix =>
           P2PKHAddress(bs)
         case b: Int if b == P2PKAddress.addressTypePrefix =>
-          val buf = ByteBuffer.wrap(bytes)
+          val buf = ByteBuffer.wrap(bs)
           val r = new ByteBufferReader(buf).mark()
           val ge = DataSerializer.deserialize[SGroupElement.type](SGroupElement, r)
           val pd = ProveDlog(ge)

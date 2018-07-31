@@ -146,7 +146,7 @@ class ErgoWalletActor(seed: String,
         sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances.toMap) //todo: avoid .toMap?
       }
 
-    case ReadWalletAddresses() =>
+    case ReadWalletAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
 
     case GenerateTransaction(payTo) =>
@@ -163,7 +163,7 @@ class ErgoWalletActor(seed: String,
 
         //todo: fix proposition, assets and register
         val changeAddress = prover.dlogPubkeys.head
-        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, changeAddress, Seq(), Map())
+        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, changeAddress, Seq.empty, Map.empty)
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
@@ -192,5 +192,5 @@ object ErgoWalletActor {
 
   case class ReadBalances(confirmed: Boolean)
 
-  case class ReadWalletAddresses()
+  case object ReadWalletAddresses
 }

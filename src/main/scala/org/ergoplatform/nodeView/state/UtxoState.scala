@@ -66,32 +66,34 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       height: Height) = Try {
+                                       height: Height) = persistentProver.synchronized {
+    Try {
 
-    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = transactions.map { tx =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-          case Some(box) => box
-          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+      val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+      val totalCost = transactions.map { tx =>
+        tx.statelessValidity.get
+        val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+          createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+            case Some(box) => box
+            case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+          }
         }
+        tx.statefulValidity(boxesToSpend, stateContext).get
+      }.sum
+
+      if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
+      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          persistentProver.performOneOperation(m)
+        })
+      }.get
+
+      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+          s"${Algos.encode(persistentProver.digest)} given")
       }
-      tx.statefulValidity(boxesToSpend, stateContext).get
-    }.sum
-
-    if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
-    val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-      t.flatMap(_ => {
-        persistentProver.performOneOperation(m)
-      })
-    }.get
-
-    if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-      throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-        s"${Algos.encode(persistentProver.digest)} given")
     }
   }
 

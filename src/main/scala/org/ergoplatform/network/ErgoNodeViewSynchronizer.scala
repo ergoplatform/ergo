@@ -1,16 +1,15 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SyntacticallySuccessfulModifier}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -69,19 +68,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
   }
 
-
   private def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-    historyReaderOpt foreach { h =>
-      val modifierHeader: Option[Header] = mod match {
-        case header: Header => Some(header)
-        case s: BlockSection => h.typedModifierById[Header](s.headerId)
-        case _ => None
-      }
-      modifierHeader.foreach { header =>
-        if (header.isNew(timeProvider, 1.hour)) {
-          broadcastModifierInv(mod)
-        }
-      }
+    mod match {
+      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
+      case _ =>
     }
   }
 

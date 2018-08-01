@@ -1,7 +1,5 @@
 package org.ergoplatform.local
 
-import java.util
-
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -50,9 +48,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse{
+  private val minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
     //TODO extract from wallet when it will be implemented
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
+    DLogProverInput(
+      BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
+    ).publicImage
   }
 
   override def preStart(): Unit = {

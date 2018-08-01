@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.AssetUtils.mergeAssets
-
 import scala.collection.mutable
 
 /**

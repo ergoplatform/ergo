@@ -122,7 +122,6 @@ class ErgoWalletActor(seed: String,
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>
-
       height.until(heightTo, -1).foreach{h =>
         val toRemove = Registry.confirmedAt(h)
         toRemove.foreach{boxId =>

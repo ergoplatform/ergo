@@ -14,8 +14,12 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   with AutoCloseable with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.historyStorageCacheSize)
+    .maximumSize(config.modifiersCacheSize)
     .build[String, ErgoPersistentModifier]
+
+  private val indexCache = CacheBuilder.newBuilder()
+    .maximumSize(config.indexesCacheSize)
+    .build[ByteArrayWrapper, ByteArrayWrapper]
 
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
@@ -39,7 +43,12 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     }
   }
 
-  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = indexStore.get(id)
+  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = Option(indexCache.getIfPresent(id)).orElse {
+    indexStore.get(id).map { value =>
+      indexCache.put(id, value)
+      value
+    }
+  }
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
 
@@ -48,10 +57,11 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
-    objectsToInsert.foreach{o =>
+    objectsToInsert.foreach { o =>
       modifiersCache.put(o.id, o)
       objectsStore.put(o)
     }
+    indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
     indexStore.update(
       id,
       Seq.empty,

@@ -27,7 +27,7 @@ class DefaultBoxSelector extends BoxSelector {
 
     //first, we pick all the boxes until ergo target balance is met
     inputBoxes.find { bc =>
-      if(filterFn(bc)) {
+      if (filterFn(bc)) {
         currentBalance = currentBalance + bc.value
         mergeAssets(currentAssets, bc.assets)
         res += bc.box
@@ -35,8 +35,10 @@ class DefaultBoxSelector extends BoxSelector {
       currentBalance >= targetBalance
     }
 
+    //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
+    //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
     inputBoxes.find { bc =>
-      if(filterFn(bc)) {
+      if (filterFn(bc)) {
         if (bc.assets.exists { case (id, _) =>
           val targetAmt = targetAssets.getOrElse(id, 0L)
           lazy val currentAmt = currentAssets.getOrElse(id, 0L)
@@ -50,8 +52,6 @@ class DefaultBoxSelector extends BoxSelector {
       successMet
     }
 
-    //todo: it could be the case that too many currentAssets to be in 1 Box and we need to add more ergo tokens
-
     if (successMet) {
       targetAssets.foreach { case (id, targetAmt) =>
         val currentAmt = currentAssets(id)
@@ -61,8 +61,27 @@ class DefaultBoxSelector extends BoxSelector {
           currentAssets.put(id, currentAmt - targetAmt)
         }
       }
-      val change = Seq((currentBalance - targetBalance) ->  currentAssets.toMap)
-      Some(BoxSelectionResult(res, change))
+
+      val changeBoxesAssets = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
+      val changeBalance = currentBalance - targetBalance
+
+      //at least 1 ergo token should be assigned per a created box
+      if (changeBoxesAssets.size > changeBalance) {
+        None
+      } else {
+        val baseChangeBalance = changeBalance / changeBoxesAssets.size
+
+        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map{ a =>
+          baseChangeBalance -> a.toMap
+        }
+
+        val firstBox = changeBoxesNoBalanceAdjusted.head
+        val modifiedBox = (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
+
+        val changeBoxes = modifiedBox +: changeBoxesNoBalanceAdjusted.tail
+
+        Some(BoxSelectionResult(res, changeBoxes))
+      }
     } else {
       None
     }

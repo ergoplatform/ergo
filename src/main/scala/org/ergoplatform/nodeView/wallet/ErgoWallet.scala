@@ -110,9 +110,8 @@ object ErgoWallet {
   }
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
-    val seed = Base16.decode(seedStr).get
     (1 to 4).map { i =>
-      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i.toByte +: seed))
+      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))
     }
   }
 }

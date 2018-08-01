@@ -48,7 +48,6 @@
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 
 
-
 \newtheorem{claim1}{Claim}
 \newtheorem{dfn}{Definition}
 \newtheorem{defn}{Definition}
@@ -118,27 +117,34 @@
 \newpage
 \tableofcontents
 
-\section{Introduction}
+
+\part{Introduction}
+\label{part-intro}
+
+This document describes
 
 \subsection{Vision}
 
 \knote{Write what is Ergo in general and why is it needed.}
 
+
 \subsection{State-Oriented Design}
-
-
 \knote{Write about boxes as first-class citizens.}
 
 
-\section{Notation and Preliminaries}
 
+\part{The Protocol}
+\label{part-protocol}
+
+
+\section{Notation and Preliminaries}
 
 \subsection{A Note on Notation}
 
 \knote{say about coin/box/output}
 
 
-\subsection{Cryptographic Primitives}
+\section{Cryptographic Primitives}
 
 We use Blake2b hash function with 256 bits output.
 
@@ -519,8 +525,6 @@ Two infinite loops in different threads with the following functions inside:
 \end{minted}
 
 
-\include{sync}
-
 \include{emission}
 
 \section{Transactions}
@@ -789,6 +793,11 @@ Below are rules for block validation when a node is verifying transactions ($Ver
 \input{voting.tex}
 
 \section{Proof-of-Work}
+
+\part{The Reference Implementation}
+\label{part-impl}
+
+\include{sync}
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

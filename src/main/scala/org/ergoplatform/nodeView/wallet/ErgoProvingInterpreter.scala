@@ -6,23 +6,19 @@ import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scapi.sigma.{DiffieHellmanTupleProverInput, SigmaProtocolPrivateInput}
+import scapi.sigma.SigmaProtocolPrivateInput
 import sigmastate.AvlTreeData
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import sigmastate.utxo.CostTable
-
 import scala.util.Try
 
 
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
-  override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets ++ dhSecrets
+  override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
 
   private lazy val dlogSecrets: Seq[DLogProverInput] = ErgoWallet.secretsFromSeed(seed).map(DLogProverInput.apply)
-
-  private lazy val dhSecrets: Seq[DiffieHellmanTupleProverInput] =
-    (1 to 4).map(_ => DiffieHellmanTupleProverInput.random())
 
   lazy val dlogPubkeys = dlogSecrets.map(_.publicImage)
 

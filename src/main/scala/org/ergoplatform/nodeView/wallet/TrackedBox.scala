@@ -24,7 +24,7 @@ sealed trait TrackedBox extends ScorexLogging {
   lazy val boxId = ByteArrayWrapper(box.id)
   def value: Long = box.value
 
-  lazy val assets = box.additionalTokens.map { case (id, amt) =>
+  lazy val assets: Map[ByteArrayWrapper, Long] = box.additionalTokens.map { case (id, amt) =>
     ByteArrayWrapper(id) -> amt
   }.toMap
 

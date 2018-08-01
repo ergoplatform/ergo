@@ -7,8 +7,8 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 
-class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
 
+class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   import DefaultBoxSelector.select
 
   property("returns None when it is impossible to select coins") {

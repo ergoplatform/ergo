@@ -8,14 +8,14 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain, WatchFor}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.{ModifierId, VersionTag}
 import scorex.core.transaction.wallet.{Vault, VaultReader}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.encode.Base16
 import scorex.crypto.hash.Blake2b256
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
@@ -87,11 +87,14 @@ class ErgoWallet(actorSystem: ActorSystem,
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] = {
-    val height = historyReader.heightOf(ModifierId @@ to).get //todo: .get
-    actor ! Rollback(height)
-    Success(this)
-  }
+  override def rollback(to: VersionTag): Try[ErgoWallet] =
+    historyReader.heightOf(ModifierId @@ to) match {
+      case Some(height) =>
+        actor ! Rollback (height)
+        Success(this)
+      case None =>
+        Failure(new Exception(s"Height of a modifier with id $to not found"))
+    }
 
   override type NVCT = this.type
 }

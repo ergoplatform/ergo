@@ -69,10 +69,10 @@ object DefaultBoxSelector extends BoxSelector {
       if (changeBoxesAssets.size > changeBalance) {
         None
       } else {
-        val changeBoxes = if(changeBoxesAssets.nonEmpty) {
+        val changeBoxes = if (changeBoxesAssets.nonEmpty) {
           val baseChangeBalance = changeBalance / changeBoxesAssets.size
 
-          val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map{ a =>
+          val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
             baseChangeBalance -> a.toMap
           }
 

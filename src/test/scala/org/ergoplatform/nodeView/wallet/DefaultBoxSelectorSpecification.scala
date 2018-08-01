@@ -8,6 +8,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 
 class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
+
   import DefaultBoxSelector.select
 
   property("returns None when it is impossible to select coins") {
@@ -22,7 +23,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     select(Seq(uBox).toIterator, box => box.onchain, 1, Map()) shouldBe None
 
     //no target asset in the input box
-    select(Seq(uBox).toIterator, _ => true, 1, Map(ByteArrayWrapper(Array.fill(32)(0:Byte)) -> 1L)) shouldBe None
+    select(Seq(uBox).toIterator, _ => true, 1, Map(ByteArrayWrapper(Array.fill(32)(0: Byte)) -> 1L)) shouldBe None
 
     //otherwise, everything is fine
     select(Seq(uBox).toIterator, _ => true, 1, Map()).isDefined shouldBe true
@@ -126,15 +127,15 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box1 = ErgoBox(1, Values.TrueLeaf,
       Seq(Digest32 @@ assetId1.data -> 1, Digest32 @@ assetId2.data -> 1,
-          Digest32 @@ assetId3.data -> 1, Digest32 @@ assetId4.data -> 1))
+        Digest32 @@ assetId3.data -> 1, Digest32 @@ assetId4.data -> 1))
 
     val box2 = ErgoBox(10, Values.TrueLeaf,
       Seq(Digest32 @@ assetId5.data -> 10, Digest32 @@ assetId6.data -> 10,
-          Digest32 @@ assetId7.data -> 10, Digest32 @@ assetId8.data -> 10))
+        Digest32 @@ assetId7.data -> 10, Digest32 @@ assetId8.data -> 10))
 
     val box3 = ErgoBox(100, Values.TrueLeaf,
       Seq(Digest32 @@ assetId3.data -> 100, Digest32 @@ assetId4.data -> 100,
-          Digest32 @@ assetId5.data -> 100, Digest32 @@ assetId6.data -> 100))
+        Digest32 @@ assetId5.data -> 100, Digest32 @@ assetId6.data -> 100))
 
     val uBox1 = UnspentOnchainBox(parentTx, 0, 100, box1, BoxCertainty.Certain)
     val uBox2 = UnspentOffchainBox(parentTx, 1, box2, BoxCertainty.Certain)

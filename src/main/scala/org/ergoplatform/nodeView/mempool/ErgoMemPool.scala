@@ -40,13 +40,13 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[ModifierId, ErgoTran
   }
 
   override def filter(condition: (ErgoTransaction) => Boolean): ErgoMemPool = {
-    unconfirmed.retain { (k, v) =>
+    unconfirmed.retain {case (k, v) =>
       condition(v)
     }
     this
   }
-
 }
+
 
 object ErgoMemPool {
 

@@ -18,9 +18,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  println("1")
   val history = genHistory()
-  println("2")
   val chain = genHeaderChain(headers =>
     headers
       .drop(MaxK)
@@ -29,10 +27,8 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     defaultDifficultyControl
   ).ensuring(_.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
 
-  println("3")
   private lazy val popowHistory = applyHeaderChain(history, chain)
 
-  println("4")
   val emptyADDigest: ADDigest = ADDigest @@ Array.fill(33)(0: Byte)
   val emptyDigest32: Digest32 = Digest32 @@ Array.fill(32)(0: Byte)
 

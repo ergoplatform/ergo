@@ -6,7 +6,6 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -20,6 +19,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -31,7 +31,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -49,9 +49,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
+  private val secrets = ErgoWallet.secretsFromSeed(ergoSettings.walletSettings.seed)
+
   private val minerProp: Value[SBoolean.type] = {
-    //TODO extract from wallet when it will be implemented
-    DLogProverInput(BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())).publicImage
+    require(secrets.nonEmpty, "No seed provided to get miner's secrets from")
+    val secret = secrets(Random.nextInt(secrets.size))
+    DLogProverInput(secret).publicImage
   }
 
   override def preStart(): Unit = {
@@ -127,7 +130,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     unknownMessage
 
   private def onReaders: Receive = {
-    case Readers(h, s, m) if s.isInstanceOf[UtxoStateReader] =>
+    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
         case Success(candidate) => procCandidateBlock(candidate)
         case Failure(e) => log.warn("Failed to produce candidate block.", e)

@@ -48,7 +48,6 @@
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 
 
-
 \newtheorem{claim1}{Claim}
 \newtheorem{dfn}{Definition}
 \newtheorem{defn}{Definition}
@@ -111,34 +110,44 @@
 \begin{document}
 
 \title{The \ergo{} Yellow Paper}
-\authors{Ergo Developers}
+\author{Ergo Developers}
 %\author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
 \maketitle
 
 \newpage
 \tableofcontents
 
-\section{Introduction}
 
-\subsection{Vision}
+\part{Introduction}
+\label{part-intro}
 
-\knote{Write what is Ergo in general and why is it needed.}
+This document describes a blockchain protocol named Ergo Platform~(or just Ergo) and a corresponding
+reference implementation. Ergo is a conservative Proof-of-Work blockchain with ultimate new contract language~(called
+ErgoTree, but in most cases you need a higher-level language, for example, ErgoScript) and better support for lightweight
+and secure modes of operation.
+
+\section{Vision}
+
+\knote{Write what is Ergo in general, why is it needed and for whom.}
+
 
 \subsection{State-Oriented Design}
-
-
 \knote{Write about boxes as first-class citizens.}
 
 
-\section{Notation and Preliminaries}
 
+\part{The Protocol}
+\label{part-protocol}
+
+
+\section{Notation and Preliminaries}
 
 \subsection{A Note on Notation}
 
 \knote{say about coin/box/output}
 
 
-\subsection{Cryptographic Primitives}
+\section{Cryptographic Primitives}
 
 We use Blake2b hash function with 256 bits output.
 
@@ -519,8 +528,6 @@ Two infinite loops in different threads with the following functions inside:
 \end{minted}
 
 
-\include{sync}
-
 \include{emission}
 
 \section{Transactions}
@@ -739,6 +746,8 @@ Stateless checks are:
     \item{} transaction outputs collectively could not contain more than 16 assets.
 \end{itemize}
 
+\knote{Should we allow 0-value iutputs?}
+
 \knote{Check box and transaction sizes.}
 
 Stateful checks are:
@@ -789,6 +798,11 @@ Below are rules for block validation when a node is verifying transactions ($Ver
 \input{voting.tex}
 
 \section{Proof-of-Work}
+
+\part{The Reference Implementation}
+\label{part-impl}
+
+\include{sync}
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

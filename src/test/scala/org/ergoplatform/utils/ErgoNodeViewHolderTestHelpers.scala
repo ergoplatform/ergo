@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

@@ -5,6 +5,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.ScorexLogging
@@ -19,6 +20,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   var historyReaderOpt: Option[ErgoHistoryReader] = None
   var stateReaderOpt: Option[ErgoStateReader] = None
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
+  var walletReaderOpt: Option[ErgoWalletReader] = None
 
   @SuppressWarnings(Array("IsInstanceOf"))
   override def receive: Receive = {
@@ -31,9 +33,12 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case ChangedMempool(reader: ErgoMemPoolReader@unchecked) if reader.isInstanceOf[ErgoMemPoolReader] =>
       mempoolReaderOpt = Some(reader)
 
+    case ChangedVault(reader: ErgoWalletReader@unchecked) if reader.isInstanceOf[ErgoWalletReader] =>
+      walletReaderOpt = Some(reader)
+
     case GetReaders =>
-      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt) match {
-        case (Some(h), Some(s), Some(m)) => sender ! Readers(h, s, m)
+      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
+        case (Some(h), Some(s), Some(m), Some(w)) => sender ! Readers(h, s, m, w)
         case _ =>
       }
 
@@ -52,7 +57,7 @@ object ErgoReadersHolder {
 
   case object GetReaders
 
-  case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader)
+  case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader, w: ErgoWalletReader)
 
 }
 

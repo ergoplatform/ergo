@@ -6,15 +6,16 @@ import org.ergoplatform.utils.AssetUtils.mergeAssets
 
 import scala.collection.mutable
 
+/**
+  * Default implementation of the box selector
+  */
 class DefaultBoxSelector extends BoxSelector {
 
   //todo: refactor code below, it is pretty terrible
   override def select(inputBoxes: Iterator[UnspentBox],
                       filterFn: UnspentBox => Boolean,
                       targetBalance: Long,
-                      availableBalance: Long,
-                      targetAssets: Map[ByteArrayWrapper, Long],
-                      availableAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult] = {
+                      targetAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult] = {
 
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L
@@ -24,6 +25,7 @@ class DefaultBoxSelector extends BoxSelector {
       currentAssets.getOrElse(id, 0L) >= targetAmt
     }
 
+    //first, we pick all the boxes until ergo target balance is met
     inputBoxes.find { bc =>
       if(filterFn(bc)) {
         currentBalance = currentBalance + bc.value
@@ -59,7 +61,8 @@ class DefaultBoxSelector extends BoxSelector {
           currentAssets.put(id, currentAmt - targetAmt)
         }
       }
-      Some(BoxSelectionResult(res, currentBalance - targetBalance, currentAssets.toMap))
+      val change = Seq((currentBalance - targetBalance) ->  currentAssets.toMap)
+      Some(BoxSelectionResult(res, change))
     } else {
       None
     }

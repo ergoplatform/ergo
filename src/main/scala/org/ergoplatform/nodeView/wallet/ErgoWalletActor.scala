@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
@@ -156,18 +157,19 @@ class ErgoWalletActor(seed: String,
       //we do not use offchain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = coinSelector.select(unspentBoxes, filterFn, targetBalance, confirmedBalance, Map(), Map()).flatMap { r =>
+      val txOpt = coinSelector.select(unspentBoxes, filterFn, targetBalance, Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
-        val changeAssets = r.changeAssets
-        val changeBalance = r.changeBalance
 
-        //todo: fix proposition, assets and register
+        //todo: fix proposition, assets
         val changeAddress = prover.dlogPubkeys.head
-        val changeBoxCandidate = new ErgoBoxCandidate(changeBalance, changeAddress, Seq.empty, Map.empty)
+        val changeBoxCandidates = r.changeBoxes.map {case (chb, cha) =>
+          val assets = cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
+          new ErgoBoxCandidate(chb, changeAddress, assets)
+        }
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
-          (payTo :+ changeBoxCandidate).toIndexedSeq)
+          (payTo ++ changeBoxCandidates).toIndexedSeq)
 
         prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash))
       }

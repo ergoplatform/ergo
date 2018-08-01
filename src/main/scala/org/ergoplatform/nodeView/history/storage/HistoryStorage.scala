@@ -8,6 +8,7 @@ import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
+import scala.concurrent.Future
 import scala.util.Failure
 
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
@@ -61,11 +62,13 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
       modifiersCache.put(o.id, o)
       objectsStore.put(o)
     }
-    indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
-    indexStore.update(
-      id,
-      Seq.empty,
-      indexesToInsert)
+    if (indexesToInsert.nonEmpty) {
+      indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
+      indexStore.update(
+        id,
+        Seq.empty,
+        indexesToInsert)
+    }
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>

@@ -31,7 +31,7 @@ class ErgoWalletActor(seed: String,
   import Registry._
 
   //todo: pass as parameter, add to config
-  val coinSelector: BoxSelector = new DefaultBoxSelector
+  val boxSelector: BoxSelector = DefaultBoxSelector
 
   private val prover = new ErgoProvingInterpreter(seed)
 
@@ -157,7 +157,7 @@ class ErgoWalletActor(seed: String,
       //we do not use offchain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = coinSelector.select(unspentBoxes, filterFn, targetBalance, Map()).flatMap { r =>
+      val txOpt = boxSelector.select(unspentBoxes, filterFn, targetBalance, Map()).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         //todo: fix proposition, assets

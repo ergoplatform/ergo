@@ -1,15 +1,21 @@
-Subjects to voting are instructions costs, computation limit, block size limit,
-and the block version. Voting for the block version lasts for {\color{red}
-HOWMANY} epochs, and requires 90 percent of the miners to vote for the change.
-All the other kinds of voting are organized in the following way. The miner who
-successfully validated the last block in the epoch initiates the voting over one
-of the parameters, stating explicitly decrease or increase (except the case when
-the current value is below $min\_setp$). The value of the change is predefined
-as $\max(\lceil0.01\times current\_value\rceil, min\_step)$ with $min\_step$
-being the hard-coded value.  The voting lasts for one epoch. Every miner
+Subjects to voting are instructions costs, computational cost limit, block size limit,
+and the block version. Voting for the block version lasts for 16 epochs, and requires
+90 percent of the miners to vote for the change.
+
+All other kinds of voting are organized in the following way. A miner who
+successfully generates the first block in the epoch initiates the voting over one
+of the parameters, stating explicitly whether a value of the parameter should be
+decreased~(except the case when the current value is below $min\_step$) or increased from miner's
+point of view.
+
+The value of the change is predefined as $\max(\lceil0.01 \times current\_value\rceil, min\_step)$ with $min\_step$
+being the hard-coded value. The voting lasts for one epoch. Every miner
 submitting the block during this epoch has two options: accept or reject the
 proposal. Miner's vote must be written in the generated block. Change in the
 value requires the majority of votes over the epoch. Every block contains the
 vote of the miner who generated it. In case the proposal fails, the parameters
 remain unchanged.
 
+\knote{Foundation wallet address change via 90 percent voting?}
+
+\knote{Foundation tax change after first years?}

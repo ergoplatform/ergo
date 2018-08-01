@@ -72,7 +72,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       failFast
-        .validate(!isHeadersChainSynced) {
+        .validate(isHeadersChainSynced) {
           error("Headers chain is not synced yet")
         }
         .validate(!historyStorage.contains(m.id)) {

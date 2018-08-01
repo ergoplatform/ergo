@@ -1,24 +1,20 @@
 package org.ergoplatform
 
-import java.io.File
-
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoSanity.{DIGEST_ST, HT, PM}
-import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, WrappedDigestState, WrappedUtxoState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
+import scorex.core.idToBytes
+import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{idToBytes, idToVersion}
-
-import scala.concurrent.ExecutionContext
+import scorex.core.app.{Version => HandshakeV}
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
@@ -48,44 +44,34 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
 
-  override def nodeViewHolder(implicit system: ActorSystem): (ActorRef, TestProbe, PM, DIGEST_ST, HT) = {
-    implicit val ec = system.dispatcher
-    val dir: File = createTempDir
-    val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
-    val settings = defaultSettings.copy(
-      nodeSettings = defaultSettings.nodeSettings.copy(
-        stateType = StateType.Digest,
-        verifyTransactions = false,
-        PoPoWBootstrap = false
-      )
-    )
-    val ce = new CoinsEmission(settings.chainSettings.monetary)
-
+  override def nodeViewSynchronizer(implicit system: ActorSystem):
+  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe) = {
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = historyGen.sample.get
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
     val v = h.openSurfaceIds().last
     s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
-    val ref = system.actorOf(NodeViewHolderForTests.props(h, s, settings, ce))
+    implicit val ec = system.dispatcher
+    val settings = ErgoSettings.read(None)
+    val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
+    val ncProbe = TestProbe("NetworkControllerProbe")
+    val vhProbe = TestProbe("ViewHolderProbe")
+    val pchProbe = TestProbe("PeerHandlerProbe")
+    val eventListener = TestProbe("EventListener")
+    val ref = ErgoNodeViewSynchronizer(
+      ncProbe.ref,
+      vhProbe.ref,
+      ErgoSyncInfoMessageSpec,
+      settings.scorexSettings.network,
+      tp
+    )
     val m = totallyValidModifier(h, s)
-    val eventListener = TestProbe()
-    (ref, eventListener, m, s, h)
-  }
-
-  class NodeViewHolderForTests(h: HT, s: DIGEST_ST, settings: ErgoSettings, ce: CoinsEmission)
-                              (implicit ec: ExecutionContext)
-    extends ErgoNodeViewHolder[DIGEST_ST](settings, new NetworkTimeProvider(settings.scorexSettings.ntp), ce) {
-
-    override protected def genesisState: (HIS, MS, VL, MP) = {
-      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      val w = new ErgoWallet
-      (h, s, w, ErgoMemPool.empty)
-    }
-
-    override def restoreState(): Option[(HIS, MS, VL, MP)] = None
-  }
-
-  object NodeViewHolderForTests {
-    def props(h: HT, s: DIGEST_ST, settings: ErgoSettings, ce: CoinsEmission)(implicit ec: ExecutionContext): Props =
-      Props(new NodeViewHolderForTests(h, s, settings, ce))
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+    val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
+      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 }

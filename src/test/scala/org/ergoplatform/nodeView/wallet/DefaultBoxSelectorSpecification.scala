@@ -166,5 +166,8 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s2.get.changeBoxes(0)._2(assetId6) shouldBe 10
     s2.get.changeBoxes(0)._2(assetId7) shouldBe 10
     s2.get.changeBoxes(0)._2(assetId8) shouldBe 10
+
+    //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
+    select(uBoxes.toIterator, _ => true, 1, Map(assetId1 -> 1)) shouldBe None
   }
 }

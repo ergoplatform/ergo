@@ -2,7 +2,6 @@ package org.ergoplatform.network
 
 
 import akka.actor.{ActorRef, ActorSystem}
-import scorex.core.ModifierId
 import scorex.core.network.DeliveryTracker
 import scorex.core.utils.NetworkTimeProvider
 
@@ -13,8 +12,4 @@ class ErgoDeliveryTracker(system: ActorSystem,
                           maxDeliveryChecks: Int,
                           nvsRef: ActorRef,
                           timeProvider: NetworkTimeProvider)
-  extends DeliveryTracker(system, deliveryTimeout, maxDeliveryChecks, nvsRef) {
-
-  def isExpecting: Boolean = expecting.nonEmpty
-
-}
+  extends DeliveryTracker(system, deliveryTimeout, maxDeliveryChecks, nvsRef)

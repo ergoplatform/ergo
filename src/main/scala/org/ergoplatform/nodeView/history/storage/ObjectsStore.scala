@@ -9,9 +9,9 @@ trait ObjectsStore {
 
   def get(id: ModifierId): Option[Array[Byte]]
 
-  def delete(id: ModifierId): Try[Unit]
+  def delete(id: ModifierId): Unit
 
-  def put(m: ErgoPersistentModifier): Try[Unit]
+  def put(m: ErgoPersistentModifier): Unit
 
   def contains(id: ModifierId): Boolean
 

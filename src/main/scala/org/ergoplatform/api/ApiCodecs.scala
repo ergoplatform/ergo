@@ -166,9 +166,11 @@ trait ApiCodecs {
       "creationTransactionId" -> creationTx.id.asJson
     }
     Map(txField,
+      "spent" -> spent.asJson,
+      "onchain" -> onchain.asJson,
+      "certain" -> certain.asJson,
       "creationOutIndex" -> creationOutIndex.asJson,
-      "box" -> box.asJson,
-      "onchain" -> onchain.asJson
+      "box" -> box.asJson
     )
   }
 
@@ -178,11 +180,11 @@ trait ApiEncoderOption
 
 object ApiEncoderOption {
 
-  case class Detalization(showDetails: Boolean) extends ApiEncoderOption {
+  abstract class Detalization(val showDetails: Boolean) extends ApiEncoderOption {
     implicit def implicitValue: Detalization = this
   }
 
-  object ShowDetails extends Detalization(true)
-  object HideDetails extends Detalization(false)
+  case object ShowDetails extends Detalization(true)
+  case object HideDetails extends Detalization(false)
 
 }

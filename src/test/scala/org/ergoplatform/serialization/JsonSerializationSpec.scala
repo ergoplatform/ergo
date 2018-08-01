@@ -12,7 +12,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHea
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
-import scorex.core.ModifierId
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}
 
@@ -93,7 +92,9 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def validateTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     import b._
     c.downField("creationOutIndex").as[Short] shouldBe Right(creationOutIndex)
+    c.downField("spent").as[Boolean] shouldBe Right(spent)
     c.downField("onchain").as[Boolean] shouldBe Right(onchain)
+    c.downField("certain").as[Boolean] shouldBe Right(certain)
     validateErgoBox(c.downField("box"), box)
     if (opts.showDetails) {
       validateTransaction(c.downField("creationTransaction"), creationTx)

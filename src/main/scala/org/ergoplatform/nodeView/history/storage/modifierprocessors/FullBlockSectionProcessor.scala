@@ -70,8 +70,11 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(m: ErgoPersistentModifier, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
+    def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       failFast
+        .validate(!isHeadersChainSynced) {
+          error("Headers chain is not synced yet")
+        }
         .validate(!historyStorage.contains(m.id)) {
           fatal(s"Modifier ${m.encodedId} is already in history")
         }

@@ -1,25 +1,19 @@
 package org.ergoplatform
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.mining.emission.CoinsEmission
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
-import scorex.core.{bytesToId, idToBytes, idToVersion}
+import scorex.core.bytesToId
 import scorex.core.transaction.state.MinimalState
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
@@ -27,8 +21,6 @@ import scorex.testkit.properties._
 import scorex.testkit.properties.mempool.MempoolTransactionsTest
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
-
-import scala.concurrent.ExecutionContext
 
 //todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
@@ -41,7 +33,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   //with MempoolFilterPerformanceTest[P, TX, MPool]
   //with MempoolRemovalTest[P, TX, MPool, PM, PM, HT, SI]
   //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
-  with NodeViewHolderTests[TX, PM, ST, SI, HT, MPool]
+  with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]
   with ErgoTestHelpers
   with HistorySpecification {
 

@@ -9,7 +9,7 @@ import scala.collection.mutable
 /**
   * Default implementation of the box selector
   */
-class DefaultBoxSelector extends BoxSelector {
+object DefaultBoxSelector extends BoxSelector {
 
   //todo: refactor code below, it is pretty terrible
   override def select(inputBoxes: Iterator[UnspentBox],
@@ -69,16 +69,22 @@ class DefaultBoxSelector extends BoxSelector {
       if (changeBoxesAssets.size > changeBalance) {
         None
       } else {
-        val baseChangeBalance = changeBalance / changeBoxesAssets.size
+        val changeBoxes = if(changeBoxesAssets.nonEmpty) {
+          val baseChangeBalance = changeBalance / changeBoxesAssets.size
 
-        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map{ a =>
-          baseChangeBalance -> a.toMap
+          val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map{ a =>
+            baseChangeBalance -> a.toMap
+          }
+
+          val firstBox = changeBoxesNoBalanceAdjusted.head
+          val modifiedBox = (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
+
+          modifiedBox +: changeBoxesNoBalanceAdjusted.tail
+        } else if (changeBalance > 0) {
+          Seq(changeBalance -> Map.empty[ByteArrayWrapper, Long])
+        } else {
+          Seq.empty
         }
-
-        val firstBox = changeBoxesNoBalanceAdjusted.head
-        val modifiedBox = (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
-
-        val changeBoxes = modifiedBox +: changeBoxesNoBalanceAdjusted.tail
 
         Some(BoxSelectionResult(res, changeBoxes))
       }

@@ -36,7 +36,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  it should "not freeze while generating candidate block with large amount of txs" in new TestKit(ActorSystem()){
+  it should "not freeze while generating candidate block with large amount of txs" in new TestKit(ActorSystem()) {
     val tmpDir = createTempDir
 
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
@@ -88,53 +88,59 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in new TestKit(ActorSystem()){
-    val tmpDir = createTempDir
+  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in
+    new TestKit(ActorSystem()) {
+      val tmpDir = createTempDir
 
-    type msgType = SemanticallySuccessfulModifier[_]
-    val newBlock = classOf[msgType]
-    val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlock)
-    val newBlockDuration = 30 seconds
+      type msgType = SemanticallySuccessfulModifier[_]
+      val newBlock = classOf[msgType]
+      val testProbe = new TestProbe(system)
+      system.eventStream.subscribe(testProbe.ref, newBlock)
+      val newBlockDuration = 30 seconds
 
-    val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
+      val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
 
-    val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
-      stateType = StateType.Utxo,
-      miningDelay = defaultAwaitDuration,
-      offlineGeneration = true,
-      verifyTransactions = true)
-    val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
-    val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+      val nodeSettings = defaultSettings.nodeSettings.copy(mining = true,
+        stateType = StateType.Utxo,
+        miningDelay = defaultAwaitDuration,
+        offlineGeneration = true,
+        verifyTransactions = true)
+      val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
+      val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+      val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission, TrueLeaf)
-    expectNoMessage(1 second)
-    val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
+      val minerRef: ActorRef = ErgoMinerRef(
+        ergoSettings,
+        nodeViewHolderRef,
+        readersHolderRef,
+        timeProvider,
+        emission,
+        Some(TrueLeaf))
+      expectNoMessage(1 second)
+      val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
-    val emissionBox = r.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.get
+      val emissionBox = r.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.get
 
-    val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+      val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
 
-    val input = Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
-    val outputs = IndexedSeq(new ErgoBoxCandidate(1000000L, prop1))
-    val tx = new ErgoTransaction(IndexedSeq(input), outputs)
+      val input = Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val outputs = IndexedSeq(new ErgoBoxCandidate(1000000L, prop1))
+      val tx = new ErgoTransaction(IndexedSeq(input), outputs)
 
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      r.m.unconfirmed.size shouldBe 0
 
-    minerRef ! StartMining
+      minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+      testProbe.expectMsgClass(newBlockDuration, newBlock)
 
-    r.m.unconfirmed.size shouldBe 0
-
-    val blocks = r.h.chainToHeader(None, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
-    val txIds: Seq[ModifierId]  = blocks.flatMap(_.blockTransactions.txs.map(_.id))
-    //Make sure that this tx wasn't mined
-    txIds.contains(tx.id) shouldBe false
-    system.terminate()
-  }
+      val blocks = r.h.chainToHeader(None, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
+      val txIds: Seq[ModifierId] = blocks.flatMap(_.blockTransactions.txs.map(_.id))
+      //Make sure that this tx wasn't mined
+      txIds.contains(tx.id) shouldBe false
+      system.terminate()
+    }
 
   it should "work correctly with 2 coinbase txs in pool" in new TestKit(ActorSystem()){
     val tmpDir = createTempDir
@@ -157,7 +163,14 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission, TrueLeaf)
+    val minerRef: ActorRef = ErgoMinerRef(
+      ergoSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      emission,
+      Some(TrueLeaf)
+    )
     expectNoMessage(1 second)
     val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
@@ -216,7 +229,5 @@ class Listener extends Actor {
 }
 
 object Listener {
-
   case object Status
-
 }

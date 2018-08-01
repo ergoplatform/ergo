@@ -275,18 +275,11 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
-
-  def apply(ergoSettings: ErgoSettings,
-            viewHolderRef: ActorRef,
-            readersHolderRef: ActorRef,
-            timeProvider: NetworkTimeProvider,
             emission: CoinsEmission,
-            minerProp: Value[SBoolean.type])
+            minerPropOpt: Option[Value[SBoolean.type]] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, Some(minerProp)))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,

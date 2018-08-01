@@ -17,6 +17,4 @@ class ErgoDeliveryTracker(system: ActorSystem,
 
   def isExpecting: Boolean = expecting.nonEmpty
 
-  def expectingSize: Int = expecting.size
-
 }

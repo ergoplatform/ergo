@@ -2,7 +2,6 @@ package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
@@ -11,7 +10,6 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
@@ -46,8 +44,6 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val v = h.openSurfaceIds().last
-    s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)

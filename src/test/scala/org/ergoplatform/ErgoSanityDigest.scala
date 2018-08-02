@@ -2,16 +2,13 @@ package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoSanity._
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
@@ -32,7 +29,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override def totallyValidModifier(history: HT, state: DIGEST_ST): PM = {
     val parentOpt = history.bestHeaderOpt
-    validFullBlock(parentOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState).header
+    validFullBlock(parentOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
   }
 
   override def totallyValidModifiers(history: HT, state: DIGEST_ST, count: Int): Seq[PM] = {
@@ -41,7 +38,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     (0 until count).foldLeft((headerOpt, Seq.empty[PM])) { case (acc, _) =>
       val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
       (Some(pm.header), acc._2 :+ pm)
-    }._2.map(_.asInstanceOf[ErgoFullBlock].header)
+    }._2
   }
 
   override def nodeViewSynchronizer(implicit system: ActorSystem):
@@ -50,8 +47,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val v = h.openSurfaceIds().last
-    s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)

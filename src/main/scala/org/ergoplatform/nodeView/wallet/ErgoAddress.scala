@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
-import sigmastate.{SBoolean, SGroupElement}
+import sigmastate.{CalcBlake2b256, SBoolean, SGroupElement}
 import sigmastate.Values.Value
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
@@ -67,19 +67,22 @@ import scala.util.Try
   *
   * address = prefix byte ++ content bytes ++ checksum
   *
-  *
   */
 
 sealed trait ErgoAddress {
   val addressTypePrefix: Byte
 
   val contentBytes: Array[Byte]
+
+  val script: Value[SBoolean.type]
 }
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = P2PKHAddress.addressTypePrefix
 
   override val contentBytes: Array[Byte] = addressHash
+
+  override val script = ???
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case P2PKHAddress(otherHash) => util.Arrays.equals(addressHash, otherHash)
@@ -105,6 +108,8 @@ case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends Ergo
 
   override val contentBytes: Array[Byte] = pubkeyBytes
 
+  override val script = pubkey
+
   override def equals(obj: scala.Any): Boolean = obj match {
     case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
     case _ => false
@@ -129,6 +134,8 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 
   override val contentBytes: Array[Byte] = scriptHash
 
+  override val script = ???
+
   override def equals(obj: scala.Any): Boolean = obj match {
     case ScriptHashAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
     case _ => false
@@ -149,7 +156,7 @@ object ScriptHashAddress {
   val addressTypePrefix: Byte = 2: Byte
 }
 
-case class ScriptAddress(script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
+case class ScriptAddress(override val script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = ScriptAddress.addressTypePrefix
 
   override val contentBytes: Array[Byte] = scriptBytes

@@ -17,22 +17,27 @@ import scala.util.Try
 
 
 /**
-  * An address is a short string which integrity could be checked. A prefix of address is showing network and
-  * address type. An address type is showing a script used to protect a box.
+  * An address is a short string corresponding to some script used to protect a box. Unlike (string-encoded) binary
+  * representation of a script, an address has some useful characteristics:
   *
-  * An address is encoding network type, address type, checksum, and enough information to watch for a particular
-  * script.
+  * * Integrity of an address could be checked., as it is incorporating a checksum.
+  * * A prefix of address is showing network and an address type.
+  * * An address is using an encoding (namely, Base58) which is avoiding similarly l0Oking characters, friendly to
+  *   double-clicking and line-breaking in emails.
+  *
+  *
+  *
+  * An address is encoding network type, address type, checksum, and enough information to watch for a particular scripts.
   *
   * Possible network types are:
   * Mainnet - 0x00
   * Testnet - 0x10
   *
-  * //todo: write concrete ErgoScript scripts
-  * Address types are:
-  * 0x00 - Pay-to-PublicKey-Hash(P2PKH) address which is corresponding to the script ???
-  * 0x01 - Pay-to-PublicKey(P2PK) address which is corresponding to the script ???
-  * 0x02 - Pay-to-Script-Hash(P2SH) which is corresponding to the script ???
-  * 0x03 - Pay-to-Script(P2S) which is representing a script as is
+  * Address types are, semantics is described below:
+  * 0x00 - Pay-to-PublicKey-Hash(P2PKH) address
+  * 0x01 - Pay-to-PublicKey(P2PK) address
+  * 0x02 - Pay-to-Script-Hash(P2SH)
+  * 0x03 - Pay-to-Script(P2S)
   *
   * For an address type, we form content bytes as follows:
   *
@@ -62,14 +67,19 @@ import scala.util.Try
   *
   * address = prefix byte ++ content bytes ++ checksum
   *
+  *
   */
 
 sealed trait ErgoAddress {
   val addressTypePrefix: Byte
+
+  val contentBytes: Array[Byte]
 }
 
 case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = P2PKHAddress.addressTypePrefix
+
+  override val contentBytes: Array[Byte] = addressHash
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case P2PKHAddress(otherHash) => util.Arrays.equals(addressHash, otherHash)
@@ -93,8 +103,10 @@ object P2PKHAddress {
 case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = P2PKAddress.addressTypePrefix
 
+  override val contentBytes: Array[Byte] = pubkeyBytes
+
   override def equals(obj: scala.Any): Boolean = obj match {
-    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb) && pk == pubkey
+    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
     case _ => false
   }
 
@@ -114,6 +126,8 @@ object P2PKAddress {
 
 case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = ScriptHashAddress.addressTypePrefix
+
+  override val contentBytes: Array[Byte] = scriptHash
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case ScriptHashAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
@@ -137,6 +151,8 @@ object ScriptHashAddress {
 
 case class ScriptAddress(script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
   override val addressTypePrefix: Byte = ScriptAddress.addressTypePrefix
+
+  override val contentBytes: Array[Byte] = scriptBytes
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case ScriptAddress(_, sb) => util.Arrays.equals(scriptBytes, sb)
@@ -164,17 +180,10 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 
   val ChecksumLength = 4
 
-  val networkPrefix = settings.chainSettings.addressPrefix
-
-  def contentBytes(address: ErgoAddress): Array[Byte] = address match {
-    case P2PKHAddress(addressHash) => addressHash
-    case P2PKAddress(_, pubkeyBytes) => pubkeyBytes
-    case ScriptHashAddress(scriptHash) => scriptHash
-    case ScriptAddress(_, scriptBytes) => scriptBytes
-  }
+  private val networkPrefix = settings.chainSettings.addressPrefix
 
   def toString(address: ErgoAddress): String = {
-    val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: contentBytes(address)
+    val withNetworkByte = (networkPrefix + address.addressTypePrefix).toByte +: address.contentBytes
 
     val checksum = hash256(withNetworkByte).take(ChecksumLength)
     Base58.encode(withNetworkByte ++ checksum)

@@ -1,7 +1,5 @@
 package org.ergoplatform.local
 
-import java.util
-
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
@@ -19,7 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.{ErgoProvingInterpreter, ErgoWallet}
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -49,12 +47,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val secrets = ErgoWallet.secretsFromSeed(ergoSettings.walletSettings.seed)
+  private val publicKeys = {
+    val secrets = ErgoProvingInterpreter.secretsFromSeed(ergoSettings.walletSettings.seed).map(DLogProverInput.apply)
+    secrets.map(_.publicImage)
+  }
 
-  private val minerProp: Value[SBoolean.type] = {
-    require(secrets.nonEmpty, "No seed provided to get miner's secrets from")
-    val secret = secrets(Random.nextInt(secrets.size))
-    DLogProverInput(secret).publicImage
+  private def minerProp: Value[SBoolean.type] = {
+    require(publicKeys.nonEmpty, "No seed provided to get miner's secrets from")
+    publicKeys(Random.nextInt(publicKeys.size))
   }
 
   override def preStart(): Unit = {

@@ -40,7 +40,7 @@ class ErgoWalletActor(seed: String,
   private val trackedAddresses: mutable.Buffer[ErgoAddress] =
     mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(addressEncoder.contentBytes)
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
@@ -139,7 +139,7 @@ class ErgoWalletActor(seed: String,
   override def receive: Receive = scanLogic orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
-      trackedBytes.append(addressEncoder.contentBytes(address))
+      trackedBytes.append(address.contentBytes)
 
     case ReadBalances(confirmed) =>
       if (confirmed) {

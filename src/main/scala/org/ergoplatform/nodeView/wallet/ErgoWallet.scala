@@ -101,17 +101,10 @@ class ErgoWallet(actorSystem: ActorSystem,
 
 
 object ErgoWallet {
-
   def readOrGenerate(actorSystem: ActorSystem,
                      nodeViewHolderRef: ActorRef,
                      historyReader: ErgoHistoryReader,
                      settings: ErgoSettings): ErgoWallet = {
     new ErgoWallet(actorSystem, nodeViewHolderRef, historyReader, settings)
-  }
-
-  def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
-    (1 to 4).map { i =>
-      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))
-    }
   }
 }

@@ -172,7 +172,7 @@ class ErgoWalletActor(seed: String,
           inputs.map(_.id).map(id => new UnsignedInput(id)),
           (payTo ++ changeBoxCandidates).toIndexedSeq)
 
-        prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash))
+        prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
       }
 
       sender() ! txOpt

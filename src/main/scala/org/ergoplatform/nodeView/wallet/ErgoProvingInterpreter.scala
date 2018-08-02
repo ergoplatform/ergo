@@ -20,7 +20,7 @@ import scala.util.Try
 /**
   * A class which is holding secrets and signing transactions.
   *
-  * Currently it just generates
+  * Currently it just generates few secrets from a seed
   *
   *
   * @param seed
@@ -43,7 +43,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
-           stateContext: ErgoStateContext): Option[ErgoTransaction] = Try {
+           stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
     val inputs = unsignedTx.inputs.zip(boxesToSpend).map { case (unsignedInput, inputBox) =>
@@ -63,7 +63,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
     }
 
     ErgoTransaction(inputs, unsignedTx.outputCandidates)
-  }.toOption //todo: handle errors
+  }
 }
 
 

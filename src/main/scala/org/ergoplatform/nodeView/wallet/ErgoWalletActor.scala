@@ -14,10 +14,12 @@ import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
+import scala.collection.Map
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
@@ -143,9 +145,9 @@ class ErgoWalletActor(seed: String,
 
     case ReadBalances(confirmed) =>
       if (confirmed) {
-        sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
+        sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances)
       } else {
-        sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances.toMap) //todo: avoid .toMap?
+        sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances)
       }
 
     case ReadWalletAddresses =>
@@ -158,7 +160,7 @@ class ErgoWalletActor(seed: String,
       //we do not use offchain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = boxSelector.select(unspentBoxes, filterFn, targetBalance, Map()).flatMap { r =>
+      val txOpt = boxSelector.select(unspentBoxes, filterFn, targetBalance, Map.empty).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         //todo: fix proposition, assets

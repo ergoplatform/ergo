@@ -8,10 +8,11 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.Blake2b256
-import sigmastate.{CalcBlake2b256, SBoolean, SGroupElement}
-import sigmastate.Values.Value
+import sigmastate._
+import sigmastate.Values.{IntConstant, TaggedByteArray, Value}
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
+import sigmastate.utxo.{DeserializeContext, Slice}
 
 import scala.util.Try
 
@@ -23,7 +24,7 @@ import scala.util.Try
   * * Integrity of an address could be checked., as it is incorporating a checksum.
   * * A prefix of address is showing network and an address type.
   * * An address is using an encoding (namely, Base58) which is avoiding similarly l0Oking characters, friendly to
-  *   double-clicking and line-breaking in emails.
+  * double-clicking and line-breaking in emails.
   *
   *
   *
@@ -134,7 +135,14 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 
   override val contentBytes: Array[Byte] = scriptHash
 
-  override val script = ???
+  //script checked in "P2SH - 160 bits" test in sigma repository
+  override val script: Value[SBoolean.type] = {
+    val scriptId = 1: Byte
+    val hashEquals = EQ(Slice(CalcBlake2b256(TaggedByteArray(scriptId)), IntConstant(0), IntConstant(20)),
+      scriptHash)
+    val scriptIsCorrect = DeserializeContext(scriptId, SBoolean)
+    AND(hashEquals, scriptIsCorrect)
+  }
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case ScriptHashAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)

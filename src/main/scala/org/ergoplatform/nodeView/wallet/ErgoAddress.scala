@@ -193,17 +193,17 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
       val bs = withoutChecksum.tail
 
       addressType match {
-        case b: Byte if b == P2PKHAddress.addressTypePrefix =>
+        case P2PKHAddress.addressTypePrefix =>
           P2PKHAddress(bs)
-        case b: Byte if b == P2PKAddress.addressTypePrefix =>
+        case P2PKAddress.addressTypePrefix =>
           val buf = ByteBuffer.wrap(bs)
           val r = new ByteBufferReader(buf).mark()
           val ge = DataSerializer.deserialize[SGroupElement.type](SGroupElement, r)
           val pd = ProveDlog(ge)
           P2PKAddress(pd, bs)
-        case b: Byte if b == ScriptHashAddress.addressTypePrefix =>
+        case ScriptHashAddress.addressTypePrefix =>
           ScriptHashAddress(bs)
-        case b: Byte if b == ScriptAddress.addressTypePrefix =>
+        case ScriptAddress.addressTypePrefix =>
           ScriptAddress(ValueSerializer.deserialize(bs).asInstanceOf[Value[SBoolean.type]], bs)
         case _ => throw new Exception("Unsupported address type: " + addressType)
       }

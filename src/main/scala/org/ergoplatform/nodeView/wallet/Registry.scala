@@ -25,15 +25,15 @@ object Registry {
     registry.contains(boxId)
   }
 
-  def putToRegistry(trackedBox: TrackedBox) = synchronized {
+  def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ByteArrayWrapper) = synchronized {
+  def removeFromRegistry(boxId: ByteArrayWrapper): Option[TrackedBox] = synchronized {
     registry.remove(boxId)
   }
 
-  def putToConfirmedIndex(height: Height, boxId: ByteArrayWrapper) = synchronized {
+  def putToConfirmedIndex(height: Height, boxId: ByteArrayWrapper): Unit = synchronized {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
   }
 
@@ -47,14 +47,13 @@ object Registry {
   private var _unconfirmedBalance: Long = 0
   private val _unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
-  def confirmedBalance = _confirmedBalance
+  def confirmedBalance: Long = _confirmedBalance
 
-  def confirmedAssetBalances = _confirmedAssetBalances
+  def confirmedAssetBalances: scala.collection.Map[ByteArrayWrapper, Long] = _confirmedAssetBalances
 
-  def unconfirmedBalance = _unconfirmedBalance
+  def unconfirmedBalance: Long = _unconfirmedBalance
 
-  def unconfirmedAssetBalances = _unconfirmedAssetBalances
-
+  def unconfirmedAssetBalances: scala.collection.Map[ByteArrayWrapper, Long] = _unconfirmedAssetBalances
 
   def increaseBalances(unspentBox: UnspentBox): Unit = synchronized {
     val box = unspentBox.box

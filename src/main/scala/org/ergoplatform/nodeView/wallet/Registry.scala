@@ -9,6 +9,8 @@ object Registry {
 
   private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
 
+  private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
+
   //todo: build indexes instead of iteration
   def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.collect {
     case ub: UnspentBox => ub
@@ -19,21 +21,25 @@ object Registry {
   //todo: extract a random element, not head
   def nextUncertain(): Option[TrackedBox] = uncertainBoxes.toSeq.headOption
 
-  def registryContains(boxId: ByteArrayWrapper): Boolean = registry.contains(boxId)
+  def registryContains(boxId: ByteArrayWrapper): Boolean = synchronized {
+    registry.contains(boxId)
+  }
 
   def putToRegistry(trackedBox: TrackedBox) = synchronized {
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ByteArrayWrapper) = registry.remove(boxId)
-
-  private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
+  def removeFromRegistry(boxId: ByteArrayWrapper) = synchronized {
+    registry.remove(boxId)
+  }
 
   def putToConfirmedIndex(height: Height, boxId: ByteArrayWrapper) = synchronized {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
   }
 
-  def confirmedAt(height: Height): Seq[ByteArrayWrapper] = confirmedIndex.getOrElse(height, Seq.empty)
+  def confirmedAt(height: Height): Seq[ByteArrayWrapper] = synchronized {
+    confirmedIndex.getOrElse(height, Seq.empty)
+  }
 
   private var _confirmedBalance: Long = 0
   private val _confirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
@@ -42,9 +48,11 @@ object Registry {
   private val _unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
 
   def confirmedBalance = _confirmedBalance
+
   def confirmedAssetBalances = _confirmedAssetBalances
 
   def unconfirmedBalance = _unconfirmedBalance
+
   def unconfirmedAssetBalances = _unconfirmedAssetBalances
 
 

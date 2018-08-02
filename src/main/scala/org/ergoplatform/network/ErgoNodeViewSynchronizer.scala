@@ -27,6 +27,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
     Constants.modifierSerializers) {
+  /**
+    * Approximate number of modifiers to be downloaded simultaneously
+    */
+  protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
   override protected lazy val modifiersCache = new ErgoModifiersCache(networkSettings.maxModifiersCacheSize)
 
@@ -45,17 +49,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt.foreach { h =>
         def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
 
-        h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.expectingSize, downloadRequired)
+        h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
           .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }
 
   override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
     super.requestMoreModifiers(applied)
-    historyReaderOpt foreach { h =>
-      if (h.isHeadersChainSynced && deliveryTracker.expectingSize < desiredSizeOfExpectingQueue / 2) {
-        // our expecting list list is is half empty - request more missed modifiers
-        self ! CheckModifiersToDownload
+    if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
+      historyReaderOpt foreach { h =>
+        if (h.isHeadersChainSynced) {
+          // our expecting list list is is half empty - request more missed modifiers
+          self ! CheckModifiersToDownload
+        } else {
+          sendSync(statusTracker, h.syncInfo, sendToRandomIfEmpty = true)
+        }
       }
     }
   }

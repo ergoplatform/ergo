@@ -12,10 +12,6 @@ class ErgoAddressSpecification extends ErgoPropertyTest {
     encoder.fromString(encoder.toString(addr)).get shouldBe addr
   }
 
-  property("P2PKH roundtrip") { forAll(proveDlogGen) { pk =>
-    addressRoundtrip(P2PKHAddress(pk))
-  }}
-
   property("P2PK roundtrip") { forAll(proveDlogGen) { pk =>
     addressRoundtrip(P2PKAddress(pk))
   }}

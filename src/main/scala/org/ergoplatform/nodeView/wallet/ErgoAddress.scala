@@ -35,28 +35,24 @@ import scala.util.Try
   * Testnet - 0x10
   *
   * Address types are, semantics is described below:
-  * 0x00 - Pay-to-PublicKey-Hash(P2PKH) address
   * 0x01 - Pay-to-PublicKey(P2PK) address
   * 0x02 - Pay-to-Script-Hash(P2SH)
   * 0x03 - Pay-to-Script(P2S)
   *
   * For an address type, we form content bytes as follows:
   *
-  * P2PKH - 160-bit hash of the publicKey
   * P2PK - serialized (compressed) public key
   * P2sH - 160 bit of the script
   * P2S  - serialized script
   *
   * Address examples for testnet:
   *
-  * 7   - P2PKH (7aqf1Do41Vw4fEKYhbWwohQrtHoMRSVCZx)
   * 3   - P2PK (3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN)
   * 8   - P2SH (8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC, 8LnSX95GAWdbDZWJZQ73Uth4uE8HqN3emJ)
   * ?   - P2S (imdaM2NzX, z4hAmfvfSnQJPChMWzfBzJjpB8ei2HoLCZ2RHTaNArMNHFirdJTc7E)
   *
   * for mainnet:
   *
-  * 1  - P2PKH (1H1Z9V7mmhnARuFNrig3jMPmAWEirSKHza)
   * 9  - P2PK (9fRAWhdxEsTcdb8PhGNrZfwqa65zfkuYHAMmkQLcic1gdLSV5vA)
   * 2  - P2SH (25qGdVWg2yyYho8uC1pLtc7KxFn4nEEAwD, 23NL9a8ngN28ovtLiKLgHexcdTKBbUMLhH)
   * ?  - P2S (7bwdkU5V8, BxKBaHkvrTvLZrDcZjcsxsF7aSsrN73ijeFZXtbj4CXZHHcvBtqSxQ)
@@ -76,32 +72,6 @@ sealed trait ErgoAddress {
   val contentBytes: Array[Byte]
 
   val script: Value[SBoolean.type]
-}
-
-case class P2PKHAddress(addressHash: Array[Byte]) extends ErgoAddress {
-  override val addressTypePrefix: Byte = P2PKHAddress.addressTypePrefix
-
-  override val contentBytes: Array[Byte] = addressHash
-
-  override val script = ???
-
-  override def equals(obj: scala.Any): Boolean = obj match {
-    case P2PKHAddress(otherHash) => util.Arrays.equals(addressHash, otherHash)
-    case _ => false
-  }
-
-  override def hashCode(): Int = Ints.fromByteArray(addressHash.takeRight(4))
-
-  override def toString = s"P2PKH(${Algos.encode(addressHash)})"
-}
-
-object P2PKHAddress {
-  val addressTypePrefix: Byte = 0: Byte
-
-  def apply(pubkey: ProveDlog): P2PKHAddress = {
-    val bt = ValueSerializer.serialize(pubkey)
-    P2PKHAddress(ErgoAddressEncoder.hash160(bt))
-  }
 }
 
 case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends ErgoAddress {
@@ -155,6 +125,8 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 }
 
 object ScriptHashAddress {
+  def apply(pubkey: ProveDlog): ScriptHashAddress = apply(pubkey)
+
   def apply(script: Value[SBoolean.type]): ScriptHashAddress = {
     val sb = ValueSerializer.serialize(script)
     val sbh = ErgoAddressEncoder.hash160(sb)
@@ -217,8 +189,6 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
       val bs = withoutChecksum.tail
 
       addressType match {
-        case P2PKHAddress.addressTypePrefix =>
-          P2PKHAddress(bs)
         case P2PKAddress.addressTypePrefix =>
           val buf = ByteBuffer.wrap(bs)
           val r = new ByteBufferReader(buf).mark()

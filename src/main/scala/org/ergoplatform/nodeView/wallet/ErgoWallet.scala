@@ -1,19 +1,15 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.math.BigInteger
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain, WatchFor}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.{ModifierId, VersionTag}
+import org.ergoplatform.settings.ErgoSettings
+import scorex.core.VersionTag
 import scorex.core.transaction.wallet.{Vault, VaultReader}
 import scorex.core.utils.ScorexLogging
-import scorex.crypto.encode.Base16
-import scorex.crypto.hash.Blake2b256
 
 import scala.util.{Failure, Success, Try}
 import akka.pattern.ask

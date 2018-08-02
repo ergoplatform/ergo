@@ -12,4 +12,7 @@ class ErgoDeliveryTracker(system: ActorSystem,
                           maxDeliveryChecks: Int,
                           nvsRef: ActorRef,
                           timeProvider: NetworkTimeProvider)
-  extends DeliveryTracker(system, deliveryTimeout, maxDeliveryChecks, nvsRef)
+  extends DeliveryTracker(system, deliveryTimeout, maxDeliveryChecks, nvsRef) {
+
+  def requestedSize: Int = requested.size
+}

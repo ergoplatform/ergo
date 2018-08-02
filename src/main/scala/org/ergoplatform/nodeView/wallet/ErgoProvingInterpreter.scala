@@ -20,11 +20,14 @@ import scala.util.Try
 /**
   * A class which is holding secrets and signing transactions.
   *
-  * Currently it just generates few secrets from a seed
+  * Currently it just generates few secrets from a seed and sign a transaction (against input boxes to spend and
+  * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
+  * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
   *
   *
-  * @param seed
-  * @param maxCost
+  * @param seed - a secret seed value
+  * @param maxCost - max cost of all the transaction input scripts combined (the prover refuses to sign a transaction
+  *                   if the total cost exceeds the limit)
   */
 
 //todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file is even

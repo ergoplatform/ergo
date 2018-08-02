@@ -88,7 +88,7 @@ class ErgoWallet(actorSystem: ActorSystem,
   }
 
   override def rollback(to: VersionTag): Try[ErgoWallet] =
-    historyReader.heightOf(ModifierId @@ to) match {
+    historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(height) =>
         actor ! Rollback (height)
         Success(this)

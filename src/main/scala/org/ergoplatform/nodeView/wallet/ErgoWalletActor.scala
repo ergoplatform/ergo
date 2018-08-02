@@ -20,7 +20,6 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
-
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 
 
@@ -99,11 +98,7 @@ class ErgoWalletActor(seed: String,
     fb.transactions.count(tx => scan(tx, Some(height)))
   }
 
-  override def receive: Receive = {
-    case WatchFor(address) =>
-      trackedAddresses.append(address)
-      trackedBytes.append(addressEncoder.contentBytes(address))
-
+  def scanLogic: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
         self ! Resolve
@@ -122,15 +117,15 @@ class ErgoWalletActor(seed: String,
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>
-      height.until(heightTo, -1).foreach{h =>
+      height.until(heightTo, -1).foreach { h =>
         val toRemove = Registry.confirmedAt(h)
-        toRemove.foreach{boxId =>
-          Registry.removeFromRegistry(boxId).foreach{tb =>
+        toRemove.foreach { boxId =>
+          Registry.removeFromRegistry(boxId).foreach { tb =>
             tb.transitionBack(heightTo) match {
               case Some(newBox) =>
                 newBox.register()
               case None =>
-                //todo: should we be here at all?
+              //todo: should we be here at all?
             }
           }
         }
@@ -138,9 +133,16 @@ class ErgoWalletActor(seed: String,
 
       height = heightTo
       log.warn("Rollback in the wallet is not implemented")
+  }
+
+
+  override def receive: Receive = scanLogic orElse {
+    case WatchFor(address) =>
+      trackedAddresses.append(address)
+      trackedBytes.append(addressEncoder.contentBytes(address))
 
     case ReadBalances(confirmed) =>
-      if(confirmed) {
+      if (confirmed) {
         sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances.toMap) //todo: avoid .toMap?
       } else {
         sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances.toMap) //todo: avoid .toMap?
@@ -161,7 +163,7 @@ class ErgoWalletActor(seed: String,
 
         //todo: fix proposition, assets
         val changeAddress = prover.dlogPubkeys.head
-        val changeBoxCandidates = r.changeBoxes.map {case (chb, cha) =>
+        val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
           val assets = cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
           new ErgoBoxCandidate(chb, changeAddress, assets)
         }
@@ -194,4 +196,5 @@ object ErgoWalletActor {
   case class ReadBalances(confirmed: Boolean)
 
   case object ReadWalletAddresses
+
 }

@@ -33,7 +33,7 @@ import scala.util.Try
 //todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file is even
 // more problematic
 
-//todo: maxCost should set to block limit
+//todo: maxCost should be set to block limit, currently total sum per tx is not calculated
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
@@ -49,6 +49,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
+
     val inputs = unsignedTx.inputs.zip(boxesToSpend).map { case (unsignedInput, inputBox) =>
       require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 

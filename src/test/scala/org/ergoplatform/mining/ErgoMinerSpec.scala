@@ -21,7 +21,7 @@ import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
@@ -92,10 +92,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     new TestKit(ActorSystem()) {
       val tmpDir = createTempDir
 
-      type msgType = SemanticallySuccessfulModifier[_]
-      val newBlock = classOf[msgType]
       val testProbe = new TestProbe(system)
-      system.eventStream.subscribe(testProbe.ref, newBlock)
+      system.eventStream.subscribe(testProbe.ref, classOf[SemanticallySuccessfulModifier[_]])
+      system.eventStream.subscribe(testProbe.ref, classOf[SuccessfulTransaction[_]])
       val newBlockDuration = 30 seconds
 
       val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
@@ -123,13 +122,15 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
 
       val tx = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, emission)
+      r.s.asInstanceOf[UtxoStateReader].validate(tx) shouldBe 'success
 
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      r.m.unconfirmed.size shouldBe 0
+      testProbe.expectMsgType[SuccessfulTransaction[ErgoTransaction]]
+      r.m.size shouldBe 1
 
       minerRef ! StartMining
 
-      testProbe.expectMsgClass(newBlockDuration, newBlock)
+      testProbe.expectMsgClass(newBlockDuration, classOf[SemanticallySuccessfulModifier[_]])
 
       val blocks = r.h.chainToHeader(None, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
       val txIds: Seq[ModifierId] = blocks.flatMap(_.blockTransactions.txs.map(_.id))
@@ -138,7 +139,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       system.terminate()
     }
 
-  it should "work correctly with 2 coinbase txs in pool" in new TestKit(ActorSystem()){
+  it should "work correctly with 2 coinbase txs in pool" in new TestKit(ActorSystem()) {
     val tmpDir = createTempDir
 
     type msgType = SemanticallySuccessfulModifier[_]
@@ -203,9 +204,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     r.m.unconfirmed.size shouldBe 0
 
     val blocks = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
-    val txs: Seq[ErgoTransaction]  = blocks.flatMap(_.blockTransactions.transactions)
+    val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
     //Make sure that only tx got into chain
-    txs.filter(tx => tx.id.sameElements(tx1.id) || tx.id.sameElements(tx2.id)) should have length 1
+    txs.filter(tx => tx.id == tx1.id || tx.id == tx2.id) should have length 1
     system.terminate()
   }
 
@@ -225,5 +226,7 @@ class Listener extends Actor {
 }
 
 object Listener {
+
   case object Status
+
 }

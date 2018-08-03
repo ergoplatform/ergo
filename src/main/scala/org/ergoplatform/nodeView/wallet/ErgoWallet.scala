@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{Rollback, ScanOffchain, ScanOnchain, WatchFor}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.{Vault, VaultReader}
@@ -14,12 +14,19 @@ import scorex.core.utils.ScorexLogging
 import scala.util.{Failure, Success, Try}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.TransactionGeneratorRef
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 
 import scala.concurrent.Future
 
+/**
+  * A payment request contains a sequence of (script, value, assets, additional registers) tuples.
+  */
+case class PaymentRequest(to: (ErgoAddress, Long, Map[ErgoBox.TokenId, Long], Seq[EvaluatedValue[_ <: SType]])*)
 
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
@@ -36,6 +43,20 @@ trait ErgoWalletReader extends VaultReader {
 
   def walletAddresses(): Future[Seq[ErgoAddress]] = {
     (actor ? ErgoWalletActor.ReadWalletAddresses).mapTo[Seq[ErgoAddress]]
+  }
+
+  def generateTransaction(paymentRequest: PaymentRequest): Future[Option[ErgoTransaction]] = {
+    val boxCandidates = paymentRequest.to.map { t =>
+      val script = t._1.script
+      val value = t._2
+      val assets = t._3.toSeq
+      val regs = t._4.zipWithIndex.map{case (v, i) =>
+        ErgoBox.nonMandatoryRegisters(i.toByte) -> v
+      }.toMap
+      new ErgoBoxCandidate(value, script, assets, regs)
+    }
+
+    (actor ? GenerateTransaction(boxCandidates)).mapTo[Option[ErgoTransaction]]
   }
 }
 

@@ -29,7 +29,8 @@ class ErgoWalletActor(seed: String,
                       addressEncoder: ErgoAddressEncoder) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
-  import Registry._
+
+  private val registry = new Registry
 
   //todo: pass as parameter, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector
@@ -46,7 +47,7 @@ class ErgoWalletActor(seed: String,
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
-    Registry.nextUncertain().foreach { uncertainBox =>
+    registry.nextUncertain().foreach { uncertainBox =>
       val box = uncertainBox.box
 
       val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
@@ -62,7 +63,7 @@ class ErgoWalletActor(seed: String,
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.info(s"Uncertain box is mine! $uncertainBox")
-          Registry.makeTransition(uncertainBox, uncertainBox.makeCertain())
+          registry.makeTransition(uncertainBox, uncertainBox.makeCertain())
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }
@@ -72,8 +73,8 @@ class ErgoWalletActor(seed: String,
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.foreach { inp =>
       val boxId = ByteArrayWrapper(inp.boxId)
-      if (Registry.registryContains(boxId)) {
-        Registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
+      if (registry.registryContains(boxId)) {
+        registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
       }
     }
 
@@ -86,7 +87,7 @@ class ErgoWalletActor(seed: String,
             case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
             case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
           }
-          bu.register()
+          bu.register(registry)
           true
         case None =>
           false
@@ -109,7 +110,7 @@ class ErgoWalletActor(seed: String,
     case Resolve =>
       resolveUncertainty()
       //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
-      if (Registry.uncertainBoxes.nonEmpty) {
+      if (registry.uncertainBoxes.nonEmpty) {
         context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
       }
 
@@ -120,12 +121,12 @@ class ErgoWalletActor(seed: String,
     //todo: update utxo root hash
     case Rollback(heightTo) =>
       height.until(heightTo, -1).foreach { h =>
-        val toRemove = Registry.confirmedAt(h)
+        val toRemove = registry.confirmedAt(h)
         toRemove.foreach { boxId =>
-          Registry.removeFromRegistry(boxId).foreach { tb =>
+          registry.removeFromRegistry(boxId).foreach { tb =>
             tb.transitionBack(heightTo) match {
               case Some(newBox) =>
-                newBox.register()
+                newBox.register(registry)
               case None =>
               //todo: should we be here at all?
             }
@@ -145,9 +146,9 @@ class ErgoWalletActor(seed: String,
 
     case ReadBalances(confirmed) =>
       if (confirmed) {
-        sender() ! BalancesSnapshot(height, confirmedBalance, confirmedAssetBalances)
+        sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
       } else {
-        sender() ! BalancesSnapshot(height, unconfirmedBalance, unconfirmedAssetBalances)
+        sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
       }
 
     case ReadWalletAddresses =>
@@ -160,7 +161,7 @@ class ErgoWalletActor(seed: String,
       //we do not use offchain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = boxSelector.select(unspentBoxes, filterFn, targetBalance, Map.empty).flatMap { r =>
+      val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, Map.empty).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         //todo: fix proposition, assets
@@ -198,5 +199,4 @@ object ErgoWalletActor {
   case class ReadBalances(confirmed: Boolean)
 
   case object ReadWalletAddresses
-
 }

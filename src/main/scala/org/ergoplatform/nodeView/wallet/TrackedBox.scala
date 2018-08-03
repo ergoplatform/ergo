@@ -28,9 +28,9 @@ sealed trait TrackedBox extends ScorexLogging {
     ByteArrayWrapper(id) -> amt
   }.toMap
 
-  def register(): Unit = Registry.putToRegistry(this)
+  def register(registry: Registry): Unit = registry.putToRegistry(this)
 
-  def deregister(): Unit = Registry.removeFromRegistry(boxId)
+  def deregister(registry: Registry): Unit = registry.removeFromRegistry(boxId)
 
   def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox]
 
@@ -63,15 +63,15 @@ case class UnspentOffchainBox(creationTx: ErgoTransaction,
                               creationOutIndex: Short,
                               box: ErgoBox,
                               certainty: BoxCertainty) extends UnspentBox with OffchainBox {
-  override def register(): Unit = {
-    super.register()
+  override def register(registry: Registry): Unit = {
+    super.register(registry)
     log.info("New offchain box arrived: " + this)
-    if (certain) Registry.increaseBalances(this)
+    if (certain) registry.increaseBalances(this)
   }
 
-  override def deregister(): Unit = {
-    super.deregister()
-    if (certain) Registry.decreaseBalances(this)
+  override def deregister(registry: Registry): Unit = {
+    super.deregister(registry)
+    if (certain) registry.decreaseBalances(this)
   }
 
   def transition(creationHeight: Height): Option[TrackedBox] =
@@ -95,16 +95,16 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
                              box: ErgoBox,
                              certainty: BoxCertainty) extends UnspentBox with OnchainBox {
 
-  override def register(): Unit = {
-    super.register()
+  override def register(registry: Registry): Unit = {
+    super.register(registry: Registry)
     log.info("New onchain box arrived: " + this)
-    Registry.putToConfirmedIndex(creationHeight, boxId)
-    if (certain) Registry.increaseBalances(this)
+    registry.putToConfirmedIndex(creationHeight, boxId)
+    if (certain) registry.increaseBalances(this)
   }
 
-  override def deregister(): Unit = {
-    super.deregister()
-    if (certain) Registry.decreaseBalances(this)
+  override def deregister(registry: Registry): Unit = {
+    super.deregister(registry)
+    if (certain) registry.decreaseBalances(this)
   }
 
   def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
@@ -174,9 +174,9 @@ case class SpentOnchainBox(creationTx: ErgoTransaction,
                            box: ErgoBox,
                            certainty: BoxCertainty) extends SpentBox with OnchainBox {
 
-  override def register(): Unit = {
-    super.register()
-    Registry.putToConfirmedIndex(spendingHeight, boxId)
+  override def register(registry: Registry): Unit = {
+    super.register(registry)
+    registry.putToConfirmedIndex(spendingHeight, boxId)
   }
 
   def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = None

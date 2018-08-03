@@ -7,10 +7,7 @@
 %% The amsthm package provides extended theorem environments
 \usepackage{amsthm}
 \usepackage{amsmath}
-
-
 \usepackage{hyperref}
-
 
 \newtheorem{axiom}{Axiom}
 
@@ -49,7 +46,6 @@
 \definecolor{dkgreen}{rgb}{0,0.6,0}
 \definecolor{gray}{rgb}{0.5,0.5,0.5}
 \definecolor{mauve}{rgb}{0.58,0,0.82}
-
 
 
 \newtheorem{claim1}{Claim}
@@ -93,15 +89,12 @@
 
 \newcommand{\state}{\textit{State}}
 \newcommand{\roller}{\textbf{Rollerchain}}
-\newcommand{\aspen}{\textbf{Aspen}}
-\newcommand{\bitcoinng}{\textbf{Bitcoin-ng}}
-\newcommand{\sse}{\textbf{Space-Scarce Economy}}
 \newcommand{\popow}{\textbf{PoPoW}}
 \newcommand{\ads}{\textbf{ADS}}
 
 % as we do not know which term to use for a state element, we use a command for this
-\newcommand{\coin}{coin}
-\newcommand{\Coin}{Coin}
+\newcommand{\coin}{box}
+\newcommand{\Coin}{Box}
 
 \newcommand{\sigm}{sigma}
 
@@ -112,19 +105,56 @@
 \usepackage{minted}
 \usemintedstyle{manni}
 \usepackage{microtype}
- 
+
 
 \begin{document}
 
-\title{The \ergo{} Yellowpaper}
-\author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
+\title{The \ergo{} Yellow Paper}
+\author{Ergo Developers}
+%\author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
 \maketitle
 
 \newpage
 \tableofcontents
 
-\section{Introduction}
-\subsection{Multiple Modes}
+
+\part{Introduction}
+\label{part-intro}
+
+This document describes a blockchain protocol named Ergo Platform~(or just Ergo) and a corresponding
+reference implementation. Ergo is a conservative Proof-of-Work blockchain with ultimate new contract language~(called
+ErgoTree, but in most cases you need a higher-level language, for example, ErgoScript) and better support for lightweight
+and secure modes of operation.
+
+\section{Vision}
+
+\knote{Write what is Ergo in general, why is it needed and for whom.}
+
+
+\subsection{State-Oriented Design}
+\knote{Write about boxes as first-class citizens.}
+
+
+
+\part{The Protocol}
+\label{part-protocol}
+
+
+\section{Notation and Preliminaries}
+
+\subsection{A Note on Notation}
+
+\knote{say about coin/box/output}
+
+
+\section{Cryptographic Primitives}
+
+We use Blake2b hash function with 256 bits output.
+
+\knote{describe a curve used}
+
+
+\section{Modes of Operation}
 Ergo (since the very first testing network Testnet0) is supporting multiple security models. In addition to full node
 mode, which is similar to Bitcoin fullnode, Ergo reference implementation supports Light-SPV, Light-Fullnode and Pruned-Fullnode modes.
 
@@ -139,18 +169,18 @@ For the full node regime, modifiers processing workflow is as follows:
    \item On receiving header:
    \begin{minted}{java}
 if(history.apply(header).isSuccess) {
-    if(!isInitialBootstrapping) Broadcast INV for this header   
+    if(!isInitialBootstrapping) Broadcast INV for this header
     Request transaction ids from this block
  } else {
     blacklist peer
  }
-\end{minted} 
+\end{minted}
 \vspace{1em}
 
  % Mempool.apply(transactionIdsForHeader)
    \item On receiving transaction ids from header:
    \begin{minted}{java}
-  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId =>
     request transaction with txId
   }
    \end{minted}
@@ -213,7 +243,7 @@ if(History.apply(header).isSuccess) {
 \item On receiving UTXOSnapshotManifest:
 
 \begin{minted}{java}
-UTXOSnapshotManifest.chunks.foreach { chunk => 
+UTXOSnapshotManifest.chunks.foreach { chunk =>
     request chunk from sender() //Or from random fullnode
   }
 \end{minted}
@@ -221,17 +251,17 @@ UTXOSnapshotManifest.chunks.foreach { chunk =>
 \begin{minted}{java}
 State.applyChunk(UTXOSnapshotChunk) match {
      case Success(Some(newMinimalState)) => GOTO 8
-     case Success(None) => stay at 7 
-     /*we need more chunks to construct state. 
+     case Success(None) => stay at 7
+     /*we need more chunks to construct state.
      TODO periodicaly request missed chunks*/
      case Failure(e) => ???
-     //UTXOSnapshotChunk or constcucted state roothash is invalid  
+     //UTXOSnapshotChunk or constcucted state roothash is invalid
   }
 \end{minted}
 
 \item Request BlockTransactions starting from State we have
 \begin{minted}{java}
-History.headersStartingFromId(State.headerId).foreach { header => 
+History.headersStartingFromId(State.headerId).foreach { header =>
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
   }
 \end{minted}
@@ -261,7 +291,7 @@ if(History.apply(header).isSuccess) {
 \end{minted}
 \item Request BlockTransactions and ADProofs starting from BlocksToKeep back in History (just 1 last header after node botstrapping):
 \begin{minted}{java}
-History.lastBestHeaders(BlocksToKeep).foreach { header => 
+History.lastBestHeaders(BlocksToKeep).foreach { header =>
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
     send message(GetAdProofsHeader(header)) to Random fullnode
   }
@@ -275,7 +305,7 @@ if(History.apply(modifier) == Success(ProgressInfo)) {
 if(State().apply(ProgressInfo) == Success((newState, ADProofs)))
 {
 if("mode"=="pruned-full") drop BlockTransactions and ADProofs older than BlocksToKeep
-} 
+}
 else {
          /*Drop Header from history, because it's transaction sequence is not valid*/
          History.drop(BlockTransactions.headerId)
@@ -318,52 +348,13 @@ Ergo has the following settings determines a mode:
 only. Keep all blocks from genesis if negative
 \item MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant).
 \end{itemize}
-\par 
-‘if(VerifyTransactions == false) require(BlocksToKeep == 0)‘ Mode from **"multimode.md"** can be determined as follows:
+\par
+‘if(VerifyTransactions == false) require(BlocksToKeep == 0)‘ Mode from "multimode.md" can be determined as follows:
 
-\section{Ergo Block Structure}
-\subsection{ErgoMinimalHeader is a minimal data amount, required to calculate blockId:}
-payloadRootHash: Array[Byte] - root hash (or simple hash of all payload data) of block payload.
-nonce: Int - field to iterate and generate valid PoW.
-\subsection{ErgoHeader is a header to keep in History and transfer:}
-\vspace{1em}
-\begin{tabular}{ |p{2.5cm}||p{0.5cm}|p{7.5cm}|  }
- \hline
- \hline
- Field & Size & Description  \\
- \hline
- version  &  1 &  block version, to be increased on every soft- and hardfork  \\
- \hline
- parentId &  32 &  id of parent block  \\
- \hline
- interlinksRoot &  32 &  root hash of interlinks structure  \\
- \hline
- ADProofsRoot &  32 &  hash of ADProofs for transactions in a block \\
- \hline
- stateRoot &  32 &  root hash (for an AVL+ tree) of a state after block application  \\
- \hline
- transactionsRoot  &  32 &  root hash (for a Merkle tree) of transactions in a block  \\
- \hline
- timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
- \hline
- nonce &  8 &  Proof-of-Work nonce  \\
- \hline
-\end{tabular}
-
-\vspace{1em}
-Some of this fields may be calculated by node by itself: 
-
-  
-   \begin{itemize}
-     \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
-     \item interlinksRoot: if(PoPoWBootstrap == false).
-     \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
-     \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
-     \end{itemize}
-     
+\include{block}
 
 \section{Ergo Modifiers Processing}
-This section describes processing algorithm for Ergo modifiers in all security modes. Unlike most of blockchain systems, Ergo have the following types of **modifiers**: In-memory:
+This section describes processing algorithm for Ergo modifiers in all security modes. Unlike most of blockchain systems, Ergo have the following types of modifiers: In-memory:
 \begin{enumerate}
 \item In-memory:
 \begin{itemize}
@@ -428,8 +419,8 @@ def updateHeadersChainToBestInNetwork() = {
 if(PoPoW) {
  1.1.1. Send GetPoPoWProof(suffix = Max(MinimalSuffix ,BlocksToKeep)) for all connections
  1.1.2. On receive PoPoWProof apply it to History
-  /* 
-  History should be able to determine, 
+  /*
+  History should be able to determine,
   whether this PoPoWProof is better, than it's current best header chain */
 } else {
   updateHeadersChainToBestInNetwork()
@@ -444,11 +435,11 @@ if(ADState == true) {
 } else {
 /*
 We need to download full state BlocksToKeep back in history
-TODO what if we can download state only "BlocksToKeep - N" 
-or "BlocksToKeep + N" blocks back? 
+TODO what if we can download state only "BlocksToKeep - N"
+or "BlocksToKeep + N" blocks back?
 */
   2.1. Request historical UTXOSnapshotManifest for at least BlocksToKeep back
-  2.2. On receiving UTXOSnapshotManifest: 
+  2.2. On receiving UTXOSnapshotManifest:
     UTXOSnapshotManifest.chunks.foreach ( chunk => request chunk from sender()
 /*Or from random fullnode*/
   2.3. On receiving UTXOSnapshotChunk
@@ -456,8 +447,8 @@ or "BlocksToKeep + N" blocks back?
      case Success(Some(newMinimalState)) => GOTO 3
      case Success(None) => stay at 2.3
      /*we need more chunks to construct state. TODO periodicaly request missed chunks*/
-     case Failure(e) => ??? 
-     /*UTXOSnapshotChunk or constcucted state roothash is invalid*/  
+     case Failure(e) => ???
+     /*UTXOSnapshotChunk or constcucted state roothash is invalid*/
   }
 }
 \end{minted}
@@ -470,9 +461,9 @@ or "BlocksToKeep + N" blocks back?
     State.setBestHeader(History.bestHeader)
   } else {
 /*we have headers chain better than full block */
-    3.1. 
+    3.1.
       assert(history contains header chain from State.bestHeader to History.bestHeaders)
-      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header =>
         sendToRandomFullNode(GetBlockTransactionsForHeader(header))
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
@@ -483,10 +474,10 @@ or "BlocksToKeep + N" blocks back?
       if(History.apply(modifier) == Success(ProgressInfo)) {
         if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
           if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
-          if(BlocksToKeep>=0) 
+          if(BlocksToKeep>=0)
           /*remove BlockTransactions and ADProofs older than BlocksToKeep from history*/
         } else {
-      /*Drop Header from history, 
+      /*Drop Header from history,
       because it's transaction sequence is not valid*/
           History.drop(modifier.headerId)
         }
@@ -513,16 +504,16 @@ Two infinite loops in different threads with the following functions inside:
     //Just update State rootshash to best header in history
     State.setBestHeader(History.bestHeader)
   } else {
-    //we have headers chain better then full block         
+    //we have headers chain better then full block
     3.1. Request transaction ids from all headers without transactions
       assert(history contains header chain from State.bestHeader to History.bestHeaders)
-      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header =>
         sendToRandomFullNode(GetTransactionIdsForHeader(header))
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
     3.2. On receiving TransactionIdsForHeader:
       Mempool.apply(TransactionIdsForHeader)
-      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId =>
         request transaction with txId
       }
     3.3. On receiving a transaction:
@@ -537,39 +528,24 @@ Two infinite loops in different threads with the following functions inside:
 \end{minted}
 
 
-%
-%\section{Components}
-%\subsection{History}
-%\subsection{State}
-%\subsection{Memory Pool}
-%
-%\section{Transactional Language}
-%
-%\section{Protocol Updates}
-%
-%\section{Peer-to-Peer Network}
-
-\include{sync}
-
 \include{emission}
 
 \section{Transactions}
 
 
-A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{16} - 1$ if block size
+A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{15} - 1$ if a block size
 limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
-in a \coin{} is disappearing
-from the state during transaction application: monetary value, guard script, contents of all the registers,
-all the bytes and also an identifier of the \coin{}.
+in a \coin{} is disappearing from the state during transaction application: monetary value, assets,
+guard script, contents of all the registers, all the bytes and also an identifier of the \coin{}.
 
 \subsection{\Coin{} Format}
-\label{coin-format}
+\label{box-format}
 
-A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 8 registers in the \ecash{} chain,
+A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 10 registers in the \ecash{} chain,
 and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
-From these registers, some are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
-serialized guard script, $R_2$ contains unique identifier of transaction which created the coin and also an index of
-the coin in the transaction.
+From these registers, four are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
+serialized guard script, $R_2$ contains assets, $R_3$ contains unique identifier of transaction which created the
+coin and also an index of the coin in the transaction.
 
 Each register is an expression in \sigm language. Thus the registers are typed: every register contains a value of
 some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
@@ -587,6 +563,10 @@ are to be formed as follows:
     \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
+    \item{\em number of assets } which box is carrying. Represented as a one-byte signed integer.
+    \item{\em assets}. A box can carry multiple assets. A single record in this field is represented as a tuple
+    $asset\_identifier -> amount$, where identifier is of 32 bytes and amount is of 8 bytes. The tuple is serialized as
+    a fixed-sized sequence of bytes.
     \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.
@@ -600,16 +580,16 @@ are to be formed as follows:
 
 
 
-\subsection{\Coin{} template}
-\label{coin-template}
+\subsection{\Coin{} candidate}
+\label{coin-candidate}
 
-Here we describe difference between a \coin{} and a \coin{} template. A \coin{} has a unique identifier to be defined
+Here we describe difference between a \coin{} and a \coin{} candidate. A \coin{} has a unique identifier to be defined
 deterministically from its contents. Thus we need to have different identifiers for \coin{}s of the same meaning, even
 if they are created by the same transaction. We also require a \coin{} to have an identifier which is derived solely
 from \coin{} contents, thus we can not use {\em (transaction\_id, output\_id)} pair as Bitcoin Core implementation is
 doing.
 
-To solve the issue we split concepts of a \coin{} and a \coin{} template. A \coin{} template is defining semantics of
+To solve the issue we split concepts of a \coin{} and a \coin{} candidate. A \coin{} candidate is defining semantics of
 the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_2$ which is set to
 $null$.
 
@@ -618,13 +598,13 @@ $null$.
 \label{tx-format}
 
 A transaction simply refers to a set of \coin{}s, by providing their identifiers and also spending proofs for
-them; the transaction also providing set of new \coin{} templates. A \coin{} template becomes a \coin{} in result of
+them; the transaction also providing set of new \coin{} candidates. A \coin{} candidate becomes a \coin{} in result of
 transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
 coin is also known before the application).
 
-We now introduce two functions to extract a \coin{} or a \coin{} template which a transaction is trying to spend.
+We now introduce two functions to extract a \coin{} or a \coin{} candidate which a transaction is trying to spend.
  In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
- returns a \coin{} template . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
+ returns a \coin{} candidate . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
 
 We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
 to preserve overall monetary value:
@@ -674,8 +654,8 @@ as follows. We concatenate the following fields:
     \ref{coin-format} for details).
     \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
     transaction can not create more than 65,536 \coin{}s).
-    \item{\em transaction outputs.} In this section we store serialized \coin{} templates, with no delimiters. A \coin{}
-    template is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
+    \item{\em transaction outputs.} In this section we store serialized \coin{} candidates, with no delimiters. A \coin{}
+    candidate is serialized as a \coin{}~(see Section~\ref{coin-format} for details), but without last field~(transaction
     identifier and index of the \coin{} in transaction outputs).
 \end{itemize}
 
@@ -748,18 +728,81 @@ from the tree:
 
 
 
+\subsection{Transaction Validation Rules}
+\label{tx-validation}
 
-\subsection{Verifying A Transaction}
+We split validation of a single transaction into two stages. There are $stateless checks$ which could be done by the
+transaction only being presented. Stateful checks are requiring knowledge of the current state, in the form of the whole
+UTXO set or a part of it, namely concrete boxes a transaction is destroying along with proof of authenticity for them~(
+against a root hash included into a last block header).
 
+Stateless checks are:
 
+\begin{itemize}
+    \item{} a transaction must spend at a least one input and create at least one output. A transaction spends no more
+    than $32767$ inputs and creates no more than $32767$ outputs.
+    \item{} all the output amounts must be non-negative.
+    \item{} an output can not contain more than 4 assets. All the assets amounts must be positive.
+    \item{} transaction outputs collectively could not contain more than 16 assets.
+\end{itemize}
+
+\knote{Should we allow 0-value iutputs?}
+
+\knote{Check box and transaction sizes.}
+
+Stateful checks are:
+
+\begin{itemize}
+    \item{} all the input boxes are members of the UTXO set or UTXO set transformation proof
+     provided by a miner in a dedicated section of a block~(if stateType="digest").
+    \item{} total input and output ergo amounts must be the same. Adding up should be done with overflow checks.
+    \item{} all the inputs have valid spending proofs. Total cost to verify all the spending proofs should be no more
+            than a limit per block~(adjustable via miners voting).
+    \item{} inputs should have no more than 16 assets collectively. An input can not contain more than 4 assets.
+    \item{} for each kind of asset in the outputs, total output amount for the asset should be no more than the total
+            input amount, if the asset identifier is not equals to identifier of the first input; otherwise, the total
+            output amount must be positive. The latter case corresponds to issuance of a new asset, while the former
+            sets asset preservation rule. Please note that for total input amount of an asset we do not require for
+            strict equality of the input and output amounts: the output amount could be less than input amount~(or zero).
+\end{itemize}
 
 \subsection{Unified Transactions}
+
+\knote{Write about fee as boxes and absence of out-of-thin-air emission in the "coinbase" transaction.}
+
+\subsection{Full-Block Validation Rules}
+
+Below are rules for block validation when a node is verifying transactions ($VerifyTransactions = 1$)
+
+\begin{itemize}
+    \item{} every transaction in a block is referencing to inputs from the UTXO set or created by previous transactions
+    in the block. Please note that it is not possible for an input to refer to an output of some follow-up transaction
+    of the block.
+    \item{} every transaction in a block is valid~(see Section~\ref{tx-validation} for transaction validation rules).
+    \item{} total cost of validation of all the inputs of all the transactions in the block is no more than
+    allowed limit.
+    \item{} root hash of the authenticated UTXO set after application of the block transactions is the same as
+    in the header.
+    \item{} for a node keeping UTXO, hash of the calcualted state transformations proof is the same as announced
+    in the header of the block.
+    \item{} header is valid~\knote{link to header validation rules}.
+\end{itemize}
+
+\knote{mention emission rules. extractEmissionBox is buggy probably.}
+\knote{extension validation rules}
 
 \subsection{Token Emission}
 \input{tokens.tex}
 
 \section{Voting}
 \input{voting.tex}
+
+\section{Proof-of-Work}
+
+\part{The Reference Implementation}
+\label{part-impl}
+
+\include{sync}
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

@@ -14,6 +14,7 @@ import scorex.core.utils.ScorexLogging
 import scala.util.{Failure, Success, Try}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local.TransactionGeneratorRef
@@ -50,7 +51,7 @@ trait ErgoWalletReader extends VaultReader {
       val script = t._1.script
       val value = t._2
       val assets = t._3.toSeq
-      val regs = t._4.zipWithIndex.map{case (v, i) =>
+      val regs: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]] = t._4.zipWithIndex.map { case (v, i) =>
         ErgoBox.nonMandatoryRegisters(i.toByte) -> v
       }.toMap
       new ErgoBoxCandidate(value, script, assets, regs)
@@ -107,7 +108,7 @@ class ErgoWallet(actorSystem: ActorSystem,
   override def rollback(to: VersionTag): Try[ErgoWallet] =
     historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(height) =>
-        actor ! Rollback (height)
+        actor ! Rollback(height)
         Success(this)
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))

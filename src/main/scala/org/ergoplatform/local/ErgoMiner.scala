@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
-import org.ergoplatform.nodeView.wallet.{ErgoProvingInterpreter, ErgoWallet}
+import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -36,7 +36,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: CoinsEmission) extends Actor with ScorexLogging {
+                emission: CoinsEmission,
+                minerPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -52,7 +53,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     secrets.map(_.publicImage)
   }
 
-  private def minerProp: Value[SBoolean.type] = {
+  private def minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
     require(publicKeys.nonEmpty, "No seed provided to get miner's secrets from")
     publicKeys(Random.nextInt(publicKeys.size))
   }
@@ -153,10 +154,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
     val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
     var totalSize = 0
-    val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).takeWhile { tx =>
-      totalSize = totalSize + tx.bytes.length
-      totalSize <= maxBlockSize
-    }
+    val emissionBox = state.emissionBoxOpt
+    val externalTransactions = state
+      .filterValid(pool.unconfirmed.values.toSeq)
+      .filter(tx => !emissionBox.exists(eb => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, eb.id))))
+      .takeWhile { tx =>
+        totalSize = totalSize + tx.bytes.length
+        totalSize <= maxBlockSize
+      }
 
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
     //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
@@ -186,15 +191,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
 
-  private def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
-    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
-      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
-      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-        (s :+ tx) -> (keys ++ bxsBaw)
-      } else {
-        (s, keys)
-      }
-    }._1
 }
 
 
@@ -247,6 +243,16 @@ object ErgoMiner extends ScorexLogging {
     )
   }
 
+  def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
+    .foldLeft((Seq.empty[ErgoTransaction], Set.empty[ByteArrayWrapper])) { case ((s, keys), tx) =>
+      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
+      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
+        (s :+ tx) -> (keys ++ bxsBaw)
+      } else {
+        (s, keys)
+      }
+    }._1
+
 
   case object StartMining
 
@@ -268,16 +274,19 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
+            emission: CoinsEmission,
+            minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission)
+            emission: CoinsEmission,
+            minerPropOpt: Option[Value[SBoolean.type]] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,

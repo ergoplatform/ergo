@@ -34,6 +34,8 @@ class ErgoAddressSpecification extends ErgoPropertyTest {
   property("P2SH proper bytes to track") {
     forAll(ergoPropositionGen) { s =>
       val p2sh = ScriptHashAddress(s)
+
+      //search we're doing to find a box potentially corresponding to some address
       ValueSerializer.serialize(p2sh.script).containsSlice(p2sh.contentBytes) shouldBe true
     }
   }
@@ -41,6 +43,8 @@ class ErgoAddressSpecification extends ErgoPropertyTest {
   property("P2S proper bytes to track") {
     forAll(ergoPropositionGen) { s =>
       val p2s = ScriptAddress(s)
+
+      //search we're doing to find a box potentially corresponding to some address
       ValueSerializer.serialize(p2s.script).containsSlice(p2s.contentBytes) shouldBe true
     }
   }

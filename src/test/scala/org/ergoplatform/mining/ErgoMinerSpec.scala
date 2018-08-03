@@ -116,17 +116,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         readersHolderRef,
         timeProvider,
         emission,
-        Some(TrueLeaf))
+        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage))
       expectNoMessage(1 second)
       val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
-      val emissionBox = r.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.get
-
       val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
 
-      val input = Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
-      val outputs = IndexedSeq(new ErgoBoxCandidate(1000000L, prop1))
-      val tx = new ErgoTransaction(IndexedSeq(input), outputs)
+      val tx = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, emission)
 
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       r.m.unconfirmed.size shouldBe 0

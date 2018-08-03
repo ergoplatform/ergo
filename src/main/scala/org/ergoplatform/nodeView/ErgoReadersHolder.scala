@@ -37,8 +37,8 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
       walletReaderOpt = Some(reader)
 
     case GetReaders =>
-      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt) match {
-        case (Some(h), Some(s), Some(m)) => sender ! Readers(h, s, m)
+      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
+        case (Some(h), Some(s), Some(m), Some(w)) => sender ! Readers(h, s, m, w)
         case m => log.warn(s"Got GetReaders request in state $m")
       }
 

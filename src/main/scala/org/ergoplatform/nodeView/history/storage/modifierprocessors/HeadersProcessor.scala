@@ -344,7 +344,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
-        .validate(heightOf(header.parentId).exists(h => headersHeight - h < config.keepVersions)) {
+        .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
         .validate(powScheme.verify(header)) {

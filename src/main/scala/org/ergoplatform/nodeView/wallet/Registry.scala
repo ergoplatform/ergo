@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 
 import scala.collection.mutable
 
-object Registry {
+class Registry {
 
   private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
 
@@ -132,7 +132,7 @@ object Registry {
   }
 
   def makeTransition(oldTrackedBox: TrackedBox, newTrackedBox: TrackedBox): Unit = {
-    newTrackedBox.register()
-    oldTrackedBox.deregister()
+    newTrackedBox.register(this)
+    oldTrackedBox.deregister(this)
   }
 }

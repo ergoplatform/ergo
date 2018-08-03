@@ -18,13 +18,13 @@ class FilesObjectsStore(dir: String) extends ObjectsStore {
     Files.readAllBytes(path(id))
   }.toOption
 
-  override def put(m: ErgoPersistentModifier): Unit = Future {
+  override def put(m: ErgoPersistentModifier): Future[Unit] = Future {
     val p = path(m.id)
     p.toFile.createNewFile()
     Files.write(p, HistoryModifierSerializer.toBytes(m), StandardOpenOption.WRITE)
   }
 
-  override def delete(id: ModifierId): Unit = Future {
+  override def delete(id: ModifierId): Future[Unit] = Future {
     Files.delete(path(id))
   }
 

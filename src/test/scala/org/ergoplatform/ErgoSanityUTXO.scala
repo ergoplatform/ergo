@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
@@ -65,5 +66,12 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
       Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
+  }
+
+  override def modifierWithTransactions(memoryPoolOpt: Option[MPool], customTransactionsOpt: Option[Seq[TX]]): CTM = {
+    val boxHolder = boxesHolderGen.sample.get
+    val txs = validTransactionsFromBoxHolder(boxHolder)._1
+    val id = modifierIdGen.sample.get
+    BlockTransactions(id, txs)
   }
 }

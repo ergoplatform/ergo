@@ -2,7 +2,7 @@ package org.ergoplatform
 
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
@@ -18,11 +18,10 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
 import scorex.testkit.properties._
-import scorex.testkit.properties.mempool.MempoolTransactionsTest
+import scorex.testkit.properties.mempool.{MempoolFilterPerformanceTest, MempoolRemovalTest, MempoolTransactionsTest}
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
-//todo: currently this class parametrized with UtxoState, consider DigestState as well
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
   //with StateApplyChangesTest[P, TX, PM, B, ST]
@@ -30,8 +29,8 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
   with MempoolTransactionsTest[TX, MPool]
   // todo: convert MempoolFilterPerformanceTest to benchmark
-  //with MempoolFilterPerformanceTest[P, TX, MPool]
-  //with MempoolRemovalTest[P, TX, MPool, PM, PM, HT, SI]
+  with MempoolFilterPerformanceTest[TX, MPool]
+  with MempoolRemovalTest[TX, MPool, PM, CTM, HT, SI]
   //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
   with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]
   with ErgoTestHelpers
@@ -93,6 +92,7 @@ object ErgoSanity {
   type TX = ErgoTransaction
   type B = ErgoBox
   type PM = ErgoPersistentModifier
+  type CTM = BlockTransactions
   type SI = ErgoSyncInfo
   type HT = ErgoHistory
   type UTXO_ST = UtxoState

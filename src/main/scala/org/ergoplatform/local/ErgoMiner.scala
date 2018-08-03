@@ -151,10 +151,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
     val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
     var totalSize = 0
-    val externalTransactions = state.filterValid(pool.unconfirmed.values.toSeq).takeWhile { tx =>
-      totalSize = totalSize + tx.bytes.length
-      totalSize <= maxBlockSize
-    }
+    val emissionBox = state.emissionBoxOpt
+    val externalTransactions = state
+      .filterValid(pool.unconfirmed.values.toSeq)
+      .filter(tx => !emissionBox.exists(eb => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, eb.id))))
+      .takeWhile { tx =>
+        totalSize = totalSize + tx.bytes.length
+        totalSize <= maxBlockSize
+      }
 
     //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
     //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)

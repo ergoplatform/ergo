@@ -24,9 +24,7 @@ import scorex.utils.Random
 
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
-  //with StateApplyChangesTest[P, TX, PM, B, ST]
   //with WalletSecretsTest[P, TX, PM]
-  //with StateRollbackTest[P, TX, PM, B, ST, SI, HT, MPool]
   with MempoolTransactionsTest[TX, MPool]
   // todo: convert MempoolFilterPerformanceTest to benchmark
   with MempoolFilterPerformanceTest[TX, MPool]

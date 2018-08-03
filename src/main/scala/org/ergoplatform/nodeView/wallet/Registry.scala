@@ -68,7 +68,7 @@ object Registry {
         val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
         _confirmedAssetBalances.put(wid, updBalance)
       }
-    } else {
+    } else {  //offchain box case
       _unconfirmedBalance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = ByteArrayWrapper(id)
@@ -96,7 +96,7 @@ object Registry {
           _confirmedAssetBalances.put(wid, updBalance)
         }
       }
-    } else {
+    } else {  //offchain box case
       _unconfirmedBalance -= tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = ByteArrayWrapper(id)

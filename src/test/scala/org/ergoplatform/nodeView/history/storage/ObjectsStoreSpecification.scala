@@ -3,6 +3,9 @@ package org.ergoplatform.nodeView.history.storage
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
 class ObjectsStoreSpecification extends ErgoPropertyTest {
 
   val folder: String = createTempDir.getAbsolutePath
@@ -11,9 +14,9 @@ class ObjectsStoreSpecification extends ErgoPropertyTest {
   property("FilesObjectsStore: put, get, delete") {
     forAll(invalidHeaderGen) { header =>
       objectsStore.get(header.id) shouldBe None
-      objectsStore.put(header)
+      Await.result(objectsStore.put(header), 5.second)
       HistoryModifierSerializer.parseBytes(objectsStore.get(header.id).get).get shouldBe header
-      objectsStore.delete(header.id)
+      Await.result(objectsStore.delete(header.id), 5.second)
       objectsStore.get(header.id) shouldBe None
     }
   }

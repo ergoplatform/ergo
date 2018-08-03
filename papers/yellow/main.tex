@@ -48,7 +48,6 @@
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 
 
-
 \newtheorem{claim1}{Claim}
 \newtheorem{dfn}{Definition}
 \newtheorem{defn}{Definition}
@@ -111,34 +110,44 @@
 \begin{document}
 
 \title{The \ergo{} Yellow Paper}
-\authors{Ergo Developers}
+\author{Ergo Developers}
 %\author{Alexander Chepurnoy \and Nazeem Faour \and Dmitry Meshkov}
 \maketitle
 
 \newpage
 \tableofcontents
 
-\section{Introduction}
 
-\subsection{Vision}
+\part{Introduction}
+\label{part-intro}
 
-\knote{Write what is Ergo in general and why is it needed.}
+This document describes a blockchain protocol named Ergo Platform~(or just Ergo) and a corresponding
+reference implementation. Ergo is a conservative Proof-of-Work blockchain with ultimate new contract language~(called
+ErgoTree, but in most cases you need a higher-level language, for example, ErgoScript) and better support for lightweight
+and secure modes of operation.
+
+\section{Vision}
+
+\knote{Write what is Ergo in general, why is it needed and for whom.}
+
 
 \subsection{State-Oriented Design}
-
-
 \knote{Write about boxes as first-class citizens.}
 
 
-\section{Notation and Preliminaries}
 
+\part{The Protocol}
+\label{part-protocol}
+
+
+\section{Notation and Preliminaries}
 
 \subsection{A Note on Notation}
 
 \knote{say about coin/box/output}
 
 
-\subsection{Cryptographic Primitives}
+\section{Cryptographic Primitives}
 
 We use Blake2b hash function with 256 bits output.
 
@@ -160,18 +169,18 @@ For the full node regime, modifiers processing workflow is as follows:
    \item On receiving header:
    \begin{minted}{java}
 if(history.apply(header).isSuccess) {
-    if(!isInitialBootstrapping) Broadcast INV for this header   
+    if(!isInitialBootstrapping) Broadcast INV for this header
     Request transaction ids from this block
  } else {
     blacklist peer
  }
-\end{minted} 
+\end{minted}
 \vspace{1em}
 
  % Mempool.apply(transactionIdsForHeader)
    \item On receiving transaction ids from header:
    \begin{minted}{java}
-  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+  transactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId =>
     request transaction with txId
   }
    \end{minted}
@@ -234,7 +243,7 @@ if(History.apply(header).isSuccess) {
 \item On receiving UTXOSnapshotManifest:
 
 \begin{minted}{java}
-UTXOSnapshotManifest.chunks.foreach { chunk => 
+UTXOSnapshotManifest.chunks.foreach { chunk =>
     request chunk from sender() //Or from random fullnode
   }
 \end{minted}
@@ -242,17 +251,17 @@ UTXOSnapshotManifest.chunks.foreach { chunk =>
 \begin{minted}{java}
 State.applyChunk(UTXOSnapshotChunk) match {
      case Success(Some(newMinimalState)) => GOTO 8
-     case Success(None) => stay at 7 
-     /*we need more chunks to construct state. 
+     case Success(None) => stay at 7
+     /*we need more chunks to construct state.
      TODO periodicaly request missed chunks*/
      case Failure(e) => ???
-     //UTXOSnapshotChunk or constcucted state roothash is invalid  
+     //UTXOSnapshotChunk or constcucted state roothash is invalid
   }
 \end{minted}
 
 \item Request BlockTransactions starting from State we have
 \begin{minted}{java}
-History.headersStartingFromId(State.headerId).foreach { header => 
+History.headersStartingFromId(State.headerId).foreach { header =>
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
   }
 \end{minted}
@@ -282,7 +291,7 @@ if(History.apply(header).isSuccess) {
 \end{minted}
 \item Request BlockTransactions and ADProofs starting from BlocksToKeep back in History (just 1 last header after node botstrapping):
 \begin{minted}{java}
-History.lastBestHeaders(BlocksToKeep).foreach { header => 
+History.lastBestHeaders(BlocksToKeep).foreach { header =>
     send message(GetBlockTransactionsForHeader(header)) to Random fullnode
     send message(GetAdProofsHeader(header)) to Random fullnode
   }
@@ -296,7 +305,7 @@ if(History.apply(modifier) == Success(ProgressInfo)) {
 if(State().apply(ProgressInfo) == Success((newState, ADProofs)))
 {
 if("mode"=="pruned-full") drop BlockTransactions and ADProofs older than BlocksToKeep
-} 
+}
 else {
          /*Drop Header from history, because it's transaction sequence is not valid*/
          History.drop(BlockTransactions.headerId)
@@ -339,7 +348,7 @@ Ergo has the following settings determines a mode:
 only. Keep all blocks from genesis if negative
 \item MinimalSuffix: Int - minimal suffix size for PoPoW proof (may be pre-defined constant).
 \end{itemize}
-\par 
+\par
 ‘if(VerifyTransactions == false) require(BlocksToKeep == 0)‘ Mode from "multimode.md" can be determined as follows:
 
 \include{block}
@@ -410,8 +419,8 @@ def updateHeadersChainToBestInNetwork() = {
 if(PoPoW) {
  1.1.1. Send GetPoPoWProof(suffix = Max(MinimalSuffix ,BlocksToKeep)) for all connections
  1.1.2. On receive PoPoWProof apply it to History
-  /* 
-  History should be able to determine, 
+  /*
+  History should be able to determine,
   whether this PoPoWProof is better, than it's current best header chain */
 } else {
   updateHeadersChainToBestInNetwork()
@@ -426,11 +435,11 @@ if(ADState == true) {
 } else {
 /*
 We need to download full state BlocksToKeep back in history
-TODO what if we can download state only "BlocksToKeep - N" 
-or "BlocksToKeep + N" blocks back? 
+TODO what if we can download state only "BlocksToKeep - N"
+or "BlocksToKeep + N" blocks back?
 */
   2.1. Request historical UTXOSnapshotManifest for at least BlocksToKeep back
-  2.2. On receiving UTXOSnapshotManifest: 
+  2.2. On receiving UTXOSnapshotManifest:
     UTXOSnapshotManifest.chunks.foreach ( chunk => request chunk from sender()
 /*Or from random fullnode*/
   2.3. On receiving UTXOSnapshotChunk
@@ -438,8 +447,8 @@ or "BlocksToKeep + N" blocks back?
      case Success(Some(newMinimalState)) => GOTO 3
      case Success(None) => stay at 2.3
      /*we need more chunks to construct state. TODO periodicaly request missed chunks*/
-     case Failure(e) => ??? 
-     /*UTXOSnapshotChunk or constcucted state roothash is invalid*/  
+     case Failure(e) => ???
+     /*UTXOSnapshotChunk or constcucted state roothash is invalid*/
   }
 }
 \end{minted}
@@ -452,9 +461,9 @@ or "BlocksToKeep + N" blocks back?
     State.setBestHeader(History.bestHeader)
   } else {
 /*we have headers chain better than full block */
-    3.1. 
+    3.1.
       assert(history contains header chain from State.bestHeader to History.bestHeaders)
-      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header =>
         sendToRandomFullNode(GetBlockTransactionsForHeader(header))
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
@@ -465,10 +474,10 @@ or "BlocksToKeep + N" blocks back?
       if(History.apply(modifier) == Success(ProgressInfo)) {
         if(State().apply(ProgressInfo) == Success((newState, ADProofs))) {
           if(ADState==false) ADProofs.foreach ( ADProof => History.apply(ADProof))
-          if(BlocksToKeep>=0) 
+          if(BlocksToKeep>=0)
           /*remove BlockTransactions and ADProofs older than BlocksToKeep from history*/
         } else {
-      /*Drop Header from history, 
+      /*Drop Header from history,
       because it's transaction sequence is not valid*/
           History.drop(modifier.headerId)
         }
@@ -495,16 +504,16 @@ Two infinite loops in different threads with the following functions inside:
     //Just update State rootshash to best header in history
     State.setBestHeader(History.bestHeader)
   } else {
-    //we have headers chain better then full block         
+    //we have headers chain better then full block
     3.1. Request transaction ids from all headers without transactions
       assert(history contains header chain from State.bestHeader to History.bestHeaders)
-      History.continuation(from = State.bestHeader, size = ???).get.foreach { header => 
+      History.continuation(from = State.bestHeader, size = ???).get.foreach { header =>
         sendToRandomFullNode(GetTransactionIdsForHeader(header))
         if(ADState == true) sendToRandomFullNode(GetADProofsForHeader(header))
       }
     3.2. On receiving TransactionIdsForHeader:
       Mempool.apply(TransactionIdsForHeader)
-      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId => 
+      TransactionIdsForHeader.filter(txId => !MemPool.contains(txId)).foreach { txId =>
         request transaction with txId
       }
     3.3. On receiving a transaction:
@@ -518,8 +527,6 @@ Two infinite loops in different threads with the following functions inside:
   }
 \end{minted}
 
-
-\include{sync}
 
 \include{emission}
 
@@ -739,6 +746,8 @@ Stateless checks are:
     \item{} transaction outputs collectively could not contain more than 16 assets.
 \end{itemize}
 
+\knote{Should we allow 0-value iutputs?}
+
 \knote{Check box and transaction sizes.}
 
 Stateful checks are:
@@ -789,6 +798,11 @@ Below are rules for block validation when a node is verifying transactions ($Ver
 \input{voting.tex}
 
 \section{Proof-of-Work}
+
+\part{The Reference Implementation}
+\label{part-impl}
+
+\include{sync}
 
 \bibliographystyle{elsarticle-num}
 \bibliography{sources.bib}

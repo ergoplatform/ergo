@@ -72,17 +72,17 @@ class PoPoWProofUtils(powScheme: PowScheme) {
     val levelDiff = header.requiredDifficulty * BigInt(2).pow(level)
     headerDiff >= levelDiff
   }
-  
+
   def maxLevel(header: Header): Int = {
     @tailrec
     def generateMaxLevel(level: Int): Int = {
-      if (isLevel(header, level)) {
+      if (isLevel(header, level + 1)) {
         generateMaxLevel(level + 1)
       } else {
         level
       }
     }
-    generateMaxLevel(1)
+    generateMaxLevel(0)
   }
   def constructInterlinkVector(parent: Header): Seq[ModifierId] = {
     if (parent.isGenesis) {

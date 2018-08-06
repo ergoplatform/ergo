@@ -31,7 +31,7 @@ import scala.util.Try
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
-                           size: Option[Int] = None)
+                           override val sizeOpt: Option[Int] = None)
   extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ErgoNodeViewModifier
     with ModifierValidator with ScorexLogging {
 

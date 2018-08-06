@@ -17,7 +17,7 @@ import scala.util.{Failure, Success, Try}
 
 case class ADProofs(headerId: ModifierId,
                     proofBytes: SerializedAdProof,
-                    size: Option[Int] = None) extends BlockSection {
+                    override val sizeOpt: Option[Int] = None) extends BlockSection {
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
@@ -111,6 +111,7 @@ object ADProofSerializer extends Serializer[ADProofs] {
     ADProofs(
       bytesToId(bytes.take(Constants.ModifierIdSize)),
       SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length),
-      Some(bytes.length))
+      Some(bytes.length)
+    )
   }
 }

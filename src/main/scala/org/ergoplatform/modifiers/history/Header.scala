@@ -31,7 +31,7 @@ case class Header(version: Version,
                   height: Int,
                   extensionHash: Digest32,
                   equihashSolution: EquihashSolution,
-                  size: Option[Int] = None
+                  override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
 
@@ -81,7 +81,6 @@ case class Header(version: Version,
     case t: BlockTransactions => java.util.Arrays.equals(transactionsRoot, t.digest)
     case _ => false
   }
-
 }
 
 object Header {

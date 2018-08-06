@@ -26,7 +26,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(LeafData @@ chunkRootHashes)
 
-  val size = None
+  override val sizeOpt: Option[Int] = None
 }
 
 object UTXOSnapshotManifest {

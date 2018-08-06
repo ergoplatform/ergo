@@ -31,11 +31,13 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 
-  val size = {
-    val hSize = header.size.getOrElse(0)
-    val btSize = blockTransactions.size.getOrElse(0)
-    val adSize = aDProofs.flatMap(_.size).getOrElse(0)
-    Some(hSize + btSize + adSize)
+  override val sizeOpt: Option[Int] = None
+
+  override lazy val size = {
+    val hSize = header.size
+    val btSize = blockTransactions.size
+    val adSize = aDProofs.map(_.size).getOrElse(0)
+    hSize + btSize + adSize
   }
 }
 

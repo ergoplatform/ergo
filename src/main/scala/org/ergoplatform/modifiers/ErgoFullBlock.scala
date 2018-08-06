@@ -10,7 +10,7 @@ import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNo
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProofs], size: Option[Int] = None)
+                         aDProofs: Option[ADProofs])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
@@ -30,6 +30,13 @@ case class ErgoFullBlock(header: Header,
     throw new Error("Should never try to serialize ErgoFullBlock")
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+
+  val size = {
+    val hSize = header.size.getOrElse(0)
+    val btSize = blockTransactions.size.getOrElse(0)
+    val adSize = aDProofs.flatMap(_.size).getOrElse(0)
+    Some(hSize + btSize + adSize)
+  }
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -39,7 +46,8 @@ object ErgoFullBlock extends ApiCodecs {
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson),
+      "size" -> b.size.asJson
     )
 
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>

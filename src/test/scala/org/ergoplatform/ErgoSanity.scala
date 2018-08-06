@@ -26,8 +26,6 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   with StateApplicationTest[PM, ST]
   //with WalletSecretsTest[P, TX, PM]
   with MempoolTransactionsTest[TX, MPool]
-  // todo: convert MempoolFilterPerformanceTest to benchmark
-  with MempoolFilterPerformanceTest[TX, MPool]
   with MempoolRemovalTest[TX, MPool, PM, CTM, HT, SI]
   //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
   with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]

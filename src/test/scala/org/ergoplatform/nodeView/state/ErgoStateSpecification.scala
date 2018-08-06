@@ -49,7 +49,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.boxChanges() double spend attempt") {
-    var (us: UtxoState, bh) = createUtxoState()
+    val (_, bh) = createUtxoState()
     bh.boxes.size shouldBe 1
     val genesisBox = bh.boxes.head._2
 
@@ -60,9 +60,9 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         ErgoState.boxChanges(txs)._1.length shouldBe 1
         ErgoState.boxChanges(txs)._1.head shouldBe genesisBox.id
 
-        // second transaction input should be be an input, created by the first transaction
+        // second transaction input should be an input created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
-        txs.head.outputs.find(_.id sameElements inputToDoubleSpend.boxId) should not be None
+        txs.head.outputs.find(b => java.util.Arrays.equals(b.id, inputToDoubleSpend.boxId)) should not be None
         val doubleSpendTx = txs.last.copy(inputs = inputToDoubleSpend +: txs.last.inputs.tail)
         val invalidTxs = txs.dropRight(1) :+ doubleSpendTx
         invalidTxs.length shouldBe txs.length
@@ -109,5 +109,4 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     s1.height shouldBe s2.height
     s1.digest shouldEqual s2.digest
   }
-
 }

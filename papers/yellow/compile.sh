@@ -9,4 +9,5 @@ rm main.blg
 rm main.bbl
 rm main.out
 rm main.toc
+rm emission.aux
 rm -r _minted-main/

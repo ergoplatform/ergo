@@ -6,7 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core._
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 
@@ -86,7 +86,7 @@ object ExtensionSerializer extends Serializer[Extension] {
       Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
     val optBytes = scorex.core.utils.concatBytes(obj.optionalFields.map(f =>
       Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
-    Bytes.concat(obj.headerId, mandBytes, Delimeter, optBytes)
+    Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimeter, optBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
@@ -106,7 +106,7 @@ object ExtensionSerializer extends Serializer[Extension] {
       }
     }
 
-    val headerId = ModifierId @@ bytes.take(32)
+    val headerId = bytesToId(bytes.take(32))
     val (mandatory, newPos) = parseSection(32, 4, Seq())
     val (optional, _) = parseSection(newPos, 32, Seq())
     Extension(headerId, mandatory, optional)

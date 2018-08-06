@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId}
+import scorex.core._
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
@@ -38,9 +38,9 @@ case class Header(version: Version,
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
-  override lazy val id: ModifierId = ModifierId @@ powHash
+  override lazy val id: ModifierId = bytesToId(serializedId)
 
-  lazy val powHash: Digest32 = {
+  lazy val serializedId: Digest32 = {
     // An implementation of a PoW function which is similar to one used in ZCash.
     // H(I||V||x_1||x_2||...|x_2^k)
     val digest = new SHA256Digest()
@@ -83,7 +83,7 @@ object Header {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
-  lazy val GenesisParentId: ModifierId = ModifierId @@ Array.fill(Constants.hashLength)(0: Byte)
+  lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.hashLength)(0: Byte))
 
   implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
     Map(
@@ -108,7 +108,7 @@ object HeaderSerializer extends Serializer[Header] {
   def bytesWithoutInterlinksAndPow(h: Header): Array[Byte] =
     Bytes.concat(
       Array(h.version),
-      h.parentId,
+      idToBytes(h.parentId),
       h.ADProofsRoot,
       h.transactionsRoot,
       h.stateRoot,
@@ -119,13 +119,13 @@ object HeaderSerializer extends Serializer[Header] {
 
   def bytesWithoutPow(h: Header): Array[Byte] = {
     @SuppressWarnings(Array("TraversableHead"))
-    def buildInterlinkBytes(links: Seq[Array[Byte]], acc: Array[Byte]): Array[Byte] = {
+    def buildInterlinkBytes(links: Seq[ModifierId], acc: Array[Byte]): Array[Byte] = {
       if (links.isEmpty) {
         acc
       } else {
-        val headLink: Array[Byte] = links.head
-        val repeating: Byte = links.count(_ sameElements headLink).toByte
-        buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), headLink))
+        val headLink: ModifierId = links.head
+        val repeating: Byte = links.count(_ == headLink).toByte
+        buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
       }
     }
 
@@ -155,7 +155,7 @@ object HeaderSerializer extends Serializer[Header] {
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
     val version = bytes.head
-    val parentId = ModifierId @@ bytes.slice(1, 33)
+    val parentId = bytesToId(bytes.slice(1, 33))
     val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
     val transactionsRoot = Digest32 @@ bytes.slice(65, 97)
     val stateRoot = ADDigest @@ bytes.slice(97, 130)
@@ -167,7 +167,7 @@ object HeaderSerializer extends Serializer[Header] {
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
-      val link: ModifierId = ModifierId @@ bytes.slice(index + 1, index + 33)
+      val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
       val links: Seq[ModifierId] = Array.fill(repeatN)(link)
       parseInterlinks(index + 33, endIndex, acc ++ links)
     } else {

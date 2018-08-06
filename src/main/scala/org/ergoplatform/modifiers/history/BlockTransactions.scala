@@ -14,7 +14,7 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction])
+case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], size: Option[Int] = None)
   extends BlockSection
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
@@ -53,7 +53,8 @@ object BlockTransactions {
   implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
-      "transactions" -> bt.txs.map(_.asJson).asJson
+      "transactions" -> bt.txs.map(_.asJson).asJson,
+      "size" -> bt.size.asJson
     ).asJson
 }
 
@@ -82,6 +83,6 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
       }
     }
 
-    parseTransactions(Constants.ModifierIdSize, Seq.empty)
+    parseTransactions(Constants.ModifierIdSize, Seq.empty).copy(size = Some(bytes.length))
   }
 }

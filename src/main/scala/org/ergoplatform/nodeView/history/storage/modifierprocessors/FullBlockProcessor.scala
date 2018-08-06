@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
-import scorex.core.ModifierId
+import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.{ModifierId, bytesToId}
 
 import scala.util.Try
 
@@ -18,7 +18,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey).map(ModifierId @@ _.data)
+  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
+    .map(w => bytesToId(w.data))
 
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
@@ -29,7 +30,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   /** Process full block when we have one.
     *
     * @param fullBlock - block to process
-    * @param newMod - new modifier we are going to put in history
+    * @param newMod    - new modifier we are going to put in history
     * @return ProgressInfo required for State to process to be consistent with History
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
@@ -144,13 +145,13 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId): Unit = {
-    val indicesToInsert = Seq(BestFullBlockKey -> ByteArrayWrapper(bestFullHeaderId))
+    val indicesToInsert = Seq(BestFullBlockKey -> Algos.idToBAW(bestFullHeaderId))
     historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
 
-  private def storageVersion(newModRow: ErgoPersistentModifier) = ByteArrayWrapper(newModRow.id)
+  private def storageVersion(newModRow: ErgoPersistentModifier) = Algos.idToBAW(newModRow.id)
 
 }
 

@@ -14,17 +14,17 @@ resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repos
   "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
   "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
-val scorexVersion = "82d1be32-SNAPSHOT"
+val scorexVersion = "6451f17d-SNAPSHOT"
 
 libraryDependencies ++= Seq(
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  "org.scorexfoundation" %% "scrypto" % "2.1.2",
-  "org.scorexfoundation" %% "sigma-state" % "0.9.4",
+  ("org.scorexfoundation" %% "scrypto" % "2.1.2").exclude("ch.qos.logback", "logback-classic"),
+  "org.scorexfoundation" %% "sigma-state" % "0.9.5-SNAPSHOT",
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  "org.scorexfoundation" %% "avl-iodb" % "0.2.14",
+  ("org.scorexfoundation" %% "avl-iodb" % "0.2.14").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
 
@@ -147,3 +147,5 @@ inConfig(Bench)(Defaults.testSettings ++  Seq(
 ))
 
 compile in Bench := (compile in Bench).dependsOn(compile in Test).value
+
+Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))

@@ -14,7 +14,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   property("block sections application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
-    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
@@ -22,7 +22,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     history = history.append(chain.tail.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
-    val pi1 =  history.append(chain.head.blockTransactions).get._2
+    val pi1 = history.append(chain.head.blockTransactions).get._2
     history.bestFullBlockOpt.get shouldBe chain.tail.head
     pi1.toApply.length shouldBe 2
 
@@ -30,7 +30,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt.get.header.height shouldBe chain.tail.head.header.height
 
     val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
-    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2,3,4,5)
+    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2, 3, 4, 5)
   }
 
   property("bootstrap from headers and last full blocks") {
@@ -43,7 +43,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
-    if(history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
 
@@ -68,7 +68,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
     history.nextModifiersToDownload(2 * (BlocksToKeep - 1), _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS
 
-    history.nextModifiersToDownload(2, id => !(id sameElements missedChain.head.blockTransactions.id))
+    history.nextModifiersToDownload(2, id => id != missedChain.head.blockTransactions.id)
       .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.tail.take(2)
   }
 

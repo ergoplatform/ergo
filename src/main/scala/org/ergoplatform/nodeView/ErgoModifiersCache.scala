@@ -6,7 +6,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.DefaultModifiersCache
 import scorex.core.validation.MalformedModifierError
 
-import scala.collection.mutable
 import scala.util.Failure
 
 class ErgoModifiersCache(override val maxSize: Int)
@@ -30,7 +29,8 @@ class ErgoModifiersCache(override val maxSize: Int)
       history
         .headerIdsAtHeight(history.fullBlockHeight + 1)
         .flatMap(id => history.typedModifierById[Header](id))
-        .flatMap(_.sectionIds.map(id => mutable.WrappedArray.make[Byte](id._2)))
+        .flatMap(_.sectionIds)
+        .map(_._2)
         .flatMap(id => cache.get(id).map(v => id -> v))
         .find(p => tryToApply(p._1, p._2)).map(_._1)
     } orElse {

@@ -1,0 +1,113 @@
+\knote{this section is to be rewritten and split into protocol and impkementation parts}
+
+\section{Blockchain synchronization}
+\dnote{This is description of updated protocol, partially implemented in https://github.com/ScorexFoundation/Scorex/pull/280}
+
+Blockchain synchronization algorithm is implemented in \term{ErgoNodeViewSynchronizer}(NVS) class and it's companion objects.
+
+
+Ergo modifiers can be in one of the following states:
+
+\begin{itemize}
+    \item{\em Unknown} - synchronization process for corresponding modifier is not started yet.
+    \item{\em Requested} - modifier was requested from another peer.
+    \item{\em Received} - modifier was received from another peer, but is not applied to history yet.
+    \item{\em Applied} - modifier was applied to history.
+    \item{\em Invalid} - modifier is permanently invalid.
+\end{itemize}
+
+The goal of NVS is to escort modifier step by step from \term{Unknown} state to \term{Applied},
+however in case of some errors (presumably because of some misbehaviour of another
+peer that should be penalized) it can go back to \term{Unknown} state again to retry to
+perform this process again or to \term{Invalid} state to prevent further modifier downloads.
+
+\subsection{From \term{Unknown} to \term{Requested}}
+
+Modifier can go from \term{Unknown} state to \term{Requested} one by different ways, that depend on
+current node status (bootstrapping/stable) and modifier type.
+
+\textbf{Inv protocol}
+
+\term{Inv} (inventory) message contains a pair: \term{(ModifierTypeId, Seq[ModifierId])}. When node A sends \term{Inv} message
+to node B it tells to node B, that it contains modifiers of specified ids and type and ready to send them to
+node B on request.
+
+Node broadcasts \term{Inv} message in 2 cases:
+\begin{itemize}
+    \item - When it successfully applies a modifier to \term{History}. This is useful to propogate new modifiers
+    as fast as possible when nodes are already synced with the network
+    \item - When it receives \term{ErgoSyncInfo} message (see \textbf{Headers synchronization} for more details)
+\end{itemize}
+
+When node received \term{Inv} message it
+\begin{itemize}
+    \item - filter out modifiers, that are not in state \term{Unknown}
+    \item - request remaining modifiers from the peer that sent \term{Inv} message.
+    Modifier goes into \term{Requested} state.
+\end{itemize}
+
+\textbf{Headers synchronization}
+
+First, node should synchronize it's headers chain with the network.
+In order to achieve this every \term{syncInterval} seconds node calculates \term{ErgoSyncInfo} message,
+containing ids of last \term{ErgoSyncInfo.MaxBlockIds} headers and send it to peers,
+defined by function \term{peersToSyncWith()}.
+If there are outdated peers (peers, which status
+was last updated earlier than \term{syncStatusRefresh} seconds ago) \term{peersToSyncWith()} return outdated peers,
+otherwise it returns one random peer which blockchain is better and all peers with status Unknown
+\footnote{peersToSyncWith() logic is not intuitive, it's better to write description, why this choice?}.
+
+On receiving \term{ErgoSyncInfo} message, node calculates \term{OtherNodeSyncingStatus},
+which contains node status (\term{Younger}, \term{Older}, \term{Equal}, \term{Nonsense} or \term{Unknown}) and extension -
+\term{Inv} for next \term{maxInvObjects} headers required for \term{ErgoSyncInfo} sender to sync with the best headers
+chain of the current node.
+After that node sends this \term{Inv} to other node and other node will sync headers to the current one
+using Inv protocol.
+
+\textbf{Block section synchronization}
+
+After headers application, a node should synchronize block sections
+(BlockTransactions, Extension and ADProofs), which amount and composition
+may vary on node settings (node with UTXO state does not need to download ADProofs,
+node with non-negative \term{blocksToKeep}
+should download only block sections for last \term{blocksToKeep} blocks, etc.).
+
+In order to achieve this, every \term{syncInterval} seconds node calculate \term{nextModifiersToDownload()} -
+block sections for headers starting at height of best full block, that are in \term{Unknown} state.
+These modifiers are requested from random peers (since we does not know a peer who have it),
+\footnote{we can keep a separate modifierId->peers map for modifiers, that are not received yet and try to download from this peers first}.
+and they switch to state \term{Requested}.
+
+When headers chain is already synced and node applies block header, it return \term{ProgressInfo} with \term{ToDownload} section,
+that contains modifiers our node should download and apply to update full block chain.
+When NVS receives this ToDownload request, it requests these modifiers from random peers
+and these modifiers goes to state \term{Requested}.
+
+\subsection{From \term{Requested} to \term{Received}}
+
+When our node requests a modifier from other peer, it puts this modifier and
+corresponding peer to special map \term{expecting} in \term{DeliveryTracker} and sends \term{CheckDelivery} to self
+with \term{deliveryTimeout} delay.
+
+When a node receives modifier in \term{expecting} map
+(and peer delivered this modifier is the same as written in \term{expecting}) -
+NVS parse it and perform initial validation.
+If modifier is invalid (and we know, that this modifier will always be invalid) NVS penalize peer and move modifier to state \term{Invalid}.
+If the peer have provided incorrect modifier bytes (we can not check,
+that these bytes corresponds to current id) penalize peer and move modifier to state \term{Unknown}.
+If everything is fine, NVS add modifier to modifiersCache, sends modifiersCache to
+NodeViewHolder(NVH) and set modifier to state \term{Received}.
+
+When \term{CheckDelivery} message comes, node check for modifier - if it is already in \term{Received} state,
+do nothing.
+If modifier is not delivered yet, node reexpect it up to \term{maxDeliveryChecks} times, and after that
+penalize peer (if not expecting from random peer) and stop expecting after that (modifier goes to \term{Unknown} state).
+
+\subsection{From \term{Received} to \term{Applied}}
+
+When NVH receives new modifiersCache, it tries to apply as much modifiers from cache as possible to History
+and send this modifiers (with a \term{SyntacticallySuccessfulModifier} message) to NVS and NVS set modifier
+state to \term{Applied} (remove this key from corresponding map since we can always get modifier state from History).
+
+When modifiersCache is overloaded, some old modifiers that are not applied yet may be removed from cache, setting
+their state to \term{Unknown} again.

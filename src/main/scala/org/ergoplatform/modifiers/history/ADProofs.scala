@@ -3,12 +3,12 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Bytes
 import io.circe.Encoder
 import io.circe.syntax._
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.core._
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId}
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -60,7 +60,7 @@ case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends
     applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
-          if (digest sameElements expectedHash) {
+          if (java.util.Arrays.equals(digest, expectedHash)) {
             Success(oldValues)
           } else {
             Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))
@@ -102,11 +102,11 @@ object ADProofs {
 }
 
 object ADProofSerializer extends Serializer[ADProofs] {
-  override def toBytes(obj: ADProofs): Array[Byte] = Bytes.concat(obj.headerId, obj.proofBytes)
+  override def toBytes(obj: ADProofs): Array[Byte] = Bytes.concat(idToBytes(obj.headerId), obj.proofBytes)
 
   override def parseBytes(bytes: Array[Byte]): Try[ADProofs] = Try {
     ADProofs(
-      ModifierId @@ bytes.take(Constants.ModifierIdSize),
+      bytesToId(bytes.take(Constants.ModifierIdSize)),
       SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length))
   }
 }

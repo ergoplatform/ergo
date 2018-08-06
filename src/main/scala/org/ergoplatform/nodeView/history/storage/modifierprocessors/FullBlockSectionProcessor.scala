@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
@@ -74,7 +74,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
 
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(ByteArrayWrapper(m.id), Seq.empty, Seq(m))
+    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 

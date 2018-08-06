@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.state.{Insertion, StateChanges}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scorex.core.ModifierId
+import scorex.core.{ModifierId, bytesToId}
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
@@ -20,7 +20,7 @@ class AdProofSpec extends ErgoPropertyTest {
   type PrevDigest = Digest
   type NewDigest = Digest
 
-  val emptyModifierId: ModifierId = ModifierId @@ Array.fill(32)(0.toByte)
+  val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   private def createEnv(howMany: Int = 10):
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {

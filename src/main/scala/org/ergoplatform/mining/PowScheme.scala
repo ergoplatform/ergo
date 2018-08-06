@@ -30,7 +30,7 @@ trait PowScheme {
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate): Option[ErgoFullBlock] = {
 
-    val transactionsRoot = BlockTransactions.rootHash(transactions.map(_.id))
+    val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
@@ -65,7 +65,7 @@ trait PowScheme {
 
     val version = Header.CurrentVersion
 
-    val parentId: ModifierId = ModifierId @@ parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, version, interlinks, height)
   }

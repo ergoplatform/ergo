@@ -7,6 +7,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import scorex.core.serialization.Serializer
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 case class PoPoWProof(m: Byte,
@@ -74,11 +75,16 @@ class PoPoWProofUtils(powScheme: PowScheme) {
   }
 
   def maxLevel(header: Header): Int = {
-    var level = 0
-    while (isLevel(header, level + 1)) level = level + 1
-    level
+    @tailrec
+    def generateMaxLevel(level: Int): Int = {
+      if (isLevel(header, level + 1)) {
+        generateMaxLevel(level + 1)
+      } else {
+        level
+      }
+    }
+    generateMaxLevel(0)
   }
-
   def constructInterlinkVector(parent: Header): Seq[ModifierId] = {
     if (parent.isGenesis) {
       //initialize interlink vector at first block after genesis

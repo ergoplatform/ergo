@@ -6,6 +6,8 @@ trait ErgoNodeViewModifier {
 
   lazy val id: ModifierId = bytesToId(serializedId)
 
+  val size: Option[Int]
+
   def serializedId: Array[Byte]
 
 }

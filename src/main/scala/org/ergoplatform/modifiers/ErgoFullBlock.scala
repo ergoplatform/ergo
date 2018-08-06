@@ -10,7 +10,7 @@ import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNo
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProofs])
+                         aDProofs: Option[ADProofs], size: Option[Int] = None)
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 

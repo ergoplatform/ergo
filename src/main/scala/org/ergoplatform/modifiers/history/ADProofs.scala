@@ -15,7 +15,9 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-case class ADProofs(headerId: ModifierId, proofBytes: SerializedAdProof) extends BlockSection {
+case class ADProofs(headerId: ModifierId,
+                    proofBytes: SerializedAdProof,
+                    size: Option[Int] = None) extends BlockSection {
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
@@ -97,7 +99,8 @@ object ADProofs {
     Map(
       "headerId" -> Algos.encode(proof.headerId).asJson,
       "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
-      "digest" -> Algos.encode(proof.digest).asJson
+      "digest" -> Algos.encode(proof.digest).asJson,
+      "size" -> proof.size.asJson
     ).asJson
 }
 
@@ -107,6 +110,7 @@ object ADProofSerializer extends Serializer[ADProofs] {
   override def parseBytes(bytes: Array[Byte]): Try[ADProofs] = Try {
     ADProofs(
       bytesToId(bytes.take(Constants.ModifierIdSize)),
-      SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length))
+      SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length),
+      Some(bytes.length))
   }
 }

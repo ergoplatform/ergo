@@ -8,7 +8,6 @@ import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import org.scalatest.Assertion
-import org.scalatest.OptionValues._
 import scorex.core.serialization.Serializer
 
 class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
@@ -20,7 +19,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
       recovered shouldBe b
 
       val size = serializer.bytesWithoutInterlinks(b).length
-      recovered.size.value shouldBe size
+      recovered.size shouldBe size
     }
   }
 
@@ -29,7 +28,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(b.bytes)
       recovered.get shouldBe b
-      recovered.get.size.value shouldBe b.bytes.length
+      recovered.get.size shouldBe b.bytes.length
     }
   }
 
@@ -71,7 +70,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
 
   def checkSize[A <: ErgoNodeViewModifier](generator: Gen[A], serializer: Serializer[A]): Assertion = {
     forAll(generator) { b: A =>
-      val size = serializer.parseBytes(serializer.toBytes(b)).get.size.get
+      val size = serializer.parseBytes(serializer.toBytes(b)).get.size
       serializer.toBytes(b).length shouldEqual size
     }
   }

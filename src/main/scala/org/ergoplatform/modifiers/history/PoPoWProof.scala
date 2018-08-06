@@ -13,7 +13,8 @@ case class PoPoWProof(m: Byte,
                       k: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header])(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      suffix: Seq[Header],
+                      override val sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -30,8 +31,6 @@ case class PoPoWProof(m: Byte,
 
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
-
-  val size = None
 
 }
 
@@ -148,6 +147,6 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
       index = index + 2 + l
       header
     }
-    PoPoWProof(m, k, i, innerchain, suffix)(powScheme)
+    PoPoWProof(m, k, i, innerchain, suffix, Some(bytes.length))(powScheme)
   }
 }

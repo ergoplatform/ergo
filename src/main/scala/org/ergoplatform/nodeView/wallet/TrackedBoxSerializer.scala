@@ -122,9 +122,9 @@ class SpentOffchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSe
 
 class SpentOnchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[SpentOnchainBox] {
 
-  def write(spentOffchainBox: SpentOnchainBox, w: ByteWriter): Unit = {
-    import spentOffchainBox._
-    w.putBits(headerBits(spentOffchainBox))
+  def write(spentOnchainBox: SpentOnchainBox, w: ByteWriter): Unit = {
+    import spentOnchainBox._
+    w.putBits(headerBits(spentOnchainBox))
       .putBytes(idToBytes(creationTx.id))
       .putShort(creationOutIndex)
       .putInt(creationHeight)
@@ -152,11 +152,10 @@ class SpentOnchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSer
 
 trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierValidator with ScorexEncoding {
 
-
   def toBytes(trackedBox: T): Array[Byte] = makeBytes(write(trackedBox, _))
   def parseBytes(bytes: Array[Byte]): Try[T] = read(startReader(bytes))
 
-  def write(unspentOnchainBox: T, w: ByteWriter): Unit
+  def write(trackedBox: T, w: ByteWriter): Unit
   def read(r: ByteReader): Try[T]
 
 
@@ -185,8 +184,8 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
                           (parser: BoxCertainty => Try[T]): Try[T] = {
     val (certainty, spendingStatus, onchainStatus) = readHeaderBits(r)
     accumulateErrors
-      .demand(onchainStatus == expectedOnchainStatus, s"$boxTypeName should be $expectedOnchainStatus")
       .demand(spendingStatus == expectedSpendingStatus, s"$boxTypeName should be $expectedSpendingStatus")
+      .demand(onchainStatus == expectedOnchainStatus, s"$boxTypeName should be $expectedOnchainStatus")
       .result(Try(parser(certainty)).flatten)
       .toTry.flatten
   }

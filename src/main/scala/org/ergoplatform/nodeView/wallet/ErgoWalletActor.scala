@@ -158,13 +158,13 @@ class ErgoWalletActor(seed: String,
       //todo: add assets
       val targetBalance = payTo.map(_.value).sum
 
-      //we do not use offchain boxes to create a transaction
+      //we currently do not use off-chain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
       val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, Map.empty).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
-        //todo: fix proposition, assets
+        //todo: fix proposition, possible assets overflow
         val changeAddress = prover.dlogPubkeys.head
         val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
           val assets = cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
@@ -23,7 +23,7 @@ import scala.util.Try
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider,
-                                                             emission: CoinsEmission)
+                                                             emission: EmissionRules)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
@@ -150,12 +150,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
                                              timeProvider: NetworkTimeProvider,
-                                             emission: CoinsEmission)
+                                             emission: EmissionRules)
   extends ErgoNodeViewHolder[DigestState](settings, timeProvider, emission)
 
 private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
                                            timeProvider: NetworkTimeProvider,
-                                           emission: CoinsEmission)
+                                           emission: EmissionRules)
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, emission)
 
 
@@ -164,14 +164,14 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
-  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST, emission: CoinsEmission): Props
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST, emission: EmissionRules): Props
 }
 
 object DigestNodeViewProps extends ErgoNodeViewProps[StateType.DigestType, DigestState, DigestNodeViewHolder] {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             digestType: StateType.DigestType,
-            emission: CoinsEmission): Props =
+            emission: EmissionRules): Props =
     Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, emission)
 }
 
@@ -179,7 +179,7 @@ object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             digestType: StateType.UtxoType,
-            emission: CoinsEmission): Props =
+            emission: EmissionRules): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, emission)
 }
 
@@ -187,7 +187,7 @@ object ErgoNodeViewRef {
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission): Props =
+            emission: EmissionRules): Props =
     settings.nodeSettings.stateType match {
       case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType, emission)
       case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType, emission)
@@ -195,6 +195,6 @@ object ErgoNodeViewRef {
 
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission)(implicit system: ActorSystem): ActorRef =
+            emission: EmissionRules)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider, emission))
 }

@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, Props}
 import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.bench.misc.CrawlerConfig
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
@@ -41,7 +41,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
 
-  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
+  lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 

@@ -7,7 +7,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -36,7 +36,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: CoinsEmission,
+                emission: EmissionRules,
                 minerPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
@@ -201,34 +201,36 @@ object ErgoMiner extends ScorexLogging {
   def createCoinbase(state: UtxoStateReader,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
-                     emission: CoinsEmission): ErgoTransaction = {
-    state.emissionBoxOpt match {
-      case Some(emissionBox) =>
-        assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
-        ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)
-      case None =>
-        val inputs = feeBoxes
-          .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-        val feeAmount = feeBoxes.map(_.value).sum
-        val feeTokens = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens)
-        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeAmount, minerProp, feeTokens, Map())
-        ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(rewardBox))
+                     emissionRules: EmissionRules): ErgoTransaction = {
+    val emissionBoxOpt = state.emissionBoxOpt
+    emissionBoxOpt foreach { emissionBox =>
+      assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
+    createCoinbase(emissionBoxOpt, state.stateContext.height, feeBoxes, minerProp, emissionRules)
   }
 
-  def createCoinbase(emissionBox: ErgoBox,
+  def createCoinbase(emissionBoxOpt: Option[ErgoBox],
                      height: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
-                     emission: CoinsEmission): ErgoTransaction = {
+                     emission: EmissionRules): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
-    val prop = emissionBox.proposition
-    val emissionAmount = emission.emissionAtHeight(height)
-    val newEmissionBox: ErgoBoxCandidate =
-      new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
-    val inputBoxes = (emissionBox +: feeBoxes).toIndexedSeq
+
+    val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
+      case Some(emissionBox) =>
+        val prop = emissionBox.proposition
+        val emissionAmount = emission.emissionAtHeight(height)
+        val newEmissionBox: ErgoBoxCandidate =
+          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
+
+        ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
+      case None => (feeBoxes, 0L, None)
+    }
+
     val inputs = inputBoxes
       .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      .toIndexedSeq
+
 
     val feeAmount = feeBoxes.map(_.value).sum
 
@@ -241,7 +243,7 @@ object ErgoMiner extends ScorexLogging {
 
     ErgoTransaction(
       inputs,
-      IndexedSeq(newEmissionBox, minerBox)
+      IndexedSeq(newEmissionBoxOpt, Some(minerBox)).flatten
     )
   }
 
@@ -276,7 +278,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
     Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
 
@@ -284,7 +286,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
@@ -294,7 +296,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission), name)

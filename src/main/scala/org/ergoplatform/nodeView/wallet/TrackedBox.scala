@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
 import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
+import org.ergoplatform.settings.Algos
 import scorex.core.utils.ScorexLogging
 
 sealed trait TrackedBox extends ScorexLogging {
@@ -135,7 +136,7 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
 
 case class SpentOffchainBox(creationTx: ErgoTransaction,
                             creationOutIndex: Short,
-                            creationHeight: Option[Int],
+                            creationHeightOpt: Option[Int],
                             spendingTx: ErgoTransaction,
                             box: ErgoBox,
                             certainty: BoxCertainty) extends SpentBox with OffchainBox {
@@ -143,8 +144,13 @@ case class SpentOffchainBox(creationTx: ErgoTransaction,
   def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
     heightOpt match {
       case Some(h) =>
-        require(creationHeight.isDefined)
-        Some(SpentOnchainBox(creationTx, creationOutIndex, creationHeight.get, spendingTransaction, h, box, certainty))
+        creationHeightOpt match {
+          case Some(creationHeight) =>
+            Some(SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box, certainty))
+          case None =>
+            log.error(s"Invalid state for ${Algos.encode(box.id)}: no creation height, but spent on-chain.")
+            None
+        }
       case None =>
         log.warn(s"Double spending of an unconfirmed box $boxId")
         //todo: handle double-spending strategy for an unconfirmed tx
@@ -152,13 +158,13 @@ case class SpentOffchainBox(creationTx: ErgoTransaction,
     }
   }
 
-  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeight match {
+  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeightOpt match {
     case Some(_) => log.warn(s"Double creation of $boxId"); None
-    case None => Some(copy(creationHeight = Some(creationHeight)))
+    case None => Some(copy(creationHeightOpt = Some(creationHeight)))
   }
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeight match {
-    case Some(h) if h < toHeight => Some(copy(creationHeight = None))
+  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeightOpt match {
+    case Some(h) if h < toHeight => Some(copy(creationHeightOpt = None))
     case _ => None
   }
 

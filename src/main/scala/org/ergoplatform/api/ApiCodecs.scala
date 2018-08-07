@@ -139,7 +139,7 @@ trait ApiCodecs {
   }
 
   implicit def spentOffchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOffchainBox] = { b =>
-    (spentBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)).asJson
+    (spentBoxFields(b) + ("creationHeight" -> b.creationHeightOpt.asJson)).asJson
   }
 
   implicit def spentOnchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOnchainBox] = { b =>

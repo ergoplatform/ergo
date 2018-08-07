@@ -124,7 +124,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
         validation.validateSeq(outAssets) {
           case (validation, (outAssetId, outAmount)) =>
-            val inAmount = inAssets.remove(outAssetId).getOrElse(-1)
+            val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
             validation
               .validate(inAmount == outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                 fatal(s"Assets preservation rule is broken in $this. " +
@@ -223,7 +223,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                          (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     accumulateErrors
       .validateOrSkip(txId) { (validation, id) =>
-        validation.demandEqualIds(id, tx.id, s"Bad identifier for Ergo transaction. It could also be skipped")
+        validation.demandEqualIds(id, tx.id, "Bad identifier for Ergo transaction. It could also be skipped")
       }
       .validate(tx.validateStateless)
       .result(tx)
@@ -238,7 +238,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
             val box = candidate.toBox(idToBytes(txId), index.toShort)
-            validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
+            validation.demandEqualArrays(boxId, box.id, "Bad identifier for Ergo box. It could also be skipped")
           }
       }
     }

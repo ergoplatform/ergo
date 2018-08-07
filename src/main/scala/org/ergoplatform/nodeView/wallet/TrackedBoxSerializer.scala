@@ -99,7 +99,7 @@ class SpentOffchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSe
     w.putBits(headerBits(spentOffchainBox))
       .putBytes(idToBytes(creationTx.id))
       .putShort(creationOutIndex)
-      .putOption(creationHeight)(_.putInt(_))
+      .putOption(creationHeightOpt)(_.putInt(_))
       .putBytes(idToBytes(spendingTx.id))
     ErgoBoxSerializer.write(box, w)
   }

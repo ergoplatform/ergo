@@ -72,7 +72,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   private def validateSpentOffchainBox(c: ACursor, b: SpentOffchainBox)(implicit opts: Detalization) = {
     validateSpentBox(c, b)(opts)
-    c.downField("creationHeight").as[Option[Int]] shouldBe Right(b.creationHeight)
+    c.downField("creationHeight").as[Option[Int]] shouldBe Right(b.creationHeightOpt)
   }
 
   private def validateSpentBox(c: ACursor, b: SpentBox)(implicit opts: Detalization) = {

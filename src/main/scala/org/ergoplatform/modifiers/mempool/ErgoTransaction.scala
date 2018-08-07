@@ -110,7 +110,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
-          .demandEqualArrays(box.id, input.boxId, s"Box id doesn't match input")
+          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
           .map(_ + scriptCost)

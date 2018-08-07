@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute, WalletApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local._
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
@@ -33,7 +33,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
+  lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 

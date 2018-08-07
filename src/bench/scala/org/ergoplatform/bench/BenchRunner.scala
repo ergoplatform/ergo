@@ -8,7 +8,7 @@ import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoNodeViewRef
@@ -57,7 +57,7 @@ object BenchRunner extends ScorexLogging {
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-    val ce = new CoinsEmission(ergoSettings.chainSettings.monetary)
+    val ce = new EmissionRules(ergoSettings.chainSettings.monetary)
     val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
     val timeProvider = new NetworkTimeProvider(ntpSettings)
 

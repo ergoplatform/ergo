@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.R4
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
@@ -92,7 +92,7 @@ object ErgoState extends ScorexLogging {
     * @return Genesis box that contains all the coins in the system, protected by the script,
     *         that allows to take part of them every block.
     */
-  def genesisEmissionBox(emission: CoinsEmission): ErgoBox = {
+  def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
     val s = emission.settings
 
     val register = R4

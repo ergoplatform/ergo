@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -28,7 +28,7 @@ trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   lazy val settings: ErgoSettings = ErgoSettings.read(None)
-  lazy val emission: CoinsEmission = new CoinsEmission(settings.chainSettings.monetary)
+  lazy val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
   lazy val stateConstants: StateConstants = StateConstants(None, emission, 200)
 
@@ -70,7 +70,7 @@ trait ValidBlocksGenerators
     stateBoxes.find(_ == genesisEmissionBox) match {
       case Some(emissionBox) if txRemain > 0 =>
         // Extract money to anyoneCanSpend output and forget about emission box for tests
-        val tx = ErgoMiner.createCoinbase(emissionBox, 0, Seq.empty, TrueLeaf, emission)
+        val tx = ErgoMiner.createCoinbase(Some(emissionBox), 0, Seq.empty, TrueLeaf, emission)
         val remainedBoxes = stateBoxes.filter(_ != genesisEmissionBox)
         val newSelfBoxes = selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf)
         validTransactionsFromBoxes(txRemain - 1, remainedBoxes, newSelfBoxes, tx +: acc, rnd)

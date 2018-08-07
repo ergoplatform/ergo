@@ -36,7 +36,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
         case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
-          Some(tx.outputs.head)
+          tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")
           None

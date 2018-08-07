@@ -82,10 +82,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
-      log.info("Starting Mining")
-      isMining = true
-      miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get, timeProvider)(context)
-      miningThreads.foreach(_ ! candidateOpt.get)
+      candidateOpt.foreach { candidate =>
+        log.info("Starting Mining")
+        isMining = true
+        miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, timeProvider)(context)
+        miningThreads.foreach(_ ! candidate)
+      }
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)

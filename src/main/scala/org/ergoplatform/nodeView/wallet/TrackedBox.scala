@@ -11,9 +11,10 @@ import org.ergoplatform.settings.Algos
 import scorex.core.utils.ScorexLogging
 
 sealed trait TrackedBox extends ScorexLogging {
-  def certainty: BoxCertainty
-  def onchainStatus: OnchainStatus
+
   def spendingStatus: SpendingStatus
+  def onchainStatus: OnchainStatus
+  def certainty: BoxCertainty
 
   final def spent: Boolean = spendingStatus.spent
   final def onchain: Boolean = onchainStatus.onchain
@@ -37,7 +38,7 @@ sealed trait TrackedBox extends ScorexLogging {
 
   def transition(creationHeight: Height): Option[TrackedBox]
 
-  def transitionBack(toHeight: Int): Option[TrackedBox]
+  def transitionBack(toHeight: Height): Option[TrackedBox]
 
   def makeCertain(): TrackedBox
 
@@ -122,7 +123,7 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
     None
   }
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = {
+  def transitionBack(toHeight: Height): Option[TrackedBox] = {
     if (creationHeight > toHeight) {
       Some(UnspentOffchainBox(creationTx, creationOutIndex, box, certainty))
     } else {
@@ -163,7 +164,7 @@ case class SpentOffchainBox(creationTx: ErgoTransaction,
     case None => Some(copy(creationHeightOpt = Some(creationHeight)))
   }
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = creationHeightOpt match {
+  def transitionBack(toHeight: Height): Option[TrackedBox] = creationHeightOpt match {
     case Some(h) if h < toHeight => Some(copy(creationHeightOpt = None))
     case _ => None
   }
@@ -189,7 +190,7 @@ case class SpentOnchainBox(creationTx: ErgoTransaction,
 
   def transition(creationHeight: Height): Option[TrackedBox] = None
 
-  def transitionBack(toHeight: Int): Option[TrackedBox] = {
+  def transitionBack(toHeight: Height): Option[TrackedBox] = {
     (toHeight < spendingHeight, toHeight < creationHeight) match {
       case (false, false) => None
       case (true, false) => Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box, certainty))

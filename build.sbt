@@ -147,3 +147,5 @@ inConfig(Bench)(Defaults.testSettings ++  Seq(
 ))
 
 compile in Bench := (compile in Bench).dependsOn(compile in Test).value
+
+Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))

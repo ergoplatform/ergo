@@ -54,9 +54,11 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
     val listener = system.actorOf(Props(new Listener))
 
-    val testingSettings = TestingSettings(transactionGeneration = true, 500)
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, testingSettings)
-    txGen ! StartGeneration
+
+    //todo: what to do here?
+  //  val testingSettings = TestingSettings(transactionGeneration = true, 500)
+  //  val txGen = TransactionGeneratorRef(nodeViewHolderRef, testingSettings)
+  //  txGen ! StartGeneration
 
     minerRef ! StartMining
     expectNoMessage(20.seconds)

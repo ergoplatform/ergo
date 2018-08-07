@@ -42,7 +42,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val txs = chain.head.transactions
 
   lazy val memPool = ErgoMemPool.empty.put(txs).get
-  lazy val readers = Readers(history, state, memPool)
+  lazy val readers = Readers(history, state, memPool, null) //todo: make wallet stub
 
 
   val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)
@@ -137,6 +137,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
@@ -144,12 +145,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
+    val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
+    val chainSettings =
+      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, CacheSettings.default, scorexSettings)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

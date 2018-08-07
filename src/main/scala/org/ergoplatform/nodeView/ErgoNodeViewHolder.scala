@@ -6,7 +6,7 @@ import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
@@ -63,7 +63,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
-    val wallet = ErgoWallet.readOrGenerate(settings)
+    val wallet = ErgoWallet.readOrGenerate(context.system, self,
+      history.getReader.asInstanceOf[ErgoHistoryReader], settings)
 
     val memPool = ErgoMemPool.empty
 
@@ -79,7 +80,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-    val wallet = ErgoWallet.readOrGenerate(settings)
+    val wallet = ErgoWallet.readOrGenerate(context.system, self, history.getReader.asInstanceOf[ErgoHistoryReader], settings)
     val memPool = ErgoMemPool.empty
     val constants = StateConstants(Some(self), emission, settings.nodeSettings.keepVersions)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)

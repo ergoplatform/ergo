@@ -4,7 +4,6 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -18,6 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
+import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
@@ -29,7 +29,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -48,11 +48,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
-    //TODO extract from wallet when it will be implemented
-    DLogProverInput(
-      BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
-    ).publicImage
+  private val publicKeys = {
+    val secrets = ErgoProvingInterpreter.secretsFromSeed(ergoSettings.walletSettings.seed).map(DLogProverInput.apply)
+    secrets.map(_.publicImage)
+  }
+
+  private def minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
+    require(publicKeys.nonEmpty, "No seed provided to get miner's secrets from")
+    publicKeys(Random.nextInt(publicKeys.size))
   }
 
   override def preStart(): Unit = {
@@ -79,10 +82,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
-      log.info("Starting Mining")
-      isMining = true
-      miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get, timeProvider)(context)
-      miningThreads.foreach(_ ! candidateOpt.get)
+      candidateOpt.foreach { candidate =>
+        log.info("Starting Mining")
+        isMining = true
+        miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, timeProvider)(context)
+        miningThreads.foreach(_ ! candidate)
+      }
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
@@ -128,7 +133,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     unknownMessage
 
   private def onReaders: Receive = {
-    case Readers(h, s, m) if s.isInstanceOf[UtxoStateReader] =>
+    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
         case Success(candidate) => procCandidateBlock(candidate)
         case Failure(e) => log.warn("Failed to produce candidate block.", e)

@@ -444,6 +444,25 @@ components:
       format: int32
       example: 1524143059077
 
+    BalancesSnapshot:
+      description: Amount of Ergo tokens and assets
+      type: object
+      required:
+        - height
+        - balance
+      properties:
+        height:
+          type: integer
+          format: int32
+        balance:
+          type: integer
+          format: int64
+        assets:
+          type: array
+          items:
+            type: array
+            example: ["7ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117", 1234567]
+
 paths:
   /blocks:
     get:
@@ -990,6 +1009,47 @@ paths:
               schema:
                 type: string
                 example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/balances:
+    get:
+      summary: Get total amount of confirmed Ergo tokens and assets
+      operationId: walletBalances
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Get total amount of confirmed Ergo tokens and assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+
+  /wallet/balances/unconfirmed:
+    get:
+      summary: Get amount of unconfirmed Ergo tokens and assets
+      operationId: walletBalances
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Get amount of unconfirmed Ergo tokens and assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalancesSnapshot'
         default:
           description: Error
           content:

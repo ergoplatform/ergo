@@ -1,9 +1,8 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
+import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute, WalletApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -52,7 +51,9 @@ class ErgoApp(args: Seq[String]) extends Application {
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi)
+  )
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
@@ -62,11 +63,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
-  }
-
-  if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
-    txGen ! StartGeneration
   }
 
   val actorsToStop = Seq(minerRef,

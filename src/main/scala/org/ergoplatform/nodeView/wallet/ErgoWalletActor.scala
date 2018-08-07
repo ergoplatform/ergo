@@ -25,8 +25,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 
 
-class ErgoWalletActor(seed: String,
-                      addressEncoder: ErgoAddressEncoder) extends Actor with ScorexLogging {
+class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
 

@@ -19,7 +19,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    minFullHeight.foreach(h => inHistory.pruningProcessor.minimalFullBlockHeightVar = h)
+    minFullHeight.foreach{h =>
+      inHistory.pruningProcessor.minimalFullBlockHeightVar = h
+      inHistory.isHeadersChainSyncedVar = true
+    }
 
     if (height > 0) {
       val chain = genChain(height, inHistory)

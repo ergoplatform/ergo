@@ -60,6 +60,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
     objectsToInsert.foreach { o =>
       modifiersCache.put(o.id, o)
+      // TODO saving object to disc may be async here for performance reasons
       objectsStore.put(o)
     }
     if (indexesToInsert.nonEmpty) {

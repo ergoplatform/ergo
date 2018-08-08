@@ -464,6 +464,20 @@ components:
       format: int32
       example: 1524143059077
 
+    EmissionInfo:
+      description: Emssion info for height
+      type: object
+      properties:
+        minerReward:
+          type: integer
+          format: int64
+        totalCoinsIssued:
+          type: integer
+          format: int64
+        totalRemainCoins:
+          type: integer
+          format: int64
+
 paths:
   /blocks:
     get:

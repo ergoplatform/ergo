@@ -28,7 +28,6 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
-      getBlockSizeByHeaderIdR ~
       getFullBlockByHeaderIdR ~
       candidateBlockR
   }
@@ -98,9 +97,5 @@ case class BlocksApiRoute(readersHolder: ActorRef, miner: ActorRef, ergoSettings
 
   def getFullBlockByHeaderIdR: Route = (headerId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
-  }
-
-  def getBlockSizeByHeaderIdR: Route = (headerId & pathPrefix("size") & get) { id =>
-    ApiResponse(getFullBlockByHeaderId(id).map(_.map(ErgoFullBlock.blockSizeEncoder.apply)))
   }
 }

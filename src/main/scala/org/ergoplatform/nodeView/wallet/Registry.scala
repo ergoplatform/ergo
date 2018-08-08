@@ -132,7 +132,7 @@ class Registry {
   }
 
   def makeTransition(oldTrackedBox: TrackedBox, newTrackedBox: TrackedBox): Unit = {
-    newTrackedBox.register(this)
     oldTrackedBox.deregister(this)
+    newTrackedBox.register(this)
   }
 }

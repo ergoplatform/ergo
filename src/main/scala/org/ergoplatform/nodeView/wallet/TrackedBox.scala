@@ -41,7 +41,6 @@ sealed trait TrackedBox extends ScorexLogging {
   def transitionBack(toHeight: Height): Option[TrackedBox]
 
   def makeCertain(): TrackedBox
-
 }
 
 sealed trait UnspentBox extends TrackedBox {
@@ -132,7 +131,6 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
   }
 
   def makeCertain(): UnspentOnchainBox = if (certain) this else copy(certainty = Certain)
-
 }
 
 case class SpentOffchainBox(creationTx: ErgoTransaction,

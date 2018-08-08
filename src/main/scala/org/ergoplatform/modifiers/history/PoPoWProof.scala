@@ -7,13 +7,15 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import scorex.core.serialization.Serializer
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 case class PoPoWProof(m: Byte,
                       k: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header])(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      suffix: Seq[Header],
+                      override val sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -73,11 +75,16 @@ class PoPoWProofUtils(powScheme: PowScheme) {
   }
 
   def maxLevel(header: Header): Int = {
-    var level = 0
-    while (isLevel(header, level + 1)) level = level + 1
-    level
+    @tailrec
+    def generateMaxLevel(level: Int): Int = {
+      if (isLevel(header, level + 1)) {
+        generateMaxLevel(level + 1)
+      } else {
+        level
+      }
+    }
+    generateMaxLevel(0)
   }
-
   def constructInterlinkVector(parent: Header): Seq[ModifierId] = {
     if (parent.isGenesis) {
       //initialize interlink vector at first block after genesis
@@ -146,6 +153,6 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
       index = index + 2 + l
       header
     }
-    PoPoWProof(m, k, i, innerchain, suffix)(powScheme)
+    PoPoWProof(m, k, i, innerchain, suffix, Some(bytes.length))(powScheme)
   }
 }

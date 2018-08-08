@@ -55,12 +55,7 @@ object ErgoFullBlock extends ApiCodecs {
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
     Json.obj(
       "id" -> b.header.id.asJson,
-      "size" -> size(b).toLong.asJson
+      "size" -> b.size.asJson
     )
 
-  private def size(block: ErgoFullBlock): Int = {
-    block.header.bytes.length +
-      block.blockTransactions.bytes.length +
-      block.aDProofs.map(_.bytes.length).getOrElse(0)
-  }
 }

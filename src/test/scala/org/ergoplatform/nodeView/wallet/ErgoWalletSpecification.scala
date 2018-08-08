@@ -141,15 +141,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
 
 class WithWalletFixture {
 
-  object BlocksGenerator
-    extends ValidBlocksGenerators
-      with ChainGenerator
-      with scorex.testkit.utils.FileUtils
-      with OptionValues
-      with TryValues {
-    val timeProvider: NetworkTimeProvider =  ErgoTestHelpers.defaultTimeProvider
-  }
-
+  object BlocksGenerator extends ErgoTestHelpers with ChainGenerator
   import BlocksGenerator._
 
   val nodeViewDir: java.io.File = createTempDir

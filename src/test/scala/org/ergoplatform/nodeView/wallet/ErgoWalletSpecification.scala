@@ -95,13 +95,13 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       import fixture._
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(countOutputs(block) * 15))
+      blocking(Thread.sleep(countOutputs(block) * scanningInterval + 300))
       val confirmedBalance = getConfirmedBalances.balance
       val sumBalance = sumOutputs(block)
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $sumBalance")
-      confirmedBalance should be > initialBalance
-      //confirmedBalance shouldBe sumBalance
+      confirmedBalance should be > 0L
+      confirmedBalance shouldBe sumBalance
     }
   }
 
@@ -114,7 +114,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
 
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(countOutputs(block) * 15))
+      blocking(Thread.sleep(countOutputs(block) * scanningInterval + 300))
       val historyHeight = getHistoryHeight
       val confirmedBalance = getConfirmedBalances.balance
       wallet.rollback(initialState.version)
@@ -128,7 +128,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       log.info(s"Balance after rollback: $balanceAfterRollback")
 
       confirmedBalance should be > 0L
-//      confirmedBalance shouldBe sumBalance
+      confirmedBalance shouldBe sumBalance
 //      balanceAfterRollback shouldBe 0L
     }
   }
@@ -146,6 +146,7 @@ class WithWalletFixture {
     defaultSettings.copy(
       directory = nodeViewDir.getAbsolutePath,
       chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme),
+      walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Utxo,
         verifyTransactions = false,
@@ -167,6 +168,7 @@ class WithWalletFixture {
   val wallet: ErgoWallet = dataFromCurrentView(_.vault)
   val addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
   val pubKey: Value[SBoolean.type] = addresses.head.asInstanceOf[P2PKAddress].pubkey
+  val scanningInterval: Long = settings.walletSettings.scanningInterval.toMillis
   val initialBlocks: Seq[ErgoFullBlock] = init()
 
   def init(): Seq[ErgoFullBlock] = {

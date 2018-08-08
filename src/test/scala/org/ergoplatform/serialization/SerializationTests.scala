@@ -12,6 +12,16 @@ import scorex.core.serialization.Serializer
 
 class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
 
+  def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
+                                                                    serializer: Serializer[A]): Assertion = {
+    forAll(generator) { b: A =>
+      val recovered = serializer.parseBytes(serializer.toBytes(b)).get
+      val bytes = serializer.toBytes(b)
+      bytes shouldEqual serializer.toBytes(recovered)
+      bytes.length shouldEqual recovered.size
+    }
+  }
+
   property("HeaderWithoutInterlinks serialization") {
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>
@@ -41,8 +51,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoTransactionGen serialization") {
-    checkSerializationRoundtrip(invalidErgoTransactionGen, ErgoTransactionSerializer)
-    checkSize(invalidErgoTransactionGen, ErgoTransactionSerializer)
+    checkSerializationRoundtripAndSize(invalidErgoTransactionGen, ErgoTransactionSerializer)
   }
 
   property("ErgoSyncInfo serialization") {
@@ -50,28 +59,19 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtrip(invalidHeaderGen, HeaderSerializer)
-    checkSize(invalidHeaderGen, HeaderSerializer)
+    checkSerializationRoundtripAndSize(invalidHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {
-    checkSerializationRoundtrip(invalidBlockTransactionsGen, BlockTransactionsSerializer)
-    checkSize(invalidBlockTransactionsGen, BlockTransactionsSerializer)
+    checkSerializationRoundtripAndSize(invalidBlockTransactionsGen, BlockTransactionsSerializer)
   }
 
   property("ADProofs serialization") {
-    checkSerializationRoundtrip(randomADProofsGen, ADProofSerializer)
-    checkSize(randomADProofsGen, ADProofSerializer)
+    checkSerializationRoundtripAndSize(randomADProofsGen, ADProofSerializer)
   }
 
   property("TransactionIdsForHeader serialization") {
     checkSerializationRoundtrip(transactionIdsForHeaderGen, TransactionIdsForHeaderSerializer)
   }
 
-  def checkSize[A <: ErgoNodeViewModifier](generator: Gen[A], serializer: Serializer[A]): Assertion = {
-    forAll(generator) { b: A =>
-      val size = serializer.parseBytes(serializer.toBytes(b)).get.size
-      serializer.toBytes(b).length shouldEqual size
-    }
-  }
 }

@@ -77,7 +77,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       }
     }
 
-    tx.outputCandidates.zipWithIndex.exists { case (outCandidate, outIndex) =>
+    tx.outputCandidates.zipWithIndex.count { case (outCandidate, outIndex) =>
       trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val idxShort = outIndex.toShort
@@ -91,7 +91,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
         case None =>
           false
       }
-    }
+    } > 0
   }
 
   private def extractFromBlock(fb: ErgoFullBlock): Int = {

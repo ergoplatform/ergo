@@ -69,9 +69,7 @@ class ErgoWallet(actorSystem: ActorSystem,
 
   private lazy val seed = settings.walletSettings.seed
 
-  private lazy val addressEncoder = new ErgoAddressEncoder(settings)
-
-  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed, addressEncoder))
+  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], seed))
 
   implicit val system = actorSystem
 

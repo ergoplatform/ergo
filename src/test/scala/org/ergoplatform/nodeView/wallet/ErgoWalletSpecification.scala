@@ -13,15 +13,14 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers, ValidBlocksGenerators}
+import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import org.scalatest.{OptionValues, TryValues}
+import org.scalatest.OptionValues
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
-import scorex.core.utils.NetworkTimeProvider
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier\
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import sigmastate.Values.Value

@@ -1,5 +1,5 @@
 package org.ergoplatform.settings
 
-case class WalletSettings(seed: String) {
+import scala.concurrent.duration.FiniteDuration
 
-}
+case class WalletSettings(seed: String, scanningInterval: FiniteDuration)

@@ -8,6 +8,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -25,9 +26,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
 
 
-class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
+class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
+
+  private lazy val seed = settings.walletSettings.seed
+
+  private lazy val scanningInterval = settings.walletSettings.scanningInterval
 
   private val registry = new Registry
 
@@ -110,7 +115,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
       resolveUncertainty()
       //todo: avoid magic number, use non-default executor?
       if (registry.uncertainBoxes.nonEmpty) {
-        context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
+        context.system.scheduler.scheduleOnce(scanningInterval)(self ! Resolve)
       }
 
     case ScanOnchain(fullBlock) =>

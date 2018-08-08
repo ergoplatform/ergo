@@ -78,8 +78,8 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validateSemantics(isSemanticallyValid(header.id)) {
           fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
         }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        .validate(!isHeadersChainSynced || header.height >= minimalHeight) {
+          error(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
         }
         .validate(isHeadersChainSynced) {
           error("Headers chain is not synced yet")

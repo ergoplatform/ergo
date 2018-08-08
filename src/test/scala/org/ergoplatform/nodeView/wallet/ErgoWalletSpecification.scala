@@ -97,14 +97,14 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
       val initialBalance = getConfirmedBalances.balance
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(1000))
+      blocking(Thread.sleep(100000))
       val confirmedBalance = getConfirmedBalances.balance
       val sumBalance = initialBalance + sumOutputs(block)
       log.info(s"Initial balance $initialBalance")
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $sumBalance")
       confirmedBalance should be > initialBalance
-      //confirmedBalance shouldBe sumBalance
+      confirmedBalance shouldBe sumBalance
     }
   }
 

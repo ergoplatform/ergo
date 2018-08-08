@@ -26,6 +26,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
 
+  override protected lazy val modifiersCache =
+    new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
+
   override type MS = State
   override type SI = ErgoSyncInfo
   override type HIS = ErgoHistory

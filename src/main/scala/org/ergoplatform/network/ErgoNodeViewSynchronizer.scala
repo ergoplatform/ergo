@@ -32,8 +32,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
-  override protected lazy val modifiersCache = new ErgoModifiersCache(networkSettings.maxModifiersCacheSize)
-
   override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
     self, timeProvider)
 
@@ -62,7 +60,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // our expecting list list is is half empty - request more missed modifiers
           self ! CheckModifiersToDownload
         } else {
-          sendSync(statusTracker, h.syncInfo, sendToRandomIfEmpty = true)
+          sendSync(statusTracker, h)
         }
       }
     }

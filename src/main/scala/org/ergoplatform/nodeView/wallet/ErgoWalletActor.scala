@@ -18,7 +18,6 @@ import sigmastate.{AvlTreeData, Values}
 import scala.collection.Map
 import scala.collection.mutable
 import scala.util.{Failure, Success}
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
@@ -67,7 +66,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.info(s"Uncertain box is mine! $uncertainBox")
-          registry.makeTransition(uncertainBox, uncertainBox.makeCertain())
+          val certainBox = uncertainBox.makeCertain()
+          registry.makeTransition(uncertainBox, certainBox)
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }
@@ -130,7 +130,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
           registry.removeFromRegistry(boxId).foreach { tb =>
             tb.transitionBack(heightTo) match {
               case Some(newBox) =>
-                newBox.register(registry)
+                registry.makeTransition(tb, newBox)
               case None =>
               //todo: should we be here at all?
             }
@@ -139,7 +139,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       }
 
       height = heightTo
-      log.warn("Rollback in the wallet is not implemented")
   }
 
 

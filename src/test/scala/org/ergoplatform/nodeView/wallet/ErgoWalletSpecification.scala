@@ -118,10 +118,12 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
 
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(1000))
+      blocking(Thread.sleep(100000))
+
       val historyHeight = getHistoryHeight
       val confirmedBalance = getConfirmedBalances.balance
       wallet.rollback(initialState.version)
+      blocking(Thread.sleep(100))
       val balanceAfterRollback = getConfirmedBalances.balance
 
       val sumBalance = initialBalance + sumOutputs(block)
@@ -133,7 +135,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
       log.info(s"Balance after rollback: $balanceAfterRollback")
 
       confirmedBalance should be > initialBalance
-//      balanceAfterRollback shouldBe initialBalance
+      balanceAfterRollback shouldBe initialBalance
     }
   }
 }

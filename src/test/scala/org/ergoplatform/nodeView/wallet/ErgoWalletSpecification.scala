@@ -14,9 +14,8 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers}
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import org.scalatest.OptionValues
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
@@ -33,7 +32,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 
-class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
+class ErgoWalletSpecification extends ErgoPropertyTest {
 
   property("successfully scans an offchain transaction") {
 
@@ -94,17 +93,15 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
   property("Successfully scans an onchain transaction") {
     WithWalletFixture { fixture =>
       import fixture._
-      val initialBalance = getConfirmedBalances.balance
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(1000))
+      blocking(Thread.sleep(countOutputs(block) * 15))
       val confirmedBalance = getConfirmedBalances.balance
-      val sumBalance = initialBalance + sumOutputs(block)
-      log.info(s"Initial balance $initialBalance")
+      val sumBalance = sumOutputs(block)
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $sumBalance")
-      confirmedBalance should be > initialBalance
-      //confirmedBalance shouldBe sumBalance
+      confirmedBalance should be > 0L
+//      confirmedBalance shouldBe sumBalance
     }
   }
 
@@ -114,26 +111,25 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
       val initialState = getCurrentState
       val versionId = scorex.core.versionToId(initialState.version)
       val initialHeight = getModifierHeight(versionId)
-      val initialBalance = getConfirmedBalances.balance
 
       val block = applyNextBlock
       wallet.scanPersistent(block)
-      blocking(Thread.sleep(1000))
+      blocking(Thread.sleep(countOutputs(block) * 15))
       val historyHeight = getHistoryHeight
       val confirmedBalance = getConfirmedBalances.balance
       wallet.rollback(initialState.version)
       val balanceAfterRollback = getConfirmedBalances.balance
 
-      val sumBalance = initialBalance + sumOutputs(block)
+      val sumBalance = sumOutputs(block)
       log.info(s"Initial height: $initialHeight")
-      log.info(s"Initial balance: $initialBalance")
       log.info(s"History height: $historyHeight")
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $sumBalance")
       log.info(s"Balance after rollback: $balanceAfterRollback")
 
-      confirmedBalance should be > initialBalance
-//      balanceAfterRollback shouldBe initialBalance
+      confirmedBalance should be > 0L
+//      confirmedBalance shouldBe sumBalance
+//      balanceAfterRollback shouldBe 0L
     }
   }
 }
@@ -159,7 +155,7 @@ class WithWalletFixture {
   }
 
   implicit val actorSystem: ActorSystem = ActorSystem()
-  implicit val ec: ExecutionContext =  actorSystem.dispatcher
+  implicit val ec: ExecutionContext = actorSystem.dispatcher
   val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings, timeProvider, emission)
 
   val testProbe = new TestProbe(actorSystem)
@@ -221,22 +217,22 @@ class WithWalletFixture {
   private def creationTxGen: Gen[Seq[ErgoTransaction]] = {
     val noProof = ProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)
     val input = Input(genesisEmissionBox.id, noProof)
-    val outputsGen = Gen.nonEmptyListOf(boxCandidateGen).map(_.toIndexedSeq)
+    val boxCount =  Gen.choose(1, 20).sample.getOrElse(5)
+    val outputsGen = Gen.listOfN(boxCount, boxCandidateGen).map(_.toIndexedSeq)
     val txGen = outputsGen.map(outs => new ErgoTransaction(IndexedSeq(input), outs))
-    Gen.nonEmptyListOf(txGen)
+    val txCount =  Gen.choose(1, 20).sample.getOrElse(5)
+    Gen.listOfN(txCount, txGen)
   }
 
   private def boxCandidateGen: Gen[ErgoBoxCandidate] = {
     Gen.choose(10, 10000).map(v => new ErgoBoxCandidate(v, pubKey))
   }
 
-  def sumOutputs(block: ErgoFullBlock): Long = {
-    block
-      .transactions
-      .flatMap(_.outputs)
-      .filter(_.proposition == pubKey)
-      .map(_.value)
-      .sum
+  def sumOutputs(block: ErgoFullBlock): Long = outputs(block).map(_.value).sum
+  def countOutputs(block: ErgoFullBlock): Int = outputs(block).size
+
+  def outputs(block: ErgoFullBlock): Seq[ErgoBox] = {
+    block.transactions.flatMap(_.outputs).filter(_.proposition == pubKey)
   }
 }
 

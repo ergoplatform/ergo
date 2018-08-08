@@ -22,7 +22,7 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected val timeProvider: NetworkTimeProvider
 
-  private var isHeadersChainSyncedVar: Boolean = false
+  private[history] var isHeadersChainSyncedVar: Boolean = false
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 

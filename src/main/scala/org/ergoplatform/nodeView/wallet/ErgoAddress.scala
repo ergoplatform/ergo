@@ -208,6 +208,5 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 object ErgoAddressEncoder {
   def hash256(input: Array[Byte]) = Blake2b256(input)
 
-  //todo: take Blake2b160 ?
   def hash160(input: Array[Byte]) = hash256(input).take(20)
 }

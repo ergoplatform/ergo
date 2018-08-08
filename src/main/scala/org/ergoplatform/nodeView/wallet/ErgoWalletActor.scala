@@ -108,7 +108,7 @@ class ErgoWalletActor(seed: String) extends Actor with ScorexLogging {
 
     case Resolve =>
       resolveUncertainty()
-      //todo: avoid magic number, use non-default executor? check that resolve is not scheduled already
+      //todo: avoid magic number, use non-default executor?
       if (registry.uncertainBoxes.nonEmpty) {
         context.system.scheduler.scheduleOnce(10.seconds)(self ! Resolve)
       }

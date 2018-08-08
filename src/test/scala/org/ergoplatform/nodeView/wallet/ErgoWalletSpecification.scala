@@ -69,7 +69,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
     bs1.assetBalances.isEmpty shouldBe true
 
     val balance2 = Random.nextInt(1000) + 1
-    w.scanOffchain(makeTx(balance2, pubKey))
+    w.scanOffchain(makeTx(balance2))
 
     blocking(Thread.sleep(1000))
 
@@ -137,7 +137,6 @@ class ErgoWalletSpecification extends ErgoPropertyTest with OptionValues {
 //      balanceAfterRollback shouldBe initialBalance
     }
   }
-
 }
 
 class WithWalletFixture {
@@ -154,17 +153,19 @@ class WithWalletFixture {
   import BlocksGenerator._
 
   val nodeViewDir: java.io.File = createTempDir
-  private val defaultSettings = ErgoSettings.read(None)
 
-  val settings: ErgoSettings = defaultSettings.copy(
-    directory = nodeViewDir.getAbsolutePath,
-    chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme),
-    nodeSettings = defaultSettings.nodeSettings.copy(
-      stateType = StateType.Utxo,
-      verifyTransactions = false,
-      PoPoWBootstrap = false
+  val settings: ErgoSettings = {
+    val defaultSettings = ErgoSettings.read(None)
+    defaultSettings.copy(
+      directory = nodeViewDir.getAbsolutePath,
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme),
+      nodeSettings = defaultSettings.nodeSettings.copy(
+        stateType = StateType.Utxo,
+        verifyTransactions = false,
+        PoPoWBootstrap = false
+      )
     )
-  )
+  }
 
   implicit val actorSystem: ActorSystem = ActorSystem()
   implicit val ec: ExecutionContext =  actorSystem.dispatcher
@@ -174,13 +175,9 @@ class WithWalletFixture {
   implicit val sender: ActorRef = testProbe.ref
 
   implicit val timeout: Timeout = Timeout(5.seconds)
-  private val awaitDuration: Duration = timeout.duration * 2
+  private val awaitDuration: Duration = timeout.duration + 1.second
 
-  val wallet: ErgoWallet = {
-    val call = GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Any](_.vault)
-    Await.result((nodeViewHolderRef ? call).mapTo[ErgoWallet], awaitDuration)
-  }
-
+  val wallet: ErgoWallet = dataFromCurrentView(_.vault)
   val addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
   val pubKey: Value[SBoolean.type] = addresses.head.asInstanceOf[P2PKAddress].pubkey
   val initialBlocks: Seq[ErgoFullBlock] = init()
@@ -191,12 +188,12 @@ class WithWalletFixture {
   }
 
   def getConfirmedBalances: BalancesSnapshot = Await.result(wallet.confirmedBalances(), awaitDuration)
-  def getHistory: ErgoHistory = dataFromView(_.history)
-  def getHistoryHeight: Int = dataFromView(_.history.headersHeight)
-  def getModifierHeight(headerId: ModifierId): Option[Int] = dataFromView(_.history.heightOf(headerId))
-  def getCurrentState: ErgoState[_] = dataFromView(_.state)
+  def getHistory: ErgoHistory = dataFromCurrentView(_.history)
+  def getHistoryHeight: Int = dataFromCurrentView(_.history.headersHeight)
+  def getModifierHeight(headerId: ModifierId): Option[Int] = dataFromCurrentView(_.history.heightOf(headerId))
+  def getCurrentState: ErgoState[_] = dataFromCurrentView(_.state)
 
-  def dataFromView[T : ClassTag](f: CurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool] => T): T = {
+  def dataFromCurrentView[T : ClassTag](f: CurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool] => T): T = {
     val request = GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, T](f)
     Await.result((nodeViewHolderRef ? request).mapTo[T], awaitDuration)
   }
@@ -223,7 +220,7 @@ class WithWalletFixture {
   def makeNextBlock: ErgoFullBlock = makeNextBlock(creationTxGen.sample.value)
 
   def makeNextBlock(txs: Seq[ErgoTransaction]): ErgoFullBlock = {
-    val (state, parent) = dataFromView(v => (v.state, v.history.bestHeaderOpt))
+    val (state, parent) = dataFromCurrentView(v => (v.state, v.history.bestHeaderOpt))
     val (adProofs, stateDigest) = state.proofsForTransactions(txs).success.value
     val time = System.currentTimeMillis()
     val extHash: Digest32 = Algos.hash(state.rootHash)

@@ -34,11 +34,10 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
   }
 
-  var genesisBlockIdOpt: Option[String] = None
 
   var nodeInfo = NodeInfo(settings.scorexSettings.network.nodeName, Version.VersionString, 0, 0, None,
     settings.nodeSettings.stateType, None, isMining = settings.nodeSettings.mining, None, None, None, None,
-    timeProvider.time(), genesisBlockIdOpt)
+    timeProvider.time(), None)
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification
@@ -55,15 +54,14 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
   private def onHistoryChanged: Receive = {
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
-      if (genesisBlockIdOpt.isEmpty) {
-        genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption
+      if (nodeInfo.genesisBlockIdOpt.isEmpty) {
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
-        fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
-        genesisBlockIdOpt = genesisBlockIdOpt
+        fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
       )
   }
 

@@ -1,18 +1,17 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.pattern.ask
-import akka.pattern.pipe
+import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, Init, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
@@ -21,7 +20,6 @@ import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.duration._
-
 import scala.language.postfixOps
 
 /**
@@ -42,7 +40,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
 
-    (readersHolder ? GetDataFromHistory[Init](r => Init(r))).mapTo[Init].pipeTo(self)
+    (readersHolder ? GetReaders).mapTo[Readers].pipeTo(self)
   }
 
 
@@ -54,7 +52,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
   private def init: Receive = {
-    case Init(h) =>
+    case Readers(h, _, _) =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
@@ -100,8 +98,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 }
 
 object ErgoStatsCollector {
-
-  final case class Init(h: ErgoHistoryReader)
 
   case object GetNodeInfo
 

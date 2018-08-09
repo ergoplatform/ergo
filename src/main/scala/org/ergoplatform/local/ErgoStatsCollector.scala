@@ -1,14 +1,18 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.pattern.ask
+import akka.pattern.pipe
+import akka.util.Timeout
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, Init, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
@@ -18,20 +22,27 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.duration._
 
+import scala.language.postfixOps
+
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
-class ErgoStatsCollector(viewHolderRef: ActorRef,
+class ErgoStatsCollector(readersHolder: ActorRef,
                          peerManager: ActorRef,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
   extends Actor with ScorexLogging {
 
+  implicit val ec = context.system.dispatcher
+  implicit val timeout = Timeout(5 seconds)
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
+    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
+
+    (readersHolder ? GetDataFromHistory[Init](r => Init(r))).mapTo[Init].pipeTo(self)
   }
 
 
@@ -40,7 +51,17 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
     timeProvider.time(), None)
 
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
-    onHistoryChanged orElse onSemanticallySuccessfulModification
+    onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
+
+  private def init: Receive = {
+    case Init(h) =>
+      nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
+        bestHeaderOpt = h.bestHeaderOpt,
+        headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
+        fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
+        genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption
+      )
+  }
 
   private def getNodeInfo: Receive = {
     case GetNodeInfo => sender ! nodeInfo
@@ -79,6 +100,8 @@ class ErgoStatsCollector(viewHolderRef: ActorRef,
 }
 
 object ErgoStatsCollector {
+
+  final case class Init(h: ErgoHistoryReader)
 
   case object GetNodeInfo
 
@@ -125,21 +148,21 @@ object ErgoStatsCollector {
 }
 
 object ErgoStatsCollectorRef {
-  def props(viewHolderRef: ActorRef,
+  def props(readersHolder: ActorRef,
             peerManager: ActorRef,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoStatsCollector(viewHolderRef, peerManager, settings, timeProvider))
+    Props(new ErgoStatsCollector(readersHolder, peerManager, settings, timeProvider))
 
-  def apply(viewHolderRef: ActorRef, peerManager: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  def apply(readersHolder: ActorRef, peerManager: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, peerManager, settings, timeProvider))
+    system.actorOf(props(readersHolder, peerManager, settings, timeProvider))
 
   def apply(name: String,
-            viewHolderRef: ActorRef,
+            readersHolder: ActorRef,
             peerManager: ActorRef,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(viewHolderRef, peerManager, settings, timeProvider), name)
+    system.actorOf(props(readersHolder, peerManager, settings, timeProvider), name)
 }

@@ -1,8 +1,6 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.pattern.{ask, pipe}
-import akka.util.Timeout
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
@@ -20,7 +18,6 @@ import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
@@ -32,15 +29,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   extends Actor with ScorexLogging {
 
   implicit val ec = context.system.dispatcher
-  implicit val timeout = Timeout(5 seconds)
 
   override def preStart(): Unit = {
+    readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
-
-    (readersHolder ? GetReaders).mapTo[Readers].pipeTo(self)
   }
 
 

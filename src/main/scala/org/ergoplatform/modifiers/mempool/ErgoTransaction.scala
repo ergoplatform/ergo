@@ -30,7 +30,8 @@ import scala.util.Try
 
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
-                           override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
+                           override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
+                           override val sizeOpt: Option[Int] = None)
   extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ErgoNodeViewModifier
     with ModifierValidator with ScorexLogging {
 
@@ -205,7 +206,8 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     Json.obj(
       "id" -> tx.id.asJson,
       "inputs" -> tx.inputs.asJson,
-      "outputs" -> tx.outputs.asJson
+      "outputs" -> tx.outputs.asJson,
+      "size" -> tx.size.asJson
     )
   }
 
@@ -253,6 +255,6 @@ object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSeria
 
   override def parseBody(bytes: Array[Byte], pos: Position): (ErgoTransaction, Consumed) = {
     val ((inputs, outputCandidates), consumed) = flattenedTxSerializer.parseBody(bytes, pos)
-    ErgoTransaction(inputs, outputCandidates) -> consumed
+    ErgoTransaction(inputs, outputCandidates, Some(consumed)) -> consumed
   }
 }

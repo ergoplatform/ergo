@@ -92,6 +92,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
 
     FullBlock:
       description: Block with header and transactions
@@ -107,6 +111,10 @@ components:
           $ref: '#/components/schemas/BlockTransactions'
         adProofs:
           $ref: '#/components/schemas/BlockADProofs'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
 
     BlockHeader:
       type: object
@@ -167,6 +175,10 @@ components:
           example: 62
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
 
     BlockTransactions:
       type: object
@@ -178,6 +190,10 @@ components:
           $ref: '#/components/schemas/ModifierId'
         transactions:
           $ref: '#/components/schemas/Transactions'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
 
     BlockADProofs:
       type: object
@@ -192,6 +208,10 @@ components:
           $ref: '#/components/schemas/SerializedAdProof'
         digest:
           $ref: '#/components/schemas/Digest32'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
 
     CandidateBlock:
       type: object
@@ -443,6 +463,20 @@ components:
       type: integer
       format: int32
       example: 1524143059077
+
+    EmissionInfo:
+      description: Emssion info for height
+      type: object
+      properties:
+        minerReward:
+          type: integer
+          format: int64
+        totalCoinsIssued:
+          type: integer
+          format: int64
+        totalRemainCoins:
+          type: integer
+          format: int64
 
     BalancesSnapshot:
       description: Amount of Ergo tokens and assets

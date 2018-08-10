@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, ModifierTypeId, bytesToId}
@@ -11,7 +10,8 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 import scorex.utils.Random
 
-case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) extends ErgoPersistentModifier {
+case class UTXOSnapshotChunk(stateElements: Seq[StateElement],
+                             index: Short) extends ErgoPersistentModifier {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
 
   //TODO implement correctly
@@ -26,6 +26,9 @@ case class UTXOSnapshotChunk(stateElements: Seq[StateElement], index: Short) ext
   override lazy val serializer: Serializer[UTXOSnapshotChunk] = ???
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(stateElements.map(LeafData @@ _.bytes))
+
+  override val sizeOpt: Option[Int] = None
+
 }
 
 object UTXOSnapshotChunk {

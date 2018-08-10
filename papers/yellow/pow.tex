@@ -1,0 +1,81 @@
+\section{Consensus}
+
+\dnote{describe, why did we chosen Proof-of-Work rather than PoS/PoXXX}
+
+Ergo PoW algorithm was designed with 2 goals in mind:
+
+\begin{itemize}
+    \item{\em ASIC resistance } - the concentration of mining power to ASIC-equipped miners
+    is a big security issue.
+    ASIC-resistant PoW algorithm should allow to generate new blocks with non-negligible
+    probability on commodity hardware.
+    Equihash algorithm was chosen as a promising ASIC-resistant PoW algorithm.
+    \item{\em pools resistance } - even if mining hardware is distributed between multiply parties,
+    their union into mining pools leads to centralization of the network control in hands of the mining pool operators.
+    Ergo PoW algorithm should disincentivize large mining pools, ensuring that mining pools are small (if possible).
+\end{itemize}
+
+\subsection{Equihash}
+
+In Equihash a miner should find a solution of the generalized paradox of birthdays - it should find
+$2^k$ such words \term{n} bits length each, that xor for all this words should be 0.
+Moreover hash of block header (including solutions) should be less than some predefined target.
+
+Search for Equihash solutions works as follows:
+
+\begin{algorithm}[H]
+    \caption{Equihash mining}
+    \label{alg:eq:mining}
+    \begin{algorithmic}[1]
+        \Function{solveEquihash}{$header$, $target$}
+            \Let{$solutions$}{$findSolutions(header)$}
+            \Let{$correctHeaders$}{$solutions.filter(s => hash(header.copy(solution = s)) < target)$}
+            \If{$correctHeaders.nonEmpty$}
+
+                \Return $correctHeaders$
+            \Else
+                \State Modify header by updating timestamp, transactions or other fields
+
+                \Return $solveEquihash(modifiedHeader, target)$
+            \EndIf
+        \EndFunction
+
+        \Function{findSolutions}{$header$}
+            \Let{$seed$}{$hash(header.bytesWithoutPoW)$}
+            \Let{$listSize$}{$2*2^{n / (k + 1)}$}
+            \Let{$X$}{(0 to listSize).map(j => (hash(seed + j), j))}
+            \For{r: 1 until k}
+              \Let{$X$}(round(X, r))
+            \EndFor
+            \State find all possible collisions on the last $2n/k+1$ bits.
+
+            \Return Sequence of solutions, where every solution is a sequence of indexes of words from X.
+        \EndFunction
+
+        \Function{round}{$X$, $r$}
+        \State Sort the $X$ by values $X_j$ .
+        \State Then find all unordered pairs $(i, j)$ such that $X_i$ collides with $X_j$ on the first $r * n/(k+1)$ bits.
+
+        \Return $(X_{i,j} = X_i$ xor $X_j, (i , j))$
+        \EndFunction
+
+    \end{algorithmic}
+\end{algorithm}
+
+Equihash solutions consists of $2^k$ integer indexes.
+Verification of Equihash solutions works as follows:
+\begin{algorithm}[H]
+    \caption{Equihash validation}
+    \label{alg:eq:valudation}
+    \begin{algorithmic}[1]
+        \Function{validateEquihash}{$header$, $solution$}
+        \State check, that there is no duplicate indexes in solutions
+        \Let{$X$}{solution.map(j => (hash(seed + j), j))}
+        \State check algorithm binding - words in $X$ have a special order and XOR for pairs at every step should start from required number of 0
+        \State check, that XOR for all X consists of 0 bits only
+
+        \Return hash(header) < target
+        \EndFunction
+    \end{algorithmic}
+\end{algorithm}
+

@@ -33,29 +33,25 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
 
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
+    // calculates digest, containing current header and personalization bytes ergoPerson.
     val bytesPerWord = n / 8
     val wordsPerHash = 512 / n
-
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash,  EquihashSolution.empty)
-
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)
+    val currentDigest = new Blake2bDigest(digest)
 
-    def generateHeader(): Option[Header] = {
-      val currentDigest = new Blake2bDigest(digest)
-      val solutions = Equihash.gbpBasic(currentDigest, n, k)
-      val headerWithSuitableSolution = solutions
-        .map { solution => h.copy(equihashSolution = solution) }
-        .find { newHeader => correctWorkDone(realDifficulty(newHeader), difficulty) }
-      headerWithSuitableSolution match {
-        case headerWithFoundSolution @ Some(_) => headerWithFoundSolution
-        case _ => None
-      }
+    // calculate solutions using Wagner algorithm
+    val solutions = Equihash.gbpBasic(currentDigest, n, k)
+    val headerWithSuitableSolution = solutions
+      .map { solution => h.copy(equihashSolution = solution) }
+      .find { newHeader => correctWorkDone(realDifficulty(newHeader), difficulty) }
+    headerWithSuitableSolution match {
+      case headerWithFoundSolution@Some(_) => headerWithFoundSolution
+      case _ => None
     }
-
-    generateHeader()
   }
 
   override def verify(header: Header): Boolean =

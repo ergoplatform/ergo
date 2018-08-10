@@ -5,8 +5,8 @@ import java.math.BigInteger
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.ergoplatform.mining.EquihashSolution
-import org.slf4j.LoggerFactory
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
+import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,7 +24,9 @@ object Equihash {
   }
 
   def hashSolution[T <: Digest](digest: T, solution: EquihashSolution): T = {
-    solution.ints map { hashXi(digest, _) }
+    solution.ints map {
+      hashXi(digest, _)
+    }
     digest
   }
 
@@ -136,19 +138,9 @@ object Equihash {
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
     log.trace("Generating first list")
-    //  1) Generate first list
-    val tmpHash = new Array[Byte](digest.getDigestSize)
-    var X = for {i <- (0 until Math.pow(2, collisionLength + 1).toInt).toVector} yield {
-      val r = i % indicesPerHashOutput
-      if (r == 0) {
-        //  X_i = H(I||V||x_i)
-        val currDigest = new Blake2bDigest(digest)
-        hashXi(currDigest, i / indicesPerHashOutput)
-        currDigest.doFinal(tmpHash, 0)
-      }
-      val d = tmpHash.slice(r * n / 8, (r + 1) * n / 8)
-      val expanded = expandArray(d, hashLength, collisionLength)
-      expanded -> Seq(i)
+    // Generate a list of 2*2^(n / (k + 1)) words
+    var X = (0 until Math.pow(2, collisionLength + 1).toInt).toVector.map { i =>
+      generateWord(n, digest, i).toByteArray.takeRight(n / 8) -> Seq(i)
     }
 
     //  3) Repeat step 2 until 2n/(k+1) bits remain

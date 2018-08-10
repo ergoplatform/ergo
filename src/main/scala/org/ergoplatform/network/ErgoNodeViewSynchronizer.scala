@@ -4,7 +4,6 @@ import akka.actor.{ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
-import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
@@ -74,7 +73,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
   }
 
-  private def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+  protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
     mod match {
       case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
       case _ =>

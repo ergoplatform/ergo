@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute, WalletApiRoute}
+import org.ergoplatform.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local._
 import org.ergoplatform.mining.emission.EmissionRules
@@ -47,6 +47,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
+    EmissionApiRoute(emission, ergoSettings),
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),

@@ -79,3 +79,23 @@ Verification of Equihash solutions works as follows:
     \end{algorithmic}
 \end{algorithm}
 
+\subsection{Pool resistance}
+
+This section contains few proposals, how to prevent mining outsourcing:
+
+\begin{itemize}
+    \item{\em use private key } - ensure that private key was involved in mining process.
+    Miner should include his public key and signature $Sig$ of all block fields to block header
+    (or other parts of the block, like extension or block transactions)
+    and all mining rewards goes to this public key.
+    Equihash should use this signature as a $seed$ and also verifier should check, that indexes of solutions do
+    not exceed $listSize$.
+    To ensure, that mining reward goes to public key used in block signing, all anyone-can-spend outputs should
+    be collected to that public key (or may be it's better to create special miner-can-spend opcode to ensure
+    that nobody else can collect this output).
+    Thus, for every search of Equihash solutions miner should sign a block.
+    Pools might still be possible, but they should send a new signature for every Equihash operation that might
+    be impossible for large pools. Current ZCash hashrate is $8*10^8$ Sol/s, thus pool, that controls 25\%
+    of hashrate should calculate $2*10^8$ signatures every second and sent 10 Gb of data per second.
+
+\end{itemize}

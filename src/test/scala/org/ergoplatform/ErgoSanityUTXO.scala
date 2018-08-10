@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
@@ -45,6 +46,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
+    val pool = ErgoMemPool.empty
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
@@ -57,7 +59,9 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
       vhProbe.ref,
       ErgoSyncInfoMessageSpec,
       settings.scorexSettings.network,
-      tp
+      tp,
+      Some(h),
+      Some(pool)
     )
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

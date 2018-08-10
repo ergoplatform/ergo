@@ -1,10 +1,10 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
-import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
@@ -22,7 +22,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
-                               timeProvider: NetworkTimeProvider)
+                               timeProvider: NetworkTimeProvider,
+                               historyOpt: Option[ErgoHistory],
+                               mempoolOpt: Option[ErgoMemPool])
                               (implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
@@ -36,6 +38,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     self, timeProvider)
 
   override def preStart(): Unit = {
+    this.historyReaderOpt = historyOpt
+    this.mempoolReaderOpt = mempoolOpt
     val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
@@ -77,6 +81,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
     mod match {
       case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
+      case h: Header if h.isNew(timeProvider, 1.hour) => broadcastModifierInv(h)
       case _ =>
     }
   }
@@ -92,18 +97,23 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            historyOpt: Option[ErgoHistory],
+            mempoolOpt: Option[ErgoMemPool])
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
-      timeProvider))
+      timeProvider, historyOpt, mempoolOpt)
+    )
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            historyOpt: Option[ErgoHistory] = None,
+            mempoolOpt: Option[ErgoMemPool] = None)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, historyOpt, mempoolOpt))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
@@ -112,7 +122,7 @@ object ErgoNodeViewSynchronizer {
             timeProvider: NetworkTimeProvider,
             name: String)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider, None, None), name)
 
 
   case object CheckModifiersToDownload

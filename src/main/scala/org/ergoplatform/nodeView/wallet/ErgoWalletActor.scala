@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.AssetUtils
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -158,13 +159,17 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       sender() ! trackedAddresses.toIndexedSeq
 
     case GenerateTransaction(payTo) =>
-      //todo: add assets
       val targetBalance = payTo.map(_.value).sum
+      val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+
+      payTo.map(_.additionalTokens).foreach {boxTokens =>
+        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap)
+      }
 
       //we currently do not use off-chain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, Map.empty).flatMap { r =>
+      val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         //todo: fix proposition, possible assets overflow

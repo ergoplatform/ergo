@@ -6,8 +6,6 @@ import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
 import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
-import scala.collection.mutable
-
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
@@ -34,6 +32,10 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     val above = genCachePair(limit + 1)
 
     modifiersCache.put(above._1, above._2)
+    modifiersCache.size shouldBe (limit + 1)
+
+    modifiersCache.cleanOverfull()
+
     modifiersCache.size shouldBe limit
 
     modifiersCache.remove(genKey(1)).isEmpty shouldBe true

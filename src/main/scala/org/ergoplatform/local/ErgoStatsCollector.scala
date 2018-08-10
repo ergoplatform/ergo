@@ -45,12 +45,14 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
   private def init: Receive = {
-    case Readers(h, _, _) =>
+    case Readers(h, s, _) =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
-        genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption
+        genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption,
+        stateRoot = Some(Algos.encode(s.rootHash)),
+        stateVersion = Some(s.version)
       )
   }
 

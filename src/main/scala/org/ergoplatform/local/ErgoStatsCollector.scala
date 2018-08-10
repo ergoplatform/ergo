@@ -28,14 +28,12 @@ class ErgoStatsCollector(readersHolder: ActorRef,
                          timeProvider: NetworkTimeProvider)
   extends Actor with ScorexLogging {
 
-  implicit val ec = context.system.dispatcher
-
   override def preStart(): Unit = {
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)
+    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
   }
 
 

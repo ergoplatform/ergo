@@ -30,8 +30,8 @@ import scala.util.Try
   *                   if the total cost exceeds the limit)
   */
 
-//todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file is even
-// more problematic
+// todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file like we are
+// doing now is even more problematic
 
 //todo: maxCost should be set to block limit, currently total sum per tx is not calculated
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)

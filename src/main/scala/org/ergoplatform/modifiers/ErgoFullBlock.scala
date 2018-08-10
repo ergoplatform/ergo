@@ -30,6 +30,15 @@ case class ErgoFullBlock(header: Header,
     throw new Error("Should never try to serialize ErgoFullBlock")
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+
+  override val sizeOpt: Option[Int] = None
+
+  override lazy val size = {
+    val hSize = header.size
+    val btSize = blockTransactions.size
+    val adSize = aDProofs.map(_.size).getOrElse(0)
+    hSize + btSize + adSize
+  }
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -39,18 +48,14 @@ object ErgoFullBlock extends ApiCodecs {
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson)
+      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson),
+      "size" -> b.size.asJson
     )
 
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
     Json.obj(
       "id" -> b.header.id.asJson,
-      "size" -> size(b).toLong.asJson
+      "size" -> b.size.asJson
     )
 
-  private def size(block: ErgoFullBlock): Int = {
-    block.header.bytes.length +
-      block.blockTransactions.bytes.length +
-      block.aDProofs.map(_.bytes.length).getOrElse(0)
-  }
 }

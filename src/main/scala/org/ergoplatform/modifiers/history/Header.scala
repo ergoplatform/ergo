@@ -30,7 +30,8 @@ case class Header(version: Version,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
                   extensionHash: Digest32,
-                  equihashSolution: EquihashSolution
+                  equihashSolution: EquihashSolution,
+                  override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
 
@@ -80,7 +81,6 @@ case class Header(version: Version,
     case t: BlockTransactions => java.util.Arrays.equals(transactionsRoot, t.digest)
     case _ => false
   }
-
 }
 
 object Header {
@@ -105,7 +105,8 @@ object Header {
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
-      "version" -> h.version.asJson
+      "version" -> h.version.asJson,
+      "size" -> h.size.asJson
     ).asJson
 }
 
@@ -188,7 +189,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, equihashSolution)
+        nBits, height, extensionHash, equihashSolution, Some(bytes.length))
     }
   }.flatten
 }

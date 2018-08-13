@@ -57,8 +57,15 @@ trait ErgoHistoryReader
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
-      historyStorage.modifierById(id)
+    val validity = isSemanticallyValid(id)
+    if (validity != ModifierSemanticValidity.Invalid && validity != ModifierSemanticValidity.Absent) {
+      historyStorage.modifierById(id) match {
+        case Some(mod) if !(mod.id sameElements id) =>
+          log.error(s"Incorrect recalculated id from local storage: ${mod.encodedId} != ${encoder.encode(id)}. " +
+            s"Bytes are: ${Algos.encode(mod.bytes)}")
+          historyStorage.modifierById(id, noCache = true)
+        case m => m
+      }
     } else {
       None
     }
@@ -281,7 +288,6 @@ trait ErgoHistoryReader
     val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
     (ourChain, commonBlockThenSuffixes)
   }
-
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {

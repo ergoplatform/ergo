@@ -21,8 +21,9 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   // TODO remove when modifierId will be string
   private def keyById(id: ModifierId): String = Algos.encode(id)
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
+  def modifierById(id: ModifierId, noCache: Boolean = false): Option[ErgoPersistentModifier] = {
     val key = keyById(id)
+    if (noCache) modifiersCache.invalidate(key)
     Option(modifiersCache.getIfPresent(key)) match {
       case Some(e) =>
         log.trace(s"Got modifier $key from cache")

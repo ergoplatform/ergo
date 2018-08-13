@@ -6,15 +6,14 @@ import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse, StartMining}
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef, TransactionGeneratorRef}
+import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec

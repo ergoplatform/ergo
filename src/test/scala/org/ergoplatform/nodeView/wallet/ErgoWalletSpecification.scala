@@ -141,14 +141,21 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       wallet.scanPersistent(block)
       blocking(Thread.sleep(countOutputs(block) * scanningInterval + 500))
       val confirmedBalance = getConfirmedBalances.balance
-      val sumBalance = sumOutputs(block)
 
-      //pay out all the wallet balance
-      val req1 = PaymentRequest((Pay2SAddress(Values.FalseLeaf), sumBalance, Map(), Seq()))
+      //pay out all the wallet balance:
+      val req1 = PaymentRequest((Pay2SAddress(Values.FalseLeaf), confirmedBalance, Map(), Seq()))
 
       val tx1 = Await.result(wallet.generateTransaction(req1), awaitDuration).get
       tx1.outputs.size shouldBe 1
-      tx1.outputs.head.value shouldBe sumBalance
+      tx1.outputs.head.value shouldBe confirmedBalance
+
+      //change == 1:
+      val req2 = PaymentRequest((Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, Map(), Seq()))
+
+      val tx2 = Await.result(wallet.generateTransaction(req2), awaitDuration).get
+      tx2.outputs.size shouldBe 2
+      tx2.outputs.head.value shouldBe confirmedBalance - 1
+      tx2.outputs(1).value shouldBe 1
     }
   }
 }

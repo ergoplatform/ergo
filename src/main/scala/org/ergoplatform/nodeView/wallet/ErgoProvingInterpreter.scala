@@ -14,7 +14,7 @@ import sigmastate.AvlTreeData
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import sigmastate.utxo.CostTable
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -49,24 +49,31 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
 
-    val inputs = unsignedTx.inputs.zip(boxesToSpend).map { case (unsignedInput, inputBox) =>
-      require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
+    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]())) {
+      case (inputsTry, (unsignedInput, inputBox)) =>
+        require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-      val context =
-        ErgoLikeContext(
-          stateContext.height + 1,
-          AvlTreeData(stateContext.digest, 32),
-          boxesToSpend,
-          unsignedTx,
-          inputBox,
-          ContextExtension.empty)
+        inputsTry match {
+          case Success(ins) =>
+            val context =
+              ErgoLikeContext(
+                stateContext.height + 1,
+                AvlTreeData(stateContext.digest, 32),
+                boxesToSpend,
+                unsignedTx,
+                inputBox,
+                ContextExtension.empty)
 
-      val proverResult = prove(inputBox.proposition, context, unsignedTx.messageToSign).get
-      Input(unsignedInput.boxId, proverResult)
+            prove(inputBox.proposition, context, unsignedTx.messageToSign).map { proverResult =>
+              Input(unsignedInput.boxId, proverResult) +: ins
+            }
+
+          case f: Failure[IndexedSeq[Input]] => f
+        }
+    }.map { inputs =>
+      ErgoTransaction(inputs, unsignedTx.outputCandidates)
     }
-
-    ErgoTransaction(inputs, unsignedTx.outputCandidates)
-  }
+  }.flatten
 }
 
 

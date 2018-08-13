@@ -24,10 +24,9 @@ import scala.util.Try
   * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
   * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
   *
-  *
-  * @param seed - a secret seed value
+  * @param seed    - a secret seed value
   * @param maxCost - max cost of all the transaction input scripts combined (the prover refuses to sign a transaction
-  *                   if the total cost exceeds the limit)
+  *                if the total cost exceeds the limit)
   */
 
 // todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file like we are
@@ -37,9 +36,9 @@ import scala.util.Try
 class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
-  override lazy val secrets: Seq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
+  override lazy val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
 
-  private lazy val dlogSecrets: Seq[DLogProverInput] =
+  private lazy val dlogSecrets: IndexedSeq[DLogProverInput] =
     ErgoProvingInterpreter.secretsFromSeed(seed).map(DLogProverInput.apply)
 
   lazy val dlogPubkeys = dlogSecrets.map(_.publicImage)
@@ -72,8 +71,10 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
 
 object ErgoProvingInterpreter {
+  val Secrets = 4
+
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
-    (1 to 4).map { i =>
+    (1 to Secrets).map { i =>
       BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))
     }
   }

@@ -18,9 +18,8 @@ import sigmastate.{AvlTreeData, Values}
 
 import scala.collection.Map
 import scala.collection.mutable
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 import scala.concurrent.ExecutionContext.Implicits.global
-
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
@@ -158,11 +157,14 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case ReadWalletAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
 
+    //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(payTo) =>
-      val targetBalance = payTo.map(_.value).sum
-      val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+      require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
 
-      payTo.map(_.additionalTokens).foreach {boxTokens =>
+      val targetBalance = payTo.map(_.value).sum
+
+      val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+      payTo.map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap)
       }
 
@@ -172,8 +174,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
-        //todo: fix proposition, possible assets overflow
-        val changeAddress = prover.dlogPubkeys.head
+        val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
+
         val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
           val assets = cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
           new ErgoBoxCandidate(chb, changeAddress, assets)
@@ -207,4 +209,5 @@ object ErgoWalletActor {
   case class ReadBalances(confirmed: Boolean)
 
   case object ReadWalletAddresses
+
 }

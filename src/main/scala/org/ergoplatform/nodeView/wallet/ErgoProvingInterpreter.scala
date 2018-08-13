@@ -7,7 +7,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import scapi.sigma.DLogProtocol.DLogProverInput
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.SigmaProtocolPrivateInput
 import scorex.crypto.hash.Blake2b256
 import sigmastate.AvlTreeData
@@ -41,7 +41,7 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
   private lazy val dlogSecrets: IndexedSeq[DLogProverInput] =
     ErgoProvingInterpreter.secretsFromSeed(seed).map(DLogProverInput.apply)
 
-  lazy val dlogPubkeys = dlogSecrets.map(_.publicImage)
+  lazy val dlogPubkeys: IndexedSeq[ProveDlog] = dlogSecrets.map(_.publicImage)
 
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],

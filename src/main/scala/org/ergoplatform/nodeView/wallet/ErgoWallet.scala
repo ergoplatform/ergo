@@ -16,15 +16,12 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 
 
-class ErgoWallet(actorSystem: ActorSystem,
-                 nodeViewHolderRef: ActorRef,
+class ErgoWallet(nodeViewHolderRef: ActorRef,
                  historyReader: ErgoHistoryReader,
-                 settings: ErgoSettings)
+                 settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
-
-  implicit val system = actorSystem
 
   if (settings.testingSettings.transactionGeneration) {
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
@@ -70,10 +67,9 @@ class ErgoWallet(actorSystem: ActorSystem,
 
 
 object ErgoWallet {
-  def readOrGenerate(actorSystem: ActorSystem,
-                     nodeViewHolderRef: ActorRef,
+  def readOrGenerate(nodeViewHolderRef: ActorRef,
                      historyReader: ErgoHistoryReader,
-                     settings: ErgoSettings): ErgoWallet = {
-    new ErgoWallet(actorSystem, nodeViewHolderRef, historyReader, settings)
+                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(nodeViewHolderRef, historyReader, settings)
   }
 }

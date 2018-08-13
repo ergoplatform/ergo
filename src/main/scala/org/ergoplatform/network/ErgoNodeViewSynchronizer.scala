@@ -59,6 +59,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // our expecting list list is is half empty - request more missed modifiers
           self ! CheckModifiersToDownload
         } else {
+          // headers chain is not synced yet, but our expecting list is half empty - ask for more headers
           sendSync(statusTracker, h)
         }
       }

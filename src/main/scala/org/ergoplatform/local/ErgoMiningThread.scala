@@ -9,7 +9,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.concurrent.ExecutionContext
-import scala.util.Random
+
 
 class ErgoMiningThread(ergoSettings: ErgoSettings,
                        viewHolderRef: ActorRef,
@@ -21,13 +21,13 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
   private val powScheme = ergoSettings.chainSettings.powScheme
   private var candidate: CandidateBlock = startCandidate
 
-  protected def mineCmd(nonce: Long): Unit =
+  protected def mineCmd(): Unit =
     context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) { self ! MineBlock }
 
 
   override def preStart(): Unit = {
     log.debug(s"Starting miner thread: ${self.path.name}")
-    mineCmd(Random.nextLong())
+    mineCmd()
   }
 
   override def postStop(): Unit = log.debug(s"Stopping miner thread: ${self.path.name}")
@@ -53,7 +53,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
               viewHolderRef ! LocallyGeneratedModifier(adp)
             }
           }
-          mineCmd(Random.nextLong())
+          mineCmd()
         case _ =>
           self ! MineBlock
       }

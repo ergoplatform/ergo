@@ -100,8 +100,8 @@ object P2PKAddress {
   }
 }
 
-case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
-  override val addressTypePrefix: Byte = ScriptHashAddress.addressTypePrefix
+case class Pay2SHAddress(scriptHash: Array[Byte]) extends ErgoAddress {
+  override val addressTypePrefix: Byte = Pay2SHAddress.addressTypePrefix
 
   override val contentBytes: Array[Byte] = scriptHash
 
@@ -115,7 +115,7 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
   }
 
   override def equals(obj: scala.Any): Boolean = obj match {
-    case ScriptHashAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
+    case Pay2SHAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
     case _ => false
   }
 
@@ -124,25 +124,25 @@ case class ScriptHashAddress(scriptHash: Array[Byte]) extends ErgoAddress {
   override def toString = s"P2SH(${Algos.encode(scriptHash)})"
 }
 
-object ScriptHashAddress {
-  def apply(pubkey: ProveDlog): ScriptHashAddress = apply(pubkey)
+object Pay2SHAddress {
+  def apply(pubkey: ProveDlog): Pay2SHAddress = apply(pubkey)
 
-  def apply(script: Value[SBoolean.type]): ScriptHashAddress = {
+  def apply(script: Value[SBoolean.type]): Pay2SHAddress = {
     val sb = ValueSerializer.serialize(script)
     val sbh = ErgoAddressEncoder.hash160(sb)
-    ScriptHashAddress(sbh)
+    Pay2SHAddress(sbh)
   }
 
   val addressTypePrefix: Byte = 2: Byte
 }
 
-case class ScriptAddress(override val script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
-  override val addressTypePrefix: Byte = ScriptAddress.addressTypePrefix
+case class Pay2SAddress(override val script: Value[SBoolean.type], scriptBytes: Array[Byte]) extends ErgoAddress {
+  override val addressTypePrefix: Byte = Pay2SAddress.addressTypePrefix
 
   override val contentBytes: Array[Byte] = scriptBytes
 
   override def equals(obj: scala.Any): Boolean = obj match {
-    case ScriptAddress(_, sb) => util.Arrays.equals(scriptBytes, sb)
+    case Pay2SAddress(_, sb) => util.Arrays.equals(scriptBytes, sb)
     case _ => false
   }
 
@@ -151,10 +151,10 @@ case class ScriptAddress(override val script: Value[SBoolean.type], scriptBytes:
   override def toString = s"P2S(${Algos.encode(scriptBytes)})"
 }
 
-object ScriptAddress {
-  def apply(script: Value[SBoolean.type]): ScriptAddress = {
+object Pay2SAddress {
+  def apply(script: Value[SBoolean.type]): Pay2SAddress = {
     val sb = ValueSerializer.serialize(script)
-    ScriptAddress(script, sb)
+    Pay2SAddress(script, sb)
   }
 
   val addressTypePrefix: Byte = 3: Byte
@@ -195,10 +195,10 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
           val ge = DataSerializer.deserialize[SGroupElement.type](SGroupElement, r)
           val pd = ProveDlog(ge)
           P2PKAddress(pd, bs)
-        case ScriptHashAddress.addressTypePrefix =>
-          ScriptHashAddress(bs)
-        case ScriptAddress.addressTypePrefix =>
-          ScriptAddress(ValueSerializer.deserialize(bs).asInstanceOf[Value[SBoolean.type]], bs)
+        case Pay2SHAddress.addressTypePrefix =>
+          Pay2SHAddress(bs)
+        case Pay2SAddress.addressTypePrefix =>
+          Pay2SAddress(ValueSerializer.deserialize(bs).asInstanceOf[Value[SBoolean.type]], bs)
         case _ => throw new Exception("Unsupported address type: " + addressType)
       }
     }

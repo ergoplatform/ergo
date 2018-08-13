@@ -15,13 +15,13 @@ class FilesObjectsStore(dir: String) extends ObjectsStore {
     Files.readAllBytes(path(id))
   }.toOption
 
-  override def put(m: ErgoPersistentModifier): Unit = {
+  override def put(m: ErgoPersistentModifier): Try[Unit] = Try {
     val p = path(m.id)
     p.toFile.createNewFile()
     Files.write(p, HistoryModifierSerializer.toBytes(m), StandardOpenOption.WRITE)
   }
 
-  override def delete(id: ModifierId): Unit = {
+  override def delete(id: ModifierId): Try[Unit] = Try {
     Files.delete(path(id))
   }
 

@@ -26,13 +26,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
     Constants.modifierSerializers) {
+
+  override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
+    self, timeProvider)
+
   /**
     * Approximate number of modifiers to be downloaded simultaneously
     */
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
-
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
-    self, timeProvider)
 
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -41,6 +42,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
   }
 
+  /**
+    * Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
+    * Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
+    */
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
@@ -51,15 +56,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  /**
+    * If our requested list is more than half empty, enforce to request more:
+    * - headers, if our headers chain is not synced yet (by sending sync message)
+    * - block sections, if our headers chain is synced
+    */
   override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
     super.requestMoreModifiers(applied)
     if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
       historyReaderOpt foreach { h =>
         if (h.isHeadersChainSynced) {
-          // our expecting list list is is half empty - request more missed modifiers
+          // our requested list is is half empty - request more missed modifiers
           self ! CheckModifiersToDownload
         } else {
-          // headers chain is not synced yet, but our expecting list is half empty - ask for more headers
+          // headers chain is not synced yet, but our requested list is half empty - ask for more headers
           sendSync(statusTracker, h)
         }
       }
@@ -67,7 +77,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Broadcast inv if modifier is new enough
+    * If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all it's sections
     */
   private val onSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod) =>

@@ -138,9 +138,13 @@ object Equihash {
     val hashLength = (k + 1) * ((collisionLength + 7) / 8)
     val indicesPerHashOutput = 512 / n
     log.trace("Generating first list")
-    // Generate a list of 2*2^(n / (k + 1)) words
+    // 1) Generate a list of 2*2^(n / (k + 1)) words and ensure it's length is n bits
+    val lengthInBytes = n / 8
     var X = (0 until Math.pow(2, collisionLength + 1).toInt).toVector.map { i =>
-      generateWord(n, digest, i).toByteArray.takeRight(n / 8) -> Seq(i)
+      val word = generateWord(n, digest, i).toByteArray
+      val missingBytes = lengthInBytes - word.length
+      val nBitsWord = if (missingBytes > 0) Array.fill(missingBytes)(0: Byte) ++ word else word.takeRight(lengthInBytes)
+      nBitsWord -> Seq(i)
     }
 
     //  3) Repeat step 2 until 2n/(k+1) bits remain

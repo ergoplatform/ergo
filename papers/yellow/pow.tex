@@ -17,11 +17,16 @@ Ergo PoW algorithm was designed with 2 goals in mind:
 
 \subsection{Equihash}
 
-In Equihash a miner should find a solution of the generalized paradox of birthdays - it should find
-$2^k$ such words \term{n} bits length each, that xor for all this words should be 0.
-Moreover hash of block header (including solutions) should be less than some predefined target.
+In Equihash a miner should find a solution of the generalized paradox of birthdays: it should find
+given list $L$ of $n$-bit words ${X_i}$, find $2^k$ distinct ${X_{i_j}}$ such that
+XOR for all this words should be 0. It is also required that this search was done via
+Wagner's algorithm - a PoW solution is considered valid only if it carries the footprint
+of the iterative partial collisions, i.e, at step $r$, the first $jr/k+1$ bits should XOR to 0.
+Difficulty control is implemented similar to regular PoW blockchains - the hash of the block header
+(including solutions) should be less than some predefined target $T$.
 
-Search for Equihash solutions works as follows:
+Mining process for Equihash PoW blockchain is defined in Alg. \ref{alg:eq:mining} and validation
+process is defined in Alg. \ref{alg:eq:valudation}
 
 \begin{algorithm}[H]
     \caption{Equihash mining}
@@ -54,7 +59,7 @@ Search for Equihash solutions works as follows:
 
         \Function{round}{$X$, $r$}
         \State Sort the $X$ by values $X_j$ .
-        \State Then find all unordered pairs $(i, j)$ such that $X_i$ collides with $X_j$ on the first $r * n/(k+1)$ bits.
+        \State Find all unordered pairs $(i, j)$ such that $X_i$ collides with $X_j$ on the first $r * n/(k+1)$ bits.
 
         \Return $(X_{i,j} = X_i$ xor $X_j, (i , j))$
         \EndFunction
@@ -62,8 +67,6 @@ Search for Equihash solutions works as follows:
     \end{algorithmic}
 \end{algorithm}
 
-Equihash solutions consists of $2^k$ integer indexes.
-Verification of Equihash solutions works as follows:
 \begin{algorithm}[H]
     \caption{Equihash validation}
     \label{alg:eq:valudation}
@@ -71,17 +74,17 @@ Verification of Equihash solutions works as follows:
         \Function{validateEquihash}{$header$, $solution$}
         \State check, that there is no duplicate indexes in solutions
         \Let{$X$}{solution.map(j => (hash(seed + j), j))}
-        \State check algorithm binding - words in $X$ have a special order and XOR for pairs at every step should start from required number of 0
+        \State check algorithm binding - at step $r$, the first $rn/k+1$ bits should XOR to 0.
         \State check, that XOR for all X consists of 0 bits only
 
-        \Return hash(header) < target
+        \Return hash(header) < T
         \EndFunction
     \end{algorithmic}
 \end{algorithm}
 
 \subsection{Pool resistance}
 
-This section contains few proposals, how to prevent mining outsourcing:
+This section contains several ideas how to prevent mining outsourcing:
 
 \begin{itemize}
     \item{\em use private key } - ensure that private key was involved in mining process.
@@ -89,13 +92,32 @@ This section contains few proposals, how to prevent mining outsourcing:
     (or other parts of the block, like extension or block transactions)
     and all mining rewards goes to this public key.
     Equihash should use this signature as a $seed$ and also verifier should check, that indexes of solutions do
-    not exceed $listSize$.
+    not exceed $listSize$\footnote{This check presents in original Equihash algorithm in serialization process
+    and is described in a paper in "algorithm binding" section, but our current implementation lack of this check}.
     To ensure, that mining reward goes to public key used in block signing, all anyone-can-spend outputs should
-    be collected to that public key (or may be it's better to create special miner-can-spend opcode to ensure
-    that nobody else can collect this output).
+    be collected to that public key (or may be it's better to use special `miner-can-spend` proposition
+    that ensures that this box can only be spent in the last transaction of a block).
     Thus, for every search of Equihash solutions miner should sign a block.
     Pools might still be possible, but they should send a new signature for every Equihash operation that might
-    be impossible for large pools. Current ZCash hashrate is $8*10^8$ Sol/s, thus pool, that controls 25\%
-    of hashrate should calculate $2*10^8$ signatures every second and sent 10 Gb of data per second.
+    be impossible for large pools. In assumption of $10^9$ Sol/s hashrate (that corresponds to current ZCash
+    hashrate) large enough mining pool should should calculate $10^9$ signatures and send 64 Gb of data per second.
+
+    \item{\em change search list requirements} - current Equihash implementation assumes that everyone can efficiently
+    reconstruct the whole list miner used to find solutions. Changing this requirement might help in pool-protection.
+    For example, if we will require that every search element should be a correct signature of a current block
+    (instead of just numerical index), data transfer between pool and miner will be $2*2^{n / (k + 1)}~2^21$ times
+    bigger than in the previous proposal.
+    However, this naive change will significantly change PoW algorithm as far as the main work will be
+    on signature calculation, rather than collision search.
+    ASIC-resistance of this new protocol should be investigated.
+
+    \item{\em search list as a secret} - when search list is not deterministic,
+    pool-protection algorithm may be build on
+    an idea, that miner is the only person who new the hole search list.
+    One possible solution is to to include the root hash
+    of a hash tree into block and change reward-taking condition for a miner, that he should provide a path in
+    a hash tree to any leaf and use this leaf as a public key to take block reward.
+    In such a case pool should enforce the whole search list by defining root hash otherwise miner will be able to
+    steal a reward by providing a path to his own public key in the tree.
 
 \end{itemize}

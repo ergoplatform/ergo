@@ -43,7 +43,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
     digest.update(I, 0, I.length)
     val currentDigest = new Blake2bDigest(digest)
 
-    // calculate solutions using Wagner algorithm
+    // calculate solutions using Wagner's algorithm
     val solutions = Equihash.gbpBasic(currentDigest, n, k)
     val headerWithSuitableSolution = solutions
       .map { solution => h.copy(equihashSolution = solution) }

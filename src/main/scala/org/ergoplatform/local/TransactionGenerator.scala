@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
@@ -36,6 +36,8 @@ class TransactionGenerator(viewHolder: ActorRef,
           currentFullHeight = v.history.headersHeight
 
           context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
+
+          context.system.eventStream.subscribe(self, classOf[FailedTransaction[ErgoTransaction]])
 
           context.system.scheduler.schedule(1500.millis,
             3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
@@ -69,8 +71,11 @@ class TransactionGenerator(viewHolder: ActorRef,
         ergoWalletActor ! GenerateTransaction(newOuts)
       }
 
-    case SuccessfulTransaction(tx) =>
+    case SuccessfulTransaction(_) =>
       self ! Attempt
+
+    case FailedTransaction(tx, err) =>
+      log.warn(s"Error $err for transaction $tx")
 
     case txOpt: Option[ErgoTransaction]@unchecked =>
       txOpt.foreach { tx =>

@@ -80,7 +80,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       tx.statefulValidity(boxesToSpend, stateContext).get
     }.sum
 
-    if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+    if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exceeds limit")
 
     val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
     mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>

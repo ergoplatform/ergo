@@ -78,7 +78,7 @@ class TransactionGenerator(viewHolder: ActorRef,
 
     case txOpt: Option[ErgoTransaction]@unchecked =>
       txOpt.foreach { tx =>
-        println("Locally generated tx: " + tx)
+        log.info("Locally generated tx: " + tx)
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
 

@@ -26,6 +26,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                                              emission: EmissionRules)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
+  private implicit lazy val actorSystem: ActorSystem = context.system
+
   override val scorexSettings: ScorexSettings = settings.scorexSettings
 
   override type MS = State
@@ -63,8 +65,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
-    val wallet = ErgoWallet.readOrGenerate(context.system, self,
-      history.getReader.asInstanceOf[ErgoHistoryReader], settings)
+    val wallet = ErgoWallet.readOrGenerate(self, history.getReader.asInstanceOf[ErgoHistoryReader], settings)
 
     val memPool = ErgoMemPool.empty
 
@@ -80,7 +81,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-    val wallet = ErgoWallet.readOrGenerate(context.system, self, history.getReader.asInstanceOf[ErgoHistoryReader], settings)
+    val wallet = ErgoWallet.readOrGenerate(self, history.getReader.asInstanceOf[ErgoHistoryReader], settings)
     val memPool = ErgoMemPool.empty
     val constants = StateConstants(Some(self), emission, settings.nodeSettings.keepVersions)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)

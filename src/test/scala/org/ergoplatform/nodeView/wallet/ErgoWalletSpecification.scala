@@ -37,7 +37,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
   property("successfully scans an offchain transaction") {
 
     implicit val actorSystem: ActorSystem = ActorSystem()
-    val w: ErgoWallet = new ErgoWallet(actorSystem, null, null, settings)
+    val w: ErgoWallet = new ErgoWallet(null, null, settings)
 
     val bf0 = w.unconfirmedBalances()
 

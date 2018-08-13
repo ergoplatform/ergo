@@ -171,28 +171,25 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // the pool
     val txsNoConflict = fixTxsConflicts(externalTransactions)
 
-    // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
     val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
     val txs = txsNoConflict :+ coinbase
 
-    val (adProof, adDigest) = state.proofsForTransactions(txs).get
+    state.proofsForTransactions(txs).map {case (adProof, adDigest) =>
+      val timestamp = timeProvider.time()
+      val nBits: Long = bestHeaderOpt
+        .map(parent => history.requiredDifficultyAfter(parent))
+        .map(d => RequiredDifficulty.encodeCompactBits(d))
+        .getOrElse(Constants.InitialNBits)
 
-    val timestamp = timeProvider.time()
+      //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
+      val extensionHash = Algos.hash(Array[Byte]())
 
-    val nBits: Long = bestHeaderOpt
-      .map(parent => history.requiredDifficultyAfter(parent))
-      .map(d => RequiredDifficulty.encodeCompactBits(d))
-      .getOrElse(Constants.InitialNBits)
-
-    //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
-    val extensionHash = Algos.hash(Array[Byte]())
-
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionHash)
-  }
+      CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionHash)
+    }
+  }.flatten
 
   def requestCandidate: Unit = readersHolderRef ! GetReaders
-
 }
 
 
@@ -231,10 +228,10 @@ object ErgoMiner extends ScorexLogging {
       .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       .toIndexedSeq
 
-
     val feeAmount = feeBoxes.map(_.value).sum
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+
     //todo: a miner is creating a new asset, remove it after playing for a while
     val newAsset: (TokenId, Long) = (Digest32 @@ inputBoxes.head.id) -> 1000
     val minerAssets = feeAssets :+ newAsset

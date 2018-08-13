@@ -1,8 +1,8 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.local.TransactionGenerator.{Attempt, CheckGeneratingConditions, StartGeneration, StopGeneration}
+import org.ergoplatform.local.TransactionGenerator.{Attempt, CheckGeneratingConditions, StartGeneration}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -24,8 +24,6 @@ class TransactionGenerator(viewHolder: ActorRef,
                            settings: TestingSettings) extends Actor with ScorexLogging {
 
 
-  private var txGenerator: Cancellable = _
-
   private var isStarted = false
 
   private var transactionsPerBlock = 0
@@ -41,8 +39,8 @@ class TransactionGenerator(viewHolder: ActorRef,
 
           context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
-          txGenerator = context.system.scheduler
-            .schedule(1500.millis, 3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
+          context.system.scheduler.schedule(1500.millis,
+            3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
         }
       }
 
@@ -81,11 +79,7 @@ class TransactionGenerator(viewHolder: ActorRef,
         log.info("Locally generated tx: " + tx)
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
-
-    case StopGeneration =>
-      isStarted = false
-      txGenerator.cancel()
-  }
+   }
 }
 
 object TransactionGenerator {
@@ -93,8 +87,6 @@ object TransactionGenerator {
   case object StartGeneration
 
   case object CheckGeneratingConditions
-
-  case object StopGeneration
 
   case object Attempt
 }

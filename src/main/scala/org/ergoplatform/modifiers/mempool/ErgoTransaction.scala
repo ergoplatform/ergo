@@ -127,9 +127,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           case (validation, (outAssetId, outAmount)) =>
             val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
             validation
-              .validate(inAmount == outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+              .validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                 fatal(s"Assets preservation rule is broken in $this. " +
-                  s"Amount in: $inAmount, out: $outAmount, Asset in: $newAssetId out: $outAssetId")
+                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
               }
         }
       }

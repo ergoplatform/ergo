@@ -76,7 +76,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     bs2.balance shouldBe (balance1 + balance2)
     bs2.assetBalances.isEmpty shouldBe true
 
-    w.watchFor(ScriptAddress(Values.TrueLeaf))
+    w.watchFor(Pay2SAddress(Values.TrueLeaf))
     val balance3 = Random.nextInt(1000) + 1
     w.scanOffchain(makeTx(balance3, Values.TrueLeaf))
 
@@ -133,11 +133,30 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       balanceAfterRollback shouldBe 0L
     }
   }
+
+  property("successfully generates a transaction") {
+    WithWalletFixture { fixture =>
+      import fixture._
+      val block = applyNextBlock
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(countOutputs(block) * scanningInterval + 500))
+      val confirmedBalance = getConfirmedBalances.balance
+      val sumBalance = sumOutputs(block)
+
+      //pay out all the wallet balance
+      val req1 = PaymentRequest((Pay2SAddress(Values.FalseLeaf), sumBalance, Map(), Seq()))
+
+      val tx1 = Await.result(wallet.generateTransaction(req1), awaitDuration).get
+      tx1.outputs.size shouldBe 1
+      tx1.outputs.head.value shouldBe sumBalance
+    }
+  }
 }
 
 class WithWalletFixture {
 
   object BlocksGenerator extends ErgoTestHelpers with ChainGenerator
+
   import BlocksGenerator._
 
   val nodeViewDir: java.io.File = createTempDir
@@ -164,7 +183,7 @@ class WithWalletFixture {
   implicit val sender: ActorRef = testProbe.ref
 
   implicit val timeout: Timeout = Timeout(5.seconds)
-  private val awaitDuration: Duration = timeout.duration + 1.second
+  val awaitDuration: Duration = timeout.duration + 1.second
 
   val wallet: ErgoWallet = dataFromCurrentView(_.vault)
   val addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
@@ -178,12 +197,16 @@ class WithWalletFixture {
   }
 
   def getConfirmedBalances: BalancesSnapshot = Await.result(wallet.confirmedBalances(), awaitDuration)
+
   def getHistory: ErgoHistory = dataFromCurrentView(_.history)
+
   def getHistoryHeight: Int = dataFromCurrentView(_.history.headersHeight)
+
   def getModifierHeight(headerId: ModifierId): Option[Int] = dataFromCurrentView(_.history.heightOf(headerId))
+
   def getCurrentState: ErgoState[_] = dataFromCurrentView(_.state)
 
-  def dataFromCurrentView[T : ClassTag](f: CurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool] => T): T = {
+  def dataFromCurrentView[T: ClassTag](f: CurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool] => T): T = {
     val request = GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, T](f)
     Await.result((nodeViewHolderRef ? request).mapTo[T], awaitDuration)
   }
@@ -207,6 +230,7 @@ class WithWalletFixture {
   }
 
   def applyNextBlock: ErgoFullBlock = applyBlock(makeNextBlock)
+
   def makeNextBlock: ErgoFullBlock = makeNextBlock(creationTxGen.sample.value)
 
   def makeNextBlock(txs: Seq[ErgoTransaction]): ErgoFullBlock = {
@@ -220,10 +244,10 @@ class WithWalletFixture {
   private def creationTxGen: Gen[Seq[ErgoTransaction]] = {
     val noProof = ProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)
     val input = Input(genesisEmissionBox.id, noProof)
-    val boxCount =  Gen.choose(1, 20).sample.getOrElse(5)
+    val boxCount = Gen.choose(1, 20).sample.getOrElse(5)
     val outputsGen = Gen.listOfN(boxCount, boxCandidateGen).map(_.toIndexedSeq)
     val txGen = outputsGen.map(outs => new ErgoTransaction(IndexedSeq(input), outs))
-    val txCount =  Gen.choose(1, 20).sample.getOrElse(5)
+    val txCount = Gen.choose(1, 20).sample.getOrElse(5)
     Gen.listOfN(txCount, txGen)
   }
 
@@ -232,6 +256,7 @@ class WithWalletFixture {
   }
 
   def sumOutputs(block: ErgoFullBlock): Long = outputs(block).map(_.value).sum
+
   def countOutputs(block: ErgoFullBlock): Int = outputs(block).size
 
   def outputs(block: ErgoFullBlock): Seq[ErgoBox] = {

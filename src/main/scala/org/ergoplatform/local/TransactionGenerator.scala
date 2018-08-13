@@ -29,8 +29,6 @@ class TransactionGenerator(viewHolder: ActorRef,
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
 
-
-  @SuppressWarnings(Array("TraversableHead"))
   override def receive: Receive = {
     case StartGeneration =>
       if (!isStarted) {

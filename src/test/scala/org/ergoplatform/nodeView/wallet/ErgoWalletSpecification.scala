@@ -21,7 +21,7 @@ import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values.{ByteArrayConstant, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate._
@@ -37,7 +37,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
   property("successfully scans an offchain transaction") {
 
     implicit val actorSystem: ActorSystem = ActorSystem()
-    val w: ErgoWallet = new ErgoWallet(null, null, settings)
+    val w: ErgoWallet = new ErgoWallet(nodeViewHolderRef = null, historyReader = null, settings)
 
     val bf0 = w.unconfirmedBalances()
 
@@ -93,7 +93,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
   property("Successfully scans an onchain transaction") {
     WithWalletFixture { fixture =>
       import fixture._
-      val block = applyNextBlock
+      val block = applyNextBlock()
       wallet.scanPersistent(block)
       blocking(Thread.sleep(countOutputs(block) * scanningInterval + 500))
       val confirmedBalance = getConfirmedBalances.balance
@@ -163,8 +163,9 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     WithWalletFixture { fixture =>
       import fixture._
 
-      val bs = ByteArrayConstant("hello world".getBytes("UTF-8"))
-      val p2s = Pay2SAddress(EQ(CalcBlake2b256(bs), bs))
+      val preimage = ByteArrayConstant("hello world".getBytes("UTF-8"))
+      val hash = Blake2b256(preimage.value)
+      val p2s = Pay2SAddress(EQ(CalcBlake2b256(preimage), hash))
 
       val initialState = getCurrentState
 
@@ -173,7 +174,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       blocking(Thread.sleep(countOutputs(block) * scanningInterval + 500))
       val confirmedBalance = getConfirmedBalances.balance
 
-      confirmedBalance should be < sumOutputs(block)
+      confirmedBalance should be < sumOutputs(block, _ => true)
 
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))
@@ -183,7 +184,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       wallet.scanPersistent(block)
       blocking(Thread.sleep(countOutputs(block) * scanningInterval + 500))
       val confirmedBalance2 = getConfirmedBalances.balance
-      confirmedBalance2 shouldBe sumOutputs(block)
+      confirmedBalance2 shouldBe sumOutputs(block, _ => true)
     }
   }
 }
@@ -301,10 +302,12 @@ class WithWalletFixture {
 
   def sumOutputs(block: ErgoFullBlock): Long = outputs(block).map(_.value).sum
 
+  def sumOutputs(block: ErgoFullBlock, filterFn: ErgoBox => Boolean): Long = outputs(block, filterFn).map(_.value).sum
+
   def countOutputs(block: ErgoFullBlock): Int = outputs(block).size
 
-  def outputs(block: ErgoFullBlock): Seq[ErgoBox] = {
-    block.transactions.flatMap(_.outputs).filter(_.proposition == pubKey)
+  def outputs(block: ErgoFullBlock, filterFn: ErgoBox => Boolean = _.proposition == pubKey): Seq[ErgoBox] = {
+    block.transactions.flatMap(_.outputs).filter(filterFn)
   }
 }
 

@@ -5,10 +5,6 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistorySpecification
-import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
-
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 

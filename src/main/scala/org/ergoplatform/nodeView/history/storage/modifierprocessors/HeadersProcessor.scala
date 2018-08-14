@@ -18,7 +18,6 @@ import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
 import scala.util.Try
 
 /**
@@ -314,6 +313,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       accumulateErrors
         .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
           fatal(s"Genesis block should have genesis parent id. $detail")
+        }
+        .validate(config.genesisId.fold(true) { _ == Algos.encode(header.id) }) {
+          fatal(s"Expected genesis block id is ${config.genesisId.getOrElse("")}," +
+            s" got genesis block with id ${Algos.encode(header.id)}")
         }
         .validate(bestHeaderIdOpt.isEmpty) {
           fatal("Trying to append genesis block to non-empty history")

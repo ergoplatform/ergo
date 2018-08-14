@@ -68,7 +68,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        expectedDigest: ADDigest,
                                        height: Height) = persistentProver.synchronized {
     Try {
-
       val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
       val totalCost = transactions.map { tx =>
         tx.statelessValidity.get

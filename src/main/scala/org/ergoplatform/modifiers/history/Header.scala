@@ -85,7 +85,7 @@ case class Header(version: Version,
   }
 
   /**
-    * Estimate, that this Header is new enough to possibly be the best header
+    * Estimate that this Header is new enough to possibly be the best header
     */
   def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
     timeProvider.time() - timestamp < timeDiff.toMillis

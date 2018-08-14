@@ -77,7 +77,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all it's sections
+    * If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     */
   private val onSemanticallySuccessfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod) =>

@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.{HistorySpecification, NoShrink}
-import scorex.core.consensus.History.{Equal, Older, Unknown, Younger}
 import scorex.crypto.hash.Digest32
 
 class NonVerifyADHistorySpecification extends HistorySpecification {

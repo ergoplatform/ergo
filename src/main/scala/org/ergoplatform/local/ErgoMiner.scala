@@ -41,8 +41,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
-  private val startTime = timeProvider.time()
-
   //shared mutable state
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None

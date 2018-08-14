@@ -1,7 +1,6 @@
 \knote{this section is to be rewritten and split into protocol and impkementation parts}
 
 \section{Blockchain synchronization}
-\dnote{This is description of updated protocol, partially implemented in https://github.com/ScorexFoundation/Scorex/pull/280}
 
 Blockchain synchronization algorithm is implemented in \term{ErgoNodeViewSynchronizer}(NVS) class and it's companion objects.
 
@@ -12,11 +11,11 @@ Ergo modifiers can be in one of the following states:
     \item{\em Unknown} - synchronization process for corresponding modifier is not started yet.
     \item{\em Requested} - modifier was requested from another peer.
     \item{\em Received} - modifier was received from another peer, but is not applied to history yet.
-    \item{\em Applied} - modifier was applied to history.
+    \item{\em Held} - modifier was applied to history.
     \item{\em Invalid} - modifier is permanently invalid.
 \end{itemize}
 
-The goal of NVS is to escort modifier step by step from \term{Unknown} state to \term{Applied},
+The goal of NVS is to escort modifier step by step from \term{Unknown} state to \term{Held},
 however in case of some errors (presumably because of some misbehaviour of another
 peer that should be penalized) it can go back to \term{Unknown} state again to retry to
 perform this process again or to \term{Invalid} state to prevent further modifier downloads.
@@ -103,11 +102,11 @@ do nothing.
 If modifier is not delivered yet, node reexpect it up to \term{maxDeliveryChecks} times, and after that
 penalize peer (if not expecting from random peer) and stop expecting after that (modifier goes to \term{Unknown} state).
 
-\subsection{From \term{Received} to \term{Applied}}
+\subsection{From \term{Received} to \term{Held}}
 
 When NVH receives new modifiersCache, it tries to apply as much modifiers from cache as possible to History
 and send this modifiers (with a \term{SyntacticallySuccessfulModifier} message) to NVS and NVS set modifier
-state to \term{Applied} (remove this key from corresponding map since we can always get modifier state from History).
+state to \term{Held} (remove this key from corresponding map since we can always get modifier state from History).
 
 When modifiersCache is overloaded, some old modifiers that are not applied yet may be removed from cache, setting
 their state to \term{Unknown} again.

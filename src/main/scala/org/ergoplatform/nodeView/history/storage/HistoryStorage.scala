@@ -8,7 +8,6 @@ import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
-import scala.concurrent.Future
 import scala.util.Failure
 
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging

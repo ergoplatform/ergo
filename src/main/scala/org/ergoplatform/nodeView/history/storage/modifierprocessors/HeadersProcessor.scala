@@ -18,7 +18,6 @@ import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
 import scala.util.Try
 
 /**

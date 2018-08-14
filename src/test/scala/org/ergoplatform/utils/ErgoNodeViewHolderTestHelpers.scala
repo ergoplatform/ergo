@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -26,7 +25,10 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
   implicit val system: ActorSystem = ActorSystem("WithIsoFix")
   implicit val executionContext: ExecutionContext = system.dispatchers.lookup("scorex.executionContext")
 
-  case class NodeViewHolderConfig(stateType: StateType, verifyTransactions: Boolean, popowBootstrap: Boolean) {
+  case class NodeViewHolderConfig(stateType: StateType,
+                                  verifyTransactions: Boolean,
+                                  popowBootstrap: Boolean,
+                                  genesisId: Option[String] = None) {
     override def toString: String = {
       s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap"
     }
@@ -43,7 +45,8 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = c.stateType,
         verifyTransactions = c.verifyTransactions,
-        PoPoWBootstrap = c.popowBootstrap
+        PoPoWBootstrap = c.popowBootstrap,
+        genesisId = c.genesisId
       ),
       chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
     )

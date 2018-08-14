@@ -3,25 +3,21 @@ package org.ergoplatform.nodeView
 import java.io.File
 
 import akka.actor.ActorRef
-import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType.Utxo
+import org.ergoplatform.nodeView.state.StateType.{Digest, Utxo}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoNodeViewHolderTestHelpers
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallySuccessfulModifier}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallyFailedModification, SyntacticallySuccessfulModifier}
 import scorex.crypto.authds.ADKey
 
-import scala.concurrent.duration.FiniteDuration
-import scala.reflect.ClassTag
 
 class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
 
@@ -369,5 +365,83 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
         t.run(c)
       }
     }
+  }
+
+  private val expectedGenesisIdOpt: Option[ModifierId] = modifierIdGen.sample
+  private val expectedGenesisIdString = expectedGenesisIdOpt.map(Algos.encode)
+
+  private val genesisIdFromConfigCheck1 = TestCase("do not apply genesis block header if " +
+    "it's not equal to genesisId from config") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val block = validFullBlock(None, us, bh)
+
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(None)
+
+    nodeViewRef ! historyHeight(nodeViewConfig)
+    expectMsg(-1)
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+
+    //sending header
+    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    expectMsgType[SyntacticallyFailedModification[Header]]
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(None)
+
+    nodeViewRef ! historyHeight(nodeViewConfig)
+    expectMsg(-1)
+  }
+
+  private val genesisIdFromConfigCheck2 = TestCase("apply genesis block header if " +
+    "it's equal to genesisId from config") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val block = validFullBlock(None, us, bh)
+
+    val nodeViewDir1: java.io.File = createTempDir
+    val nodeViewRef1: ActorRef = actorRef(
+      nodeViewConfig.copy(genesisId = Some(Algos.encode(block.header.id))),
+      Option(nodeViewDir1)
+    )
+
+    nodeViewRef1 ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(None)
+
+    nodeViewRef1 ! historyHeight(nodeViewConfig)
+    expectMsg(-1)
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+
+    nodeViewRef1 ! LocallyGeneratedModifier[Header](block.header)
+    expectMsgType[SyntacticallySuccessfulModifier[Header]]
+
+    nodeViewRef1 ! historyHeight(nodeViewConfig)
+    expectMsg(0)
+
+    nodeViewRef1 ! heightOf(block.header.id, nodeViewConfig)
+    expectMsg(Some(0))
+  }
+
+  property(genesisIdFromConfigCheck1.name) {
+    genesisIdFromConfigCheck1.run(NodeViewHolderConfig(
+      Digest,
+      false,
+      false,
+      expectedGenesisIdString
+    ))
+  }
+
+  property(genesisIdFromConfigCheck2.name) {
+    genesisIdFromConfigCheck2.run(NodeViewHolderConfig(
+      Digest,
+      false,
+      false,
+      expectedGenesisIdString
+    ))
   }
 }

@@ -22,7 +22,7 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected val timeProvider: NetworkTimeProvider
 
-  private var isHeadersChainSyncedVar: Boolean = false
+  private[history] var isHeadersChainSyncedVar: Boolean = false
 
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
@@ -81,7 +81,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (header.height >= pruningProcessor.minimalFullBlockHeight) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && isNewHeader(header)) {
+    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       isHeadersChainSyncedVar = true
@@ -101,14 +101,6 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else {
       h.sectionIds.tail.filterNot(_._2 sameElements emptyExtensionId)
     }
-  }
-
-  /**
-    * Estimate, that this block is new enough.
-    * TODO use the same function to start mining
-    */
-  private def isNewHeader(h: Header): Boolean = {
-    timeProvider.time() - h.timestamp < chainSettings.blockInterval.toMillis * 5
   }
 
 }

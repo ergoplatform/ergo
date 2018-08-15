@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers
 
-import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import io.circe.{Encoder, Json}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -33,6 +33,16 @@ case class ErgoFullBlock(header: Header,
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 
   lazy val blockSections: Seq[BlockSection] = Seq(adProofs, Some(blockTransactions), Some(extension)).flatten
+
+  override val sizeOpt: Option[Int] = None
+
+  override lazy val size = {
+    val hSize = header.size
+    val btSize = blockTransactions.size
+    val adSize = adProofs.map(_.size).getOrElse(0)
+    hSize + btSize + adSize
+  }
+
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -43,13 +53,14 @@ object ErgoFullBlock extends ApiCodecs {
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
       "extension" -> b.extension.asJson,
-      "adProofs" -> b.adProofs.asJson
+      "adProofs" -> b.adProofs.asJson,
+      "size" -> b.size.asJson
     )
 
   val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
     Json.obj(
       "id" -> b.header.id.asJson,
-      "size" -> size(b).toLong.asJson
+      "size" -> b.size.asJson
     )
 
   private def size(block: ErgoFullBlock): Int = {

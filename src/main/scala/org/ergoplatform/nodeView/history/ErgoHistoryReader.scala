@@ -112,7 +112,8 @@ trait ErgoHistoryReader
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
-          Unknown
+          //Assume it is older and far ahead from us
+          Older
         }
       case None if info.lastHeaderIds.isEmpty =>
         //Both nodes do not keep any blocks

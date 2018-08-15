@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
+import org.ergoplatform.api.{BlocksApiRoute, EmissionApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
@@ -30,8 +30,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val features: Seq[PeerFeature] = Seq()
 
-  implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
-
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
   lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
@@ -45,9 +43,10 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
+  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
+    EmissionApiRoute(emission, ergoSettings),
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),

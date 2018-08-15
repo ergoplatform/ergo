@@ -6,6 +6,8 @@ import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
 import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
+import scala.annotation.tailrec
+
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
@@ -75,7 +77,7 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     properCandidate shouldBe true
   }
 
-  ignore("cache is proposing proper candidate during forking") {
+  property("cache is proposing proper candidate during forking") {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)
 
@@ -91,12 +93,24 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
 
     chain1.foreach(fb => history = applyBlock(history, fb))
 
-    history.fullBlockHeight shouldBe history.headersHeight
+    chain2.foreach(fb => history = history.append(fb.header).get._1)
 
+    history.bestFullBlockOpt.get shouldBe chain1.last
+    history.bestHeaderOpt.get shouldBe chain2.last.header
 
-    chain2.foreach { fb =>
-      history = history.append(fb.header).get._1
+    chain2.flatMap(_.blockSections).foreach(s => modifiersCache.put(s.id, s))
+
+    @tailrec
+    def applyLoop(): Unit = {
+      modifiersCache.popCandidate(history) match {
+        case Some(mod) =>
+          history.append(mod)
+          applyLoop()
+        case None =>
+          modifiersCache.size shouldBe 0
+          history.bestFullBlockOpt.get shouldBe chain2.last
+      }
     }
-    // TODO complete test
+    applyLoop()
   }
 }

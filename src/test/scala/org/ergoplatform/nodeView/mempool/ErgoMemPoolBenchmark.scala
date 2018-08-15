@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTransactionGenerators}
+import org.ergoplatform.utils.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._

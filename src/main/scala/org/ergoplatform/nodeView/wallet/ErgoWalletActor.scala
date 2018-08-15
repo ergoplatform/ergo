@@ -164,9 +164,11 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       val targetBalance = payTo.map(_.value).sum
 
       val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+
+      /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
       payTo.map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap)
-      }
+      } */
 
       //we currently do not use off-chain boxes to create a transaction
       def filterFn(bu: UnspentBox) = bu.onchain
@@ -177,7 +179,10 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
 
         val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
-          val assets = cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
+
+          // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
+          val assets = IndexedSeq() //cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
+
           new ErgoBoxCandidate(chb, changeAddress, assets)
         }
 

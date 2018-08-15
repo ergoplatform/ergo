@@ -5,9 +5,6 @@ import java.io.File
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType.Utxo

@@ -148,7 +148,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
-    if (header.extensionRoot sameElements Algos.emptyMerkleTreeRoot) {
+    if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
       // extension is empty, generate it and insert to history
       Seq(header, Extension(header.id, Seq(), Seq()))
     } else {

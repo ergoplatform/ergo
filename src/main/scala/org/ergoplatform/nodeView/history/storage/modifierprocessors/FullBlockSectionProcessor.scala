@@ -53,7 +53,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   private def getFullBlockByBlockSection(m: BlockSection): Option[ErgoFullBlock] = {
     def getOrRead[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = m match {
-      case mod: T if m.id sameElements id => Some(mod)
+      case mod: T if m.id == id => Some(mod)
       case _ => typedModifierById[T](id)
     }
 
@@ -111,13 +111,15 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         case e: Extension =>
           // todo checks that all required mandatory fields are set
           // todo checks number of mandatory fields
-          // todo checks number of optional fields
           failFast
             .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field key is not ${Extension.MandatoryFieldKeySize}")
+              fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
             }
             .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field key is not ${Extension.OptionalFieldKeySize}")
+              fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
+            }
+            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
+              fatal(s"Extension ${m.encodedId} have too many optional fields")
             }
         case _ => failFast
       }

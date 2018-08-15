@@ -84,61 +84,64 @@ process is defined in Alg. \ref{alg:eq:valudation}
 
 \subsection{Pool resistance}
 
-This section contains several ideas how to prevent mining outsourcing:
+\dnote{there are several ideas, let's put final version we're going to implement here}
 
-\begin{itemize}
-    \item{\em use private key } - ensure that private key was involved in mining process.
-    Miner should include his public key and signature $Sig$ of all block fields to block header
-    (or other parts of the block, like extension or block transactions)
-    and all mining rewards goes to this public key.
-    Equihash should use this signature as a $seed$ and also verifier should check, that indexes of solutions do
-    not exceed $listSize$\footnote{This check is present in original Equihash algorithm in serialization process
-    and is described in a paper in ``algorithm binding'' section, but our
-current implementation lacks this check}.
-    To ensure, that mining reward goes to public key used in block signing, all anyone-can-spend outputs should
-    be collected to that public key (or may be it's better to use special `miner-can-spend` proposition
-    that ensures that this box can only be spent in the last transaction of a block).
-    Thus, for every search of Equihash solutions miner should sign a block.
-    Pools might still be possible, but they should send a new signature for every Equihash operation that might
-    be impossible for large pools. In assumption of $10^9$ Sol/s hashrate (that corresponds to current ZCash
-    hashrate) large enough mining pool should should calculate $10^9$ signatures and send 64 Gb of data per second.
+%This section contains several ideas how to prevent mining outsourcing:
+%
+%\begin{itemize}
+%    \item{\em use private key } - ensure that private key was involved in mining process.
+%    Miner should include his public key and signature $Sig$ of all block fields to block header
+%    (or other parts of the block, like extension or block transactions)
+%    and all mining rewards goes to this public key.
+%    Equihash should use this signature as a $seed$ and also verifier should check, that indexes of solutions do
+%    not exceed $listSize$\footnote{This check is present in original Equihash algorithm in serialization process
+%    and is described in a paper in ``algorithm binding'' section, but our
+%current implementation lacks this check}.
+%    To ensure, that mining reward goes to public key used in block signing, all anyone-can-spend outputs should
+%    be collected to that public key (or may be it's better to use special `miner-can-spend` proposition
+%    that ensures that this box can only be spent in the last transaction of a block).
+%    Thus, for every search of Equihash solutions miner should sign a block.
+%    Pools might still be possible, but they should send a new signature for every Equihash operation that might
+%    be impossible for large pools. In assumption of $10^9$ Sol/s hashrate (that corresponds to current ZCash
+%    hashrate) large enough mining pool should should calculate $10^9$ signatures and send 64 Gb of data per second.
+%
+%    \item{\em change search list requirements} - current Equihash implementation assumes that everyone can efficiently
+%    reconstruct the whole list miner used to find solutions. Changing this requirement might help in pool-protection.
+%    For example, if we will require that every search element should be a correct signature of a current block
+%    (instead of just numerical index), data transfer between pool and miner will be $2*2^{n / (k + 1)}~2^21$ times
+%    bigger than in the previous proposal.
+%    However, this naive change will significantly change PoW algorithm as far as the main work will be
+%    on signature calculation, rather than collision search.
+%    ASIC-resistance of this new protocol should be investigated.
+%
+%    \item{\em search list as a secret} - when search list is not deterministic,
+%    pool-protection algorithm may be built on
+%    an idea, that miner is the only person who new the whole search list.
+%    One possible solution is to to include the root hash
+%    of a hash tree into block and change reward-taking condition for a miner, that he should provide a path in
+%    a hash tree to any leaf and use this leaf as a public key to take block reward.
+%    In such a case pool should enforce the whole search list by defining root hash otherwise miner will be able to
+%    steal a reward by providing a path to his own public key in the tree.
+%
+%\item{\em inefficiency of the masked computations} --- one can also use the
+%    homomophity of elliptic curve multiplication to provide the asymmetry
+%    between puzzle solution and validation. In fact solving Generalized Birthday
+%    Problem is choosing $2^k$ linearly dependent $n$-dimensional vectors over
+%    $\mathbb{Z}/2\mathbb{Z}$ out of pseudorandom set. One can instead consider
+%    vectors with the coordinates in the elliptic curve group. Say, in 1D search for
+%    collisions for the words $x_i = sk_i - H(V||PK_i)$ with $PK_i=sk_iG$, and $G$
+%    being the group generator. The puzzle is to find such subset $J$ of indeces
+%    that $\sum_{j\in J} x_j = 0$. The solution is the list of corresponding
+%    values $PK_j$. Validator can ensure that $\sum_j PK_j =
+%    \sum_jH(V||PK_j)G$, and $sk_j$ may be used as secret keys for the
+%    spending transaction. Of course, a pool could provide the list of allowed $PK_i$,
+%    but given that point addition is much slower than number addition, it can
+%    result in search inefficiency. The hash size must be adjusted to match the
+%    group size. Another issue is potentially low length of $sk_i$. It
+%    may be possible to adjust it choosing the appropriate values of $n$ and
+%    $k$. In order to reduce number of pre-generated keys, one can allow nonce
+%    usage under the hash function. However, controlling the algorithm flow in this
+%    case is much harder (if possible).
+%
+%\end{itemize}
 
-    \item{\em change search list requirements} - current Equihash implementation assumes that everyone can efficiently
-    reconstruct the whole list miner used to find solutions. Changing this requirement might help in pool-protection.
-    For example, if we will require that every search element should be a correct signature of a current block
-    (instead of just numerical index), data transfer between pool and miner will be $2*2^{n / (k + 1)}~2^21$ times
-    bigger than in the previous proposal.
-    However, this naive change will significantly change PoW algorithm as far as the main work will be
-    on signature calculation, rather than collision search.
-    ASIC-resistance of this new protocol should be investigated.
-
-    \item{\em search list as a secret} - when search list is not deterministic,
-    pool-protection algorithm may be built on
-    an idea, that miner is the only person who new the whole search list.
-    One possible solution is to to include the root hash
-    of a hash tree into block and change reward-taking condition for a miner, that he should provide a path in
-    a hash tree to any leaf and use this leaf as a public key to take block reward.
-    In such a case pool should enforce the whole search list by defining root hash otherwise miner will be able to
-    steal a reward by providing a path to his own public key in the tree.
-    
-\item{\em inefficiency of the masked computations} --- one can also use the
-    homomophity of elliptic curve multiplication to provide the asymmetry
-    between puzzle solution and validation. In fact solving Generalized Birthday
-    Problem is choosing $2^k$ linearly dependent $n$-dimensional vectors over
-    $\mathbb{Z}/2\mathbb{Z}$ out of pseudorandom set. One can instead consider
-    vectors with the coordinates in the elliptic curve group. Say, in 1D search for
-    collisions for the words $x_i = sk_i - H(V||PK_i)$ with $PK_i=sk_iG$, and $G$
-    being the group generator. The puzzle is to find such subset $J$ of indeces
-    that $\sum_{j\in J} x_j = 0$. The solution is the list of corresponding
-    values $PK_j$. Validator can ensure that $\sum_j PK_j =
-    \sum_jH(V||PK_j)G$, and $sk_j$ may be used as secret keys for the
-    spending transaction. Of course, a pool could provide the list of allowed $PK_i$,
-    but given that point addition is much slower than number addition, it can
-    result in search inefficiency. The hash size must be adjusted to match the
-    group size. Another issue is potentially low length of $sk_i$. It
-    may be possible to adjust it choosing the appropriate values of $n$ and
-    $k$. In order to reduce number of pre-generated keys, one can allow nonce
-    usage under the hash function. However, controlling the algorithm flow in this
-    case is much harder (if possible).
-
-\end{itemize}

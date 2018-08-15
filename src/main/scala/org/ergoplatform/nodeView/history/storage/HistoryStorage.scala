@@ -10,6 +10,14 @@ import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.util.Failure
 
+/**
+  * Storage for Ergo history
+  *
+  * @param indexStore   - Additional key-value storage for indexes, required by History for efficient work.
+  *                     contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
+  * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
+  * @param config       - cache configs
+  */
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
   with AutoCloseable with ScorexEncoding {
 

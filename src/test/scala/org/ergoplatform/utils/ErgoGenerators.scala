@@ -83,7 +83,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     mandatoryElements <- Gen.nonEmptyListOf(kvGen(Extension.MandatoryFieldKeySize, 6))
     optionalElementsElements <- Gen.nonEmptyListOf(kvGen(Extension.OptionalFieldKeySize, 6))
   } yield Extension(headerId,
-    mandatoryElements.filter(e => !(e._1 sameElements ExtensionSerializer.Delimeter)),
+    mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimeter)),
     optionalElementsElements)
 
   lazy val invalidHeaderGen: Gen[Header] = for {

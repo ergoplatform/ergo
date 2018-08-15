@@ -52,6 +52,8 @@ object Extension {
 
   val OptionalFieldKeySize: Int = 32
 
+  val MaxOptionalFields: Int = 2
+
   def apply(headerId: ModifierId): Extension = Extension(headerId, Seq(), Seq())
 
   def rootHash(e: Extension): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
@@ -98,7 +100,7 @@ object ExtensionSerializer extends Serializer[Extension] {
                      keySize: Int,
                      acc: Seq[(Array[Byte], Array[Byte])]): (Seq[(Array[Byte], Array[Byte])], Int) = {
       val key = bytes.slice(pos, pos + keySize)
-      if (!(key sameElements Delimeter) && pos < totalLength) {
+      if (!java.util.Arrays.equals(key, Delimeter) && pos < totalLength) {
         val length = Shorts.fromByteArray(bytes.slice(pos + keySize, pos + keySize + 2))
         val value = bytes.slice(pos + keySize + 2, pos + keySize + 2 + length)
         parseSection(pos + keySize + 2 + length, keySize, acc :+ (key, value))

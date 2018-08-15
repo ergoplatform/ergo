@@ -81,7 +81,7 @@ case class Header(version: Version,
   /**
     * Checks, that modifier m corresponds t this header
     */
-  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean =sectionIds.exists(_._2 == m.id)
+  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 
   /**
     * Estimate that this Header is new enough to possibly be the best header

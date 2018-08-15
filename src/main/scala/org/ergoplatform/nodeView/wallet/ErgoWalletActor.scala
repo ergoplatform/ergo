@@ -9,10 +9,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.AssetUtils
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 

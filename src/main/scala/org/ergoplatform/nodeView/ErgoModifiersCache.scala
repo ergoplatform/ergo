@@ -16,7 +16,7 @@ class ErgoModifiersCache(override val maxSize: Int)
       history.applicableTry(v) match {
         case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
           log.warn(s"Modifier ${v.encodedId} is permanently invalid and will be removed from cache", e)
-          remove(k, rememberKey = true)
+          remove(k)
           false
         case m => m.isSuccess
       }

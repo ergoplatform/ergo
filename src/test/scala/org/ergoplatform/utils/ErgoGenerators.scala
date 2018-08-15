@@ -98,8 +98,20 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
-  } yield Header(version, parentId, interlinks, adRoot, stateRoot, transactionsRoot, timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty), height, extensionHash, EquihashSolution(equihashSolutions))
+  } yield Header(
+    version,
+    parentId,
+    interlinks,
+    adRoot,
+    stateRoot,
+    transactionsRoot,
+    timestamp,
+    RequiredDifficulty.encodeCompactBits(requiredDifficulty),
+    height,
+    extensionHash,
+    EquihashSolution(equihashSolutions),
+    None
+  )
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen

@@ -85,17 +85,20 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
       modifierSpecificValidation(m, header)
-        .validate(header.sectionIds.exists(_._2 sameElements m.id)) {
-          fatal(s"Modifier ${m.modifierTypeId}|${m.encodedId} does not corresponds to header ${header.encodedId}")
-        }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.modifierTypeId}|${m.encodedId}: ${header.height} < $minimalHeight")
-        }
-        .validate(!historyStorage.contains(m.id)) {
-          fatal(s"Modifier ${m.modifierTypeId}|${m.encodedId} is already in history")
+        .validate(header.isCorrespondingModifier(m)) {
+          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
         }
         .validateSemantics(isSemanticallyValid(header.id)) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.modifierTypeId}|${m.encodedId} is semantically invalid")
+          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
+        }
+        .validate(isHeadersChainSynced) {
+          error("Headers chain is not synced yet")
+        }
+        .validate(header.height >= minimalHeight) {
+          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        }
+        .validate(!historyStorage.contains(m.id)) {
+          error(s"Modifier ${m.encodedId} is already in history")
         }
         .result
     }

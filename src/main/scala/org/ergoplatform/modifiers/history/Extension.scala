@@ -25,7 +25,8 @@ import scala.util.Try
   */
 case class Extension(headerId: ModifierId,
                      mandatoryFields: Seq[(Array[Byte], Array[Byte])],
-                     optionalFields: Seq[(Array[Byte], Array[Byte])]) extends BlockSection {
+                     optionalFields: Seq[(Array[Byte], Array[Byte])],
+                     override val sizeOpt: Option[Int] = None) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(mandatoryFields, optionalFields)
@@ -109,6 +110,6 @@ object ExtensionSerializer extends Serializer[Extension] {
     val headerId = bytesToId(bytes.take(32))
     val (mandatory, newPos) = parseSection(32, 4, Seq())
     val (optional, _) = parseSection(newPos, 32, Seq())
-    Extension(headerId, mandatory, optional)
+    Extension(headerId, mandatory, optional, Some(bytes.length))
   }
 }

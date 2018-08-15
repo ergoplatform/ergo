@@ -17,6 +17,12 @@ import scala.util.{Failure, Try}
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 
+  /**
+    * Process block section.
+    * If modifier is ADProofs in UTXO mode - just put to storage, we should already process this full block.
+    * Otherwise - try to construct full block with this block section, if possible - process this new full block,
+    * if not - just put new block section to storage.
+    */
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     m match {
       case _: ADProofs if !requireProofs =>
@@ -121,7 +127,9 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
             .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
               fatal(s"Extension ${m.encodedId} have too many optional fields")
             }
-        case _ => failFast
+        case _ =>
+          // todo some validations of block transactions, including size limit, should go there.
+          failFast
       }
     }
   }

@@ -15,33 +15,32 @@ case class ErgoFullBlock(header: Header,
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ adProofs.toSeq
+  override type M = ErgoFullBlock
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override val parentId: ModifierId = header.parentId
-
-  override def serializedId: Array[Byte] = header.serializedId
+  override val serializedId: Array[Byte] = header.serializedId
 
   override lazy val id: ModifierId = header.id
 
-  override type M = ErgoFullBlock
-
-  override lazy val serializer: Serializer[ErgoFullBlock] =
-    throw new Error("Should never try to serialize ErgoFullBlock")
-
-  override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+  override val parentId: ModifierId = header.parentId
 
   lazy val blockSections: Seq[BlockSection] = Seq(adProofs, Some(blockTransactions), Some(extension)).flatten
 
+  lazy val toSeq: Seq[ErgoPersistentModifier] = header +: blockSections
+
+  override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
+
   override val sizeOpt: Option[Int] = None
 
-  override lazy val size = {
+  override lazy val size: Int = {
     val hSize = header.size
     val btSize = blockTransactions.size
     val adSize = adProofs.map(_.size).getOrElse(0)
     hSize + btSize + adSize
   }
+
+  override lazy val serializer: Serializer[ErgoFullBlock] = throw new Error("Never try to serialize ErgoFullBlock")
 
 }
 

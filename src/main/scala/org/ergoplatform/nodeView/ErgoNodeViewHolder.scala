@@ -5,16 +5,14 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
-import scorex.core.serialization.Serializer
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 
@@ -36,13 +34,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override type VL = ErgoWallet
   override type MP = ErgoMemPool
 
-  override protected lazy val modifiersCache = new ErgoModifiersCache(scorexSettings.network.maxModifiersCacheSize)
-
-  override lazy val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-    Map(Header.modifierTypeId -> HeaderSerializer,
-      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
-      ADProofs.modifierTypeId -> ADProofSerializer,
-      Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+  override protected lazy val modifiersCache =
+    new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -110,7 +103,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (ErgoState.genesisStateVersion, None, _)  =>
+      case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
         stateIn
       case (stateId, Some(block), _) if stateId == block.id =>

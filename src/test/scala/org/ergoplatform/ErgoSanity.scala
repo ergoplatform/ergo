@@ -1,26 +1,33 @@
 package org.ergoplatform
 
+import akka.actor.ActorRef
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
-import scorex.core.bytesToId
+import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.state.MinimalState
+import scorex.core.utils.NetworkTimeProvider
+import scorex.core.{PersistentNodeViewModifier, bytesToId}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
 import scorex.testkit.properties._
-import scorex.testkit.properties.mempool.{MempoolFilterPerformanceTest, MempoolRemovalTest, MempoolTransactionsTest}
+import scorex.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
 import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
   with StateApplicationTest[PM, ST]
@@ -81,6 +88,37 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
           case SynInvalid => makeSyntacticallyInvalid(mod)
         }
       }
+
+  class SyncronizerMock(networkControllerRef: ActorRef,
+                        viewHolderRef: ActorRef,
+                        syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+                        networkSettings: NetworkSettings,
+                        timeProvider: NetworkTimeProvider,
+                        history: ErgoHistory,
+                        pool: ErgoMemPool)
+                       (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
+    networkControllerRef,
+    viewHolderRef,
+    syncInfoSpec,
+    networkSettings,
+    timeProvider)(ec) {
+
+    override def preStart(): Unit = {
+      this.historyReaderOpt = Some(history)
+      this.mempoolReaderOpt = Some(pool)
+      super.preStart()
+    }
+
+    override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+      mod match {
+        case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
+          fb.toSeq.foreach(s => broadcastModifierInv(s))
+        case h: Header if h.isNew(timeProvider, 1.hour) =>
+          broadcastModifierInv(h)
+        case _ =>
+      }
+    }
+  }
 
 }
 

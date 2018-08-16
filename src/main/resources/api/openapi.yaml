@@ -66,12 +66,7 @@ components:
           items:
             $ref: '#/components/schemas/Asset'
         additionalRegisters:
-          description: Additional registers
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            R4: '7c'
+          $ref: '#/components/schemas/Registers'
 
     ErgoTransaction:
       type: object
@@ -96,6 +91,30 @@ components:
           description: Size in bytes
           type: integer
           format: int32
+
+    PaymentRequest:
+      description: request to generate payment transaction to a given address
+      type: object
+      required:
+        - address
+        - value
+        - assets
+        - registers
+      properties:
+        address:
+          description: Encoded Ergo Address
+          type: string
+        value:
+          description: Payment amount
+          type: integer
+          format: int64
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        registers:
+          $ref: '#/components/schemas/Registers'
 
     FullBlock:
       description: Block with header and transactions
@@ -415,6 +434,14 @@ components:
           type: integer
           format: int64
           example: 1000
+
+    Registers:
+      description: Ergo box registers
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/SValue'
+      example:
+        R4: '7c'
 
     SValue:
       description: Base-16 envoded serialized Sigma-state value
@@ -1074,7 +1101,7 @@ paths:
   /wallet/balances/unconfirmed:
     get:
       summary: Get amount of unconfirmed Ergo tokens and assets
-      operationId: walletBalances
+      operationId: walletBalancesUnconfirmed
       tags:
         - wallet
       responses:
@@ -1084,6 +1111,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction:
+    post:
+      summary: Send a transaction
+      operationId: walletTransactionSend
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErgoTransaction'
+      responses:
+        '200':
+          description: JSON with ID of the new transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                example: invalid.transaction.signature, invalid.transaction.timestamp, invalid.transaction.value, invalid.box.nonce, invalid.json
+
+
+  /wallet/transaction/generate:
+    post:
+      summary: Generate a transaction from payment
+      operationId: walletTransactionGenerate
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '403':
+          description: Insufficient funds
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/payment:
+    post:
+      summary: Generate and send a transaction from payment
+      operationId: walletTransactionGenerateAndSend
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '403':
+          description: Insufficient funds
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
         default:
           description: Error
           content:

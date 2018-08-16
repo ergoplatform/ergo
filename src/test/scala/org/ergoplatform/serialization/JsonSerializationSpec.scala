@@ -10,8 +10,9 @@ import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.scalatest.Inspectors
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}
 
@@ -61,6 +62,26 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       validateSpentOnchainBox(b.asJson.hcursor, b)
       import ShowDetails.implicitValue
       validateSpentOnchainBox(b.asJson.hcursor, b)
+    }
+  }
+
+  property("Payment Request should be serialized to json") {
+    val ergoSettings = ErgoSettings.read(None)
+    implicit val requestEncoder = new PaymentRequestEncoder(ergoSettings)
+    implicit val requestDecoder = new PaymentRequestDecoder(ergoSettings)
+    forAll(paymentRequestGen) { request =>
+      val json = request.asJson
+      val parsingResult = json.as[PaymentRequest]
+      parsingResult.isRight shouldBe true
+      val restored = parsingResult.right.value
+      restored.address shouldEqual request.address
+      restored.value shouldEqual request.value
+      restored.registers should contain  theSameElementsAs(request.registers)
+      Inspectors.forAll(restored.assets.zip(request.assets)) {
+        case ((restoredToken, restoredValue),(requestToken, requestValue)) =>
+          restoredToken shouldEqual requestToken
+          restoredValue shouldEqual requestValue
+      }
     }
   }
 
@@ -121,7 +142,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   private def validateRegisters(c: ACursor, registers: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]]) = {
-    import ErgoTransaction.identifierDecoder
     val Right(decodedRegs) = c.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
     decodedRegs should contain theSameElementsAs registers
   }

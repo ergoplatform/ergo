@@ -3,6 +3,7 @@ package org.ergoplatform.utils
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.scalacheck.Gen
+import sigmastate.Values
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
@@ -51,6 +52,14 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
     } yield SpentOnchainBox(tx, outIndex, height, spendingTx, spendingHeight, ergoBox, certainty)
+  }
+
+  def paymentRequestGen: Gen[PaymentRequest] = {
+    for {
+      value <- Gen.choose(1L, 100000L)
+      assets <- additionalTokensGen
+      registers <- additionalRegistersGen
+    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers)
   }
 
   private def outIndexGen(tx: ErgoTransaction) =

@@ -4,6 +4,8 @@ import java.nio.ByteBuffer
 import java.util
 
 import com.google.common.primitives.Ints
+import io.circe._
+import io.circe.syntax._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
@@ -14,7 +16,7 @@ import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
 import sigmastate.utxo.{DeserializeContext, Slice}
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -202,6 +204,24 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
         case _ => throw new Exception("Unsupported address type: " + addressType)
       }
     }
+  }
+
+
+  implicit val encoder: Encoder[ErgoAddress] = { address =>
+    toString(address).asJson
+  }
+
+  implicit val decoder: Decoder[ErgoAddress] = { cursor =>
+    def decodeString(addrStr: String) = {
+      fromString(addrStr) match {
+        case Success(address) => Right(address)
+        case Failure(exception) => Left(DecodingFailure(exception.toString, cursor.history))
+      }
+    }
+    for {
+      addressStr <- cursor.as[String]
+      address <- decodeString(addressStr)
+    } yield address
   }
 }
 

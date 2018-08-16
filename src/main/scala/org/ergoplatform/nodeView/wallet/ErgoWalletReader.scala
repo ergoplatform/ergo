@@ -10,13 +10,14 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.concurrent.Future
+import scala.util.Try
 
 
 
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
 
-  private implicit val timeout = Timeout(5, TimeUnit.SECONDS)
+  private implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
   def balances(confirmed: Boolean): Future[BalancesSnapshot] = {
     (actor ? ErgoWalletActor.ReadBalances(confirmed)).mapTo[BalancesSnapshot]
@@ -30,8 +31,8 @@ trait ErgoWalletReader extends VaultReader {
     (actor ? ErgoWalletActor.ReadWalletAddresses).mapTo[Seq[ErgoAddress]]
   }
 
-  def generateTransaction(paymentRequests: Seq[PaymentRequest]): Future[Option[ErgoTransaction]] = {
+  def generateTransaction(paymentRequests: Seq[PaymentRequest]): Future[Try[ErgoTransaction]] = {
     val boxCandidates = paymentRequests.map(_.toBoxCandidate)
-    (actor ? GenerateTransaction(boxCandidates)).mapTo[Option[ErgoTransaction]]
+    (actor ? GenerateTransaction(boxCandidates)).mapTo[Try[ErgoTransaction]]
   }
 }

@@ -9,16 +9,14 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.AssetUtils
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
 import scala.collection.Map
 import scala.collection.mutable
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Random, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
@@ -159,41 +157,49 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(payTo) =>
-      require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
+      val txTry: Try[ErgoTransaction] = Try {
+        require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
+        require(payTo.forall(_.value > 0), "Non-positive Ergo value")
+        require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
-      val targetBalance = payTo.map(_.value).sum
 
-      val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+        val targetBalance = payTo.map(_.value).sum
 
-      /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
+        val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+
+        /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
       payTo.map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap)
       } */
 
-      //we currently do not use off-chain boxes to create a transaction
-      def filterFn(bu: UnspentBox) = bu.onchain
+        //we currently do not use off-chain boxes to create a transaction
+        def filterFn(bu: UnspentBox) = bu.onchain
 
-      val txOpt = boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
-        val inputs = r.boxes.toIndexedSeq
+        boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
+          val inputs = r.boxes.toIndexedSeq
 
-        val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
+          val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
 
-        val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
+          val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
 
-          // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-          val assets = IndexedSeq() //cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
+            // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
+            val assets = IndexedSeq() //cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
 
-          new ErgoBoxCandidate(chb, changeAddress, assets)
+            new ErgoBoxCandidate(chb, changeAddress, assets)
+          }
+
+          val unsignedTx = new UnsignedErgoTransaction(
+            inputs.map(_.id).map(id => new UnsignedInput(id)),
+            (payTo ++ changeBoxCandidates).toIndexedSeq)
+
+          prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
+        } match {
+          case Some(tx) => tx
+          case None     => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
         }
-
-        val unsignedTx = new UnsignedErgoTransaction(
-          inputs.map(_.id).map(id => new UnsignedInput(id)),
-          (payTo ++ changeBoxCandidates).toIndexedSeq)
-
-        prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
       }
 
-      sender() ! txOpt
+      sender() ! txTry
   }
 }
 

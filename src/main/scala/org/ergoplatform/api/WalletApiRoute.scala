@@ -1,18 +1,19 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.{Directives, Route}
+import akka.pattern.ask
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, PaymentRequest, PaymentRequestDecoder}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.api.http.{ApiError, ApiResponse}
+import scorex.core.api.http.ApiError.BadRequest
+import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
-import akka.pattern.ask
-import org.ergoplatform.settings.ErgoSettings
+import scala.util.{Failure, Success}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -40,16 +41,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def generateTransactionRoute: Route = (path("transaction" / "generate") & post
     & entity(as[Seq[PaymentRequest]])) { payments =>
     Directives.onSuccess(getWallet.flatMap(_.generateTransaction(payments))) {
-      case None => InsufficientFunds(s"Insufficient funds for payments $payments")
-      case Some(tx) => ApiResponse(tx)
+      case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(tx) => ApiResponse(tx)
     }
   }
 
   def generateAndSendTransactionRoute: Route = (path("transaction" / "payment") & post
     & entity(as[Seq[PaymentRequest]])) { payments =>
     Directives.onSuccess(getWallet.flatMap(_.generateTransaction(payments))) {
-      case None => InsufficientFunds(s"Insufficient funds for payments $payments")
-      case Some(tx) =>
+      case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
         ApiResponse(tx.id)
     }
@@ -64,5 +65,3 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
 }
-
-object InsufficientFunds extends ApiError(StatusCodes.Forbidden, "not.enough.funds")

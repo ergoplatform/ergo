@@ -1167,8 +1167,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErgoTransaction'
-        '403':
-          description: Insufficient funds
+        '400':
+          description: Bad payment request
           content:
             text/plain; charset=UTF-8:
               schema:
@@ -1201,8 +1201,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionId'
-        '403':
-          description: Insufficient funds
+        '400':
+          description: Bad payment request
           content:
             text/plain; charset=UTF-8:
               schema:

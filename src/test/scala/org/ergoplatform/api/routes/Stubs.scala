@@ -20,14 +20,15 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.network.peer.PeerInfo
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.duration._
+import scala.util.Success
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
@@ -120,7 +121,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case GenerateTransaction(payTo) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), payTo.toIndexedSeq)
-        sender() ! Some(tx)
+        sender() ! Success(tx)
     }
   }
 

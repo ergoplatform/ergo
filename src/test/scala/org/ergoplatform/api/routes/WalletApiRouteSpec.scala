@@ -46,7 +46,6 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].outputs.head.value shouldEqual amount
     }
-    log.info(Seq(request).asJson.toString)
   }
 
   it should "generate & send transaction" in {
@@ -55,7 +54,6 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }
-    log.info(Seq(request).asJson.toString)
   }
 
 }

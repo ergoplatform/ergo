@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.util.concurrent.TimeUnit
+
 import akka.pattern.ask
 import akka.actor.ActorRef
 import akka.util.Timeout
@@ -11,7 +12,9 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.core.transaction.wallet.VaultReader
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
+
 import scala.concurrent.Future
+import scala.util.Try
 
 
 
@@ -32,7 +35,7 @@ trait ErgoWalletReader extends VaultReader {
     (actor ? ErgoWalletActor.ReadWalletAddresses).mapTo[Seq[ErgoAddress]]
   }
 
-  def generateTransaction(paymentRequest: PaymentRequest): Future[Option[ErgoTransaction]] = {
+  def generateTransaction(paymentRequest: PaymentRequest): Future[Try[ErgoTransaction]] = {
     val boxCandidates = paymentRequest.to.map { t =>
       val script = t._1.script
       val value = t._2
@@ -43,6 +46,6 @@ trait ErgoWalletReader extends VaultReader {
       new ErgoBoxCandidate(value, script, assets, regs)
     }
 
-    (actor ? GenerateTransaction(boxCandidates)).mapTo[Option[ErgoTransaction]]
+    (actor ? GenerateTransaction(boxCandidates)).mapTo[Try[ErgoTransaction]]
   }
 }

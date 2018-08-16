@@ -178,13 +178,6 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield Input(boxId, proof)
   }
 
-
-  implicit val identifierDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
-    ErgoBox.registerByName.get(key).collect {
-      case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
-    }
-  }
-
   implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
     for {
       tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]

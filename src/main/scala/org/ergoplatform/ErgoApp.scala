@@ -51,7 +51,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
-    WalletApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi)
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings)
   )
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

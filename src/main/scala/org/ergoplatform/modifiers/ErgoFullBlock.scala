@@ -19,11 +19,11 @@ case class ErgoFullBlock(header: Header,
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
 
-  override val serializedId: Array[Byte] = header.serializedId
+  override def serializedId: Array[Byte] = header.serializedId
 
   override lazy val id: ModifierId = header.id
 
-  override val parentId: ModifierId = header.parentId
+  override def parentId: ModifierId = header.parentId
 
   lazy val blockSections: Seq[BlockSection] = Seq(adProofs, Some(blockTransactions), Some(extension)).flatten
 
@@ -62,9 +62,4 @@ object ErgoFullBlock extends ApiCodecs {
       "size" -> b.size.asJson
     )
 
-  private def size(block: ErgoFullBlock): Int = {
-    block.header.bytes.length +
-      block.blockTransactions.bytes.length +
-      block.adProofs.map(_.bytes.length).getOrElse(0)
-  }
 }

@@ -19,7 +19,7 @@ import scala.util.Try
   *
   * @param headerId        - id of corresponding header
   * @param mandatoryFields - fields, that are known to all node in the network and may be changed
-  *                        via soft/hard forks only. This fields have 4 bytes key and at most 64 bytes value.
+  *                        via soft/hard forks only. These fields have 4 bytes key and at most 64 bytes value.
   * @param optionalFields  - random data miner may add to a block. This section contains at most 8
   *                        elements with 32 byte key size and at most 1024 bytes value size.
   */
@@ -70,14 +70,14 @@ object Extension {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  implicit val jsonEncoder: Encoder[Extension] = (e: Extension) => {
+  implicit val jsonEncoder: Encoder[Extension] = (e: Extension) =>
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
       "digest" -> Algos.encode(e.digest).asJson,
       "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
       "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
     ).asJson
-  }
+
 
 }
 
@@ -103,9 +103,9 @@ object ExtensionSerializer extends Serializer[Extension] {
       if (!java.util.Arrays.equals(key, Delimeter) && pos < totalLength) {
         val length = Shorts.fromByteArray(bytes.slice(pos + keySize, pos + keySize + 2))
         val value = bytes.slice(pos + keySize + 2, pos + keySize + 2 + length)
-        parseSection(pos + keySize + 2 + length, keySize, acc :+ (key, value))
+        parseSection(pos + keySize + 2 + length, keySize, (key, value) +: acc)
       } else {
-        (acc, pos + keySize)
+        (acc.reverse, pos + keySize)
       }
     }
 

@@ -169,7 +169,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
         /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
       payTo.map(_.additionalTokens).foreach { boxTokens =>
-        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => ByteArrayWrapper(t._1) -> t._2).toMap)
+        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
       } */
 
         //we currently do not use off-chain boxes to create a transaction
@@ -183,7 +183,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
           val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
 
             // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-            val assets = IndexedSeq() //cha.map(t => Digest32 @@ t._1.data -> t._2).toIndexedSeq
+            val assets = IndexedSeq() //cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
 
             new ErgoBoxCandidate(chb, changeAddress, assets)
           }

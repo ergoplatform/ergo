@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.AssetUtils.mergeAssets
+import scorex.core.ModifierId
+
 import scala.collection.mutable
 
 /**
@@ -14,11 +15,11 @@ object DefaultBoxSelector extends BoxSelector {
   override def select(inputBoxes: Iterator[UnspentBox],
                       filterFn: UnspentBox => Boolean,
                       targetBalance: Long,
-                      targetAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult] = {
+                      targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
 
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L
-    val currentAssets = mutable.Map[ByteArrayWrapper, Long]()
+    val currentAssets = mutable.Map[ModifierId, Long]()
 
     def successMet = currentBalance >= targetBalance && targetAssets.forall { case (id, targetAmt) =>
       currentAssets.getOrElse(id, 0L) >= targetAmt
@@ -80,7 +81,7 @@ object DefaultBoxSelector extends BoxSelector {
 
           modifiedBox +: changeBoxesNoBalanceAdjusted.tail
         } else if (changeBalance > 0) {
-          Seq(changeBalance -> Map.empty[ByteArrayWrapper, Long])
+          Seq(changeBalance -> Map.empty[ModifierId, Long])
         } else {
           Seq.empty
         }

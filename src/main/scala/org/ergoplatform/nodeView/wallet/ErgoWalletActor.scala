@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Actor
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
@@ -9,6 +8,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.{ModifierId, bytesToId}
 import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
@@ -20,7 +20,7 @@ import scala.util.{Failure, Random, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
-case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ByteArrayWrapper, Long])
+case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
 
 
 class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
@@ -74,7 +74,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.foreach { inp =>
-      val boxId = ByteArrayWrapper(inp.boxId)
+      val boxId = bytesToId(inp.boxId)
       if (registry.registryContains(boxId)) {
         registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
       }
@@ -165,7 +165,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
         val targetBalance = payTo.map(_.value).sum
 
-        val targetAssets = mutable.Map[ByteArrayWrapper, Long]()
+        val targetAssets = mutable.Map[ModifierId, Long]()
 
         /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
       payTo.map(_.additionalTokens).foreach { boxTokens =>

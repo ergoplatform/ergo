@@ -98,7 +98,7 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
                              certainty: BoxCertainty) extends UnspentBox with OnchainBox {
 
   override def register(registry: Registry): Unit = {
-    super.register(registry: Registry)
+    super.register(registry)
     log.info("New onchain box arrived: " + this)
     registry.putToConfirmedIndex(creationHeight, boxId)
     if (certain) registry.increaseBalances(this)

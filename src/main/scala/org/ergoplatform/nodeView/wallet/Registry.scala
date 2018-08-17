@@ -5,6 +5,9 @@ import scorex.core.{ModifierId, bytesToId}
 
 import scala.collection.mutable
 
+
+//todo: declare this class thread-unsafe?
+
 class Registry {
 
   private val registry = mutable.Map[ModifierId, TrackedBox]()
@@ -23,8 +26,8 @@ class Registry {
   }
 
   def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {
-    if(!trackedBox.certain) uncertainBoxes += trackedBox.boxId
-    if(trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
+    if (!trackedBox.certain) uncertainBoxes += trackedBox.boxId
+    if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
@@ -75,7 +78,7 @@ class Registry {
         val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
         _confirmedAssetBalances.put(wid, updBalance)
       }
-    } else {  //offchain box case
+    } else { //offchain box case
       _unconfirmedBalance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = bytesToId(id)
@@ -103,7 +106,7 @@ class Registry {
           _confirmedAssetBalances.put(wid, updBalance)
         }
       }
-    } else {  //offchain box case
+    } else { //offchain box case
       _unconfirmedBalance -= tokenDelta
       assetDeltas.foreach { case (id, amount) =>
         val wid = bytesToId(id)

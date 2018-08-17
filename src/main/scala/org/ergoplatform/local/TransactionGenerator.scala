@@ -16,7 +16,7 @@ import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
 import scala.concurrent.duration._
-import scala.util.Random
+import scala.util.{Random, Try}
 
 
 class TransactionGenerator(viewHolder: ActorRef,
@@ -77,8 +77,8 @@ class TransactionGenerator(viewHolder: ActorRef,
     case FailedTransaction(tx, err) =>
       log.warn(s"Error $err for transaction $tx")
 
-    case txOpt: Option[ErgoTransaction]@unchecked =>
-      txOpt.foreach { tx =>
+    case txTry: Try[ErgoTransaction]@unchecked =>
+      txTry.foreach { tx =>
         log.info("Locally generated tx: " + tx)
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView
 import java.io.File
 
 import akka.actor.ActorRef
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
@@ -395,12 +396,25 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)
     }
+    val wrongTxs3 = {
+      val txs = block.blockTransactions.transactions
+      val tx = txs.head
+      val wrongInputs = tx.inputs.map { input =>
+        input.copy(boxId = ADKey @@ input.boxId.reverse)
+      }
+      val wrongTxs = tx.copy(inputs = wrongInputs) +: txs.tail
+      block.blockTransactions.copy(txs = wrongTxs)
+    }
+
 
 
     nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs1)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 
     nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs2)
+    expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
+
+    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs3)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 
     nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](block.blockTransactions)

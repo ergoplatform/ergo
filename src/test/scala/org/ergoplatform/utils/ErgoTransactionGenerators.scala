@@ -36,36 +36,50 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     bytes <- Gen.listOfN(length, arbByte.arbitrary)
   } yield ByteArrayConstant(bytes.toArray)
 
-  def additionalRegistersGen(cnt: Byte): Seq[Gen[(NonMandatoryRegisterId, EvaluatedValue[SType])]] = {
-    (0 until cnt)
-      .map(_ + ErgoBox.startingNonMandatoryIndex)
-      .map(rI => ErgoBox.registerByIndex(rI.toByte).asInstanceOf[NonMandatoryRegisterId])
-      .map { r =>
-        for {
-          arr <- byteArrayConstGen
-          v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
-        } yield r -> v.asInstanceOf[EvaluatedValue[SType]]
-      }
+  def additionalRegistersGen: Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
+    for {
+      cnt <- Gen.choose(0: Byte, ErgoBox.nonMandatoryRegistersCount)
+      registers <- additionalRegistersGen(cnt)
+    } yield registers
   }
 
-  def additionalTokensGen(cnt: Byte): Seq[Gen[(TokenId, Long)]] =
-    (0 until cnt).map { _ =>
-      for {
-        id <- Digest32 @@ boxIdGen
-        amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-      } yield id -> amt
+  def additionalRegistersGen(cnt: Byte): Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
+    Gen.listOfN(cnt, evaluatedValueGen) map { values =>
+      ErgoBox.nonMandatoryRegisters.take(cnt).zip(values).toMap
     }
+  }
+
+  def evaluatedValueGen: Gen[EvaluatedValue[SType]] = {
+    for {
+      arr <- byteArrayConstGen
+      v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
+    } yield v.asInstanceOf[EvaluatedValue[SType]]
+  }
+
+  def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = {
+   for {
+     cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+     assets <- additionalTokensGen(cnt)
+   } yield assets
+  }
+
+  def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
+
+  def assetGen: Gen[(TokenId, Long)] = {
+    for {
+      id <- boxIdGen
+      amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
+    } yield Digest32 @@ id -> amt
+  }
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
-    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
-  } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+  } yield ErgoBox(value, prop, tokens, ar, transactionId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
@@ -73,18 +87,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
-  } yield ErgoBox(value, prop, tokens, ar.asScala.toMap, transactionId, boxId)
+    ar <- additionalRegistersGen
+  } yield ErgoBox(value, prop, tokens, ar, transactionId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
-    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
-    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
-  } yield new ErgoBoxCandidate(value, prop, tokens.asScala, ar.asScala.toMap)
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+  } yield new ErgoBoxCandidate(value, prop, tokens, ar)
 
   lazy val inputGen: Gen[Input] = for {
     boxId <- boxIdGen
@@ -210,3 +221,5 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, Some(proof))
 }
+
+object ErgoTransactionGenerators extends ErgoTransactionGenerators

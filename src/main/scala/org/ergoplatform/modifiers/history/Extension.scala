@@ -18,7 +18,7 @@ import scala.util.Try
   * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
   *
   * @param headerId        - id of corresponding header
-  * @param mandatoryFields - fields, that are known to all node in the network and may be changed
+  * @param mandatoryFields - fields that are known to all nodes in the network and may be changed
   *                        via soft/hard forks only. These fields have 4 bytes key and at most 64 bytes value.
   * @param optionalFields  - random data miner may add to a block. This section contains at most 8
   *                        elements with 32 byte key size and at most 1024 bytes value size.

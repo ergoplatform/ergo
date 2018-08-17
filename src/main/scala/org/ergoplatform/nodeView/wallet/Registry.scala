@@ -11,26 +11,33 @@ class Registry {
 
   private val confirmedIndex = mutable.TreeMap[Height, Seq[ModifierId]]()
 
-  //todo: build indexes instead of iteration
-  def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.collect {
-    case ub: UnspentBox => ub
-  }
+  private val unspentBoxes = mutable.TreeSet[ModifierId]()
 
-  def uncertainBoxes: Iterator[TrackedBox] = registry.valuesIterator.filterNot(_.certain)
+  private val uncertainBoxes = mutable.TreeSet[ModifierId]()
+
+  def unspentBoxesIterator = unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
 
   //todo: extract a random element, not head
-  def nextUncertain(): Option[TrackedBox] = uncertainBoxes.toSeq.headOption
-
-  def registryContains(boxId: ModifierId): Boolean = synchronized {
-    registry.contains(boxId)
+  def nextUncertain(): Option[TrackedBox] = synchronized {
+    uncertainBoxes.headOption.flatMap(id => registry.get(id))
   }
 
   def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {
+    if(!trackedBox.certain) uncertainBoxes += trackedBox.boxId
+    if(trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
   def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = synchronized {
-    registry.remove(boxId)
+    registry.remove(boxId).map { trackedBox: TrackedBox =>
+      if (!trackedBox.certain) uncertainBoxes -= trackedBox.boxId
+      if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes -= trackedBox.boxId
+      trackedBox
+    }
+  }
+
+  def registryContains(boxId: ModifierId): Boolean = synchronized {
+    registry.contains(boxId)
   }
 
   def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = synchronized {

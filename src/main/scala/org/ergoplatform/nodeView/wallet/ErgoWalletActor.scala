@@ -112,7 +112,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case Resolve =>
       resolveUncertainty()
       //todo: use non-default executor?
-      if (registry.uncertainBoxes.nonEmpty) {
+      //todo: call something smarter than nextUncertain
+      if (registry.nextUncertain().nonEmpty) {
         context.system.scheduler.scheduleOnce(scanningInterval)(self ! Resolve)
       }
 
@@ -175,7 +176,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         //we currently do not use off-chain boxes to create a transaction
         def filterFn(bu: UnspentBox) = bu.onchain
 
-        boxSelector.select(registry.unspentBoxes, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
+        boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
           val inputs = r.boxes.toIndexedSeq
 
           val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))

@@ -15,7 +15,7 @@ import scorex.core.settings.RESTApiSettings
 import scala.concurrent.Future
 
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
-                               (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                               (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val route: Route = (pathPrefix("transactions") & withCors) {
     getUnconfirmedTransactionsR ~ sendTransactionR
@@ -30,7 +30,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
     // todo validation?
     nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-    ApiResponse.OK
+    ApiResponse(tx.id)
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_ , limit) =>

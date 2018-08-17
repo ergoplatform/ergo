@@ -6,9 +6,8 @@ import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistorySpecification
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
+import scorex.core.consensus.ModifierSemanticValidity._
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -19,7 +18,10 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
   private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    minFullHeight.foreach(h => inHistory.pruningProcessor.minimalFullBlockHeightVar = h)
+    minFullHeight.foreach{h =>
+      inHistory.pruningProcessor.minimalFullBlockHeightVar = h
+      inHistory.isHeadersChainSyncedVar = true
+    }
 
     if (height > 0) {
       val chain = genChain(height, inHistory)

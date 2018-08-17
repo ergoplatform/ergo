@@ -329,17 +329,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
     private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       failFast
-        .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
-          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
-        }
         .validate(header.timestamp > parent.timestamp) {
           fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
         }
         .validate(header.height == parent.height + 1) {
           fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height}")
-        }
-        .validateNot(historyStorage.contains(header.id)) {
-          fatal("Header is already in history")
         }
         .validate(realDifficulty(header) >= header.requiredDifficulty) {
           fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
@@ -347,7 +341,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
-        .validate(heightOf(header.parentId).exists(h => headersHeight - h < config.keepVersions)) {
+        .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
         .validate(powScheme.verify(header)) {
@@ -355,6 +349,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         }
         .validateSemantics(isSemanticallyValid(header.parentId)) {
           fatal("Parent header is marked as semantically invalid")
+        }
+        .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
+          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
+        }
+        .validateNot(historyStorage.contains(header.id)) {
+          error("Header is already in history")
         }
         .result
     }

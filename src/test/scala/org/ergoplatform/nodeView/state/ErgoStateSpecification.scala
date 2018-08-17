@@ -1,12 +1,37 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.core.bytesToVersion
 
 import scala.util.Random
 
 class ErgoStateSpecification extends ErgoPropertyTest {
+
+  property("applyModifier() - double spending") {
+    forAll(boxesHolderGen) { bh =>
+      var us = createUtxoState(bh)
+      var ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash)
+
+      val validBlock = validFullBlock(None, us, bh)
+      val dsTxs = validBlock.transactions ++ validBlock.transactions
+      val changes = ErgoState.stateChanges(dsTxs)
+      val toRemove = changes.toRemove.map(_.boxId)
+      toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
+
+      val dsRoot = BlockTransactions.transactionsRoot(dsTxs)
+      val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
+      val doubleSpendBlock = ErgoFullBlock(dsHeader, BlockTransactions(dsHeader.id, dsTxs), validBlock.aDProofs)
+
+      us.applyModifier(doubleSpendBlock) shouldBe 'failure
+      us.applyModifier(validBlock) shouldBe 'success
+
+      ds.applyModifier(doubleSpendBlock) shouldBe 'failure
+      ds.applyModifier(validBlock) shouldBe 'success
+    }
+  }
 
   property("stateContext should be the same for Utxo and Digest states") {
     var (us, bh) = createUtxoState()

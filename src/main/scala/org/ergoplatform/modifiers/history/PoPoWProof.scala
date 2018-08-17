@@ -48,28 +48,28 @@ class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with Modifier
     //todo: why initial difficulty here?
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
     failFast
-      .validate(proof.suffix.lengthCompare(proof.k) != 0) {
+      .validate(proof.suffix.lengthCompare(proof.k) == 0) {
         error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}")
       }
-      .validate(proof.k < 1) {
+      .validate(proof.k >= 1) {
         error(s"k should positive, ${proof.k} given")
       }
-      .validate(proof.m < 1) {
+      .validate(proof.m >= 1) {
         error(s"m should positive, ${proof.m} given")
       }
-      .validate(!(proof.suffix.head.interlinks(proof.i) == proof.innerchain.last.id)) {
+      .validate(proof.suffix.head.interlinks(proof.i) == proof.innerchain.last.id) {
         error(s"Incorrect link form suffix to innerchain in $proof")
       }
-      .validate(proof.innerchain.length < proof.m) {
+      .validate(proof.innerchain.length >= proof.m) {
         error(s"Innerchain length is not enough in $proof")
       }
-      .validate(!proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
+      .validate(!proof.innerchain.forall(h => powScheme.realDifficulty(h) < innerDifficulty)) {
         error(s"Innerchain difficulty is not enough in $proof")
       }
-      .validate(!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {
+      .validate(proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {
         error(s"Suffix links are incorrect in $proof")
       }
-      .validate(!proof.innerchain.sliding(2).filter(_.length == 2).forall(s => s(1).interlinks(proof.i) == s.head.id)) {
+      .validate(proof.innerchain.sliding(2).filter(_.length == 2).forall(s => s(1).interlinks(proof.i) == s.head.id)) {
         error(s"Innerchain links are incorrect in $proof")
       }
       .result
@@ -160,7 +160,7 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
       if (step < innerchainLength) {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
         val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
-        createInnerChain(index + 2 + l, step+1, chain ++ Seq(header))
+        createInnerChain(index + 2 + l, step + 1, chain ++ Seq(header))
       } else {
         chain
       }

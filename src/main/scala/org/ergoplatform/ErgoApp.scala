@@ -19,7 +19,7 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.Await
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
@@ -76,7 +76,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 }
 
 object ErgoApp extends ScorexLogging {
-
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
@@ -89,5 +88,4 @@ object ErgoApp extends ScorexLogging {
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
   }
-
 }

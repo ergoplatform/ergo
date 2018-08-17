@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -8,6 +7,7 @@ import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
 import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
+import scorex.core.{ModifierId, bytesToId}
 import scorex.core.utils.ScorexLogging
 
 sealed trait TrackedBox extends ScorexLogging {
@@ -23,11 +23,12 @@ sealed trait TrackedBox extends ScorexLogging {
   def creationTx: ErgoTransaction
   def creationOutIndex: Short
   val box: ErgoBox
-  lazy val boxId = ByteArrayWrapper(box.id)
+
+  lazy val boxId: ModifierId = bytesToId(box.id)
   def value: Long = box.value
 
-  lazy val assets: Map[ByteArrayWrapper, Long] = box.additionalTokens.map { case (id, amt) =>
-    ByteArrayWrapper(id) -> amt
+  lazy val assets: Map[ModifierId, Long] = box.additionalTokens.map { case (id, amt) =>
+    bytesToId(id) -> amt
   }.toMap
 
   def register(registry: Registry): Unit = registry.putToRegistry(this)

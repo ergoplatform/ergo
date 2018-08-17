@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.wallet
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
+import scorex.core.ModifierId
 
 case class BoxSelectionResult(boxes: Seq[ErgoBox],
-                              changeBoxes: Seq[(Long, Map[ByteArrayWrapper, Long])])
+                              changeBoxes: Seq[(Long, Map[ModifierId, Long])])
 
 /**
   * An interface which is exposing a method to select unspent boxes according to target amounts in Ergo tokens and
@@ -25,5 +25,5 @@ trait BoxSelector {
   def select(inputBoxes: Iterator[UnspentBox],
              filterFn: UnspentBox => Boolean,
              targetBalance: Long,
-             targetAssets: Map[ByteArrayWrapper, Long]): Option[BoxSelectionResult]
+             targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult]
 }

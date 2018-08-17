@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView.wallet
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import scorex.core.{ModifierId, bytesToId}
 
 import scala.collection.mutable
 
 class Registry {
 
-  private val registry = mutable.Map[ByteArrayWrapper, TrackedBox]()
+  private val registry = mutable.Map[ModifierId, TrackedBox]()
 
-  private val confirmedIndex = mutable.TreeMap[Height, Seq[ByteArrayWrapper]]()
+  private val confirmedIndex = mutable.TreeMap[Height, Seq[ModifierId]]()
 
   //todo: build indexes instead of iteration
   def unspentBoxes: Iterator[UnspentBox] = registry.valuesIterator.collect {
@@ -21,7 +21,7 @@ class Registry {
   //todo: extract a random element, not head
   def nextUncertain(): Option[TrackedBox] = uncertainBoxes.toSeq.headOption
 
-  def registryContains(boxId: ByteArrayWrapper): Boolean = synchronized {
+  def registryContains(boxId: ModifierId): Boolean = synchronized {
     registry.contains(boxId)
   }
 
@@ -29,31 +29,31 @@ class Registry {
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ByteArrayWrapper): Option[TrackedBox] = synchronized {
+  def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = synchronized {
     registry.remove(boxId)
   }
 
-  def putToConfirmedIndex(height: Height, boxId: ByteArrayWrapper): Unit = synchronized {
+  def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = synchronized {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
   }
 
-  def confirmedAt(height: Height): Seq[ByteArrayWrapper] = synchronized {
+  def confirmedAt(height: Height): Seq[ModifierId] = synchronized {
     confirmedIndex.getOrElse(height, Seq.empty)
   }
 
   private var _confirmedBalance: Long = 0
-  private val _confirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
+  private val _confirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
 
   private var _unconfirmedBalance: Long = 0
-  private val _unconfirmedAssetBalances: mutable.Map[ByteArrayWrapper, Long] = mutable.Map()
+  private val _unconfirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
 
   def confirmedBalance: Long = _confirmedBalance
 
-  def confirmedAssetBalances: scala.collection.Map[ByteArrayWrapper, Long] = _confirmedAssetBalances
+  def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
 
   def unconfirmedBalance: Long = _unconfirmedBalance
 
-  def unconfirmedAssetBalances: scala.collection.Map[ByteArrayWrapper, Long] = _unconfirmedAssetBalances
+  def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
 
   def increaseBalances(unspentBox: UnspentBox): Unit = synchronized {
     val box = unspentBox.box
@@ -64,14 +64,14 @@ class Registry {
     if (unspentBox.onchain) {
       _confirmedBalance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
-        val wid = ByteArrayWrapper(id)
+        val wid = bytesToId(id)
         val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
         _confirmedAssetBalances.put(wid, updBalance)
       }
     } else {  //offchain box case
       _unconfirmedBalance += tokenDelta
       assetDeltas.foreach { case (id, amount) =>
-        val wid = ByteArrayWrapper(id)
+        val wid = bytesToId(id)
         val updBalance = _unconfirmedAssetBalances.getOrElse(wid, 0L) + amount
         _unconfirmedAssetBalances.put(wid, updBalance)
       }
@@ -87,7 +87,7 @@ class Registry {
     if (unspentBox.onchain) {
       _confirmedBalance -= tokenDelta
       assetDeltas.foreach { case (id, amount) =>
-        val wid = ByteArrayWrapper(id)
+        val wid = bytesToId(id)
         val currentBalance = _confirmedAssetBalances.getOrElse(wid, 0L)
         if (currentBalance == amount) {
           _confirmedAssetBalances.remove(wid)
@@ -99,7 +99,7 @@ class Registry {
     } else {  //offchain box case
       _unconfirmedBalance -= tokenDelta
       assetDeltas.foreach { case (id, amount) =>
-        val wid = ByteArrayWrapper(id)
+        val wid = bytesToId(id)
         val currentBalance = _unconfirmedAssetBalances.getOrElse(wid, 0L)
         if (currentBalance == amount) {
           _unconfirmedAssetBalances.remove(wid)
@@ -111,7 +111,7 @@ class Registry {
     }
   }
 
-  def makeTransition(boxId: ByteArrayWrapper, transition: Transition): Unit = {
+  def makeTransition(boxId: ModifierId, transition: Transition): Unit = {
     makeTransition(registry(boxId), transition)
   }
 

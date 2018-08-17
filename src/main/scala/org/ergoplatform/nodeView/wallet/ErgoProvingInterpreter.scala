@@ -7,13 +7,12 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.settings.Constants
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.SigmaProtocolPrivateInput
 import scorex.crypto.hash.Blake2b256
 import sigmastate.AvlTreeData
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
-import sigmastate.utxo.CostTable
-
+import sigmastate.interpreter.{ContextExtension, CostedProverResult, ProverInterpreter}
 import scala.util.{Failure, Success, Try}
 
 
@@ -32,8 +31,7 @@ import scala.util.{Failure, Success, Try}
 // todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file like we are
 // doing now is even more problematic
 
-//todo: maxCost should be set to block limit, currently total sum per tx is not calculated
-class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTable.ScriptLimit)
+class ErgoProvingInterpreter(seed: String, override val maxCost: Long = Constants.MaxBlockCost)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
   override lazy val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
@@ -49,12 +47,12 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
 
-    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]())) {
-      case (inputsTry, (unsignedInput, inputBox)) =>
+    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
+      case (inputsCostTry, (unsignedInput, inputBox)) =>
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        inputsTry match {
-          case Success(ins) =>
+        inputsCostTry match {
+          case Success((ins, totalCost)) =>
             val context =
               ErgoLikeContext(
                 stateContext.height + 1,
@@ -64,13 +62,18 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = CostTabl
                 inputBox,
                 ContextExtension.empty)
 
-            prove(inputBox.proposition, context, unsignedTx.messageToSign).map { proverResult =>
-              Input(unsignedInput.boxId, proverResult) +: ins
+            prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
+              val newTC = totalCost + proverResult.asInstanceOf[CostedProverResult].cost
+              if (newTC > maxCost) {
+                Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
+              } else {
+                Success((Input(unsignedInput.boxId, proverResult) +: ins) -> 0L)
+              }
             }
 
-          case f: Failure[IndexedSeq[Input]] => f
+          case f: Failure[_] => f
         }
-    }.map { inputs =>
+    }.map { case (inputs, _) =>
       ErgoTransaction(inputs, unsignedTx.outputCandidates)
     }
   }.flatten

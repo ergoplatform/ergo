@@ -18,7 +18,6 @@ import scala.util.Random
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
-
   property("valid coinbase transaction generation when emission box is present") {
     val (us, bh) = createUtxoState()
     us.emissionBoxOpt should not be None
@@ -96,32 +95,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
       us.applyTransactions(txs, digest, height = 1).get
-    }
-  }
-
-  //todo: FIX is needed before any new major release!!!
-  ignore("applyTransactions() - double spending") {
-    forAll(boxesHolderGen) { bh =>
-      val txs_ = validTransactionsFromBoxHolder(bh)._1
-
-      val txs = txs_ ++ txs_
-
-      val us = createUtxoState(bh)
-      val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
-    }
-  }
-
-  //todo: FIX is needed before any new major release!!!
-  ignore("applyTransactions() - double spending #2") {
-    forAll(boxesHolderGen) { bh =>
-      val txs_ = validTransactionsFromBoxHolder(bh)._1
-
-      val us = createUtxoState(bh)
-      val digest = us.proofsForTransactions(txs_).get._2
-
-      val txs = txs_ ++ txs_
-      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
     }
   }
 

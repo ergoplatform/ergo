@@ -2,13 +2,14 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
+import akka.actor.ActorRef
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType.Utxo
+import org.ergoplatform.nodeView.state.StateType.{Digest, Utxo}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos

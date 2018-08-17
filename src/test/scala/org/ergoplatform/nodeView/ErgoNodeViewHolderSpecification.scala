@@ -2,21 +2,21 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import akka.actor.ActorRef
+import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType.{Digest, Utxo}
+import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoNodeViewHolderTestHelpers
 import scorex.core.ModifierId
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, LocallyGeneratedTransaction}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SyntacticallyFailedModification, SyntacticallySuccessfulModifier}
-import scorex.crypto.authds.ADKey
+import scorex.core.NodeViewHolder.ReceivableMessages._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import scorex.crypto.authds.{ADKey, SerializedAdProof}
 
 
 class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
@@ -357,10 +357,105 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     }
   }
 
+  private val t12 = TestCase("Do not apply txs with wrong header id") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val block = validFullBlock(None, us, bh)
+    logger.error(s"HERE ${block.aDProofs.toString}")
+
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(None)
+
+    nodeViewRef ! historyHeight(nodeViewConfig)
+    expectMsg(-1)
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+
+    //sending header
+    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    expectMsgType[SyntacticallySuccessfulModifier[Header]]
+
+    nodeViewRef ! historyHeight(nodeViewConfig)
+    expectMsg(0)
+
+    nodeViewRef ! heightOf(block.header.id, nodeViewConfig)
+    expectMsg(Some(0))
+
+    val randomId = modifierIdGen.sample.get
+    val wrongTxs1 = block.blockTransactions.copy(headerId = randomId)
+    val wrongTxs2 = {
+      val txs = block.blockTransactions.transactions
+      val tx = txs.head
+      val wrongOutputs = tx.outputCandidates.map(o =>
+        new ErgoBoxCandidate(o.value + 10L, o.proposition, o.additionalTokens, o.additionalRegisters)
+      )
+      val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
+      block.blockTransactions.copy(txs = wrongTxs)
+    }
+
+
+    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs1)
+    expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
+
+    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs2)
+    expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
+
+    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](block.blockTransactions)
+    expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
+  }
+
+  private val t13 = TestCase("Do not apply wrong AdProofs") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val block = validFullBlock(None, us, bh)
+    logger.error(s"HERE ${block.aDProofs.toString}")
+
+    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
+    expectMsg(None)
+
+    nodeViewRef ! historyHeight(nodeViewConfig)
+    expectMsg(-1)
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+
+    //sending header
+    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    expectMsgType[SyntacticallySuccessfulModifier[Header]]
+
+    val randomId = modifierIdGen.sample.get
+    val wrongProofsBytes = SerializedAdProof @@ block.aDProofs.get.proofBytes.reverse
+    val wrongProofs1 = block.aDProofs.map(_.copy(headerId = randomId))
+    val wrongProofs2 = block.aDProofs.map(_.copy(proofBytes = wrongProofsBytes))
+
+    nodeViewRef ! LocallyGeneratedModifier[ADProofs](wrongProofs1.get)
+    expectMsgType[SyntacticallyFailedModification[ADProofs]]
+    nodeViewRef ! LocallyGeneratedModifier[ADProofs](wrongProofs2.get)
+    expectMsgType[SyntacticallyFailedModification[ADProofs]]
+
+    nodeViewRef ! LocallyGeneratedModifier[ADProofs](block.aDProofs.get)
+    expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
+  }
+
   val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
 
   allConfigs.foreach { c =>
     cases.foreach { t =>
+      property(s"${t.name} - $c") {
+        t.run(c)
+      }
+    }
+  }
+
+  val verifyingTxCases = List(t12, t13)
+
+  val verifyTxConfigs = allConfigs.filter(_.verifyTransactions)
+
+  verifyTxConfigs.foreach { c =>
+    verifyingTxCases.foreach { t =>
       property(s"${t.name} - $c") {
         t.run(c)
       }
@@ -444,4 +539,5 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
       expectedGenesisIdString
     ))
   }
+
 }

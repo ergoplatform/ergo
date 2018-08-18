@@ -21,7 +21,8 @@ class Registry {
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
   private var lastScanned: ModifierId = initialScanValue
 
-  def unspentBoxesIterator = unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
+  def unspentBoxesIterator: Iterator[UnspentBox] =
+    unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
 
   def nextUncertain(): Option[TrackedBox] = synchronized {
       uncertainBoxes.from(lastScanned).headOption match {
@@ -33,6 +34,8 @@ class Registry {
           None
       }
   }
+
+  def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
   def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {
     if (!trackedBox.certain) uncertainBoxes += trackedBox.boxId

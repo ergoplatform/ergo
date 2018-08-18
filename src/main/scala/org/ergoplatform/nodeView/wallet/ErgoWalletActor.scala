@@ -112,8 +112,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case Resolve =>
       resolveUncertainty()
       //todo: use non-default executor?
-      //todo: call something smarter than nextUncertain
-      if (registry.nextUncertain().nonEmpty) {
+      if (registry.uncertainExists) {
         context.system.scheduler.scheduleOnce(scanningInterval)(self ! Resolve)
       }
 

@@ -41,14 +41,17 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
   protected def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
     val dir: File = dirOpt.getOrElse(createTempDir)
     val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = dir.getAbsolutePath)
+    val chainSettings = defaultSettings.chainSettings.copy(
+      genesisId = c.genesisId,
+      powScheme = DefaultFakePowScheme
+    )
     val settings = defaultSettings.copy(
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = c.stateType,
         verifyTransactions = c.verifyTransactions,
-        PoPoWBootstrap = c.popowBootstrap,
-        genesisId = c.genesisId
+        PoPoWBootstrap = c.popowBootstrap
       ),
-      chainSettings = defaultSettings.chainSettings.copy(powScheme = DefaultFakePowScheme)
+      chainSettings = chainSettings
     )
     ErgoNodeViewRef(settings, timeProvider, emission)
   }

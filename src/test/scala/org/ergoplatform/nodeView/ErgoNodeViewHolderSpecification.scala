@@ -406,8 +406,6 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
       block.blockTransactions.copy(txs = wrongTxs)
     }
 
-
-
     nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs1)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 

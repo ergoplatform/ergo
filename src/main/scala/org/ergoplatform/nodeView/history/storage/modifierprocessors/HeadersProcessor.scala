@@ -314,8 +314,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
           fatal(s"Genesis block should have genesis parent id. $detail")
         }
-        .validate(config.genesisId.fold(true) { _ == Algos.encode(header.id) }) {
-          fatal(s"Expected genesis block id is ${config.genesisId.getOrElse("")}," +
+        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
+          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
             s" got genesis block with id ${Algos.encode(header.id)}")
         }
         .validate(bestHeaderIdOpt.isEmpty) {

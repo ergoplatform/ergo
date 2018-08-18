@@ -19,8 +19,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean,
-                                     keepVersions: Int,
-                                     genesisId: Option[String] = None)
+                                     keepVersions: Int)
 
 
 trait NodeConfigurationReaders extends StateTypeReaders {
@@ -36,7 +35,6 @@ trait NodeConfigurationReaders extends StateTypeReaders {
                               cfg.as[Boolean](s"$path.mining"),
                               cfg.as[FiniteDuration](s"$path.miningDelay"),
                               cfg.as[Boolean](s"$path.offlineGeneration"),
-                              cfg.as[Int](s"$path.keepVersions"),
-                              cfg.getAs[String](s"$path.genesisId"))
+                              cfg.as[Int](s"$path.keepVersions"))
   }
 }

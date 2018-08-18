@@ -12,4 +12,5 @@ case class ChainSettings(blockInterval: FiniteDuration,
                          epochLength: Int,
                          useLastEpochs: Int,
                          powScheme: PowScheme,
-                         monetary: MonetarySettings)
+                         monetary: MonetarySettings,
+                         genesisId: Option[String] = None)

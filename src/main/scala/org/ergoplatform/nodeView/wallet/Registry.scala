@@ -25,14 +25,14 @@ class Registry {
     unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
 
   def nextUncertain(): Option[TrackedBox] = synchronized {
-      uncertainBoxes.from(lastScanned).headOption match {
-        case Some(id) =>
-          lastScanned = id
-          registry.get(id)
-        case None =>
-          lastScanned = initialScanValue
-          None
-      }
+    uncertainBoxes.from(lastScanned).headOption match {
+      case Some(id) =>
+        lastScanned = id
+        registry.get(id)
+      case None =>
+        lastScanned = initialScanValue
+        None
+    }
   }
 
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty

@@ -76,10 +76,11 @@ object DefaultBoxSelector extends BoxSelector {
             baseChangeBalance -> a.toMap
           }
 
-          val firstBox = changeBoxesNoBalanceAdjusted.head
-          val modifiedBox = (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
+          val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
+            (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
+          }
 
-          modifiedBox +: changeBoxesNoBalanceAdjusted.tail
+          modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
         } else if (changeBalance > 0) {
           Seq(changeBalance -> Map.empty[ModifierId, Long])
         } else {

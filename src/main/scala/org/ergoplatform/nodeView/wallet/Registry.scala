@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.settings.Constants
 import scorex.core.{ModifierId, bytesToId}
 
 import scala.collection.mutable
@@ -16,13 +17,21 @@ class Registry {
 
   private val unspentBoxes = mutable.TreeSet[ModifierId]()
 
+  private val initialScanValue = bytesToId(Array.fill(Constants.ModifierIdSize)(0: Byte))
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
+  private var lastScanned: ModifierId = initialScanValue
 
   def unspentBoxesIterator = unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
 
-  //todo: extract a random element, not head
   def nextUncertain(): Option[TrackedBox] = synchronized {
-    uncertainBoxes.headOption.flatMap(id => registry.get(id))
+      uncertainBoxes.from(lastScanned).headOption match {
+        case Some(id) =>
+          lastScanned = id
+          registry.get(id)
+        case None =>
+          lastScanned = initialScanValue
+          None
+      }
   }
 
   def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {

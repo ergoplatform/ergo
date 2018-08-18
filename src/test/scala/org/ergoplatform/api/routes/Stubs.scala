@@ -7,24 +7,28 @@ import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.network.peer.PeerInfo
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
 import scala.concurrent.duration._
+import scala.util.Success
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
@@ -39,10 +43,12 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
   }.sample.get
 
+  lazy val wallet = new WalletStub
+
   val txs = chain.head.transactions
 
   lazy val memPool = ErgoMemPool.empty.put(txs).get
-  lazy val readers = Readers(history, state, memPool, null) //todo: make wallet stub
+  lazy val readers = Readers(history, state, memPool, wallet)
 
 
   val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)
@@ -108,6 +114,23 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object PeerManagerStub {
     def props() = Props(new PeerManagerStub)
+  }
+
+  class WalletActorStub extends Actor {
+    def receive: Receive = {
+      case GenerateTransaction(payTo) =>
+        val input = ErgoTransactionGenerators.inputGen.sample.value
+        val tx = ErgoTransaction(IndexedSeq(input), payTo.toIndexedSeq)
+        sender() ! Success(tx)
+    }
+  }
+
+  object WalletActorStub {
+    def props(): Props = Props(new WalletActorStub)
+  }
+
+  class WalletStub extends ErgoWalletReader {
+    val actor = system.actorOf(WalletActorStub.props())
   }
 
 

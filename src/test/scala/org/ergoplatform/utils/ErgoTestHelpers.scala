@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.settings.ErgoSettings
-import org.scalatest.{OptionValues, TryValues}
+import org.scalatest.{EitherValues, OptionValues, TryValues}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
 
 import scala.concurrent.ExecutionContext
@@ -13,7 +13,8 @@ trait ErgoTestHelpers
     with ScorexLogging
     with ScorexEncoding
     with OptionValues
-    with TryValues {
+    with TryValues
+    with EitherValues {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 

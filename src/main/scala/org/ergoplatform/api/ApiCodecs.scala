@@ -98,9 +98,25 @@ trait ApiCodecs {
     }
   }
 
- implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
+  implicit val registerIdEncoder: KeyEncoder[NonMandatoryRegisterId] = { regId =>
+    s"R${regId.number}"
+  }
+
+  implicit val registerIdDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
+    ErgoBox.registerByName.get(key).collect {
+      case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
+    }
+  }
+
+  def decodeRegisterId(key: String)(implicit cursor: ACursor): Decoder.Result[NonMandatoryRegisterId] = {
+    registerIdDecoder
+      .apply(key.toUpperCase)
+      .toRight(DecodingFailure(s"Unknown register identifier: $key", cursor.history))
+  }
+
+  implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
     _.map { case (key, value) =>
-      s"R${key.number}" -> valueEncoder(value)
+      registerIdEncoder(key) -> valueEncoder(value)
     }.asJson
   }
 

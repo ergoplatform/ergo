@@ -6,11 +6,11 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import scorex.core.serialization.Serializer
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.ModifierValidator
 import scorex.core.utils.ScorexEncoding
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class PoPoWProof(m: Byte,
                       k: Byte,
@@ -63,7 +63,7 @@ class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with Modifier
       .validate(proof.innerchain.length >= proof.m) {
         error(s"Innerchain length is not enough in $proof")
       }
-      .validate(!proof.innerchain.forall(h => powScheme.realDifficulty(h) < innerDifficulty)) {
+      .validate(proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
         error(s"Innerchain difficulty is not enough in $proof")
       }
       .validate(proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {

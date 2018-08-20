@@ -7,7 +7,7 @@ import scorex.core.{ModifierId, bytesToId}
 import scala.collection.mutable
 
 /**
-  * This class is not thread-safe
+  * This class is not thread-safe.
   */
 class Registry {
 

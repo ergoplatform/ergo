@@ -7,7 +7,9 @@ import scorex.core.ModifierId
 import scala.collection.mutable
 
 /**
-  * Default implementation of the box selector
+  * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
+  * meets target Ergo balance, then it checks which assets are not fulfilled and adds boxes till target
+  * asset values are met.
   */
 object DefaultBoxSelector extends BoxSelector {
 

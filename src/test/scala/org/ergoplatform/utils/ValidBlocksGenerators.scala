@@ -51,7 +51,7 @@ trait ValidBlocksGenerators
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
   @tailrec
-  private def validTransactionsFromBoxes(txRemain: Int,
+  protected final def validTransactionsFromBoxes(txRemain: Int,
                                          stateBoxes: Seq[ErgoBox],
                                          selfBoxes: Seq[ErgoBox],
                                          acc: Seq[ErgoTransaction],

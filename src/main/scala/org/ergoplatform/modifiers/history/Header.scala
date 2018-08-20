@@ -7,17 +7,19 @@ import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.core._
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
-import scorex.core._
+import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 case class Header(version: Version,
@@ -30,7 +32,8 @@ case class Header(version: Version,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
                   extensionHash: Digest32,
-                  equihashSolution: EquihashSolution
+                  equihashSolution: EquihashSolution,
+                  override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
 
@@ -81,6 +84,13 @@ case class Header(version: Version,
     case _ => false
   }
 
+  /**
+    * Estimate that this Header is new enough to possibly be the best header
+    */
+  def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
+    timeProvider.time() - timestamp < timeDiff.toMillis
+  }
+
 }
 
 object Header {
@@ -105,7 +115,8 @@ object Header {
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
-      "version" -> h.version.asJson
+      "version" -> h.version.asJson,
+      "size" -> h.size.asJson
     ).asJson
 }
 
@@ -188,7 +199,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, equihashSolution)
+        nBits, height, extensionHash, equihashSolution, Some(bytes.length))
     }
   }.flatten
 }

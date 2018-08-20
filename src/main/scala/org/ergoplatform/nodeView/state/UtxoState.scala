@@ -23,9 +23,9 @@ import scala.util.{Failure, Success, Try}
   * Utxo set implementation
   *
   * @param persistentProver - persistent prover that build authenticated AVL+ tree on top of utxo set
-  * @param store - storage of persistentProver that also keeps metadata
-  * @param version - current state version
-  * @param constants - constants, that do not change with state version changes
+  * @param store            - storage of persistentProver that also keeps metadata
+  * @param version          - current state version
+  * @param constants        - constants, that do not change with state version changes
   */
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
@@ -67,7 +67,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
                                        height: Height) = Try {
-
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get

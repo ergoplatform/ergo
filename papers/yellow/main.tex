@@ -32,6 +32,7 @@
 
 \newcommand{\knote}[1]{{\authnote{\textcolor{green}{Alex notes}}{#1}}}
 \newcommand{\dnote}[1]{{\authnote{\textcolor{red}{Dima notes}}{#1}}}
+\newcommand{\vnote}[1]{{\authnote{\textcolor{purple}{Vasily notes}}{#1}}}
 
 \newcommand{\term}[1]{\textit{#1}}
 
@@ -792,10 +793,32 @@ Below are rules for block validation when a node is verifying transactions ($Ver
 \knote{extension validation rules}
 
 \subsection{Token Emission}
+\vnote{outputs->boxes?}
 \input{tokens.tex}
 
 \section{Voting}
 \input{voting.tex}
+
+\section{Transaction Fees}
+Register $R2$ of the box contains tuple $(tx\_id, out\_num,
+last\_height)$. $last\_height$ field is used to determine the block height
+at the start of the subsidized period. Transaction can only be put in the
+block of height $h$ if for every created box $R2.last\_height<h$.
+
+Transaction fees must satisfy relation $fee\ge max(K\sum_i B_i, Cd_{comp})$.
+Here $K$ is the storage cost of one byte for the subsidized period, $B_i$ is the
+size of $i$th created box. $d_{comp}$ is the amount of computations required by
+the transaction, and $C$ is the cost of unit computation.
+
+Once the subsidized period for the box ends (that is,
+$current\_block\_height\ge R2.last\_height + subsidized\_period$), anyone can
+create the new box with the exactly the same content (including the guarding
+script) except the monetary value and $last\_height$.  The monetary value is
+reduced by $KB$ where $B$ is the box size, and $KB$ coins are to be paid to
+miner. $last\_height$ is replaced with the $current\_block\_height$, so that the
+subsidized period starts over.
+
+\vnote{Script needed}
 
 \section{Proof-of-Work}
 

@@ -7,9 +7,16 @@ import scorex.core.{ModifierId, bytesToId}
 import scala.collection.mutable
 
 /**
+  * Storage class for wallet entities:
+  *   - all the boxes which are potentially belong to the user,
+  *   - index for boxes which could belong to the user (it contains needed bytes, for example, public key bytes),
+  *     but that is to be carefully checked yet (by successfully signing a test transaction which is spending the box).
+  *   - index for unspent boxes
+  *   - confirmed and unconfirmed balances
+  *
   * This class is not thread-safe.
   */
-class Registry {
+class WalletStorage {
 
   private val registry = mutable.Map[ModifierId, TrackedBox]()
 

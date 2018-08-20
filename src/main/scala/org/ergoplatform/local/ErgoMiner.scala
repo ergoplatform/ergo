@@ -41,8 +41,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
-  private val startTime = timeProvider.time()
-
   //shared mutable state
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
@@ -94,7 +92,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def shouldStartMine(b: ErgoFullBlock): Boolean = {
-    ergoSettings.nodeSettings.mining && b.header.timestamp >= startTime
+    ergoSettings.nodeSettings.mining && b.header.isNew(timeProvider, ergoSettings.chainSettings.blockInterval * 2)
   }
 
   private def receiveSemanticallySuccessfulModifier: Receive = {

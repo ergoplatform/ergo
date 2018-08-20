@@ -1,13 +1,13 @@
 package org.ergoplatform
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
@@ -45,6 +45,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
+    val pool = ErgoMemPool.empty
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
@@ -52,13 +53,16 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val ref = ErgoNodeViewSynchronizer(
-      ncProbe.ref,
-      vhProbe.ref,
-      ErgoSyncInfoMessageSpec,
-      settings.scorexSettings.network,
-      tp
-    )
+    val ref = system.actorOf(Props(
+      new SyncronizerMock(
+        ncProbe.ref,
+        vhProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings.scorexSettings.network,
+        tp,
+        h,
+        pool)
+    ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2

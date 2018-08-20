@@ -10,22 +10,30 @@ import scorex.core.utils.{ScorexEncoding, ScorexLogging}
 
 import scala.util.Failure
 
+/**
+  * Storage for Ergo history
+  *
+  * @param indexStore   - Additional key-value storage for indexes, required by History for efficient work.
+  *                     contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
+  * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
+  * @param config       - cache configs
+  */
 class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
   with AutoCloseable with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.historyStorageCacheSize)
+    .maximumSize(config.modifiersCacheSize)
     .build[String, ErgoPersistentModifier]
 
+  private val indexCache = CacheBuilder.newBuilder()
+    .maximumSize(config.indexesCacheSize)
+    .build[ByteArrayWrapper, ByteArrayWrapper]
 
-  // TODO remove when modifierId will be string
-  private def keyById(id: ModifierId): String = Algos.encode(id)
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    val key = keyById(id)
-    Option(modifiersCache.getIfPresent(key)) match {
+    Option(modifiersCache.getIfPresent(id)) match {
       case Some(e) =>
-        log.trace(s"Got modifier $key from cache")
+        log.trace(s"Got modifier $id from cache")
         Some(e)
       case None =>
         objectsStore.get(id).flatMap { bBytes =>
@@ -34,8 +42,8 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
             Failure(e)
           }.toOption match {
             case Some(pm) =>
-              log.trace(s"Cache miss for existing modifier $key")
-              modifiersCache.put(key, pm)
+              log.trace(s"Cache miss for existing modifier $id")
+              modifiersCache.put(id, pm)
               Some(pm)
             case None => None
           }
@@ -43,7 +51,12 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     }
   }
 
-  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = indexStore.get(id)
+  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = Option(indexCache.getIfPresent(id)).orElse {
+    indexStore.get(id).map { value =>
+      indexCache.put(id, value)
+      value
+    }
+  }
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
 
@@ -52,15 +65,22 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
-    objectsToInsert.foreach(o => objectsStore.put(o))
-    indexStore.update(
-      id,
-      Seq.empty,
-      indexesToInsert)
+    objectsToInsert.foreach { o =>
+      modifiersCache.put(o.id, o)
+      // TODO saving object to disc may be async here for performance reasons
+      objectsStore.put(o)
+    }
+    if (indexesToInsert.nonEmpty) {
+      indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
+      indexStore.update(
+        id,
+        Seq.empty,
+        indexesToInsert)
+    }
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
-    modifiersCache.invalidate(keyById(id))
+    modifiersCache.invalidate(id)
     objectsStore.delete(id)
   }
 

@@ -6,8 +6,6 @@ import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
 import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
-import scala.collection.mutable
-
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
@@ -34,34 +32,13 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     val above = genCachePair(limit + 1)
 
     modifiersCache.put(above._1, above._2)
+    modifiersCache.size shouldBe (limit + 1)
+
+    modifiersCache.cleanOverfull()
+
     modifiersCache.size shouldBe limit
 
     modifiersCache.remove(genKey(1)).isEmpty shouldBe true
-  }
-
-  property("cache is remembering removed modifier ids if rememberKey = true") {
-    val limit = 3
-    val modifiersCache = new ErgoModifiersCache(limit)
-
-    (1 to limit).foreach { i =>
-      val (k, h) = genCachePair(i)
-      modifiersCache.put(k, h)
-    }
-
-    val k1 = genKey(1)
-    modifiersCache.contains(k1) shouldBe true
-    modifiersCache.remove(k1, rememberKey = true)
-    modifiersCache.contains(k1) shouldBe true
-
-    val k2 = genKey(2)
-    modifiersCache.contains(k2) shouldBe true
-    modifiersCache.remove(k2, rememberKey = false)
-    modifiersCache.contains(k2) shouldBe false
-
-    val k3 = genKey(3)
-    modifiersCache.contains(k3) shouldBe true
-    modifiersCache.remove(k3)
-    modifiersCache.contains(k3) shouldBe false
   }
 
   property("cache is proposing a reasonable candidate to enhance history") {

@@ -6,9 +6,9 @@ import scorex.core.{ModifierId, bytesToId}
 
 import scala.collection.mutable
 
-
-//todo: declare this class thread-unsafe?
-
+/**
+  * This class is not thread-safe
+  */
 class Registry {
 
   private val registry = mutable.Map[ModifierId, TrackedBox]()
@@ -24,7 +24,7 @@ class Registry {
   def unspentBoxesIterator: Iterator[UnspentBox] =
     unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
 
-  def nextUncertain(): Option[TrackedBox] = synchronized {
+  def nextUncertain(): Option[TrackedBox] = {
     uncertainBoxes.from(lastScanned).headOption match {
       case Some(id) =>
         lastScanned = id
@@ -37,13 +37,13 @@ class Registry {
 
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
-  def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = synchronized {
+  def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = {
     if (!trackedBox.certain) uncertainBoxes += trackedBox.boxId
     if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = synchronized {
+  def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = {
     registry.remove(boxId).map { trackedBox: TrackedBox =>
       if (!trackedBox.certain) uncertainBoxes -= trackedBox.boxId
       if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes -= trackedBox.boxId
@@ -51,15 +51,15 @@ class Registry {
     }
   }
 
-  def registryContains(boxId: ModifierId): Boolean = synchronized {
+  def registryContains(boxId: ModifierId): Boolean = {
     registry.contains(boxId)
   }
 
-  def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = synchronized {
+  def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
   }
 
-  def confirmedAt(height: Height): Seq[ModifierId] = synchronized {
+  def confirmedAt(height: Height): Seq[ModifierId] = {
     confirmedIndex.getOrElse(height, Seq.empty)
   }
 
@@ -77,7 +77,7 @@ class Registry {
 
   def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
 
-  def increaseBalances(unspentBox: UnspentBox): Unit = synchronized {
+  def increaseBalances(unspentBox: UnspentBox): Unit = {
     val box = unspentBox.box
     val tokenDelta = box.value
     val assetDeltas = box.additionalTokens
@@ -100,7 +100,7 @@ class Registry {
     }
   }
 
-  def decreaseBalances(unspentBox: UnspentBox): Unit = synchronized {
+  def decreaseBalances(unspentBox: UnspentBox): Unit = {
     val box = unspentBox.box
     val tokenDelta = box.value
     val assetDeltas = box.additionalTokens

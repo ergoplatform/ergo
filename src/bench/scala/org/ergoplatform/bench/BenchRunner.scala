@@ -64,8 +64,8 @@ object BenchRunner extends ScorexLogging {
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, ce)
 
     /**
-      * It's a hack to set minimalFullBlockHeightVar to 0, cause in our case we are considering
-      * only locally pre-generated modifiers.
+      * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
+      * in our case we are considering only locally pre-generated modifiers.
       */
     nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit]{ v =>
       import scala.reflect.runtime.{universe => ru}
@@ -75,6 +75,12 @@ object BenchRunner extends ScorexLogging {
       val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
       val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
       runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+
+
+      val f2: java.lang.reflect.Field = v.history.asInstanceOf[ToDownloadProcessor].getClass.getDeclaredField("isHeadersChainSyncedVar")
+      f2.setAccessible(true)
+      f2.set(v.history.asInstanceOf[ToDownloadProcessor], true)
+
       ()
     }
 

@@ -160,7 +160,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ErgoTransaction(inputs, newBoxes)
   }
 
-  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]]  = {
+  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
       val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)

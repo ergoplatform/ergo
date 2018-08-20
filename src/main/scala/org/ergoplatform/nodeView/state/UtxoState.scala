@@ -136,6 +136,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
       Failure(new Exception("unknown modifier"))
+
   }
 
   @SuppressWarnings(Array("OptionGet"))

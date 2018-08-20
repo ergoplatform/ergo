@@ -31,7 +31,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   private lazy val scanningInterval = settings.walletSettings.scanningInterval
 
-  private val registry = new Registry
+  private val registry = new WalletStorage
 
   //todo: pass as a class argument, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector

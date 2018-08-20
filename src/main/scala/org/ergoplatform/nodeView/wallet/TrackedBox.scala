@@ -10,37 +10,84 @@ import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, bytesToId}
 import scorex.core.utils.ScorexLogging
 
+/**
+  * A generic interface for a box tracked by a wallet. A TrackedBox instantiation contains box itself as well as
+  * its state (e.g. spent or not, confirmed or not etc).
+  */
 sealed trait TrackedBox extends ScorexLogging {
 
+  /**
+    * Whether the box is spent or not
+    */
   def spendingStatus: SpendingStatus
+
+  /**
+    * Whether the box is confirmed or not
+    */
   def onchainStatus: OnchainStatus
+
+  /**
+    * Whether the box is definitely belongs to the user or not
+    */
   def certainty: BoxCertainty
 
   final def spent: Boolean = spendingStatus.spent
   final def onchain: Boolean = onchainStatus.onchain
   final def certain: Boolean = certainty.certain
 
+  /**
+    * Transaction created the box
+    */
   def creationTx: ErgoTransaction
+
+  /**
+    * Output index in the transaction
+    */
   def creationOutIndex: Short
+
   val box: ErgoBox
 
   lazy val boxId: ModifierId = bytesToId(box.id)
+
   def value: Long = box.value
 
   lazy val assets: Map[ModifierId, Long] = box.additionalTokens.map { case (id, amt) =>
     bytesToId(id) -> amt
   }.toMap
 
-  def register(registry: Registry): Unit = registry.putToRegistry(this)
+  /**
+    * Register this box in a wallet storage
+    */
+  def register(storage: WalletStorage): Unit = storage.putToRegistry(this)
 
-  def deregister(registry: Registry): Unit = registry.removeFromRegistry(boxId)
+  /**
+    * Remove this box from a wallet storage
+    */
+  def deregister(storage: WalletStorage): Unit = storage.removeFromRegistry(boxId)
 
+  /**
+    * Do state transition on a spending transaction (confirmed or not to come)
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
   def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox]
 
+  /**
+    * Do state transition on a creating transaction got confirmed
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
   def transition(creationHeight: Height): Option[TrackedBox]
 
+  /**
+    * Do state transition on a rollback to a certain height
+    * @param toHeight - height to oll back to
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
   def transitionBack(toHeight: Height): Option[TrackedBox]
 
+  /**
+    * Handle a command to make this box "certain" (definitely hold by the user)
+    * @return updated box
+    */
   def makeCertain(): TrackedBox
 }
 
@@ -65,13 +112,13 @@ case class UnspentOffchainBox(creationTx: ErgoTransaction,
                               creationOutIndex: Short,
                               box: ErgoBox,
                               certainty: BoxCertainty) extends UnspentBox with OffchainBox {
-  override def register(registry: Registry): Unit = {
+  override def register(registry: WalletStorage): Unit = {
     super.register(registry)
     log.info("New offchain box arrived: " + this)
     if (certain) registry.increaseBalances(this)
   }
 
-  override def deregister(registry: Registry): Unit = {
+  override def deregister(registry: WalletStorage): Unit = {
     super.deregister(registry)
     if (certain) registry.decreaseBalances(this)
   }
@@ -97,14 +144,14 @@ case class UnspentOnchainBox(creationTx: ErgoTransaction,
                              box: ErgoBox,
                              certainty: BoxCertainty) extends UnspentBox with OnchainBox {
 
-  override def register(registry: Registry): Unit = {
+  override def register(registry: WalletStorage): Unit = {
     super.register(registry)
     log.info("New onchain box arrived: " + this)
     registry.putToConfirmedIndex(creationHeight, boxId)
     if (certain) registry.increaseBalances(this)
   }
 
-  override def deregister(registry: Registry): Unit = {
+  override def deregister(registry: WalletStorage): Unit = {
     super.deregister(registry)
     if (certain) registry.decreaseBalances(this)
   }
@@ -180,7 +227,7 @@ case class SpentOnchainBox(creationTx: ErgoTransaction,
                            box: ErgoBox,
                            certainty: BoxCertainty) extends SpentBox with OnchainBox {
 
-  override def register(registry: Registry): Unit = {
+  override def register(registry: WalletStorage): Unit = {
     super.register(registry)
     registry.putToConfirmedIndex(spendingHeight, boxId)
   }

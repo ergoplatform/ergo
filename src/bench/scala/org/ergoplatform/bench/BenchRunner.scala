@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
+import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
 
@@ -33,15 +34,11 @@ object BenchRunner extends ScorexLogging {
   val targetDirectory = "target/bench"
 
   def main(args: Array[String]): Unit = {
-
     new File(targetDirectory).mkdirs()
-
     val threshold = args.headOption.getOrElse("1000").toInt
     val fileName = args.lift(1).get
     val isUtxo = args.lift(2).isEmpty
-
     val state = if (isUtxo) StateType.Utxo else StateType.Digest
-
     val benchRef = BenchActor(threshold, state)
     val userDir = TempDir.createTempDir
 
@@ -67,29 +64,27 @@ object BenchRunner extends ScorexLogging {
       * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
       * in our case we are considering only locally pre-generated modifiers.
       */
-    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit]{ v =>
-      import scala.reflect.runtime.{universe => ru}
-      val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-      val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])
-      val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
-      val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
-      val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-      runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
-
-
-      val f2: java.lang.reflect.Field = v.history.asInstanceOf[ToDownloadProcessor].getClass.getDeclaredField("isHeadersChainSyncedVar")
-      f2.setAccessible(true)
-      f2.set(v.history.asInstanceOf[ToDownloadProcessor], true)
-
-      ()
-    }
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit](adjust)
 
     log.info("Starting to read modifiers.")
     val modifiers = readModifiers(fileName, threshold)
     log.info("Finished read modifiers, starting to bench.")
     log.info(s"$threshold modifiers to go")
     runBench(benchRef, nodeViewHolderRef, modifiers)
-    //writeHtml
+  }
+
+  private def adjust(v: CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]): Unit = {
+    import scala.reflect.runtime.{universe => ru}
+    val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
+    val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])
+    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
+    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
+    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+    val f2: java.lang.reflect.Field = v.history.asInstanceOf[ToDownloadProcessor].getClass.getDeclaredField("isHeadersChainSyncedVar")
+    f2.setAccessible(true)
+    f2.set(v.history.asInstanceOf[ToDownloadProcessor], true)
+    ()
   }
 
   private def readModifiers(fileName: String, threshold: Int): Vector[ErgoPersistentModifier] = {

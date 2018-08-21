@@ -22,7 +22,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      keepVersions: Int)
 
 
-trait NodeConfigurationReaders extends StateTypeReaders {
+trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"

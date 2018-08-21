@@ -6,9 +6,11 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import scorex.core.serialization.Serializer
+import scorex.core.validation.ModifierValidator
+import scorex.core.utils.ScorexEncoding
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class PoPoWProof(m: Byte,
                       k: Byte,
@@ -40,32 +42,39 @@ object PoPoWProof {
 }
 
 @SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
-class PoPoWProofUtils(powScheme: PowScheme) {
+class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with ModifierValidator{
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
     //todo: why initial difficulty here?
     val innerDifficulty: BigInt = Constants.InitialDifficulty * BigInt(2).pow(proof.i)
-    if (proof.suffix.lengthCompare(proof.k) != 0) {
-      Failure(new Error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}"))
-    } else if (proof.k < 1) {
-      Failure(new Error(s"k should positive, ${proof.k} given"))
-    } else if (proof.m < 1) {
-      Failure(new Error(s"m should positive, ${proof.m} given"))
-    } else if (!(proof.suffix.head.interlinks(proof.i) == proof.innerchain.last.id)) {
-      Failure(new Error(s"Incorrect link form suffix to innerchain in $proof"))
-    } else if (proof.innerchain.length < proof.m) {
-      Failure(new Error(s"Innerchain length is not enough in $proof"))
-    } else if (!proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
-      Failure(new Error(s"Innerchain difficulty is not enough in $proof"))
-    } else if (!proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {
-      Failure(new Error(s"Suffix links are incorrect in $proof"))
-    } else if (!proof.innerchain.sliding(2).filter(_.length == 2)
-      .forall(s => s(1).interlinks(proof.i) == s.head.id)) {
-      Failure(new Error(s"Innerchain links are incorrect in $proof"))
-    } else {
-      Success(Unit)
-    }
+    failFast
+      .validate(proof.suffix.lengthCompare(proof.k) == 0) {
+        error(s"Incorrect suffix ${proof.suffix.length} != ${proof.k}")
+      }
+      .validate(proof.k >= 1) {
+        error(s"k should positive, ${proof.k} given")
+      }
+      .validate(proof.m >= 1) {
+        error(s"m should positive, ${proof.m} given")
+      }
+      .validate(proof.suffix.head.interlinks(proof.i) == proof.innerchain.last.id) {
+        error(s"Incorrect link form suffix to innerchain in $proof")
+      }
+      .validate(proof.innerchain.length >= proof.m) {
+        error(s"Innerchain length is not enough in $proof")
+      }
+      .validate(proof.innerchain.forall(h => powScheme.realDifficulty(h) >= innerDifficulty)) {
+        error(s"Innerchain difficulty is not enough in $proof")
+      }
+      .validate(proof.suffix.sliding(2).filter(_.length == 2).forall(s => s(1).parentId == s.head.id)) {
+        error(s"Suffix links are incorrect in $proof")
+      }
+      .validate(proof.innerchain.sliding(2).filter(_.length == 2).forall(s => s(1).interlinks(proof.i) == s.head.id)) {
+        error(s"Innerchain links are incorrect in $proof")
+      }
+      .result
+      .toTry
   }
 
   def isLevel(header: Header, level: Int): Boolean = {
@@ -144,15 +153,19 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
       }
     }
 
-    var (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
+    val (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
     val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
-    index = index + 2
-    val innerchain = (0 until innerchainLength) map { _ =>
-      val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-      val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
-      index = index + 2 + l
-      header
+
+    @tailrec
+    def createInnerChain(index: Int, step: Int = 0, chain: Seq[Header] = Seq.empty): Seq[Header] = {
+      if (step < innerchainLength) {
+        val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
+        val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
+        createInnerChain(index + 2 + l, step + 1, chain ++ Seq(header))
+      } else {
+        chain
+      }
     }
-    PoPoWProof(m, k, i, innerchain, suffix, Some(bytes.length))(powScheme)
+    PoPoWProof(m, k, i, createInnerChain(index + 2), suffix, Some(bytes.length))(powScheme)
   }
 }

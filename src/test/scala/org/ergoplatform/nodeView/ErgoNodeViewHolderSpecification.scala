@@ -3,14 +3,13 @@ package org.ergoplatform.nodeView
 import java.io.File
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType.{Digest, Utxo}
+import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos
@@ -453,32 +452,7 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
-
-  allConfigs.foreach { c =>
-    cases.foreach { t =>
-      property(s"${t.name} - $c") {
-        t.run(c)
-      }
-    }
-  }
-
-  val verifyingTxCases = List(t12, t13)
-
-  val verifyTxConfigs = allConfigs.filter(_.verifyTransactions)
-
-  verifyTxConfigs.foreach { c =>
-    verifyingTxCases.foreach { t =>
-      property(s"${t.name} - $c") {
-        t.run(c)
-      }
-    }
-  }
-
-  private val expectedGenesisIdOpt: Option[ModifierId] = modifierIdGen.sample
-  private val expectedGenesisIdString = expectedGenesisIdOpt.map(Algos.encode)
-
-  private val genesisIdFromConfigCheck1 = TestCase("do not apply genesis block header if " +
+  private val t14 = TestCase("do not apply genesis block header if " +
     "it's not equal to genesisId from config") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewRef))
@@ -503,7 +477,7 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     expectMsg(-1)
   }
 
-  private val genesisIdFromConfigCheck2 = TestCase("apply genesis block header if " +
+  private val t15 = TestCase("apply genesis block header if " +
     "it's equal to genesisId from config") { fixture =>
     import fixture._
 
@@ -512,7 +486,7 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
 
     val nodeViewDir1: java.io.File = createTempDir
     val nodeViewRef1: ActorRef = actorRef(
-      nodeViewConfig.copy(genesisId = Some(Algos.encode(block.header.id))),
+      nodeViewConfig.copy(genesisId = Some(ModifierId @@ Algos.encode(block.header.id))),
       Option(nodeViewDir1)
     )
 
@@ -535,22 +509,33 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     expectMsg(Some(0))
   }
 
-  property(genesisIdFromConfigCheck1.name) {
-    genesisIdFromConfigCheck1.run(NodeViewHolderConfig(
-      Digest,
-      false,
-      false,
-      expectedGenesisIdString
-    ))
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+
+  allConfigs.foreach { c =>
+    cases.foreach { t =>
+      property(s"${t.name} - $c") {
+        t.run(c)
+      }
+    }
   }
 
-  property(genesisIdFromConfigCheck2.name) {
-    genesisIdFromConfigCheck2.run(NodeViewHolderConfig(
-      Digest,
-      false,
-      false,
-      expectedGenesisIdString
-    ))
+  val verifyingTxCases = List(t12, t13)
+
+  val verifyTxConfigs = allConfigs.filter(_.verifyTransactions)
+
+  verifyTxConfigs.foreach { c =>
+    verifyingTxCases.foreach { t =>
+      property(s"${t.name} - $c") {
+        t.run(c)
+      }
+    }
   }
 
+  val genesisIdTestCases = List(t14, t15)
+
+  genesisIdTestCases.foreach { t =>
+    property(s"${t.name}") {
+      t.run(configWithExpectedGenesisId)
+    }
+  }
 }

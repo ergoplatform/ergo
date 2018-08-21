@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -28,7 +29,7 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
   case class NodeViewHolderConfig(stateType: StateType,
                                   verifyTransactions: Boolean,
                                   popowBootstrap: Boolean,
-                                  genesisId: Option[String] = None) {
+                                  genesisId: Option[ModifierId] = None) {
     override def toString: String = {
       s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap"
     }
@@ -73,6 +74,10 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
     NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true),
     NodeViewHolderConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false),
   )
+
+  private val expectedGenesisIdOpt: Option[ModifierId] = modifierIdGen.sample
+
+  val configWithExpectedGenesisId = NodeViewHolderConfig(Digest, false, false, expectedGenesisIdOpt)
 
   protected def checkAfterGenesisState(c: C) = GetDataFromCurrentView[H, S, W, P, Boolean] { v =>
     java.util.Arrays.equals(v.state.rootHash, settings.chainSettings.monetary.afterGenesisStateDigest)

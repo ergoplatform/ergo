@@ -9,7 +9,7 @@ import scorex.core.serialization.Serializer
 
 import scala.util.Success
 
-class TrackedBoxSerializationTest extends ErgoPropertyTest with WalletGenerators {
+class TrackedBoxSerializationSpec extends ErgoPropertyTest with WalletGenerators {
 
   property("UnspentOffchainBox serialization") {
     checkBoxSerialization(unspentOffchainBoxGen, new UnspentOffchainBoxSerializer(_))

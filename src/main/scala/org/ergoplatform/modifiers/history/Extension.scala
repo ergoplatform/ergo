@@ -19,9 +19,11 @@ import scala.util.Try
   *
   * @param headerId        - id of corresponding header
   * @param mandatoryFields - fields that are known to all nodes in the network and may be changed
-  *                        via soft/hard forks only. These fields have 4 bytes key and at most 64 bytes value.
-  * @param optionalFields  - random data miner may add to a block. This section contains at most 8
-  *                        elements with 32 byte key size and at most 1024 bytes value size.
+  *                        via soft/hard forks only. These fields have 4 bytes key and at most `MandatoryFieldValueSize`
+  *                        bytes value.
+  * @param optionalFields  - random data miner may add to a block. This section contains at most `MaxOptionalFields`
+  *                        elements with `OptionalFieldKeySize` byte key size and at most `OptionalFieldValueSize`
+  *                        bytes value size.
   */
 case class Extension(headerId: ModifierId,
                      mandatoryFields: Seq[(Array[Byte], Array[Byte])],
@@ -50,7 +52,11 @@ object Extension {
 
   val MandatoryFieldKeySize: Int = 4
 
+  val MandatoryFieldValueSize: Int = 64
+
   val OptionalFieldKeySize: Int = 32
+
+  val OptionalFieldValueSize: Int = 64
 
   val MaxOptionalFields: Int = 2
 
@@ -82,14 +88,14 @@ object Extension {
 }
 
 object ExtensionSerializer extends Serializer[Extension] {
-  val Delimeter: Array[Byte] = Array.fill(4)(0: Byte)
+  val Delimiter: Array[Byte] = Array.fill(4)(0: Byte)
 
   override def toBytes(obj: Extension): Array[Byte] = {
     val mandBytes = scorex.core.utils.concatBytes(obj.mandatoryFields.map(f =>
       Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
     val optBytes = scorex.core.utils.concatBytes(obj.optionalFields.map(f =>
       Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
-    Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimeter, optBytes)
+    Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimiter, optBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
@@ -100,7 +106,7 @@ object ExtensionSerializer extends Serializer[Extension] {
                      keySize: Int,
                      acc: Seq[(Array[Byte], Array[Byte])]): (Seq[(Array[Byte], Array[Byte])], Int) = {
       val key = bytes.slice(pos, pos + keySize)
-      if (!java.util.Arrays.equals(key, Delimeter) && pos < totalLength) {
+      if (!java.util.Arrays.equals(key, Delimiter) && pos < totalLength) {
         val length = Shorts.fromByteArray(bytes.slice(pos + keySize, pos + keySize + 2))
         val value = bytes.slice(pos + keySize + 2, pos + keySize + 2 + length)
         parseSection(pos + keySize + 2 + length, keySize, (key, value) +: acc)

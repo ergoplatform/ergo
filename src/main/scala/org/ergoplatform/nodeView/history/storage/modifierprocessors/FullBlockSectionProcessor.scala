@@ -115,17 +115,22 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     private def modifierSpecificValidation(m: BlockSection, header: Header): ValidationState[Unit] = {
       m match {
         case e: Extension =>
-          // todo checks that all required mandatory fields are set
-          // todo checks number of mandatory fields
+          // todo checks that all required mandatory fields are set and non additional mandatory fields
           failFast
+            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
+              fatal(s"Extension ${m.encodedId} have too many optional fields")
+            }
             .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
               fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
             }
             .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
               fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
             }
-            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
-              fatal(s"Extension ${m.encodedId} have too many optional fields")
+            .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldValueSize) <= 0)) {
+              fatal(s"Extension ${m.encodedId} mandatory field value length > ${Extension.MandatoryFieldKeySize}")
+            }
+            .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldValueSize) <= 0)) {
+              fatal(s"Extension ${m.encodedId} optional field value length > ${Extension.OptionalFieldValueSize}")
             }
         case _ =>
           // todo some validations of block transactions, including size limit, should go there.

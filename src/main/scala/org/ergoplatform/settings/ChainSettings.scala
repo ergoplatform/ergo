@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.PowScheme
+import scorex.core.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -12,4 +13,5 @@ case class ChainSettings(blockInterval: FiniteDuration,
                          epochLength: Int,
                          useLastEpochs: Int,
                          powScheme: PowScheme,
-                         monetary: MonetarySettings)
+                         monetary: MonetarySettings,
+                         genesisId: Option[ModifierId] = None)

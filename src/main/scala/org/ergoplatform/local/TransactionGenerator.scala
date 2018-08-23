@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
 import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
@@ -74,8 +74,7 @@ class TransactionGenerator(viewHolder: ActorRef,
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
 
-    case SuccessfulTransaction(_) =>
-      self ! Attempt
+    case SuccessfulTransaction(_) => self ! Attempt
    }
 }
 

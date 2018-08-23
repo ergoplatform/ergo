@@ -51,27 +51,24 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = Constant
       case (inputsCostTry, (unsignedInput, inputBox)) =>
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        inputsCostTry match {
-          case Success((ins, totalCost)) =>
-            val context =
-              ErgoLikeContext(
-                stateContext.height + 1,
-                AvlTreeData(stateContext.digest, 32),
-                boxesToSpend,
-                unsignedTx,
-                inputBox,
-                ContextExtension.empty)
+        inputsCostTry.flatMap { case (ins, totalCost) =>
+          val context =
+            ErgoLikeContext(
+              stateContext.height + 1,
+              AvlTreeData(stateContext.digest, 32),
+              boxesToSpend,
+              unsignedTx,
+              inputBox,
+              ContextExtension.empty)
 
-            prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
-              val newTC = totalCost + proverResult.asInstanceOf[CostedProverResult].cost
-              if (newTC > maxCost) {
-                Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
-              } else {
-                Success((Input(unsignedInput.boxId, proverResult) +: ins) -> 0L)
-              }
+          prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
+            val newTC = totalCost + proverResult.asInstanceOf[CostedProverResult].cost
+            if (newTC > maxCost) {
+              Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
+            } else {
+              Success((Input(unsignedInput.boxId, proverResult) +: ins) -> 0L)
             }
-
-          case f: Failure[_] => f
+          }
         }
     }.map { case (inputs, _) =>
       ErgoTransaction(inputs, unsignedTx.outputCandidates)

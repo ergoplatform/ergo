@@ -37,13 +37,10 @@ class TransactionGenerator(viewHolder: ActorRef,
 
           context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
-          context.system.eventStream.subscribe(self, classOf[FailedTransaction[ErgoTransaction]])
-
           context.system.scheduler.schedule(1500.millis,
             3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
         }
       }
-
       isStarted = true
 
     case CheckGeneratingConditions =>
@@ -71,17 +68,14 @@ class TransactionGenerator(viewHolder: ActorRef,
         ergoWalletActor ! GenerateTransaction(newOuts)
       }
 
-    case SuccessfulTransaction(_) =>
-      self ! Attempt
-
-    case FailedTransaction(tx, err) =>
-      log.warn(s"Error $err for transaction $tx")
-
     case txTry: Try[ErgoTransaction]@unchecked =>
       txTry.foreach { tx =>
         log.info("Locally generated tx: " + tx)
         viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
+
+    case SuccessfulTransaction(_) =>
+      self ! Attempt
    }
 }
 

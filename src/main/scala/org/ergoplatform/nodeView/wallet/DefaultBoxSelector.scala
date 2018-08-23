@@ -13,15 +13,48 @@ import scala.collection.mutable
   */
 object DefaultBoxSelector extends BoxSelector {
 
-  //todo: refactor code below, it is pretty terrible
+  private def formChangeBoxes(changeBalance: Long,
+                              changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]): Option[Seq[(Long, Map[ModifierId, Long])]] = {
+    //at least 1 ergo token should be assigned per a created box
+    if (changeBoxesAssets.size > changeBalance) {
+      None
+    } else {
+      val changeBoxes = if (changeBoxesAssets.nonEmpty) {
+        val baseChangeBalance = changeBalance / changeBoxesAssets.size
+
+        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
+          baseChangeBalance -> a.toMap
+        }
+
+        val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
+          (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
+        }
+
+        modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
+      } else if (changeBalance > 0) {
+        Seq(changeBalance -> Map.empty[ModifierId, Long])
+      } else {
+        Seq.empty
+      }
+      Some(changeBoxes)
+    }
+  }
+
   override def select(inputBoxes: Iterator[UnspentBox],
                       filterFn: UnspentBox => Boolean,
                       targetBalance: Long,
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
 
+    //mutable structures to collect results
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L
     val currentAssets = mutable.Map[ModifierId, Long]()
+
+    def collect(unspentBox: UnspentBox) = {
+      currentBalance = currentBalance + unspentBox.value
+      mergeAssets(currentAssets, unspentBox.assets)
+      res += unspentBox.box
+    }
 
     def successMet = currentBalance >= targetBalance && targetAssets.forall { case (id, targetAmt) =>
       currentAssets.getOrElse(id, 0L) >= targetAmt
@@ -29,28 +62,20 @@ object DefaultBoxSelector extends BoxSelector {
 
     //first, we pick all the boxes until ergo target balance is met
     inputBoxes.find { bc =>
-      if (filterFn(bc)) {
-        currentBalance = currentBalance + bc.value
-        mergeAssets(currentAssets, bc.assets)
-        res += bc.box
-      }
+      if (filterFn(bc)) collect(bc)
       currentBalance >= targetBalance
     }
 
     //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
     //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
     inputBoxes.find { bc =>
-      if (filterFn(bc)) {
-        if (bc.assets.exists { case (id, _) =>
+      if (filterFn(bc) && {
+        bc.assets.exists { case (id, _) =>
           val targetAmt = targetAssets.getOrElse(id, 0L)
           lazy val currentAmt = currentAssets.getOrElse(id, 0L)
           targetAmt > 0 && targetAmt > currentAmt
-        }) {
-          currentBalance = currentBalance + bc.value
-          mergeAssets(currentAssets, bc.assets)
-          res += bc.box
         }
-      }
+      }) collect(bc)
       successMet
     }
 
@@ -64,33 +89,9 @@ object DefaultBoxSelector extends BoxSelector {
         }
       }
 
-      val changeBoxesAssets = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
+      val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
       val changeBalance = currentBalance - targetBalance
-
-      //at least 1 ergo token should be assigned per a created box
-      if (changeBoxesAssets.size > changeBalance) {
-        None
-      } else {
-        val changeBoxes = if (changeBoxesAssets.nonEmpty) {
-          val baseChangeBalance = changeBalance / changeBoxesAssets.size
-
-          val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
-            baseChangeBalance -> a.toMap
-          }
-
-          val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
-            (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
-          }
-
-          modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
-        } else if (changeBalance > 0) {
-          Seq(changeBalance -> Map.empty[ModifierId, Long])
-        } else {
-          Seq.empty
-        }
-
-        Some(BoxSelectionResult(res, changeBoxes))
-      }
+      formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))
     } else {
       None
     }

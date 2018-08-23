@@ -14,15 +14,17 @@ import sigmastate.Values.EvaluatedValue
   */
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
-                          assets: Seq[(ErgoBox.TokenId, Long)],
-                          registers: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]) {
+                          assets: Option[Seq[(ErgoBox.TokenId, Long)]],
+                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) {
   def toBoxCandidate: ErgoBoxCandidate = {
-    new ErgoBoxCandidate(value, address.script, assets, registers)
+    new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
   }
 }
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
+
   implicit val addressEncoder = new ErgoAddressEncoder(settings).encoder
+
   def apply(request: PaymentRequest): Json = {
     Json.obj(
       "address" -> request.address.asJson,
@@ -35,14 +37,16 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {
 
-  implicit val addressDecoder = new ErgoAddressEncoder(settings).decoder
+  val addressEncoders: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+
+  implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
 
   def apply(cursor: HCursor): Decoder.Result[PaymentRequest] = {
     for {
       address <- cursor.downField("address").as[ErgoAddress]
       value <- cursor.downField("value").as[Long]
-      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
-      registers <- cursor.downField("registers").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
+      assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
+      registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
     } yield PaymentRequest(address, value, assets, registers)
   }
 }

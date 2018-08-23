@@ -151,14 +151,14 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       val confirmedBalance = getConfirmedBalances.balance
 
       //pay out all the wallet balance:
-      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Seq.empty, Map.empty)
+      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, None, None)
 
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
 
       //change == 1:
-      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, Seq.empty, Map.empty)
+      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None)
 
       val tx2 = Await.result(wallet.generateTransaction(Seq(req2)), awaitDuration).get
       tx2.outputs.size shouldBe 2
@@ -235,7 +235,7 @@ class WalletFixture {
 
   val wallet: ErgoWallet = getCurrentView.vault
   def addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
-  val defaultAddress = addresses.head.asInstanceOf[P2PKAddress]
+  val defaultAddress: P2PKAddress = addresses.head.asInstanceOf[P2PKAddress]
   val pubKey: Value[SBoolean.type] = defaultAddress.pubkey
   val proofBytes: Array[Byte] = defaultAddress.contentBytes
 

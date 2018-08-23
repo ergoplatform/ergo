@@ -13,8 +13,8 @@ import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadWalletAddresses}
+import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoProvingInterpreter, ErgoWalletReader, P2PKAddress}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
@@ -27,6 +27,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -38,9 +39,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val history = applyChain(generateHistory(), chain)
 
-  lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
-    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
-  }
+  lazy val state = {
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
+    }
   }.sample.get
 
   lazy val wallet = new WalletStub
@@ -117,11 +119,21 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class WalletActorStub extends Actor {
+    def seed = "walletstub"
+    private val prover = new ErgoProvingInterpreter(seed)
+    private val trackedAddresses: mutable.Buffer[ErgoAddress] =
+      mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+
+
     def receive: Receive = {
+
+      case ReadWalletAddresses =>
+        sender ! trackedAddresses
+
       case GenerateTransaction(payTo) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), payTo.toIndexedSeq)
-        sender() ! Success(tx)
+        sender ! Success(tx)
     }
   }
 

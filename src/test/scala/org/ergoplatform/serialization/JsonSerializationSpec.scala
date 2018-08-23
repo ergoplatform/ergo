@@ -76,9 +76,9 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val restored = parsingResult.right.value
       restored.address shouldEqual request.address
       restored.value shouldEqual request.value
-      restored.registers should contain  theSameElementsAs(request.registers)
-      Inspectors.forAll(restored.assets.zip(request.assets)) {
-        case ((restoredToken, restoredValue),(requestToken, requestValue)) =>
+      restored.registers shouldEqual request.registers
+      Inspectors.forAll(restored.assets.getOrElse(Seq.empty).zip(request.assets.getOrElse(Seq.empty))) {
+        case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
           restoredToken shouldEqual requestToken
           restoredValue shouldEqual requestValue
       }

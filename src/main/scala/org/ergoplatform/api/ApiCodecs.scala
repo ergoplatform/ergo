@@ -120,7 +120,7 @@ trait ApiCodecs {
     }.asJson
   }
 
-  implicit val assetEncoder: Encoder[Tuple2[ErgoBox.TokenId, Long]] = { asset =>
+  implicit def assetEncoder[Id: Encoder]: Encoder[(Id, Long)] = { asset =>
     Json.obj(
       "tokenId" -> asset._1.asJson,
       "amount" -> asset._2.asJson

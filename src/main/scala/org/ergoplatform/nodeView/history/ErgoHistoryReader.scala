@@ -31,7 +31,7 @@ trait ErgoHistoryReader
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
 
-  protected val historyStorage: HistoryStorage
+  protected[history] val historyStorage: HistoryStorage
 
   /**
     * Is there's no history, even genesis block

@@ -51,7 +51,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ idToBytes(id)))
 
-  protected def validityKey(id: ModifierId): ByteArrayWrapper =
+  protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))

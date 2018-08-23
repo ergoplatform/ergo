@@ -93,7 +93,7 @@ trait ErgoHistory
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
-                                       progressInfo: ProgressInfo[ErgoPersistentModifier],
+                                       progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {

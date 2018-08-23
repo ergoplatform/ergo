@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.utils.AssetUtils.mergeAssets
+import org.ergoplatform.utils.AssetUtils.{mergeAssets, subtractAssets}
 import scorex.core.ModifierId
 
 import scala.collection.mutable
@@ -65,30 +65,25 @@ object DefaultBoxSelector extends BoxSelector {
       if (filterFn(bc)) collect(bc)
       currentBalance >= targetBalance
     }
-
-    //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
-    //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
-    inputBoxes.find { bc =>
-      if (filterFn(bc) && {
-        bc.assets.exists { case (id, _) =>
-          val targetAmt = targetAssets.getOrElse(id, 0L)
-          lazy val currentAmt = currentAssets.getOrElse(id, 0L)
-          targetAmt > 0 && targetAmt > currentAmt
+    if (!successMet) {
+      //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
+      //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
+      inputBoxes.find { bc =>
+        if (filterFn(bc) && {
+          bc.assets.exists { case (id, _) =>
+            val targetAmt = targetAssets.getOrElse(id, 0L)
+            lazy val currentAmt = currentAssets.getOrElse(id, 0L)
+            targetAmt > 0 && targetAmt > currentAmt
+          }
+        }) {
+          collect(bc)
         }
-      }) collect(bc)
-      successMet
+        successMet
+      }
     }
 
     if (successMet) {
-      targetAssets.foreach { case (id, targetAmt) =>
-        val currentAmt = currentAssets(id)
-        if (currentAmt == targetAmt) {
-          currentAssets.remove(id)
-        } else {
-          currentAssets.put(id, currentAmt - targetAmt)
-        }
-      }
-
+      subtractAssets(currentAssets, targetAssets)
       val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
       val changeBalance = currentBalance - targetBalance
       formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))

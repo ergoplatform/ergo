@@ -9,7 +9,7 @@ import io.circe.syntax._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
-import scorex.crypto.hash.Blake2b256
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate._
 import sigmastate.Values.{IntConstant, TaggedByteArray, Value}
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
@@ -81,16 +81,16 @@ case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends Ergo
 
   override val contentBytes: Array[Byte] = pubkeyBytes
 
-  override val script = pubkey
+  override val script: ProveDlog = pubkey
 
-  override def equals(obj: scala.Any): Boolean = obj match {
-    case P2PKAddress(pk, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
+  override def equals(obj: Any): Boolean = obj match {
+    case P2PKAddress(_, pkb) => util.Arrays.equals(pubkeyBytes, pkb)
     case _ => false
   }
 
   override def hashCode(): Int = Ints.fromByteArray(pubkeyBytes.takeRight(4))
 
-  override def toString = s"P2PK(${Algos.encode(pubkeyBytes)})"
+  override def toString: String = s"P2PK(${Algos.encode(pubkeyBytes)})"
 }
 
 object P2PKAddress {
@@ -116,14 +116,14 @@ case class Pay2SHAddress(scriptHash: Array[Byte]) extends ErgoAddress {
     AND(hashEquals, scriptIsCorrect)
   }
 
-  override def equals(obj: scala.Any): Boolean = obj match {
+  override def equals(obj: Any): Boolean = obj match {
     case Pay2SHAddress(otherHash) => util.Arrays.equals(scriptHash, otherHash)
     case _ => false
   }
 
   override def hashCode(): Int = Ints.fromByteArray(scriptHash.takeRight(4))
 
-  override def toString = s"P2SH(${Algos.encode(scriptHash)})"
+  override def toString: String = s"P2SH(${Algos.encode(scriptHash)})"
 }
 
 object Pay2SHAddress {
@@ -143,14 +143,14 @@ case class Pay2SAddress(override val script: Value[SBoolean.type], scriptBytes: 
 
   override val contentBytes: Array[Byte] = scriptBytes
 
-  override def equals(obj: scala.Any): Boolean = obj match {
+  override def equals(obj: Any): Boolean = obj match {
     case Pay2SAddress(_, sb) => util.Arrays.equals(scriptBytes, sb)
     case _ => false
   }
 
   override def hashCode(): Int = Ints.fromByteArray(scriptBytes.takeRight(4))
 
-  override def toString = s"P2S(${Algos.encode(scriptBytes)})"
+  override def toString: String = s"P2S(${Algos.encode(scriptBytes)})"
 }
 
 object Pay2SAddress {
@@ -185,8 +185,9 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
       val addressType = (headByte - networkPrefix).toByte
       val (withoutChecksum, checksum) = bytes.splitAt(bytes.length - ChecksumLength)
 
-      if (!util.Arrays.equals(hash256(withoutChecksum).take(ChecksumLength), checksum))
+      if (!util.Arrays.equals(hash256(withoutChecksum).take(ChecksumLength), checksum)) {
         throw new Exception(s"Checksum check fails for $addrStr")
+      }
 
       val bs = withoutChecksum.tail
 
@@ -226,7 +227,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 }
 
 object ErgoAddressEncoder {
-  def hash256(input: Array[Byte]) = Blake2b256(input)
+  def hash256(input: Array[Byte]): Digest32 = Blake2b256(input)
 
-  def hash160(input: Array[Byte]) = hash256(input).take(20)
+  def hash160(input: Array[Byte]): Array[Byte] = hash256(input).take(20)
 }

@@ -32,4 +32,3 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
     Await.result(result, 10.minutes)
   }
 }
-

@@ -139,6 +139,48 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       height = heightTo
   }
 
+  protected def generateTransactionWithOutputs(payTo: Seq[ErgoBoxCandidate]): Try[ErgoTransaction] = Try {
+    require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
+    require(payTo.forall(_.value > 0), "Non-positive Ergo value")
+    require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
+
+
+    val targetBalance = payTo.map(_.value).sum
+
+    val targetAssets = mutable.Map[ModifierId, Long]()
+
+    /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
+  payTo.map(_.additionalTokens).foreach { boxTokens =>
+    AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
+  } */
+
+    //we currently do not use off-chain boxes to create a transaction
+    def filterFn(bu: UnspentBox) = bu.onchain
+
+    boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
+      val inputs = r.boxes.toIndexedSeq
+
+      val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
+
+      val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
+
+        // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
+        val assets = IndexedSeq() //cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+
+        new ErgoBoxCandidate(chb, changeAddress, assets)
+      }
+
+      val unsignedTx = new UnsignedErgoTransaction(
+        inputs.map(_.id).map(id => new UnsignedInput(id)),
+        (payTo ++ changeBoxCandidates).toIndexedSeq)
+
+      prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
+    } match {
+      case Some(tx) => tx
+      case None     => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
+    }
+  }
+
 
   override def receive: Receive = scanLogic orElse {
     case WatchFor(address) =>
@@ -157,49 +199,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(payTo) =>
-      val txTry: Try[ErgoTransaction] = Try {
-        require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
-        require(payTo.forall(_.value > 0), "Non-positive Ergo value")
-        require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
-
-
-        val targetBalance = payTo.map(_.value).sum
-
-        val targetAssets = mutable.Map[ModifierId, Long]()
-
-        /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-      payTo.map(_.additionalTokens).foreach { boxTokens =>
-        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
-      } */
-
-        //we currently do not use off-chain boxes to create a transaction
-        def filterFn(bu: UnspentBox) = bu.onchain
-
-        boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
-          val inputs = r.boxes.toIndexedSeq
-
-          val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
-
-          val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
-
-            // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-            val assets = IndexedSeq() //cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-
-            new ErgoBoxCandidate(chb, changeAddress, assets)
-          }
-
-          val unsignedTx = new UnsignedErgoTransaction(
-            inputs.map(_.id).map(id => new UnsignedInput(id)),
-            (payTo ++ changeBoxCandidates).toIndexedSeq)
-
-          prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
-        } match {
-          case Some(tx) => tx
-          case None     => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
-        }
-      }
-
-      sender() ! txTry
+      sender() ! generateTransactionWithOutputs(payTo)
   }
 }
 

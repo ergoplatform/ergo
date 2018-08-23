@@ -1,11 +1,12 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directives, Route}
+import akka.http.scaladsl.server.Route
 import akka.pattern.ask
+import io.circe.Encoder
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, PaymentRequest, PaymentRequestDecoder}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
@@ -19,28 +20,29 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   implicit val paymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
+  implicit val addressEncoder = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private def getWallet: Future[ErgoWalletReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.w)
+  private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
+    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)
+  }
+
+  private def withWallet[T : Encoder](op: ErgoWalletReader => Future[T]): Route = {
+    withWalletOp(op)(ApiResponse.apply[T])
+  }
 
   override val route: Route = (pathPrefix("wallet") & withCors) {
     balancesRoute ~
       unconfirmedBalanceRoute ~
-      sendTransactionRoute ~
+      addressesRoute ~
       generateTransactionRoute ~
       generateAndSendTransactionRoute
   }
 
-  def sendTransactionRoute: Route = (path("transaction") & post & entity(as[ErgoTransaction])) { tx =>
-    // todo validation?
-    nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-    ApiResponse(tx.id)
-  }
-
   def generateTransactionRoute: Route = (path("transaction" / "generate") & post
     & entity(as[Seq[PaymentRequest]])) { payments =>
-    Directives.onSuccess(getWallet.flatMap(_.generateTransaction(payments))) {
+    withWalletOp(_.generateTransaction(payments)) {
       case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => ApiResponse(tx)
     }
@@ -48,7 +50,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def generateAndSendTransactionRoute: Route = (path("transaction" / "payment") & post
     & entity(as[Seq[PaymentRequest]])) { payments =>
-    Directives.onSuccess(getWallet.flatMap(_.generateTransaction(payments))) {
+    withWalletOp(_.generateTransaction(payments)) {
       case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
@@ -57,11 +59,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def balancesRoute: Route = (path("balances") & get) {
-    ApiResponse(getWallet.flatMap(_.confirmedBalances()))
+    withWallet(_.confirmedBalances())
   }
 
   def unconfirmedBalanceRoute: Route = (path("balances" / "unconfirmed") & get) {
-    ApiResponse(getWallet.flatMap(_.unconfirmedBalances()))
+    withWallet(_.unconfirmedBalances())
+  }
+
+  def addressesRoute: Route = (path("addresses") & get) {
+    withWallet(_.walletAddresses())
   }
 
 }

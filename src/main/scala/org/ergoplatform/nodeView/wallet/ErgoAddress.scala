@@ -207,7 +207,6 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
     }
   }
 
-
   implicit val encoder: Encoder[ErgoAddress] = { address =>
     toString(address).asJson
   }

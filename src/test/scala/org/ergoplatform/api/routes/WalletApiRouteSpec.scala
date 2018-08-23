@@ -27,21 +27,9 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val requestEncoder = new PaymentRequestEncoder(ergoSettigns)
   val route = WalletApiRoute(readersRef, nodeViewRef, settings).route
 
-  it should "send transaction" in {
-    val input = Input(
-      ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
-      ProverResult(Array.emptyByteArray, ContextExtension(Map())))
-    val output = new ErgoBoxCandidate(0, TrueLeaf)
-    val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
-    Post(prefix + "/transaction", tx.asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      responseAs[String] shouldEqual tx.id
-    }
-  }
-
   it should "generate transaction" in {
     val amount = 100L
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), amount, Seq.empty, Map.empty)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), amount, None, None)
     Post(prefix + "/transaction/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].outputs.head.value shouldEqual amount
@@ -49,10 +37,16 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate & send transaction" in {
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, Seq.empty, Map.empty)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
     Post(prefix + "/transaction/payment", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
+    }
+  }
+
+  it should "return addresses" in {
+    Get(prefix + "/addresses") ~> route ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 

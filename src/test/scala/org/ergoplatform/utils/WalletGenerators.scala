@@ -57,8 +57,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
   def paymentRequestGen: Gen[PaymentRequest] = {
     for {
       value <- Gen.choose(1L, 100000L)
-      assets <- additionalTokensGen
-      registers <- additionalRegistersGen
+      assets <- Gen.option(additionalTokensGen)
+      registers <- Gen.option(additionalRegistersGen)
     } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers)
   }
 

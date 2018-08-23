@@ -210,5 +210,4 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
   protected def readErgoBox(r: ByteReader)(parser: ErgoBox => T): Try[T] = {
     ErgoBoxSerializer.read(r) map { box => parser(box) }
   }
-
 }

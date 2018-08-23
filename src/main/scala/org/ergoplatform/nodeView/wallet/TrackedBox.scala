@@ -216,7 +216,6 @@ case class SpentOffchainBox(creationTx: ErgoTransaction,
   }
 
   def makeCertain(): SpentOffchainBox = if (certain) this else copy(certainty = Certain)
-
 }
 
 case class SpentOnchainBox(creationTx: ErgoTransaction,
@@ -246,5 +245,4 @@ case class SpentOnchainBox(creationTx: ErgoTransaction,
   }
 
   def makeCertain(): SpentOnchainBox = if (certain) this else copy(certainty = Certain)
-
 }

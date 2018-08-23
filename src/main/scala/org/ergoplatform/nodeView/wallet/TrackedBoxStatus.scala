@@ -20,4 +20,3 @@ object SpendingStatus {
   case object Spent extends SpendingStatus(true)
   case object Unspent extends SpendingStatus(false)
 }
-

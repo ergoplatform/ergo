@@ -64,8 +64,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.info(s"Uncertain box is mine! $uncertainBox")
-          val certainBox = uncertainBox.copy(certainty = Certain)
-          registry.makeTransition(uncertainBox, certainBox)
+          registry.makeTransitionTo(uncertainBox.copy(certainty = Certain))
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }
@@ -75,9 +74,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.foreach { inp =>
       val boxId = bytesToId(inp.boxId)
-      if (registry.registryContains(boxId)) {
-        registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
-      }
+      registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
 
     tx.outputCandidates.zipWithIndex.count { case (outCandidate, outIndex) =>

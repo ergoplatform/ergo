@@ -3,13 +3,13 @@ language: scala
 sudo: false
 branches:
   only:
-    - sigma
+    - v1.6
     - master
     - /^\d\.\d+$/
 jdk:
 - oraclejdk9
 scala:
-- 2.12.3
+- 2.12.6
 script:
   - sbt clean coverage test coverageReport
   - sbt bench:compile

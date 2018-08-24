@@ -153,14 +153,13 @@ class WalletStorage extends ScorexLogging {
   }
 
   def makeTransitionTo(updatedBox: TrackedBox): Unit = {
-    deregister(updatedBox.boxId)
+    deregister(updatedBox.boxId) // Actually this line is duplicated in `register` method
     register(updatedBox)
   }
 
   def convertBox(trackedBox: TrackedBox, transition: Transition): Option[TrackedBox] = {
     transition match {
       case ProcessRollback(toHeight) =>
-        //todo: looks like it is never being called
         convertBack(trackedBox, toHeight)
       case CreationConfirmation(creationHeight) =>
         //todo: looks like it is never being called
@@ -174,6 +173,7 @@ class WalletStorage extends ScorexLogging {
     * Register tracked box in a wallet storage
     */
   def register(trackedBox: TrackedBox): Unit = {
+    deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     putToRegistry(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
         log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
@@ -195,15 +195,6 @@ class WalletStorage extends ScorexLogging {
         decreaseBalances(removedBox)
       }
       removedBox
-    }
-  }
-
-  def removeAndRollback(boxId: ModifierId, heightTo: Height): Unit = {
-    deregister(boxId).foreach { trackedBox =>
-      convertBack(trackedBox, heightTo) match {
-        case Some(newBox) => register(newBox)
-        case None => //todo: should we be here at all?
-      }
     }
   }
 

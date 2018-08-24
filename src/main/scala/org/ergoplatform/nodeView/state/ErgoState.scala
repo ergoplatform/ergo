@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.mining.emission.CoinsEmission
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -12,7 +11,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.ScorexLogging
-import scorex.core.{VersionTag, bytesToVersion}
+import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.encode.Base16
 import sigmastate.Values.{IntConstant, LongConstant}
@@ -74,17 +73,17 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove
     */
   def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
-    val toInsert: mutable.HashMap[ByteArrayWrapper, ErgoBox] = mutable.HashMap.empty
-    val toRemove: mutable.ArrayBuffer[(ByteArrayWrapper, ADKey)] = mutable.ArrayBuffer()
+    val toInsert: mutable.HashMap[ModifierId, ErgoBox] = mutable.HashMap.empty
+    val toRemove: mutable.ArrayBuffer[(ModifierId, ADKey)] = mutable.ArrayBuffer()
     txs.foreach { tx =>
       tx.inputs.foreach { i =>
-        val wrapped = ByteArrayWrapper(i.boxId)
+        val wrapped = bytesToId(i.boxId)
         toInsert.remove(wrapped) match {
           case None => toRemove.append((wrapped, i.boxId))
           case _ => // old value removed, do nothing
         }
       }
-      tx.outputs.foreach(o => toInsert += ByteArrayWrapper(o.id) -> o)
+      tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> o)
     }
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }

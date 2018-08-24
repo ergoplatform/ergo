@@ -1,7 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
+import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
+import scorex.core.utils.ScorexLogging
 import scorex.core.{ModifierId, bytesToId}
 
 import scala.collection.mutable
@@ -16,7 +22,7 @@ import scala.collection.mutable
   *
   * This class is not thread-safe.
   */
-class WalletStorage {
+class WalletStorage extends ScorexLogging {
 
   private val registry = mutable.Map[ModifierId, TrackedBox]()
 
@@ -28,8 +34,8 @@ class WalletStorage {
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
   private var lastScanned: ModifierId = initialScanValue
 
-  def unspentBoxesIterator: Iterator[UnspentBox] =
-    unspentBoxes.iterator.flatMap(id => registry.get(id).map(_.asInstanceOf[UnspentBox]))
+  def unspentBoxesIterator: Iterator[TrackedBox] =
+    unspentBoxes.iterator.flatMap(id => registry.get(id))
 
   def nextUncertain(): Option[TrackedBox] = {
     uncertainBoxes.from(lastScanned).headOption match {
@@ -44,16 +50,16 @@ class WalletStorage {
 
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
-  def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = {
-    if (!trackedBox.certain) uncertainBoxes += trackedBox.boxId
-    if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
+  private def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = {
+    if (trackedBox.certainty == Uncertain) uncertainBoxes += trackedBox.boxId
+    if (trackedBox.spendingStatus == Unspent) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = {
+  private def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = {
     registry.remove(boxId).map { trackedBox: TrackedBox =>
-      if (!trackedBox.certain) uncertainBoxes -= trackedBox.boxId
-      if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes -= trackedBox.boxId
+      if (trackedBox.certainty == Uncertain) uncertainBoxes -= trackedBox.boxId
+      if (trackedBox.spendingStatus == Unspent) unspentBoxes -= trackedBox.boxId
       trackedBox
     }
   }
@@ -62,7 +68,7 @@ class WalletStorage {
     registry.contains(boxId)
   }
 
-  def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = {
+  private def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = {
     confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
   }
 
@@ -84,60 +90,59 @@ class WalletStorage {
 
   def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
 
-  def increaseBalances(unspentBox: UnspentBox): Unit = {
-    val box = unspentBox.box
-    val tokenDelta = box.value
-    val assetDeltas = box.additionalTokens
-
-    //todo: reduce boilerplate below?
-    if (unspentBox.onchain) {
-      _confirmedBalance += tokenDelta
-      assetDeltas.foreach { case (id, amount) =>
-        val wid = bytesToId(id)
-        val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
-        _confirmedAssetBalances.put(wid, updBalance)
-      }
-    } else { //offchain box case
-      _unconfirmedBalance += tokenDelta
-      assetDeltas.foreach { case (id, amount) =>
-        val wid = bytesToId(id)
-        val updBalance = _unconfirmedAssetBalances.getOrElse(wid, 0L) + amount
-        _unconfirmedAssetBalances.put(wid, updBalance)
+  private def increaseBalances(unspentBox: TrackedBox): Unit = {
+    if (checkUnspent(unspentBox)) {
+      val box = unspentBox.box
+      if (unspentBox.onchainStatus == Onchain) {
+        _confirmedBalance += box.value
+        increaseAssets(_confirmedAssetBalances, box.additionalTokens)
+      } else {
+        _unconfirmedBalance += box.value
+        increaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
       }
     }
   }
 
-  def decreaseBalances(unspentBox: UnspentBox): Unit = {
-    val box = unspentBox.box
-    val tokenDelta = box.value
-    val assetDeltas = box.additionalTokens
-
-    //todo: reduce boilerplate below?
-    if (unspentBox.onchain) {
-      _confirmedBalance -= tokenDelta
-      assetDeltas.foreach { case (id, amount) =>
-        val wid = bytesToId(id)
-        val currentBalance = _confirmedAssetBalances.getOrElse(wid, 0L)
-        if (currentBalance == amount) {
-          _confirmedAssetBalances.remove(wid)
-        } else {
-          val updBalance = currentBalance - amount
-          _confirmedAssetBalances.put(wid, updBalance)
-        }
-      }
-    } else { //offchain box case
-      _unconfirmedBalance -= tokenDelta
-      assetDeltas.foreach { case (id, amount) =>
-        val wid = bytesToId(id)
-        val currentBalance = _unconfirmedAssetBalances.getOrElse(wid, 0L)
-        if (currentBalance == amount) {
-          _unconfirmedAssetBalances.remove(wid)
-        } else {
-          val updBalance = currentBalance - amount
-          _unconfirmedAssetBalances.put(wid, updBalance)
-        }
+  private def decreaseBalances(unspentBox: TrackedBox): Unit = {
+    if (checkUnspent(unspentBox)) {
+      val box = unspentBox.box
+      if (unspentBox.onchainStatus == Onchain) {
+        _confirmedBalance -= box.value
+        decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
+      } else {
+        _unconfirmedBalance -= box.value
+        decreaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
       }
     }
+  }
+
+  private def increaseAssets(balanceMap: mutable.Map[ModifierId, Long], assetDeltas: Seq[(TokenId, Long)]): Unit = {
+    assetDeltas.foreach { case (id, amount) =>
+      val wid = bytesToId(id)
+      val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
+      _confirmedAssetBalances.put(wid, updBalance)
+    }
+  }
+
+  private def decreaseAssets(balanceMap: mutable.Map[ModifierId, Long], assetDeltas: Seq[(TokenId, Long)]): Unit = {
+    assetDeltas.foreach { case (id, amount) =>
+      val wid = bytesToId(id)
+      val currentBalance = balanceMap.getOrElse(wid, 0L)
+      if (currentBalance == amount) {
+        balanceMap.remove(wid)
+      } else {
+        val updBalance = currentBalance - amount
+        balanceMap.put(wid, updBalance)
+      }
+    }
+  }
+
+  private def checkUnspent(trackedBox: TrackedBox): Boolean = {
+    if (trackedBox.spendingStatus == Spent) {
+      val msg = s"Cannot update balances with spent box $trackedBox"
+      log.warn(msg, new IllegalArgumentException(msg))
+    }
+    trackedBox.spendingStatus == Unspent
   }
 
   def makeTransition(boxId: ModifierId, transition: Transition): Unit = {
@@ -147,11 +152,13 @@ class WalletStorage {
   def makeTransition(trackedBox: TrackedBox, transition: Transition): Unit = {
     val transitionResult: Option[TrackedBox] = transition match {
       case ProcessRollback(toHeight) =>
-        trackedBox.transitionBack(toHeight)
+        //todo: looks like it is never being called
+        convertBack(trackedBox, toHeight)
       case CreationConfirmation(creationHeight) =>
-        trackedBox.transition(creationHeight)
+        //todo: looks like it is never being called
+        convertToConfirmed(trackedBox, creationHeight)
       case ProcessSpending(spendingTransaction, spendingHeightOpt) =>
-        trackedBox.transition(spendingTransaction, spendingHeightOpt)
+        convertToSpent(trackedBox, spendingTransaction, spendingHeightOpt)
     }
     transitionResult match {
       case Some(newTrackedBox) =>
@@ -161,7 +168,102 @@ class WalletStorage {
   }
 
   def makeTransition(oldTrackedBox: TrackedBox, newTrackedBox: TrackedBox): Unit = {
-    oldTrackedBox.deregister(this)
-    newTrackedBox.register(this)
+    deregister(oldTrackedBox)
+    register(newTrackedBox)
   }
+
+  /**
+    * Register tracked box in a wallet storage
+    */
+  def register(trackedBox: TrackedBox): Unit = {
+    putToRegistry(trackedBox)
+    if (trackedBox.spendingStatus == Unspent) {
+        log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
+    }
+    if (trackedBox.onchainStatus == Onchain) {
+      putToConfirmedIndex(trackedBox.creationHeight.get, trackedBox.boxId)
+    }
+    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
+      increaseBalances(trackedBox)
+    }
+  }
+
+  /**
+    * Remove tracked box from a wallet storage
+    */
+  def deregister(trackedBox: TrackedBox): Unit = {
+    removeFromRegistry(trackedBox.boxId)
+    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
+      decreaseBalances(trackedBox)
+    }
+  }
+
+  def removeAndRollback(boxId: ModifierId, heightTo: Height): Unit = {
+    removeFromRegistry(boxId).foreach { trackedBox =>
+      convertBack(trackedBox, heightTo) match {
+        //todo: should we decrease balances here?
+        case Some(newBox) => makeTransition(trackedBox, newBox)
+        case None => //todo: should we be here at all?
+      }
+    }
+  }
+
+  /**
+    * Do tracked box state transition on a spending transaction (confirmed or not to come)
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
+  private def convertToSpent(trackedBox: TrackedBox,
+                     spendingTransaction: ErgoTransaction,
+                     spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
+    (trackedBox.spendingStatus, trackedBox.onchainStatus) match {
+      case _ if spendingHeightOpt.nonEmpty && trackedBox.creationHeight.isEmpty =>
+        log.error(s"Invalid state transition for ${trackedBox.encodedBoxId}: no creation height, but spent on-chain")
+        None
+      case (Unspent, Offchain) if spendingHeightOpt.nonEmpty =>
+        log.warn(s"Onchain transaction ${trackedBox.encodedSpendingTxId} is spending offchain box ${trackedBox.box}")
+        None
+      case (Spent, Offchain) if spendingHeightOpt.isEmpty =>
+        log.warn(s"Double spending of an unconfirmed box ${trackedBox.encodedBoxId}")
+        //todo: handle double-spending strategy for an unconfirmed tx
+        None
+      case (Spent, Onchain) =>
+        None
+      case _ =>
+        Some(trackedBox.copy(spendingTx = Option(spendingTransaction), spendingHeight = spendingHeightOpt))
+    }
+  }
+
+  /**
+    * Do tracked box state transition on a creating transaction got confirmed
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
+  private def convertToConfirmed(trackedBox: TrackedBox, creationHeight: Height): Option[TrackedBox] = {
+    if (trackedBox.creationHeight.isEmpty) {
+      Some(trackedBox.copy(creationHeight = Option(creationHeight)))
+    } else {
+      if (trackedBox.spendingStatus == Unspent || trackedBox.onchainStatus == Offchain) {
+        log.warn(s"Double creation of tracked box for  ${trackedBox.encodedBoxId}")
+      }
+      None
+    }
+  }
+
+  /**
+    * Do tracked box state transition on a rollback to a certain height
+    * @param toHeight - height to roll back to
+    * @return Some(trackedBox), if box state has been changed, None otherwise
+    */
+  private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
+    //todo: this was creationHeight < toHeight for SpentOffchainBox. Was it an error?
+    val dropCreationAndSpending = trackedBox.creationHeight.exists(toHeight < _)
+    val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
+    if (dropCreationAndSpending) {
+      Some(trackedBox.copy(spendingTx = None, creationHeight = None, spendingHeight = None))
+    } else if (dropSpending) {
+      Some(trackedBox.copy(spendingTx = None, spendingHeight = None))
+    } else {
+      None
+    }
+  }
+
 }

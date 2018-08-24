@@ -8,30 +8,20 @@ import sigmastate.Values
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   def trackedBoxGen: Gen[TrackedBox] = {
-    Gen.oneOf(unspentOffchainBoxGen, unspentOnchainBoxGen, spentOffchainBoxGen, spentOnchainBoxGen)
+    Gen.oneOf(unspentBoxGen, spentOffchainBoxGen, spentOnchainBoxGen)
   }
 
-  def unspentOffchainBoxGen: Gen[UnspentOffchainBox] = {
+  def unspentBoxGen: Gen[TrackedBox] = {
     for {
       (boxes, tx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
+      height <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield UnspentOffchainBox(tx, outIndex, ergoBox, certainty)
+    } yield TrackedBox(tx, outIndex, height, ergoBox, certainty)
   }
 
-  def unspentOnchainBoxGen: Gen[UnspentOnchainBox] = {
-    for {
-      (boxes, tx) <- validErgoTransactionGen
-      outIndex <- outIndexGen(tx)
-      height <- heightGen()
-      ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield UnspentOnchainBox(tx, outIndex, height, ergoBox, certainty)
-  }
-
-
-  def spentOffchainBoxGen: Gen[SpentOffchainBox] = {
+  def spentOffchainBoxGen: Gen[TrackedBox] = {
     for {
       (boxes, tx) <- validErgoTransactionGen
       (_, spendingTx) <- validErgoTransactionGen
@@ -39,10 +29,10 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       heightOpt <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield SpentOffchainBox(tx, outIndex, heightOpt, spendingTx, ergoBox, certainty)
+    } yield TrackedBox(tx, outIndex, heightOpt, Some(spendingTx), None, ergoBox, certainty)
   }
 
-  def spentOnchainBoxGen: Gen[SpentOnchainBox] = {
+  def spentOnchainBoxGen: Gen[TrackedBox] = {
     for {
       (boxes, tx) <- validErgoTransactionGen
       (_, spendingTx) <- validErgoTransactionGen
@@ -51,7 +41,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       spendingHeight <- heightGen(height)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield SpentOnchainBox(tx, outIndex, height, spendingTx, spendingHeight, ergoBox, certainty)
+    } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), Some(spendingHeight), ergoBox, certainty)
   }
 
   def paymentRequestGen: Gen[PaymentRequest] = {

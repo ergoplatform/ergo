@@ -8,12 +8,12 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 
 import scala.util.Try
 
@@ -195,7 +195,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -205,7 +205,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -216,7 +216,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -226,7 +226,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }

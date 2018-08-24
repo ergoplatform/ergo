@@ -5,8 +5,8 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.Serializer
 import scorex.core._
+import scorex.core.serialization.Serializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 

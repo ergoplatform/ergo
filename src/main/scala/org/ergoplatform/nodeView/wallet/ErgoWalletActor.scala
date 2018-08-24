@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
+import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierId, bytesToId}
 import scorex.core.utils.ScorexLogging
@@ -64,7 +64,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.info(s"Uncertain box is mine! $uncertainBox")
-          val certainBox = uncertainBox.makeCertain()
+          val certainBox = uncertainBox.copy(certainty = Certain)
           registry.makeTransition(uncertainBox, certainBox)
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
@@ -85,11 +85,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         case Some(_) =>
           val idxShort = outIndex.toShort
           val box = outCandidate.toBox(tx.serializedId, idxShort)
-          val bu = heightOpt match {
-            case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
-            case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
-          }
-          bu.register(registry)
+          val trackedBox = TrackedBox(tx, idxShort, heightOpt, box, Uncertain)
+          registry.register(trackedBox)
           true
         case None =>
           false
@@ -124,18 +121,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case Rollback(heightTo) =>
       height.until(heightTo, -1).foreach { h =>
         val toRemove = registry.confirmedAt(h)
-        toRemove.foreach { boxId =>
-          registry.removeFromRegistry(boxId).foreach { tb =>
-            tb.transitionBack(heightTo) match {
-              case Some(newBox) =>
-                registry.makeTransition(tb, newBox)
-              case None =>
-              //todo: should we be here at all?
-            }
-          }
-        }
+        toRemove.foreach(boxId => registry.removeAndRollback(boxId, heightTo))
       }
-
       height = heightTo
   }
 
@@ -143,7 +130,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
     require(payTo.forall(_.value > 0), "Non-positive Ergo value")
     require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
-
 
     val targetBalance = payTo.map(_.value).sum
 
@@ -155,7 +141,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   } */
 
     //we currently do not use off-chain boxes to create a transaction
-    def filterFn(bu: UnspentBox) = bu.onchain
+    def filterFn(trackedBox: TrackedBox) = trackedBox.onchainStatus.onchain
 
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
       val inputs = r.boxes.toIndexedSeq

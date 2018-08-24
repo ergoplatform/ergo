@@ -40,8 +40,8 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
-  override def select(inputBoxes: Iterator[UnspentBox],
-                      filterFn: UnspentBox => Boolean,
+  override def select(inputBoxes: Iterator[TrackedBox],
+                      filterFn: TrackedBox => Boolean,
                       targetBalance: Long,
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
 
@@ -50,7 +50,7 @@ object DefaultBoxSelector extends BoxSelector {
     var currentBalance = 0L
     val currentAssets = mutable.Map[ModifierId, Long]()
 
-    def collect(unspentBox: UnspentBox) = {
+    def collect(unspentBox: TrackedBox) = {
       currentBalance = currentBalance + unspentBox.value
       mergeAssets(currentAssets, unspentBox.assets)
       res += unspentBox.box

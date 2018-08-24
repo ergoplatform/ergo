@@ -3,7 +3,6 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
@@ -142,50 +141,27 @@ trait ApiCodecs {
     )
   }
 
-  implicit def unspentOffchainBoxEncoder(implicit opts: Detalization): Encoder[UnspentOffchainBox] = { b =>
-    trackedBoxFields(b).asJson
-  }
-
-  implicit def unspentOnchainBoxEncoder(implicit opts: Detalization): Encoder[UnspentOnchainBox] = { b =>
-    (trackedBoxFields(b) + ("creationHeight" -> b.creationHeight.asJson)).asJson
-  }
-
-  implicit def spentOffchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOffchainBox] = { b =>
-    (spentBoxFields(b) + ("creationHeight" -> b.creationHeightOpt.asJson)).asJson
-  }
-
-  implicit def spentOnchainBoxEncoder(implicit opts: Detalization): Encoder[SpentOnchainBox] = { b =>
-    (spentBoxFields(b) +
-      ("creationHeight" -> b.creationHeight.asJson) +
-      ("spendingHeight" -> b.spendingHeight.asJson)).asJson
-  }
-
-  private def spentBoxFields(b: SpentBox)(implicit opts: Detalization): Map[String, Json] = {
-    import b._
-    val txField = if (opts.showDetails) {
-      "spendingTransaction" -> spendingTx.asJson
-    } else {
-      "spendingTransactionId" -> spendingTx.id.asJson
-    }
-    trackedBoxFields(b) + txField
-  }
-
-  private def trackedBoxFields(b: TrackedBox)(implicit opts: Detalization): Map[String, Json] = {
-    import b._
-    val txField = if (opts.showDetails) {
-      "creationTransaction" -> creationTx.asJson
-    } else {
-      "creationTransactionId" -> creationTx.id.asJson
-    }
-    Map(txField,
-      "spent" -> spent.asJson,
-      "onchain" -> onchain.asJson,
-      "certain" -> certain.asJson,
-      "creationOutIndex" -> creationOutIndex.asJson,
-      "box" -> box.asJson
+  implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { b =>
+    val plainFields = Map(
+      "spent" -> b.spendingStatus.spent.asJson,
+      "onchain" -> b.onchainStatus.onchain.asJson,
+      "certain" -> b.certainty.certain.asJson,
+      "creationOutIndex" -> b.creationOutIndex.asJson,
+      "creationHeight" -> b.creationHeight.asJson,
+      "spendingHeight" -> b.spendingHeight.asJson,
+      "box" -> b.box.asJson
     )
+    val fieldsWithTx = if (opts.showDetails) {
+      plainFields +
+        ("creationTransaction" -> b.creationTx.asJson) +
+        ("spendingTransaction" -> b.spendingTx.asJson)
+    } else {
+      plainFields +
+        ("creationTransactionId" -> b.creationTxId.asJson) +
+        ("spendingTransactionId" -> b.spendingTxId.asJson)
+    }
+    fieldsWithTx.asJson
   }
-
 }
 
 trait ApiEncoderOption

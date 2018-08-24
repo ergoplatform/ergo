@@ -146,11 +146,19 @@ class WalletStorage extends ScorexLogging {
   }
 
   def makeTransition(boxId: ModifierId, transition: Transition): Unit = {
-    makeTransition(registry(boxId), transition)
+    registry.get(boxId).foreach { trackedBox =>
+      val targetBox: Option[TrackedBox] = convertBox(trackedBox, transition)
+      targetBox.foreach(makeTransitionTo)
+    }
   }
 
-  def makeTransition(trackedBox: TrackedBox, transition: Transition): Unit = {
-    val transitionResult: Option[TrackedBox] = transition match {
+  def makeTransitionTo(updatedBox: TrackedBox): Unit = {
+    deregister(updatedBox.boxId)
+    register(updatedBox)
+  }
+
+  def convertBox(trackedBox: TrackedBox, transition: Transition): Option[TrackedBox] = {
+    transition match {
       case ProcessRollback(toHeight) =>
         //todo: looks like it is never being called
         convertBack(trackedBox, toHeight)
@@ -160,16 +168,6 @@ class WalletStorage extends ScorexLogging {
       case ProcessSpending(spendingTransaction, spendingHeightOpt) =>
         convertToSpent(trackedBox, spendingTransaction, spendingHeightOpt)
     }
-    transitionResult match {
-      case Some(newTrackedBox) =>
-        makeTransition(trackedBox, newTrackedBox)
-      case None =>
-    }
-  }
-
-  def makeTransition(oldTrackedBox: TrackedBox, newTrackedBox: TrackedBox): Unit = {
-    deregister(oldTrackedBox)
-    register(newTrackedBox)
   }
 
   /**
@@ -191,18 +189,19 @@ class WalletStorage extends ScorexLogging {
   /**
     * Remove tracked box from a wallet storage
     */
-  def deregister(trackedBox: TrackedBox): Unit = {
-    removeFromRegistry(trackedBox.boxId)
-    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
-      decreaseBalances(trackedBox)
+  def deregister(boxId: ModifierId): Option[TrackedBox] = {
+    removeFromRegistry(boxId) map { removedBox =>
+      if (removedBox.spendingStatus == Unspent && removedBox.certainty == Certain) {
+        decreaseBalances(removedBox)
+      }
+      removedBox
     }
   }
 
   def removeAndRollback(boxId: ModifierId, heightTo: Height): Unit = {
-    removeFromRegistry(boxId).foreach { trackedBox =>
+    deregister(boxId).foreach { trackedBox =>
       convertBack(trackedBox, heightTo) match {
-        //todo: should we decrease balances here?
-        case Some(newBox) => makeTransition(trackedBox, newBox)
+        case Some(newBox) => register(newBox)
         case None => //todo: should we be here at all?
       }
     }

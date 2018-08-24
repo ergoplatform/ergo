@@ -143,7 +143,8 @@ trait ValidBlocksGenerators
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
                      n: Char = 48,
-                     k: Char = 5
+                     k: Char = 5,
+                     timeOpt: Option[Long] = None
                     ): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
@@ -153,7 +154,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = System.currentTimeMillis()
+    val time = timeOpt.getOrElse(timeProvider.time())
     val extension: ExtensionCandidate = defaultExtension
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,

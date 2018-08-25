@@ -22,9 +22,9 @@ class ErgoWallet(nodeViewHolderRef: ActorRef,
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
-
+  
   if (settings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, this, settings.testingSettings)
     txGen ! StartGeneration
   }
 

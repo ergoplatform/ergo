@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, Pay2SAddress, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
@@ -20,7 +20,7 @@ import scala.util.{Random, Try}
 
 
 class TransactionGenerator(viewHolder: ActorRef,
-                           ergoWalletActor: ActorRef,
+                           ergoWallet: ErgoWallet,
                            settings: TestingSettings) extends Actor with ScorexLogging {
 
 
@@ -62,10 +62,11 @@ class TransactionGenerator(viewHolder: ActorRef,
         val newOuts = (1 to newOutsCount).map { _ =>
           val value = Random.nextInt(50) + 1
           val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
-          new ErgoBoxCandidate(value, prop)
+
+          PaymentRequest(Pay2SAddress(prop), value, None, None)
         }
 
-        ergoWalletActor ! GenerateTransaction(newOuts)
+        ergoWallet.generateTransaction(newOuts)
       }
 
     case txTry: Try[ErgoTransaction]@unchecked =>
@@ -88,14 +89,14 @@ object TransactionGenerator {
 }
 
 object TransactionGeneratorRef {
-  def props(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings): Props =
-    Props(new TransactionGenerator(viewHolder, ergoWalletActor, settings))
+  def props(viewHolder: ActorRef, ergoWallet: ErgoWallet, settings: TestingSettings): Props =
+    Props(new TransactionGenerator(viewHolder, ergoWallet, settings))
 
-  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings)
+  def apply(viewHolder: ActorRef, ergoWallet: ErgoWallet, settings: TestingSettings)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, ergoWalletActor, settings))
+    context.actorOf(props(viewHolder, ergoWallet, settings))
 
-  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings, name: String)
+  def apply(viewHolder: ActorRef, ergoWallet: ErgoWallet, settings: TestingSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, ergoWalletActor, settings), name)
+    context.actorOf(props(viewHolder, ergoWallet, settings), name)
 }

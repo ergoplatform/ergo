@@ -194,7 +194,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
       }
 
-    case ReadWalletAddresses =>
+    case ReadTrackedAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
 
     //generate a transaction paying to a sequence of boxes payTo
@@ -219,6 +219,6 @@ object ErgoWalletActor {
 
   case class ReadBalances(confirmed: Boolean)
 
-  case object ReadWalletAddresses
+  case object ReadTrackedAddresses
 
 }

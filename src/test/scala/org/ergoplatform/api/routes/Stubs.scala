@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadWalletAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
 import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoProvingInterpreter, ErgoWalletReader, P2PKAddress}
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
@@ -127,7 +127,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     def receive: Receive = {
 
-      case ReadWalletAddresses =>
+      case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
       case GenerateTransaction(payTo) =>

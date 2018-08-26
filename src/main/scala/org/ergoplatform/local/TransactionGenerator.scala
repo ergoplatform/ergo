@@ -13,8 +13,9 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTra
 import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
-import scala.concurrent.duration._
 import scala.util.{Random, Try}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 class TransactionGenerator(viewHolder: ActorRef,

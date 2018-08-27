@@ -16,7 +16,8 @@ case class PoPoWProof(m: Byte,
                       k: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
-                      suffix: Seq[Header])(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      suffix: Seq[Header],
+                      sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -30,6 +31,52 @@ case class PoPoWProof(m: Byte,
   override type M = PoPoWProof
 
   override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
+  // lca(C1, C2) = (C1 ∩ C2)[−1] π
+  // needed at //best-arg_m(πA, lca) ≥ best-arg_m(πB, lca)
+  @tailrec
+  final private def lca(
+                         proofB: PoPoWProof,
+                         proofABlockIdx: Int,
+                         proofBBlockIdx: Int,
+                         LCA: Option[Header] = None): Option[Header] = {
+
+    if (proofABlockIdx >= 0 && proofBBlockIdx >= 0) {
+
+      this.innerchain(proofABlockIdx) match {
+
+        case a if a.extensionHash == proofB.innerchain(proofBBlockIdx).extensionHash =>
+          Some(this.innerchain(proofABlockIdx))
+
+        case a if a.height > proofB.innerchain(proofBBlockIdx).height =>
+          lca(proofB, proofABlockIdx - 1, proofBBlockIdx)
+
+        case _ => lca(proofB, proofABlockIdx, proofBBlockIdx - 1)
+      }
+    } else {
+      None
+    }
+  }
+
+  def defineM(proof: PoPoWProof, startBlock: Option[Header]): Seq[Header] = {
+
+    @tailrec // {b:}
+    def generateInitialIdx(innerChain: Seq[Header], startBlock: Header, position: Int): Int =
+      if (position >= 0)
+        if (innerChain(position) == startBlock) position
+        else generateInitialIdx(innerchain, startBlock, position - 1)
+      else 0
+
+    val initialIdx =
+      if (startBlock.isEmpty) 0
+      else generateInitialIdx(proof.innerchain, startBlock.get, proof.innerchain.length -1)
+
+    def generateLevels(innerChain: Seq[Header], idx: Int, levels: Seq[Header] = Seq.empty): Seq[Header] = {
+      val mu = innerchain(idx)
+    }
+
+    val levels = ???
+    // {µ : |π ↑µ {b :}| ≥ m}
+  }
 
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
@@ -93,6 +140,7 @@ class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with Modifier
     }
     generateMaxLevel(0)
   }
+
   def constructInterlinkVector(parent: Header): Seq[ModifierId] = {
     if (parent.isGenesis) {
       //initialize interlink vector at first block after genesis
@@ -166,6 +214,6 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
       }
     }
 
-    PoPoWProof(m, k, i, createInnerChain(index + 2), suffix)(powScheme)
+    PoPoWProof(m, k, i, createInnerChain(index + 2), suffix, Some(bytes.length))(powScheme)
   }
 }

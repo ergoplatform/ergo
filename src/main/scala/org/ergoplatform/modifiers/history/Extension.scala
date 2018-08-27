@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Shorts}
+import com.google.common.primitives.Bytes
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
@@ -52,11 +52,11 @@ object Extension {
 
   val MandatoryFieldKeySize: Int = 4
 
-  val MandatoryFieldValueSize: Int = 64
-
   val OptionalFieldKeySize: Int = 32
 
-  val OptionalFieldValueSize: Int = 64
+  val MaxMandatoryFieldValueSize: Int = 64
+
+  val MaxOptionalFieldValueSize: Int = 64
 
   val MaxOptionalFields: Int = 2
 
@@ -84,7 +84,6 @@ object Extension {
       "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
     ).asJson
 
-
 }
 
 object ExtensionSerializer extends Serializer[Extension] {
@@ -92,32 +91,44 @@ object ExtensionSerializer extends Serializer[Extension] {
 
   override def toBytes(obj: Extension): Array[Byte] = {
     val mandBytes = scorex.core.utils.concatBytes(obj.mandatoryFields.map(f =>
-      Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
+      Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
     val optBytes = scorex.core.utils.concatBytes(obj.optionalFields.map(f =>
-      Bytes.concat(f._1, Shorts.toByteArray(f._2.length.toShort), f._2)))
-    Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimiter, optBytes)
+      Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
+    if (optBytes.nonEmpty) {
+      Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimiter, optBytes)
+    } else {
+      Bytes.concat(idToBytes(obj.headerId), mandBytes)
+    }
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
     val totalLength = bytes.length
+    // todo check bytes length immediately after voting implementation to prevent DoS
 
     @tailrec
     def parseSection(pos: Int,
                      keySize: Int,
                      acc: Seq[(Array[Byte], Array[Byte])]): (Seq[(Array[Byte], Array[Byte])], Int) = {
-      val key = bytes.slice(pos, pos + keySize)
-      if (!java.util.Arrays.equals(key, Delimiter) && pos < totalLength) {
-        val length = Shorts.fromByteArray(bytes.slice(pos + keySize, pos + keySize + 2))
-        val value = bytes.slice(pos + keySize + 2, pos + keySize + 2 + length)
-        parseSection(pos + keySize + 2 + length, keySize, (key, value) +: acc)
+      if (pos == totalLength) {
+        // deserialization complete
+        (acc.reverse, pos)
       } else {
-        (acc.reverse, pos + keySize)
+        val key = bytes.slice(pos, pos + keySize)
+        if (keySize == Extension.MandatoryFieldKeySize && java.util.Arrays.equals(key, Delimiter)) {
+          // mandatory fields deserialization complete
+          (acc.reverse, pos + keySize)
+        } else {
+          val length: Byte = bytes(pos + keySize)
+          require(length >= 0, "value size should not be negative")
+          val value = bytes.slice(pos + keySize + 1, pos + keySize + 1 + length)
+          parseSection(pos + keySize + 1 + length, keySize, (key, value) +: acc)
+        }
       }
     }
 
     val headerId = bytesToId(bytes.take(32))
-    val (mandatory, newPos) = parseSection(32, 4, Seq())
-    val (optional, _) = parseSection(newPos, 32, Seq())
+    val (mandatory, newPos) = parseSection(32, Extension.MandatoryFieldKeySize, Seq())
+    val (optional, _) = parseSection(newPos, Extension.OptionalFieldKeySize, Seq())
     Extension(headerId, mandatory, optional, Some(bytes.length))
   }
 }

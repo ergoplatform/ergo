@@ -27,8 +27,16 @@ trait ErgoWalletReader extends VaultReader {
 
   def unconfirmedBalances(): Future[BalancesSnapshot] = balances(confirmed = false)
 
-  def walletAddresses(): Future[Seq[ErgoAddress]] = {
-    (actor ? ErgoWalletActor.ReadWalletAddresses).mapTo[Seq[ErgoAddress]]
+  def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
+    (actor ? ErgoWalletActor.ReadPublicKeys).mapTo[Seq[P2PKAddress]]
+  }
+
+  def randomPublicKey(): Future[P2PKAddress] = {
+    (actor ? ErgoWalletActor.ReadRandomPublicKey).mapTo[P2PKAddress]
+  }
+
+  def trackedAddresses(): Future[Seq[ErgoAddress]] = {
+    (actor ? ErgoWalletActor.ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
   }
 
   def generateTransaction(paymentRequests: Seq[PaymentRequest]): Future[Try[ErgoTransaction]] = {

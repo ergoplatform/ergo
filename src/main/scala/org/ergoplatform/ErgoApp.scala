@@ -3,6 +3,7 @@ package org.ergoplatform
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import org.ergoplatform.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -73,6 +74,11 @@ class ErgoApp(args: Seq[String]) extends Application {
     nodeViewHolderRef
   )
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
+
+  if (ergoSettings.testingSettings.transactionGeneration) {
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
+    txGen ! StartGeneration
+  }
 }
 
 object ErgoApp extends ScorexLogging {

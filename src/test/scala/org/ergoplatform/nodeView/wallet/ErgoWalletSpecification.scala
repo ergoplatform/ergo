@@ -234,7 +234,7 @@ class WalletFixture {
   val awaitDuration: Duration = timeout.duration + 1.second
 
   val wallet: ErgoWallet = getCurrentView.vault
-  def addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
+  def addresses: Seq[ErgoAddress] = Await.result(wallet.trackedAddresses(), awaitDuration)
   val defaultAddress: P2PKAddress = addresses.head.asInstanceOf[P2PKAddress]
   val pubKey: Value[SBoolean.type] = defaultAddress.pubkey
   val proofBytes: Array[Byte] = defaultAddress.contentBytes

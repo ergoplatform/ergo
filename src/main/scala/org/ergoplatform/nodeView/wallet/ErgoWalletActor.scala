@@ -36,13 +36,14 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   //todo: pass as a class argument, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector
 
-  private val prover = new ErgoProvingInterpreter(seed)
+  private val prover = new ErgoProvingInterpreter(seed, settings.walletSettings.dlogSecretsNumber)
 
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private val trackedAddresses: mutable.Buffer[ErgoAddress] =
-    mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+  private val publicKeys = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+
+  private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
   private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
@@ -164,12 +165,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     }
   }
 
-
-  override def receive: Receive = scanLogic orElse {
-    case WatchFor(address) =>
-      trackedAddresses.append(address)
-      trackedBytes.append(address.contentBytes)
-
+  def readers: Receive = {
     case ReadBalances(confirmed) =>
       if (confirmed) {
         sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
@@ -177,8 +173,20 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
       }
 
-    case ReadWalletAddresses =>
+    case ReadPublicKeys(from, until) =>
+      publicKeys.slice(from, until)
+
+    case ReadRandomPublicKey  =>
+      sender() ! publicKeys(Random.nextInt(publicKeys.size))
+
+    case ReadTrackedAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
+  }
+
+  override def receive: Receive = scanLogic orElse readers orElse {
+    case WatchFor(address) =>
+      trackedAddresses.append(address)
+      trackedBytes.append(address.contentBytes)
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(payTo) =>
@@ -202,6 +210,10 @@ object ErgoWalletActor {
 
   case class ReadBalances(confirmed: Boolean)
 
-  case object ReadWalletAddresses
+  case class ReadPublicKeys(from: Int, until: Int)
+
+  case object ReadRandomPublicKey
+
+  case object ReadTrackedAddresses
 
 }

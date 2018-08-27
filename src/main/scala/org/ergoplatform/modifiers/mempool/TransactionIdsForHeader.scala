@@ -40,7 +40,7 @@ object TransactionIdsForHeader {
 
 object TransactionIdsForHeaderSerializer extends Serializer[TransactionIdsForHeader] {
 
-  val fixedSize = NodeViewModifier.ModifierIdSize
+  val fixedSize: Int = NodeViewModifier.ModifierIdSize
 
   override def toBytes(obj: TransactionIdsForHeader): Array[Byte] =
     Bytes.concat(obj.serializedIds: _*).ensuring(_.length % fixedSize == 0)

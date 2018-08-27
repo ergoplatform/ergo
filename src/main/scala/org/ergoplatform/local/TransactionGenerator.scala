@@ -1,26 +1,24 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.local.TransactionGenerator.{Attempt, CheckGeneratingConditions, StartGeneration}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, Pay2SAddress, PaymentRequest}
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
 import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
-import scala.concurrent.duration._
 import scala.util.{Random, Try}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 class TransactionGenerator(viewHolder: ActorRef,
-                           ergoWalletActor: ActorRef,
                            settings: TestingSettings) extends Actor with ScorexLogging {
 
 
@@ -62,10 +60,13 @@ class TransactionGenerator(viewHolder: ActorRef,
         val newOuts = (1 to newOutsCount).map { _ =>
           val value = Random.nextInt(50) + 1
           val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
-          new ErgoBoxCandidate(value, prop)
+
+          PaymentRequest(Pay2SAddress(prop), value, None, None)
         }
 
-        ergoWalletActor ! GenerateTransaction(newOuts)
+        viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+          v.vault.generateTransaction(newOuts).onComplete(t => self ! t.flatten)
+        }
       }
 
     case txTry: Try[ErgoTransaction]@unchecked =>
@@ -88,14 +89,14 @@ object TransactionGenerator {
 }
 
 object TransactionGeneratorRef {
-  def props(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings): Props =
-    Props(new TransactionGenerator(viewHolder, ergoWalletActor, settings))
+  def props(viewHolder: ActorRef, settings: TestingSettings): Props =
+    Props(new TransactionGenerator(viewHolder, settings))
 
-  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings)
+  def apply(viewHolder: ActorRef, settings: TestingSettings)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, ergoWalletActor, settings))
+    context.actorOf(props(viewHolder, settings))
 
-  def apply(viewHolder: ActorRef, ergoWalletActor: ActorRef, settings: TestingSettings, name: String)
+  def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolder, ergoWalletActor, settings), name)
+    context.actorOf(props(viewHolder, settings), name)
 }

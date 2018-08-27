@@ -12,13 +12,13 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform._
-import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
-import scapi.sigma.DLogProtocol.DLogProverInput
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
+import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
 import scorex.crypto.hash.Digest32
@@ -29,7 +29,8 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success, Try}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -37,7 +38,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
                 emission: EmissionRules,
-                minerPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
+                extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -46,17 +47,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val publicKeys = {
-    val secrets = ErgoProvingInterpreter.secretsFromSeed(ergoSettings.walletSettings.seed).map(DLogProverInput.apply)
-    secrets.map(_.publicImage)
-  }
+  private var publicKeyOpt: Option[P2PKAddress] = None
 
-  private def minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
-    require(publicKeys.nonEmpty, "No seed provided to get miner's secrets from")
-    publicKeys(Random.nextInt(publicKeys.size))
+  private def minerPropOpt: Option[Value[SBoolean.type]] = extPropOpt.orElse {
+    publicKeyOpt.map(_.pubkey)
   }
 
   override def preStart(): Unit = {
+    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+      v.vault.randomPublicKey().onComplete { keyTry =>
+        publicKeyOpt = keyTry.toOption
+      }
+    }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
 
@@ -70,7 +72,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def unknownMessage: Receive = {
     case m =>
-      log.warn(s"Unexpected message $m")
+      log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
   private def miningStatus: Receive = {
@@ -87,7 +89,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         miningThreads.foreach(_ ! candidate)
       }
     case StartMining if candidateOpt.isEmpty =>
-      requestCandidate
+      requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
@@ -107,7 +109,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       * That means that our candidate is outdated. Should produce new candidate for ourselves.
       * Stop all current threads and re-run them with newly produced candidate.
       */
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) => requestCandidate
+    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) => requestCandidate()
 
     /**
       * Non obvious but case when mining is enabled, but miner doesn't started yet. Initialization case.
@@ -132,9 +134,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
-        case Success(candidate) => procCandidateBlock(candidate)
-        case Failure(e) => log.warn("Failed to produce candidate block.", e)
+      minerPropOpt.foreach { minerProp =>
+        createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
+          case Success(candidate) => procCandidateBlock(candidate)
+          case Failure(e) => log.warn("Failed to produce candidate block.", e)
+        }
       }
   }
 
@@ -145,13 +149,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  private def createCandidate(history: ErgoHistoryReader,
+  private def createCandidate(minerProp: Value[SBoolean.type],
+                              history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
+    // todo: size should be chosen by miners votes. fix after voting implementation
     val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
     var totalSize = 0
     val emissionBox = state.emissionBoxOpt
@@ -173,7 +178,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
     val txs = txsNoConflict :+ coinbase
 
-    state.proofsForTransactions(txs).map {case (adProof, adDigest) =>
+    state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       val timestamp = timeProvider.time()
       val nBits: Long = bestHeaderOpt
         .map(parent => history.requiredDifficultyAfter(parent))
@@ -187,7 +192,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }.flatten
 
-  def requestCandidate: Unit = readersHolderRef ! GetReaders
+  def requestCandidate(): Unit = readersHolderRef ! GetReaders
 }
 
 

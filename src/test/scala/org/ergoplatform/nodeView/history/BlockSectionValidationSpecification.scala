@@ -32,19 +32,19 @@ class BlockSectionValidationSpecification extends HistorySpecification {
 
     // checks, specific for extension
     // validation of mandatory fields key size
-    val imvKey = kvGen(Extension.MandatoryFieldKeySize - 1, Extension.MandatoryFieldValueSize).sample.get
+    val imvKey = kvGen(Extension.MandatoryFieldKeySize - 1, Extension.MaxMandatoryFieldValueSize).sample.get
     applicableCheck(extension.copy(mandatoryFields = imvKey +: m), header, history)
     // validation of mandatory fields value size
-    val imvValue = kvGen(Extension.MandatoryFieldKeySize, Extension.MandatoryFieldValueSize + 1).sample.get
+    val imvValue = kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize + 1).sample.get
     applicableCheck(extension.copy(mandatoryFields = imvValue +: m), header, history)
     // validation of optional fields key size
-    val omvKey = kvGen(Extension.OptionalFieldKeySize - 1, Extension.OptionalFieldValueSize).sample.get
+    val omvKey = kvGen(Extension.OptionalFieldKeySize - 1, Extension.MaxOptionalFieldValueSize).sample.get
     applicableCheck(extension.copy(optionalFields = omvKey +: o), header, history)
     // validation of optional fields value size
-    val omvValue = kvGen(Extension.OptionalFieldKeySize, Extension.OptionalFieldValueSize + 1).sample.get
+    val omvValue = kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize + 1).sample.get
     applicableCheck(extension.copy(mandatoryFields = omvValue +: o), header, history)
     // validation of optional fields number
-    val moreOMV = (0 until Extension.MaxOptionalFields + 1) map (_ => kvGen(Extension.MandatoryFieldKeySize, Extension.MandatoryFieldValueSize).sample.get)
+    val moreOMV = (0 until Extension.MaxOptionalFields + 1) map (_ => kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get)
     applicableCheck(extension.copy(mandatoryFields = moreOMV), header, history, correct = true)
     applicableCheck(extension.copy(mandatoryFields = moreOMV ++ o), header, history)
 

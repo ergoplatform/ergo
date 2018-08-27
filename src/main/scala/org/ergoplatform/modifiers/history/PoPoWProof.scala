@@ -17,7 +17,7 @@ case class PoPoWProof(m: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
                       suffix: Seq[Header],
-                      sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      override val sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -213,7 +213,6 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
         chain
       }
     }
-
     PoPoWProof(m, k, i, createInnerChain(index + 2), suffix, Some(bytes.length))(powScheme)
   }
 }

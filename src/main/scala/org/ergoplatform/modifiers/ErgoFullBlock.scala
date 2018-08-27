@@ -25,7 +25,9 @@ case class ErgoFullBlock(header: Header,
 
   override def parentId: ModifierId = header.parentId
 
-  lazy val blockSections: Seq[BlockSection] = Seq(adProofs, Some(blockTransactions), Some(extension)).flatten
+  lazy val mandatoryBlockSections: Seq[BlockSection] = Seq(blockTransactions, extension)
+
+  lazy val blockSections: Seq[BlockSection] = adProofs.toSeq ++ mandatoryBlockSections
 
   lazy val toSeq: Seq[ErgoPersistentModifier] = header +: blockSections
 

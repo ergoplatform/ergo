@@ -261,7 +261,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
         case (validation, ((candidate, maybeId), index)) =>
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
-            val box = candidate.toBox(idToBytes(txId), index.toShort)
+            val box = candidate.toBox(txId, index.toShort)
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }

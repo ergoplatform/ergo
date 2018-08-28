@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.core._
+import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.{ScorexEncoding, ScorexLogging}

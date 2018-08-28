@@ -19,7 +19,8 @@ import scala.util.{Failure, Success, Try}
 /**
   * A class which is holding secrets and signing transactions.
   *
-  * Currently it just generates few secrets from a seed and sign a transaction (against input boxes to spend and
+  * Currently it just generates some number of secrets (the number is provided via "dlogSecretsNumber" setting in the
+  * "wallet" section) from a seed and sign a transaction (against input boxes to spend and
   * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
   * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
   *
@@ -31,13 +32,23 @@ import scala.util.{Failure, Success, Try}
 // todo: storing seed in class parameters is not very secure choice. However, storing seed in a config file like we are
 // doing now is even more problematic
 
-class ErgoProvingInterpreter(seed: String, override val maxCost: Long = Constants.MaxBlockCost)
+class ErgoProvingInterpreter(seed: String,
+                             numOfSecrets: Int,
+                             override val maxCost: Long = Constants.MaxBlockCost)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
+
+  require(numOfSecrets > 0, "non-positive number of secrets to generate")
 
   override lazy val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
 
+  def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
+    (1 to numOfSecrets).map { i =>
+      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))
+    }
+  }
+
   private lazy val dlogSecrets: IndexedSeq[DLogProverInput] =
-    ErgoProvingInterpreter.secretsFromSeed(seed).map(DLogProverInput.apply)
+    secretsFromSeed(seed).map(DLogProverInput.apply)
 
   lazy val dlogPubkeys: IndexedSeq[ProveDlog] = dlogSecrets.map(_.publicImage)
 
@@ -74,15 +85,4 @@ class ErgoProvingInterpreter(seed: String, override val maxCost: Long = Constant
       ErgoTransaction(inputs, unsignedTx.outputCandidates)
     }
   }.flatten
-}
-
-
-object ErgoProvingInterpreter {
-  val Secrets = 4
-
-  def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
-    (1 to Secrets).map { i =>
-      BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))
-    }
-  }
 }

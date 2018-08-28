@@ -10,8 +10,6 @@ import scorex.core.transaction.wallet.Vault
 import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.TransactionGeneratorRef
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 
@@ -22,11 +20,6 @@ class ErgoWallet(nodeViewHolderRef: ActorRef,
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
   override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
-
-  if (settings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, actor, settings.testingSettings)
-    txGen ! StartGeneration
-  }
 
   def watchFor(address: ErgoAddress): ErgoWallet = {
     actor ! WatchFor(address)

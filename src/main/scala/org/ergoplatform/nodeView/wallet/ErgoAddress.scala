@@ -6,7 +6,7 @@ import java.util
 import com.google.common.primitives.Ints
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -23,9 +23,9 @@ import scala.util.{Failure, Success, Try}
   * An address is a short string corresponding to some script used to protect a box. Unlike (string-encoded) binary
   * representation of a script, an address has some useful characteristics:
   *
-  * * Integrity of an address could be checked., as it is incorporating a checksum.
-  * * A prefix of address is showing network and an address type.
-  * * An address is using an encoding (namely, Base58) which is avoiding similarly l0Oking characters, friendly to
+  * - Integrity of an address could be checked., as it is incorporating a checksum.
+  * - A prefix of address is showing network and an address type.
+  * - An address is using an encoding (namely, Base58) which is avoiding similarly l0Oking characters, friendly to
   * double-clicking and line-breaking in emails.
   *
   *
@@ -89,8 +89,6 @@ case class P2PKAddress(pubkey: ProveDlog, pubkeyBytes: Array[Byte]) extends Ergo
   }
 
   override def hashCode(): Int = Ints.fromByteArray(pubkeyBytes.takeRight(4))
-
-  override def toString: String = s"P2PK(${Algos.encode(pubkeyBytes)})"
 }
 
 object P2PKAddress {
@@ -122,8 +120,6 @@ case class Pay2SHAddress(scriptHash: Array[Byte]) extends ErgoAddress {
   }
 
   override def hashCode(): Int = Ints.fromByteArray(scriptHash.takeRight(4))
-
-  override def toString: String = s"P2SH(${Algos.encode(scriptHash)})"
 }
 
 object Pay2SHAddress {
@@ -149,8 +145,6 @@ case class Pay2SAddress(override val script: Value[SBoolean.type], scriptBytes: 
   }
 
   override def hashCode(): Int = Ints.fromByteArray(scriptBytes.takeRight(4))
-
-  override def toString: String = s"P2S(${Algos.encode(scriptBytes)})"
 }
 
 object Pay2SAddress {

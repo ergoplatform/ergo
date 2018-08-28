@@ -162,7 +162,6 @@ class WalletStorage extends ScorexLogging {
       case ProcessRollback(toHeight) =>
         convertBack(trackedBox, toHeight)
       case CreationConfirmation(creationHeight) =>
-        //todo: looks like it is never being called
         convertToConfirmed(trackedBox, creationHeight)
       case ProcessSpending(spendingTransaction, spendingHeightOpt) =>
         convertToSpent(trackedBox, spendingTransaction, spendingHeightOpt)
@@ -203,8 +202,8 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertToSpent(trackedBox: TrackedBox,
-                     spendingTransaction: ErgoTransaction,
-                     spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
+                             spendingTransaction: ErgoTransaction,
+                             spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
     (trackedBox.spendingStatus, trackedBox.onchainStatus) match {
       case _ if spendingHeightOpt.nonEmpty && trackedBox.creationHeight.isEmpty =>
         log.error(s"Invalid state transition for ${trackedBox.encodedBoxId}: no creation height, but spent on-chain")
@@ -244,11 +243,10 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
-    //todo: this was creationHeight < toHeight for SpentOffchainBox. Was it an error?
     val dropCreationAndSpending = trackedBox.creationHeight.exists(toHeight < _)
     val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
     if (dropCreationAndSpending) {
-      Some(trackedBox.copy(spendingTx = None, creationHeight = None, spendingHeight = None))
+      Some(trackedBox.copy(creationHeight = None, spendingTx = None, spendingHeight = None))
     } else if (dropSpending) {
       Some(trackedBox.copy(spendingTx = None, spendingHeight = None))
     } else {

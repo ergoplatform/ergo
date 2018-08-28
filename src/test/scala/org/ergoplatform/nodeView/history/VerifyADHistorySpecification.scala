@@ -1,18 +1,19 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistorySpecification
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity._
+import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
+import scorex.testkit.utils.NoShrink
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 
-class VerifyADHistorySpecification extends HistorySpecification {
+class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
   type PM = ErgoPersistentModifier
 
@@ -29,6 +30,15 @@ class VerifyADHistorySpecification extends HistorySpecification {
     } else {
       (inHistory, Seq.empty)
     }
+  }
+
+  property("Should generate empty extension on fly") {
+    var (history, _) = genHistory()
+    val block = genChain(1, history, extension = emptyExtension).head
+    block.extension shouldBe Extension(block.header.id, Seq(), Seq())
+    history.bestFullBlockOpt shouldBe None
+    history.append(block.header) shouldBe 'success
+    history.contains(block.extension) shouldBe true
   }
 
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {
@@ -65,23 +75,21 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
-    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
-    history.bestFullBlockOpt shouldBe None
-    history = history.append(fullBlocksToApply.head.aDProofs.get).get._1
+    history = applyBlock(history, fullBlocksToApply.head)
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
     fullBlocksToApply.tail.foreach { f =>
-      history = history.append(f.blockTransactions).get._1
-      history = history.append(f.aDProofs.get).get._1
+      history = applyBlock(history, f)
     }
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.last.header
 
-    //block transactions should be already pruned
-    history.contains(fullBlocksToApply.head.blockTransactions) shouldBe false
+    //block sections should be already pruned
+    fullBlocksToApply.head.header.sectionIds.foreach(id => history.contains(id._2) shouldBe false)
+
     //block transactions should not be able to apply since they are too far back in history
-    history.applicable(fullBlocksToApply.head.blockTransactions) shouldBe false
+    fullBlocksToApply.head.blockSections.foreach(s => history.applicable(s) shouldBe false)
   }
 
   property("proofs and transactions application in random order with forks") {
@@ -123,8 +131,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
-          history.append(block.blockTransactions) shouldBe 'success
-          history.append(block.aDProofs.get) shouldBe 'success
+          r.shuffle(block.blockSections).foreach(s => history.append(s) shouldBe 'success)
 
           appended += block
 
@@ -147,20 +154,16 @@ class VerifyADHistorySpecification extends HistorySpecification {
     history.bestFullBlockOpt shouldBe None
     history.bestHeaderOpt shouldBe Some(block3.header)
 
-    history.append(block0.blockTransactions) shouldBe 'success
-    history.append(block0.aDProofs.get) shouldBe 'success
+    history = applyBlock(history, block0)
     history.bestFullBlockOpt shouldBe Some(block0)
 
-    history.append(block2.blockTransactions) shouldBe 'success
-    history.append(block2.aDProofs.get) shouldBe 'success
+    history = applyBlock(history, block2)
     history.bestFullBlockOpt shouldBe Some(block0)
 
-    history.append(block3.blockTransactions) shouldBe 'success
-    history.append(block3.aDProofs.get) shouldBe 'success
+    history = applyBlock(history, block3)
     history.bestFullBlockOpt shouldBe Some(block0)
 
-    history.append(block1.blockTransactions) shouldBe 'success
-    history.append(block1.aDProofs.get) shouldBe 'success
+    history = applyBlock(history, block1)
     history.bestFullBlockOpt shouldBe Some(block3)
   }
 
@@ -177,9 +180,7 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
 
-    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
-    history.bestFullBlockOpt shouldBe None
-    history = history.append(fullBlocksToApply.head.aDProofs.get).get._1
+    history = applyBlock(history, fullBlocksToApply.head)
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
   }
 
@@ -202,27 +203,23 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.bestFullBlockOpt.foreach(b => b.header shouldBe history.bestHeaderOpt.get)
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Absent
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Absent
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Absent
+      fullBlock.blockSections.foreach(s => history.isSemanticallyValid(s.id) shouldBe Absent)
 
-      history = history.append(fullBlock.header).get._1
-      history = history.append(fullBlock.aDProofs.get).get._1
-      history = history.append(fullBlock.blockTransactions).get._1
+      history = applyBlock(history, fullBlock)
 
       history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
       history.bestHeaderOpt.get.id shouldEqual fullBlock.header.id
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
+      fullBlock.blockSections.foreach(s => history.isSemanticallyValid(s.id) shouldBe Unknown)
 
       history.reportModifierIsValid(fullBlock.header)
-      history.reportModifierIsValid(fullBlock.aDProofs.get)
-      history.reportModifierIsValid(fullBlock.blockTransactions)
+      fullBlock.blockSections.foreach(s => history.reportModifierIsValid(s))
+
+      history.reportModifierIsValid(fullBlock)
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Valid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Valid
-      history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Valid
+      fullBlock.blockSections.foreach(s => history.isSemanticallyValid(s.id) shouldBe Valid)
     }
   }
 
@@ -238,15 +235,15 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     chain.reverse.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Unknown
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Unknown
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Unknown
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
 
-      val progressInfo = ProgressInfo[PM](Option(fullBlock.header.parentId), Seq(fullBlock) , Seq.empty, Seq.empty)
+      val progressInfo = ProgressInfo[PM](Option(fullBlock.header.parentId), Seq(fullBlock), Seq.empty, Seq.empty)
       history.reportModifierIsInvalid(fullBlock.header, progressInfo)
 
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
@@ -266,13 +263,13 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     fork1.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
 
     fork2.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
-      history.isSemanticallyValid(fullBlock.aDProofs.get.id) shouldBe Invalid
+      history.isSemanticallyValid(fullBlock.adProofs.get.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
     }
   }
@@ -365,9 +362,11 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
     history = applyChain(history, fork2.dropRight(1))
     val lastBlock = fork2.last
-    history = history.append(lastBlock.header).get._1.append(lastBlock.blockTransactions).get._1
+    history = history.append(lastBlock.header).get._1
+      .append(lastBlock.blockTransactions).get._1
+      .append(lastBlock.extension).get._1
 
-    val changes = history.append(lastBlock.aDProofs.get).get
+    val changes = history.append(lastBlock.adProofs.get).get
     history = changes._1
     history.bestHeaderOpt.get shouldBe fork2.last.header
 
@@ -393,9 +392,11 @@ class VerifyADHistorySpecification extends HistorySpecification {
 
         history = applyChain(history, fork2.dropRight(1))
         val lastBlock = fork2.last
-        history = history.append(lastBlock.header).get._1.append(lastBlock.blockTransactions).get._1
+        history = history.append(lastBlock.header).get._1
+          .append(lastBlock.extension).get._1
+          .append(lastBlock.blockTransactions).get._1
 
-        val changes = history.append(lastBlock.aDProofs.get).get
+        val changes = history.append(lastBlock.adProofs.get).get
         history = changes._1
         history.bestHeaderOpt.get shouldBe fork2.last.header
 
@@ -416,22 +417,27 @@ class VerifyADHistorySpecification extends HistorySpecification {
       val startFullBlock = history.bestFullBlockOpt.get
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
-      val proofs = fullBlock.aDProofs.get
+      val proofs = fullBlock.adProofs.get
+      val extension = fullBlock.extension
       history.contains(header) shouldBe false
       history.contains(txs) shouldBe false
       history.contains(proofs) shouldBe false
+      history.contains(extension) shouldBe false
       history.applicable(header) shouldBe true
       history.applicable(proofs) shouldBe false
       history.applicable(txs) shouldBe false
+      history.applicable(extension) shouldBe false
 
       history = history.append(header).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe false
       history.contains(proofs) shouldBe false
+      history.contains(extension) shouldBe false
       history.applicable(header) shouldBe false
       history.applicable(proofs) shouldBe true
       history.applicable(txs) shouldBe true
+      history.applicable(extension) shouldBe true
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe startFullBlock
       history.openSurfaceIds().head shouldEqual startFullBlock.header.id
@@ -441,19 +447,24 @@ class VerifyADHistorySpecification extends HistorySpecification {
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe true
       history.contains(proofs) shouldBe false
+      history.contains(extension) shouldBe false
       history.applicable(header) shouldBe false
       history.applicable(proofs) shouldBe true
+      history.applicable(extension) shouldBe true
       history.applicable(txs) shouldBe false
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe startFullBlock
 
       history = history.append(proofs).get._1
+      history = history.append(extension).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe true
       history.contains(proofs) shouldBe true
+      history.contains(extension) shouldBe true
       history.applicable(header) shouldBe false
       history.applicable(proofs) shouldBe false
+      history.applicable(extension) shouldBe false
       history.applicable(txs) shouldBe false
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe fullBlock

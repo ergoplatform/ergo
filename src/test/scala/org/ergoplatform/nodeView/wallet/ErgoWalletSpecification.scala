@@ -113,6 +113,32 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("offchain transaction becomes onchain") {
+    withWalletFixture { fixture =>
+      import fixture._
+      val block = applyNextBlock(pubKey)
+      val sumBalance = sumOutputs(block)
+
+      block.transactions.foreach{tx =>
+        wallet.scanOffchain(tx)
+      }
+      blocking(Thread.sleep(scanDuration(block)))
+      val unconfirmedBalance = getUnconfirmedBalances.balance
+      unconfirmedBalance shouldBe sumBalance
+
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(scanDuration(block)))
+      val confirmedBalance = getConfirmedBalances.balance
+      log.info(s"Confirmed balance $confirmedBalance")
+      log.info(s"Sum balance: $sumBalance")
+      confirmedBalance should be > 0L
+      confirmedBalance shouldBe sumBalance
+      confirmedBalance shouldBe unconfirmedBalance
+
+      getUnconfirmedBalances.balance shouldBe 0L
+    }
+  }
+
   property("Successfully does a rollback") {
     withWalletFixture { fixture =>
       import fixture._
@@ -234,7 +260,7 @@ class WalletFixture {
   val awaitDuration: Duration = timeout.duration + 1.second
 
   val wallet: ErgoWallet = getCurrentView.vault
-  def addresses: Seq[ErgoAddress] = Await.result(wallet.walletAddresses(), awaitDuration)
+  def addresses: Seq[ErgoAddress] = Await.result(wallet.trackedAddresses(), awaitDuration)
   val defaultAddress: P2PKAddress = addresses.head.asInstanceOf[P2PKAddress]
   val pubKey: Value[SBoolean.type] = defaultAddress.pubkey
   val proofBytes: Array[Byte] = defaultAddress.contentBytes

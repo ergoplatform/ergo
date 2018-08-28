@@ -67,7 +67,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def addressesRoute: Route = (path("addresses") & get) {
-    withWallet(_.walletAddresses())
+    withWallet(_.trackedAddresses())
   }
 
 }

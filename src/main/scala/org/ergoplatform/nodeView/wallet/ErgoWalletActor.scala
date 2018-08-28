@@ -144,12 +144,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         val toRemove = registry.confirmedAt(h)
         toRemove.foreach { boxId =>
           registry.removeFromRegistry(boxId).foreach { tb =>
-            tb.transitionBack(heightTo) match {
-              case Some(newBox) =>
-                registry.makeTransition(tb, newBox)
-              case None =>
-              //todo: should we be here at all?
-            }
+            registry.makeTransition(tb, ProcessRollback(heightTo))
           }
         }
       }

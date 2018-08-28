@@ -41,7 +41,7 @@ class DigestState protected(override val version: VersionTag,
       Success(Unit)
 
     case fb: ErgoFullBlock =>
-      fb.aDProofs match {
+      fb.adProofs match {
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>

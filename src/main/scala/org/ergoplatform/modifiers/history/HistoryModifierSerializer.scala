@@ -13,6 +13,8 @@ object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
       ADProofs.modifierTypeId +: ADProofSerializer.toBytes(m)
     case m: BlockTransactions =>
       BlockTransactions.modifierTypeId +: BlockTransactionsSerializer.toBytes(m)
+    case m: Extension =>
+      Extension.modifierTypeId +: ExtensionSerializer.toBytes(m)
     case m =>
       throw new Error(s"Serialization for unknown modifier: $m")
   }
@@ -24,6 +26,8 @@ object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
       ADProofSerializer.parseBytes(bytes.tail)
     case BlockTransactions.`modifierTypeId` =>
       BlockTransactionsSerializer.parseBytes(bytes.tail)
+    case Extension.`modifierTypeId` =>
+      ExtensionSerializer.parseBytes(bytes.tail)
     case m =>
       Failure(new Error(s"Deserialization for unknown type byte: $m"))
   }

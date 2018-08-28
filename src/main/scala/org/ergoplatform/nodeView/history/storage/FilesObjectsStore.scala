@@ -6,10 +6,11 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierId
+import scorex.core.utils.ScorexLogging
 
 import scala.util.Try
 
-class FilesObjectsStore(dir: String) extends ObjectsStore {
+class FilesObjectsStore(dir: String) extends ObjectsStore with ScorexLogging {
 
   override def get(id: ModifierId): Option[Array[Byte]] = Try {
     Files.readAllBytes(path(id))
@@ -19,6 +20,7 @@ class FilesObjectsStore(dir: String) extends ObjectsStore {
     val p = path(m.id)
     p.toFile.createNewFile()
     Files.write(p, HistoryModifierSerializer.toBytes(m), StandardOpenOption.WRITE)
+    log.trace(s"Modifier ${m.encodedId} saved to FilesObjectsStore")
   }
 
   override def delete(id: ModifierId): Try[Unit] = Try {

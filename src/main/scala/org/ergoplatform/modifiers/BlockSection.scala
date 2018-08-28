@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers
 
 import org.ergoplatform.settings.Algos
 import scorex.core._
+import scorex.crypto.hash.Digest32
 
 /**
   * An interface for Ergo block section which contains corresponding header id and a digest of its payload.
@@ -13,7 +14,7 @@ trait BlockSection extends ErgoPersistentModifier {
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
-  def digest: Array[Byte]
+  def digest: Digest32
 
   def headerId: ModifierId
 

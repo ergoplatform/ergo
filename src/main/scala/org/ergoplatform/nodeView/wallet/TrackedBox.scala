@@ -211,7 +211,7 @@ case class SpentOffchainBox(creationTx: ErgoTransaction,
   }
 
   def transitionBack(toHeight: Height): Option[TrackedBox] = creationHeightOpt match {
-    case Some(h) if h < toHeight => Some(copy(creationHeightOpt = None))
+    case Some(h) if h > toHeight => Some(copy(creationHeightOpt = None))
     case _ => None
   }
 

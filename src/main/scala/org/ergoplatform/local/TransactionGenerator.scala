@@ -20,26 +20,20 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: TestingSettings) extends Actor with ScorexLogging {
-
-
-  private var isStarted = false
-
+  
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
 
   override def receive: Receive = {
     case StartGeneration =>
-      if (!isStarted) {
-        viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          currentFullHeight = v.history.headersHeight
+      viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        currentFullHeight = v.history.headersHeight
 
-          context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
+        context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
-          context.system.scheduler.schedule(1500.millis,
-            3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
-        }
+        context.system.scheduler.schedule(1500.millis,
+          3000.millis)(self ! CheckGeneratingConditions)(context.system.dispatcher)
       }
-      isStarted = true
 
     case CheckGeneratingConditions =>
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
@@ -55,7 +49,7 @@ class TransactionGenerator(viewHolder: ActorRef,
     case Attempt =>
       //todo: real prop, assets
       transactionsPerBlock = transactionsPerBlock - 1
-      if(transactionsPerBlock >= 0) {
+      if (transactionsPerBlock >= 0) {
         val newOutsCount = Random.nextInt(50) + 1
         val newOuts = (1 to newOutsCount).map { _ =>
           val value = Random.nextInt(50) + 1
@@ -76,7 +70,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
 
     case SuccessfulTransaction(_) => self ! Attempt
-   }
+  }
 }
 
 object TransactionGenerator {
@@ -86,6 +80,7 @@ object TransactionGenerator {
   case object CheckGeneratingConditions
 
   case object Attempt
+
 }
 
 object TransactionGeneratorRef {

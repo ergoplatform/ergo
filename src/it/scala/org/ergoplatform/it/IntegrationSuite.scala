@@ -4,7 +4,7 @@ import com.typesafe.config.ConfigFactory
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Suite, TryValues}
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 

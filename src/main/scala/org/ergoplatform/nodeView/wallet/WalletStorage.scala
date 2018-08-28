@@ -10,7 +10,7 @@ import scala.collection.mutable
   * Storage class for wallet entities:
   *   - all the boxes which are potentially belong to the user,
   *   - index for boxes which could belong to the user (it contains needed bytes, for example, public key bytes),
-  *     but that is to be carefully checked yet (by successfully signing a test transaction which is spending the box).
+  * but that is to be carefully checked yet (by successfully signing a test transaction which is spending the box).
   *   - index for unspent boxes
   *   - confirmed and unconfirmed balances
   *
@@ -58,7 +58,11 @@ class WalletStorage {
     }
   }
 
-  def registryContains(boxId: ModifierId): Boolean = {
+  def byId(boxId: ModifierId): Option[TrackedBox] = {
+    registry.get(boxId)
+  }
+
+  def contains(boxId: ModifierId): Boolean = {
     registry.contains(boxId)
   }
 

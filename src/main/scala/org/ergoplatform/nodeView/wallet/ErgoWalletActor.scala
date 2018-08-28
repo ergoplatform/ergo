@@ -73,25 +73,42 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     }
   }
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
     tx.inputs.foreach { inp =>
       val boxId = bytesToId(inp.boxId)
-      if (registry.registryContains(boxId)) {
+      if (registry.contains(boxId)) {
         registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
       }
     }
+  }
+
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    scanInputs(tx, heightOpt)
 
     tx.outputCandidates.zipWithIndex.count { case (outCandidate, outIndex) =>
       trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val idxShort = outIndex.toShort
           val box = outCandidate.toBox(tx.serializedId, idxShort)
-          val bu = heightOpt match {
-            case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
-            case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
+
+          registry.byId(bytesToId(box.id)) match {
+            case Some(oldBox) =>
+              heightOpt match {
+                case Some(h) =>
+                  registry.makeTransition(oldBox, CreationConfirmation(h))
+                  true
+                case None =>
+                  log.warn(s"Double registration of the offchain box: ${oldBox.boxId}")
+                  false
+              }
+            case None =>
+              val bu = heightOpt match {
+                case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
+                case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
+              }
+              bu.register(registry)
+              true
           }
-          bu.register(registry)
-          true
         case None =>
           false
       }
@@ -178,7 +195,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
     } match {
       case Some(tx) => tx
-      case None     => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
+      case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
     }
   }
 
@@ -193,7 +210,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case ReadPublicKeys(from, until) =>
       publicKeys.slice(from, until)
 
-    case ReadRandomPublicKey  =>
+    case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
     case ReadTrackedAddresses =>

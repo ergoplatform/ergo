@@ -70,7 +70,8 @@ object ErgoState extends ScorexLogging {
     * @param txs - sequence of transactions
     * @return modifications from `txs` - sequence of ids to remove, and sequence of ErgoBoxes to create.
     *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    *         if box was first spend and created after that - it is in both toInsert and toRemove,
+    *         and an error will be thrown further during tree modification
     */
   def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
     val toInsert: mutable.HashMap[ModifierId, ErgoBox] = mutable.HashMap.empty

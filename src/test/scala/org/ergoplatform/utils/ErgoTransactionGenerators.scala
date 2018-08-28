@@ -12,6 +12,7 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util._
 import sigmastate._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -29,7 +30,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
+  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId.toModifierId, boxId)
 
   val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
     length <- Gen.chooseNum(1, 100)
@@ -65,7 +66,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- Gen.sequence(additionalRegistersGen(regNum))
     tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
     tokens <- Gen.sequence(additionalTokensGen(tokensCount))
-  } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
+  } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId.toModifierId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
@@ -75,7 +76,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     boxId: Short <- Arbitrary.arbitrary[Short]
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
     ar <- Gen.sequence(additionalRegistersGen(regNum))
-  } yield ErgoBox(value, prop, tokens, ar.asScala.toMap, transactionId, boxId)
+  } yield ErgoBox(value, prop, tokens, ar.asScala.toMap, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen

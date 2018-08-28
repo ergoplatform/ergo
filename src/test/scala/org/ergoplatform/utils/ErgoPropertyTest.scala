@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import org.scalatest.PropSpec
 import org.scalatest.prop.{PropertyChecks, TableDrivenPropertyChecks}
+import scorex.testkit.utils.NoShrink
 
 trait ErgoPropertyTest extends PropSpec
   with PropertyChecks

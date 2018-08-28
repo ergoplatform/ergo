@@ -14,7 +14,8 @@ import org.ergoplatform.settings.Algos
 import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey

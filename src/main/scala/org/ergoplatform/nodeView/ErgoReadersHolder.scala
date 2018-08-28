@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
 

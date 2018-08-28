@@ -11,7 +11,8 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
 import scorex.crypto.hash.Digest32

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.TestingSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 import scala.util.Random

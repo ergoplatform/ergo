@@ -12,7 +12,7 @@ import scorex.core.serialization.Serializer
 
 class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
 
-  def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
+ def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
                                                                     serializer: Serializer[A]): Assertion = {
     forAll(generator) { b: A =>
       val recovered = serializer.parseBytes(serializer.toBytes(b)).get
@@ -44,6 +44,10 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
 
   property("ErgoStateContext serialization") {
     checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
+  }
+
+  property("Extension serialization") {
+    checkSerializationRoundtrip(extensionGen, ExtensionSerializer)
   }
 
   property("ErgoBox serialization") {

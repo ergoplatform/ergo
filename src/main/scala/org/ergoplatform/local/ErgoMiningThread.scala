@@ -47,12 +47,13 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           log.info("New block found: " + newBlock)
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-          viewHolderRef ! LocallyGeneratedModifier(newBlock.blockTransactions)
-          if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-            newBlock.aDProofs.foreach { adp =>
-              viewHolderRef ! LocallyGeneratedModifier(adp)
-            }
+          val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
+            newBlock.blockSections
+          } else {
+            newBlock.mandatoryBlockSections
           }
+
+          sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
           mineCmd()
         case _ =>
           self ! MineBlock
@@ -83,4 +84,5 @@ object ErgoMiningThread {
     context.actorOf(props(ergoSettings, viewHolderRef, startCandidate, timeProvider), name)
 
   case object MineBlock
+
 }

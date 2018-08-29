@@ -75,6 +75,7 @@ object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
         BlockTransactions(headerId, acc)
       } else {
         val txLength = Ints.fromByteArray(bytes.slice(index, index + 4))
+        require(txLength > 0)
         val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 4, index + 4 + txLength)) match {
           case Success(parsedTx) => parsedTx
           case Failure(f) => throw f

@@ -10,7 +10,7 @@ import scorex.core.utils
 
 import scala.util.Try
 
-class ModeFeature(stateType: StateType,
+case class ModeFeature(stateType: StateType,
                   verifyingTransactions: Boolean,
                   popowBootstrapping: Boolean,
                   popowSuffix: Int,

@@ -40,8 +40,8 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
-  override def select(inputBoxes: Iterator[TrackedBox],
-                      filterFn: TrackedBox => Boolean,
+  override def select(inputBoxes: Iterator[UnspentBox],
+                      filterFn: UnspentBox => Boolean,
                       targetBalance: Long,
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
 

@@ -147,14 +147,14 @@ trait ApiCodecs {
       "onchain" -> b.onchainStatus.onchain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "creationHeight" -> b.creationHeight.asJson,
-      "spendingHeight" -> b.spendingHeight.asJson,
+      "creationHeight" -> b.creationHeightOpt.asJson,
+      "spendingHeight" -> b.spendingHeightOpt.asJson,
       "box" -> b.box.asJson
     )
     val fieldsWithTx = if (opts.showDetails) {
       plainFields +
         ("creationTransaction" -> b.creationTx.asJson) +
-        ("spendingTransaction" -> b.spendingTx.asJson)
+        ("spendingTransaction" -> b.spendingTxOpt.asJson)
     } else {
       plainFields +
         ("creationTransactionId" -> b.creationTxId.asJson) +

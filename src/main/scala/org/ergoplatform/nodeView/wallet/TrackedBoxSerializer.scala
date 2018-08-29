@@ -27,9 +27,9 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     w.putBits(headerBits(trackedBox))
       .putBytes(idToBytes(trackedBox.creationTxId))
       .putShort(trackedBox.creationOutIndex)
-      .putOption(trackedBox.creationHeight)(_.putInt(_))
+      .putOption(trackedBox.creationHeightOpt)(_.putInt(_))
       .putOption(trackedBox.spendingTxId)((r, id) => r.putBytes(idToBytes(id)))
-      .putOption(trackedBox.spendingHeight)(_.putInt(_))
+      .putOption(trackedBox.spendingHeightOpt)(_.putInt(_))
     ErgoBoxSerializer.write(trackedBox.box, w)
   }
 

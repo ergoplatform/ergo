@@ -12,12 +12,12 @@ import sigmastate.Values
 class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   import DefaultBoxSelector.select
 
-  private val noFilter: TrackedBox => Boolean = _ => true
+  private val noFilter: UnspentBox => Boolean = _ => true
 
   property("returns None when it is impossible to select coins") {
     val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box = ErgoBox(1, Values.TrueLeaf)
-    val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain)
+    val uBox = UnspentBox(parentTx, 0, None, box, BoxCertainty.Certain)
 
     //target amount is too high
     select(Seq(uBox).toIterator, noFilter, 10, Map()) shouldBe None
@@ -38,9 +38,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val box2 = ErgoBox(10, Values.TrueLeaf)
     val box3 = ErgoBox(100, Values.TrueLeaf)
 
-    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, BoxCertainty.Certain)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
-    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, BoxCertainty.Certain)
+    val uBox1 = UnspentBox(parentTx, 0, Option(100), box1, BoxCertainty.Certain)
+    val uBox2 = UnspentBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = UnspentBox(parentTx, 2, Option(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -84,9 +84,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val box2 = ErgoBox(10, Values.TrueLeaf, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
     val box3 = ErgoBox(100, Values.TrueLeaf, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
+    val uBox1 = UnspentBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
+    val uBox2 = UnspentBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = UnspentBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -140,9 +140,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
+    val uBox1 = UnspentBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
+    val uBox2 = UnspentBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = UnspentBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 

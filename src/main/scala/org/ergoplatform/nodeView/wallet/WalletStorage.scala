@@ -34,8 +34,11 @@ class WalletStorage extends ScorexLogging {
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
   private var lastScanned: ModifierId = initialScanValue
 
-  def unspentBoxesIterator: Iterator[TrackedBox] =
-    unspentBoxes.iterator.flatMap(id => registry.get(id))
+  def unspentBoxesIterator: Iterator[UnspentBox] = {
+    unspentBoxes.iterator.flatMap(id => registry.get(id)).collect {
+      case unspentBox: UnspentBox => unspentBox
+    }
+  }
 
   def nextUncertain(): Option[TrackedBox] = {
     uncertainBoxes.from(lastScanned).headOption match {
@@ -94,29 +97,25 @@ class WalletStorage extends ScorexLogging {
 
   def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
 
-  private def increaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
-      val box = unspentBox.box
-      if (unspentBox.onchainStatus == Onchain) {
-        _confirmedBalance += box.value
-        increaseAssets(_confirmedAssetBalances, box.additionalTokens)
-      } else {
-        _unconfirmedBalance += box.value
-        increaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
-      }
+  private def increaseBalances(unspentBox: UnspentBox): Unit = {
+    val box = unspentBox.box
+    if (unspentBox.onchainStatus == Onchain) {
+      _confirmedBalance += box.value
+      increaseAssets(_confirmedAssetBalances, box.additionalTokens)
+    } else {
+      _unconfirmedBalance += box.value
+      increaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
     }
   }
 
-  private def decreaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
-      val box = unspentBox.box
-      if (unspentBox.onchainStatus == Onchain) {
-        _confirmedBalance -= box.value
-        decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
-      } else {
-        _unconfirmedBalance -= box.value
-        decreaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
-      }
+  private def decreaseBalances(unspentBox: UnspentBox): Unit = {
+    val box = unspentBox.box
+    if (unspentBox.onchainStatus == Onchain) {
+      _confirmedBalance -= box.value
+      decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
+    } else {
+      _unconfirmedBalance -= box.value
+      decreaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
     }
   }
 
@@ -141,24 +140,12 @@ class WalletStorage extends ScorexLogging {
     }
   }
 
-  private def checkUnspent(trackedBox: TrackedBox): Boolean = {
-    if (trackedBox.spendingStatus == Spent) {
-      val msg = s"Cannot update balances with spent box $trackedBox"
-      log.warn(msg, new IllegalArgumentException(msg))
-    }
-    trackedBox.spendingStatus == Unspent
-  }
-
-  def makeTransition(boxId: ModifierId, transition: Transition): Unit = {
-    registry.get(boxId).foreach { trackedBox =>
+  def makeTransition(boxId: ModifierId, transition: Transition): Boolean = {
+    registry.get(boxId) exists { trackedBox =>
       val targetBox: Option[TrackedBox] = convertBox(trackedBox, transition)
-      targetBox.foreach(makeTransitionTo)
+      targetBox.foreach(register)
+      targetBox.nonEmpty
     }
-  }
-
-  def makeTransitionTo(updatedBox: TrackedBox): Unit = {
-    deregister(updatedBox.boxId) // Actually this line is duplicated in `register` method
-    register(updatedBox)
   }
 
   def convertBox(trackedBox: TrackedBox, transition: Transition): Option[TrackedBox] = {
@@ -169,6 +156,8 @@ class WalletStorage extends ScorexLogging {
         convertToConfirmed(trackedBox, creationHeight)
       case ProcessSpending(spendingTransaction, spendingHeightOpt) =>
         convertToSpent(trackedBox, spendingTransaction, spendingHeightOpt)
+      case MakeCertain =>
+        convertToCertain(trackedBox)
     }
   }
 
@@ -179,13 +168,13 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     putToRegistry(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-        log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
+      log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
     }
     if (trackedBox.onchainStatus == Onchain) {
-      putToConfirmedIndex(trackedBox.creationHeight.get, trackedBox.boxId)
+      putToConfirmedIndex(trackedBox.creationHeightOpt.get, trackedBox.boxId)
     }
     if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
-      increaseBalances(trackedBox)
+      increaseBalances(trackedBox.asInstanceOf[UnspentBox])
     }
   }
 
@@ -195,7 +184,7 @@ class WalletStorage extends ScorexLogging {
   def deregister(boxId: ModifierId): Option[TrackedBox] = {
     removeFromRegistry(boxId) map { removedBox =>
       if (removedBox.spendingStatus == Unspent && removedBox.certainty == Certain) {
-        decreaseBalances(removedBox)
+        decreaseBalances(removedBox.asInstanceOf[UnspentBox])
       }
       removedBox
     }
@@ -209,8 +198,10 @@ class WalletStorage extends ScorexLogging {
                              spendingTransaction: ErgoTransaction,
                              spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
     (trackedBox.spendingStatus, trackedBox.onchainStatus) match {
-      case _ if spendingHeightOpt.nonEmpty && trackedBox.creationHeight.isEmpty =>
+      case _ if spendingHeightOpt.nonEmpty && trackedBox.creationHeightOpt.isEmpty =>
         log.error(s"Invalid state transition for ${trackedBox.encodedBoxId}: no creation height, but spent on-chain")
+        None
+      case (Spent, Onchain) =>
         None
       case (Unspent, Offchain) if spendingHeightOpt.nonEmpty =>
         log.warn(s"Onchain transaction ${trackedBox.encodedSpendingTxId} is spending offchain box ${trackedBox.box}")
@@ -219,10 +210,8 @@ class WalletStorage extends ScorexLogging {
         log.warn(s"Double spending of an unconfirmed box ${trackedBox.encodedBoxId}")
         //todo: handle double-spending strategy for an unconfirmed tx
         None
-      case (Spent, Onchain) =>
-        None
       case _ =>
-        Some(trackedBox.copy(spendingTx = Option(spendingTransaction), spendingHeight = spendingHeightOpt))
+        Some(trackedBox.copy(spendingTxOpt = Option(spendingTransaction), spendingHeightOpt = spendingHeightOpt))
     }
   }
 
@@ -231,8 +220,8 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertToConfirmed(trackedBox: TrackedBox, creationHeight: Height): Option[TrackedBox] = {
-    if (trackedBox.creationHeight.isEmpty) {
-      Some(trackedBox.copy(creationHeight = Option(creationHeight)))
+    if (trackedBox.creationHeightOpt.isEmpty) {
+      Some(trackedBox.copy(creationHeightOpt = Option(creationHeight)))
     } else {
       if (trackedBox.spendingStatus == Unspent || trackedBox.onchainStatus == Offchain) {
         log.warn(s"Double creation of tracked box for  ${trackedBox.encodedBoxId}")
@@ -247,15 +236,23 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
-    val dropCreationAndSpending = trackedBox.creationHeight.exists(toHeight < _)
-    val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
+    val dropCreationAndSpending = trackedBox.creationHeightOpt.exists(toHeight < _)
+    val dropSpending = trackedBox.spendingHeightOpt.exists(toHeight < _)
     if (dropCreationAndSpending) {
-      Some(trackedBox.copy(creationHeight = None, spendingTx = None, spendingHeight = None))
+      Some(trackedBox.copy(creationHeightOpt = None, spendingTxOpt = None, spendingHeightOpt = None))
     } else if (dropSpending) {
-      Some(trackedBox.copy(spendingTx = None, spendingHeight = None))
+      Some(trackedBox.copy(spendingTxOpt = None, spendingHeightOpt = None))
     } else {
       None
     }
+  }
+
+  /**
+    * Handle a command to make this box "certain" (definitely hold by the user)
+    * @return updated box
+    */
+  def convertToCertain(trackedBox: TrackedBox): Option[TrackedBox] = {
+    if (trackedBox.certainty == Certain) None else Some(trackedBox.copy(certainty = Certain))
   }
 
 }

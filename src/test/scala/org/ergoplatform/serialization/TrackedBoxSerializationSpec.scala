@@ -18,8 +18,8 @@ class TrackedBoxSerializationSpec extends ErgoPropertyTest with WalletGenerators
   }
 
   def txLookup(box: TrackedBox): TransactionLookup = {
-    if (box.spendingTx.nonEmpty) {
-      Map(box.creationTxId -> box.creationTx, box.spendingTxId.value -> box.spendingTx.value).get(_)
+    if (box.spendingTxOpt.nonEmpty) {
+      Map(box.creationTxId -> box.creationTx, box.spendingTxId.value -> box.spendingTxOpt.value).get(_)
     } else {
       Map(box.creationTxId -> box.creationTx).get(_)
     }

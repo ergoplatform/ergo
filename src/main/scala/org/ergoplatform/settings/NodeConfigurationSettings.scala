@@ -14,7 +14,7 @@ import scala.concurrent.duration.FiniteDuration
 case class NodeConfigurationSettings(stateType: StateType,
                                      verifyTransactions: Boolean,
                                      blocksToKeep: Int,
-                                     PoPoWBootstrap: Boolean,
+                                     poPoWBootstrap: Boolean,
                                      minimalSuffix: Int,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,

@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.state
 import io.circe.Encoder
 
 sealed trait StateType {
+  def stateTypeCode: Byte
+
   def stateTypeName: String
   def requireProofs: Boolean
   override def toString: String = stateTypeName
@@ -11,13 +13,15 @@ sealed trait StateType {
 object StateType {
 
   case object Utxo extends StateType {
-    def stateTypeName: String = "utxo"
-    val requireProofs: Boolean = false
+    override val stateTypeCode: Byte = 0: Byte
+    override val stateTypeName: String = "utxo"
+    override val requireProofs: Boolean = false
   }
 
   case object Digest extends StateType {
-    def stateTypeName: String = "digest"
-    val requireProofs: Boolean = true
+    override val stateTypeCode: Byte = 1: Byte
+    override val stateTypeName: String = "digest"
+    override val requireProofs: Boolean = true
   }
 
   type UtxoType = Utxo.type

@@ -65,7 +65,7 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = c.stateType,
         verifyTransactions = c.verifyTransactions,
-        PoPoWBootstrap = c.popowBootstrap
+        poPoWBootstrap = c.popowBootstrap
       ),
       chainSettings = chainSettings
     )

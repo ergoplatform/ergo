@@ -10,10 +10,10 @@ import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import scorex.core.utils.ScorexLogging
-import scorex.utils.Random
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.util.Random
 
 /**
   * Application object for chain generation.
@@ -25,6 +25,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
   val n: Char = 96
   val k: Char = 5
+  val txsSize: Int = 100 * 1024
   val pow = new EquihashPowScheme(n, k)
   val blockInterval = 2.minute
 
@@ -65,7 +66,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   def loop(state: UtxoState, boxHolder: BoxHolder, last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < timeProvider.time) {
-      val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder)
+      val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder, new Random, txsSize)
 
       val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
       val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
@@ -85,7 +86,9 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
     pow.proveBlock(candidate) match {
       case Some(fb) => fb
-      case _ => generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(Random.randomBytes(Extension.OptionalFieldKeySize) -> Array[Byte]()))))
+      case _ =>
+        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
+        generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
     }
   }
 }

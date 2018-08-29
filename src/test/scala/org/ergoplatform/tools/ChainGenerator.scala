@@ -6,7 +6,7 @@ import org.ergoplatform.mining.{CandidateBlock, EquihashPowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import scorex.core.utils.ScorexLogging
@@ -48,39 +48,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     System.exit(11)
   }
 
-  var (state, boxHolder) = createUtxoState()
-
-  def loop(last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
-    val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
-    if (time < timeProvider.time) {
-      val txsBoxes = validTransactionsFromBoxHolder(boxHolder)
-      val txs = txsBoxes._1
-      boxHolder = txsBoxes._2
-
-      @tailrec
-      def generate(candidate: CandidateBlock): ErgoFullBlock = {
-        log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
-
-        pow.proveBlock(candidate) match {
-          case Some(fb) => fb
-          case _ => generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(Random.randomBytes(Extension.OptionalFieldKeySize) -> Array[Byte]()))))
-        }
-      }
-
-      val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
-      val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
-        txs, time, ExtensionCandidate(Seq(), Seq()))
-
-      val block = generate(candidate)
-      log.info(s"Block ${block.id} at height ${block.header.height} generated")
-      state = state.applyModifier(block).get
-      loop(Some(block.header), acc :+ block)
-    } else {
-      acc
-    }
-  }
-
-  val chain = loop(None, Seq())
+  val (state, boxHolder) = createUtxoState()
+  val chain = loop(state, boxHolder, None, Seq())
   log.info(s"Chain of length ${chain.length} generated")
   chain.foreach { block =>
     history.append(block.header).get
@@ -93,4 +62,30 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   log.info("History was generated successfully")
   System.exit(0)
 
+  def loop(state: UtxoState, boxHolder: BoxHolder, last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+    val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
+    if (time < timeProvider.time) {
+      val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder)
+
+      val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
+      val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
+        txs, time, ExtensionCandidate(Seq(), Seq()))
+
+      val block = generate(candidate)
+      log.info(s"Block ${block.id} at height ${block.header.height} generated")
+      loop(state.applyModifier(block).get, newBoxHolder, Some(block.header), acc :+ block)
+    } else {
+      acc
+    }
+  }
+
+  @tailrec
+  private def generate(candidate: CandidateBlock): ErgoFullBlock = {
+    log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+
+    pow.proveBlock(candidate) match {
+      case Some(fb) => fb
+      case _ => generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(Random.randomBytes(Extension.OptionalFieldKeySize) -> Array[Byte]()))))
+    }
+  }
 }

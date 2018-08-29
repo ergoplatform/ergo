@@ -20,7 +20,7 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.Await
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {

@@ -10,6 +10,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.core.utils.ScorexEncoding
 
 import scala.annotation.tailrec
+import scala.math.BigInt
 import scala.util.Try
 
 case class PoPoWProof(m: Byte,
@@ -32,7 +33,7 @@ case class PoPoWProof(m: Byte,
 
   override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
   // lca(C1, C2) = (C1 ∩ C2)[−1] π
-  // needed at //best-arg_m(πA, lca) ≥ best-arg_m(πB, lca)
+  // needed at best-arg_m(πA, lca) ≥ best-arg_m(πB, lca)
   @tailrec
   final private def lca(
                          proofB: PoPoWProof,
@@ -57,7 +58,7 @@ case class PoPoWProof(m: Byte,
     }
   }
 
-  def defineM(proof: PoPoWProof, startBlock: Option[Header]): Seq[Header] = {
+  private def defineM(proof: PoPoWProof, startBlock: Option[Header]): Seq[Int] = {
 
     @tailrec // {b:}
     def generateInitialIdx(innerChain: Seq[Header], startBlock: Header, position: Int): Int =
@@ -70,16 +71,40 @@ case class PoPoWProof(m: Byte,
       if (startBlock.isEmpty) 0
       else generateInitialIdx(proof.innerchain, startBlock.get, proof.innerchain.length -1)
 
-    def generateLevels(innerChain: Seq[Header], idx: Int, levels: Seq[Header] = Seq.empty): Seq[Header] = {
-      val mu = innerchain(idx)
+    def takeLevel(header: Header, level: Int = 0): Int = {
+      if (Constants.MaxTarget / BigInt(1, header.serializedId) >= header.requiredDifficulty * BigInt(2).pow(level)) {
+        level
+      } else {
+        takeLevel(header, level + 1)
+      }
     }
 
-    val levels = ???
     // {µ : |π ↑µ {b :}| ≥ m}
+    proof.innerchain
+      .map(block => Seq.fill(takeLevel(block))(1))
+      .foldLeft(Seq.fill(proof.innerchain.length - 1)(0))((acc: Seq[Int], currnet: Seq[Int]) => {
+        for{
+          a <- acc
+          b <- currnet
+        } yield a + b
+      })
+
   }
 
-  //todo: implement
-  override def compare(that: PoPoWProof): Int = ???
+  private def bestArg(proof: PoPoWProof, lca: Option[Header]): BigInt = {
+    val m = defineM(proof, lca)
+    Seq.range(0, proof.innerchain.length - 1).foldLeft(0: BigInt)((a: BigInt,b: Int) =>{
+      val check = BigInt(2).pow(b) * BigInt(m(b))
+      if (check > a) check else a
+    })
+  }
+
+  override def compare(proof: PoPoWProof): Int = {
+    val lca = lca(proof, this.innerchain.length - 1, proof.innerchain.length - 1)
+    val proofA = bestArg(this, lca)
+    val proofB = bestArg(proof, lca)
+    proofA.compare(proofB)
+  }
 
 }
 

@@ -236,10 +236,13 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
-    val dropCreationAndSpending = trackedBox.creationHeightOpt.exists(toHeight < _)
+    val dropCreation = trackedBox.creationHeightOpt.exists(toHeight < _)
     val dropSpending = trackedBox.spendingHeightOpt.exists(toHeight < _)
-    if (dropCreationAndSpending) {
+
+    if (dropCreation && dropSpending) {
       Some(trackedBox.copy(creationHeightOpt = None, spendingTxOpt = None, spendingHeightOpt = None))
+    } else if (dropCreation) {
+      Some(trackedBox.copy(creationHeightOpt = None))
     } else if (dropSpending) {
       Some(trackedBox.copy(spendingTxOpt = None, spendingHeightOpt = None))
     } else {

@@ -149,16 +149,12 @@ class WalletStorage extends ScorexLogging {
     trackedBox.spendingStatus == Unspent
   }
 
-  def makeTransition(boxId: ModifierId, transition: Transition): Unit = {
-    registry.get(boxId).foreach { trackedBox =>
+  def makeTransition(boxId: ModifierId, transition: Transition): Boolean = {
+    registry.get(boxId) exists { trackedBox =>
       val targetBox: Option[TrackedBox] = convertBox(trackedBox, transition)
-      targetBox.foreach(makeTransitionTo)
+      targetBox.foreach(register)
+      targetBox.nonEmpty
     }
-  }
-
-  def makeTransitionTo(updatedBox: TrackedBox): Unit = {
-    deregister(updatedBox.boxId) // Actually this line is duplicated in `register` method
-    register(updatedBox)
   }
 
   def convertBox(trackedBox: TrackedBox, transition: Transition): Option[TrackedBox] = {
@@ -169,6 +165,8 @@ class WalletStorage extends ScorexLogging {
         convertToConfirmed(trackedBox, creationHeight)
       case ProcessSpending(spendingTransaction, spendingHeightOpt) =>
         convertToSpent(trackedBox, spendingTransaction, spendingHeightOpt)
+      case MakeCertain =>
+        convertToCertain(trackedBox)
     }
   }
 
@@ -179,7 +177,7 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     putToRegistry(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-        log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
+      log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
     }
     if (trackedBox.onchainStatus == Onchain) {
       putToConfirmedIndex(trackedBox.creationHeight.get, trackedBox.boxId)
@@ -247,15 +245,26 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
-    val dropCreationAndSpending = trackedBox.creationHeight.exists(toHeight < _)
+    val dropCreation = trackedBox.creationHeight.exists(toHeight < _)
     val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
-    if (dropCreationAndSpending) {
+
+    if (dropCreation && dropSpending) {
       Some(trackedBox.copy(creationHeight = None, spendingTx = None, spendingHeight = None))
+    } else if (dropCreation) {
+      Some(trackedBox.copy(creationHeight = None))
     } else if (dropSpending) {
       Some(trackedBox.copy(spendingTx = None, spendingHeight = None))
     } else {
       None
     }
+  }
+
+  /**
+    * Handle a command to make this box "certain" (definitely hold by the user)
+    * @return updated box
+    */
+  def convertToCertain(trackedBox: TrackedBox): Option[TrackedBox] = {
+    if (trackedBox.certainty == Certain) None else Some(trackedBox.copy(certainty = Certain))
   }
 
 }

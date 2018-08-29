@@ -50,13 +50,13 @@ class WalletStorage extends ScorexLogging {
 
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
-  private def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = {
+  private def put(trackedBox: TrackedBox): Option[TrackedBox] = {
     if (trackedBox.certainty == Uncertain) uncertainBoxes += trackedBox.boxId
     if (trackedBox.spendingStatus == Unspent) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  private def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = {
+  private def remove(boxId: ModifierId): Option[TrackedBox] = {
     registry.remove(boxId).map { trackedBox: TrackedBox =>
       if (trackedBox.certainty == Uncertain) uncertainBoxes -= trackedBox.boxId
       if (trackedBox.spendingStatus == Unspent) unspentBoxes -= trackedBox.boxId
@@ -175,7 +175,7 @@ class WalletStorage extends ScorexLogging {
     */
   def register(trackedBox: TrackedBox): Unit = {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
-    putToRegistry(trackedBox)
+    put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
       log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
     }
@@ -191,7 +191,7 @@ class WalletStorage extends ScorexLogging {
     * Remove tracked box from a wallet storage
     */
   def deregister(boxId: ModifierId): Option[TrackedBox] = {
-    removeFromRegistry(boxId) map { removedBox =>
+    remove(boxId) map { removedBox =>
       if (removedBox.spendingStatus == Unspent && removedBox.certainty == Certain) {
         decreaseBalances(removedBox)
       }

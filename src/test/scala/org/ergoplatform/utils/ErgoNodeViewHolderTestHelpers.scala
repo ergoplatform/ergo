@@ -16,7 +16,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.scalatest.BeforeAndAfterAll
 import scorex.core.ModifierId
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import scorex.testkit.utils.NoShrink
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -38,6 +39,20 @@ trait ErgoNodeViewHolderTestHelpers extends ErgoPropertyTest with BeforeAndAfter
   override def afterAll(): Unit = {
     system.terminate()
   }
+
+  protected def applyBlock(nodeViewRef: ActorRef, fb: ErgoFullBlock, nodeViewConfig: NodeViewHolderConfig): Unit = {
+    nodeViewRef ! LocallyGeneratedModifier(fb.header)
+    applyPayload(nodeViewRef, fb, nodeViewConfig)
+  }
+
+  protected def applyPayload(nodeViewRef: ActorRef, fb: ErgoFullBlock, nodeViewConfig: NodeViewHolderConfig): Unit = {
+    if (nodeViewConfig.verifyTransactions) {
+      nodeViewRef ! LocallyGeneratedModifier(fb.blockTransactions)
+      nodeViewRef ! LocallyGeneratedModifier(fb.adProofs.get)
+      nodeViewRef ! LocallyGeneratedModifier(fb.extension)
+    }
+  }
+
 
   protected def actorRef(c: NodeViewHolderConfig, dirOpt: Option[File] = None): ActorRef = {
     val dir: File = dirOpt.getOrElse(createTempDir)

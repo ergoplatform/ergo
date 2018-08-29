@@ -218,8 +218,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen
     txs <- invalidBlockTransactionsGen
+    extension <- extensionGen
     proof <- randomADProofsGen
-  } yield ErgoFullBlock(header, txs, Some(proof))
+  } yield ErgoFullBlock(header, txs, extension, Some(proof))
 }
 
 object ErgoTransactionGenerators extends ErgoTransactionGenerators

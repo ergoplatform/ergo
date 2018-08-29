@@ -62,9 +62,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
 
-  override def postStop(): Unit = killAllThreads
-
-  private def killAllThreads: Unit = {
+  override def postStop(): Unit = {
     log.warn("Stopping miner's threads.")
     miningThreads.foreach(_ ! PoisonPill)
     miningThreads.clear()

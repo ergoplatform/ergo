@@ -12,17 +12,16 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.block.Block.Timestamp
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
-import scorex.crypto.authds.{ADDigest, ADKey}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.authds.ADKey
+import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{ByteArrayConstant, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate._

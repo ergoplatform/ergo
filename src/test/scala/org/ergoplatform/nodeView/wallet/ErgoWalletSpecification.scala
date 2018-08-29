@@ -6,7 +6,7 @@ import akka.testkit.TestProbe
 import akka.util.Timeout
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -19,8 +19,9 @@ import org.scalacheck.Gen
 import scorex.core.ModifierId
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import scorex.core.block.Block.Timestamp
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values.{ByteArrayConstant, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -306,7 +307,7 @@ class WalletFixture {
     testProbe.expectMsgType[SyntacticallySuccessfulModifier[Header]]
     if (settings.nodeSettings.verifyTransactions) {
       nodeViewHolderRef ! LocallyGeneratedModifier(block.blockTransactions)
-      nodeViewHolderRef ! LocallyGeneratedModifier(block.aDProofs.value)
+      nodeViewHolderRef ! LocallyGeneratedModifier(block.adProofs.value)
       settings.nodeSettings.stateType match {
         case StateType.Digest =>
           testProbe.expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
@@ -330,8 +331,8 @@ class WalletFixture {
     val parent = currentView.history.bestHeaderOpt
     val (adProofs, stateDigest) = state.proofsForTransactions(txs).success.value
     val time = timeProvider.time()
-    val extHash: Digest32 = Algos.hash(state.rootHash)
-    DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, extHash).value
+    val ext = ExtensionCandidate(Seq(), Seq())
+    DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext).value
   }
 
   def creationTxSeqGen(neededOutputGen: Option[Gen[ErgoBoxCandidate]] = None): Gen[Seq[ErgoTransaction]] = {

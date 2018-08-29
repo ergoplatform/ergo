@@ -140,6 +140,7 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
     val k = bytes(1)
     val i = bytes(2)
     val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
+    require(headSuffixLength > 0)
     val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
 
     def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
@@ -147,6 +148,7 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
         (index, acc.reverse)
       } else {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
+        require(l > 0)
         val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
         val interlinks = new PoPoWProofUtils(powScheme).constructInterlinkVector(acc.head)
         parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
@@ -155,11 +157,13 @@ class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] 
 
     val (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
     val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
+    require(innerchainLength > 0)
 
     @tailrec
     def createInnerChain(index: Int, step: Int = 0, chain: Seq[Header] = Seq.empty): Seq[Header] = {
       if (step < innerchainLength) {
         val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
+        require(l > 0)
         val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
         createInnerChain(index + 2 + l, step + 1, chain ++ Seq(header))
       } else {

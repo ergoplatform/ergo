@@ -58,12 +58,12 @@ sealed trait TrackedBox extends ScorexLogging {
   /**
     * Register this box in a wallet storage
     */
-  def register(storage: WalletStorage): Unit = storage.putToRegistry(this)
+  def register(storage: WalletStorage): Unit = storage.put(this)
 
   /**
     * Remove this box from a wallet storage
     */
-  def deregister(storage: WalletStorage): Unit = storage.removeFromRegistry(boxId)
+  def deregister(storage: WalletStorage): Unit = storage.remove(boxId)
 
   /**
     * Do state transition on a spending transaction (confirmed or not to come)

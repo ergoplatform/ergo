@@ -44,13 +44,13 @@ class WalletStorage {
 
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
-  def putToRegistry(trackedBox: TrackedBox): Option[TrackedBox] = {
+  def put(trackedBox: TrackedBox): Option[TrackedBox] = {
     if (!trackedBox.certain) uncertainBoxes += trackedBox.boxId
     if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
-  def removeFromRegistry(boxId: ModifierId): Option[TrackedBox] = {
+  def remove(boxId: ModifierId): Option[TrackedBox] = {
     registry.remove(boxId).map { trackedBox: TrackedBox =>
       if (!trackedBox.certain) uncertainBoxes -= trackedBox.boxId
       if (trackedBox.isInstanceOf[UnspentBox]) unspentBoxes -= trackedBox.boxId

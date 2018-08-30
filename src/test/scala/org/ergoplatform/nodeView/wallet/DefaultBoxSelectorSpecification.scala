@@ -23,7 +23,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     select(Seq(uBox).toIterator, noFilter, 10, Map()) shouldBe None
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, box => box.onchainStatus.onchain, 1, Map()) shouldBe None
+    select(Seq(uBox).toIterator, box => box.chainStatus.onchain, 1, Map()) shouldBe None
 
     //no target asset in the input box
     select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)) shouldBe None
@@ -61,7 +61,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s3.get.boxes shouldBe Seq(box1, box2)
 
     //box2 should be filtered out
-    val s4 = select(uBoxes.toIterator, box => box.onchainStatus.onchain, 11, Map())
+    val s4 = select(uBoxes.toIterator, box => box.chainStatus.onchain, 11, Map())
     s4.isDefined shouldBe true
     s4.get.changeBoxes.size == 1
     s4.get.changeBoxes.head._1 shouldBe 90
@@ -102,7 +102,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s2.get.changeBoxes.head._2(assetId1) shouldBe 90
     s2.get.boxes shouldBe Seq(box1, box3)
 
-    select(uBoxes.toIterator, box => box.onchainStatus.onchain, 1, Map(assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, box => box.chainStatus.onchain, 1, Map(assetId2 -> 1)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1000)) shouldBe None
 
@@ -114,7 +114,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s3.get.changeBoxes.head._2(assetId2) shouldBe 9
     s3.get.boxes shouldBe Seq(box1, box2, box3)
 
-    select(uBoxes.toIterator, box => box.onchainStatus.onchain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, box => box.chainStatus.onchain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
   }
 
   property("properly selects coins - assets w. multiple change boxes") {

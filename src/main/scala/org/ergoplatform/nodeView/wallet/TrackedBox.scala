@@ -2,11 +2,9 @@ package org.ergoplatform.nodeView.wallet
 
 import io.circe.Encoder
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.api.ApiEncoderOption.HideDetails
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
@@ -88,6 +86,10 @@ case class TrackedBox(
 
   def encodedSpendingTxId: Option[String] = spendingTxId.map(Algos.encode)
 
+  override def toString: String = {
+    getClass.getSimpleName + " " + TrackedBox.encoder(this)
+  }
+
 }
 
 object TrackedBox {
@@ -99,5 +101,7 @@ object TrackedBox {
             box: ErgoBox, certainty: BoxCertainty): TrackedBox = {
     apply(creationTx, creationOutIndex, creationHeight, None, None, box, certainty)
   }
+
+  implicit def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
 
 }

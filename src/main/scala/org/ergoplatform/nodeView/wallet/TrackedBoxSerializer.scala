@@ -63,15 +63,15 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
 
   protected def readHeaderBits(r: ByteReader): (SpendingStatus, ChainStatus, BoxCertainty) = {
     val bits = r.getBits(size = 3)
-    (readSpendingStatus(bits(0)), readOnchainStatus(bits(1)), readCertainty(bits(2)))
+    (readSpendingStatus(bits(0)), readChainStatus(bits(1)), readCertainty(bits(2)))
   }
 
   protected def readHeader(r: ByteReader)(parser: BoxCertainty => Try[TrackedBox]): Try[TrackedBox] = {
-    val (spendingStatus, onchainStatus, certainty) = readHeaderBits(r)
+    val (spendingStatus, chainStatus, certainty) = readHeaderBits(r)
     parser(certainty) flatMap { trackedBox =>
       accumulateErrors
         .demand(trackedBox.spendingStatus == spendingStatus, s"$trackedBox corrupted: should be $spendingStatus")
-        .demand(trackedBox.chainStatus == onchainStatus, s"$trackedBox corrupted: should be $onchainStatus")
+        .demand(trackedBox.chainStatus == chainStatus, s"$trackedBox corrupted: should be $chainStatus")
         .result(trackedBox)
         .toTry
     }
@@ -80,7 +80,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
   private def readCertainty(bit: Boolean): BoxCertainty =
     Seq(Certain, Uncertain).find(_.certain == bit).getOrElse(Uncertain)
 
-  private def readOnchainStatus(bit: Boolean): ChainStatus =
+  private def readChainStatus(bit: Boolean): ChainStatus =
     Seq(Onchain, Offchain).find(_.onchain == bit).getOrElse(Offchain)
 
   private def readSpendingStatus(bit: Boolean): SpendingStatus =

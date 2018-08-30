@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
-import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
 import scorex.core.utils.ScorexLogging
@@ -97,7 +97,7 @@ class WalletStorage extends ScorexLogging {
   private def increaseBalances(unspentBox: TrackedBox): Unit = {
     if (checkUnspent(unspentBox)) {
       val box = unspentBox.box
-      if (unspentBox.onchainStatus == Onchain) {
+      if (unspentBox.chainStatus == Onchain) {
         _confirmedBalance += box.value
         increaseAssets(_confirmedAssetBalances, box.additionalTokens)
       } else {
@@ -110,7 +110,7 @@ class WalletStorage extends ScorexLogging {
   private def decreaseBalances(unspentBox: TrackedBox): Unit = {
     if (checkUnspent(unspentBox)) {
       val box = unspentBox.box
-      if (unspentBox.onchainStatus == Onchain) {
+      if (unspentBox.chainStatus == Onchain) {
         _confirmedBalance -= box.value
         decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
       } else {
@@ -177,9 +177,9 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-      log.info(s"New ${trackedBox.onchainStatus} box arrived: " + trackedBox)
+      log.info(s"New ${trackedBox.chainStatus} box arrived: " + trackedBox)
     }
-    if (trackedBox.onchainStatus == Onchain) {
+    if (trackedBox.chainStatus == Onchain) {
       putToConfirmedIndex(trackedBox.creationHeight.get, trackedBox.boxId)
     }
     if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
@@ -206,7 +206,7 @@ class WalletStorage extends ScorexLogging {
   private def convertToSpent(trackedBox: TrackedBox,
                              spendingTransaction: ErgoTransaction,
                              spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
-    (trackedBox.spendingStatus, trackedBox.onchainStatus) match {
+    (trackedBox.spendingStatus, trackedBox.chainStatus) match {
       case _ if spendingHeightOpt.nonEmpty && trackedBox.creationHeight.isEmpty =>
         log.error(s"Invalid state transition for ${trackedBox.encodedBoxId}: no creation height, but spent on-chain")
         None
@@ -232,7 +232,7 @@ class WalletStorage extends ScorexLogging {
     if (trackedBox.creationHeight.isEmpty) {
       Some(trackedBox.copy(creationHeight = Option(creationHeight)))
     } else {
-      if (trackedBox.spendingStatus == Unspent || trackedBox.onchainStatus == Offchain) {
+      if (trackedBox.spendingStatus == Unspent || trackedBox.chainStatus == Offchain) {
         log.warn(s"Double creation of tracked box for  ${trackedBox.encodedBoxId}")
       }
       None

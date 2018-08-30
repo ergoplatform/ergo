@@ -155,7 +155,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   } */
 
     //we currently do not use off-chain boxes to create a transaction
-    def filterFn(trackedBox: TrackedBox) = trackedBox.onchainStatus.onchain
+    def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
 
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
       val inputs = r.boxes.toIndexedSeq

@@ -6,21 +6,23 @@ import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
+import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoStateContext, StateType}
 import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.{TrueLeaf, Value}
 import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+
+import scala.util.Random
 
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
@@ -120,4 +122,15 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
+
+  lazy val modeFeatureGen: Gen[ModeFeature] = for {
+    stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
+    popowSuffix <- Gen.choose(1, 10)
+    blocksToKeep <- Gen.choose(1, 100000)
+  } yield ModeFeature(
+    StateType.fromCode(stateTypeCode),
+    Random.nextBoolean(),
+    Random.nextBoolean(),
+    popowSuffix,
+    blocksToKeep)
 }

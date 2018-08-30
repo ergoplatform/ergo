@@ -39,6 +39,8 @@ case class ModeFeature(stateType: StateType,
     }
 
     override def parseBytes(bytes: Array[Id]): Try[ModeFeature] = Try {
+      require(bytes.length < 512)
+
       val stateTypeByte = bytes(0)
       val verifyingTransactions = bytes(1)
       val popowBootstrap = bytes(2)
@@ -46,13 +48,7 @@ case class ModeFeature(stateType: StateType,
       val popowSuffixBytes = bytes.slice(3, 7)
       val blocksToKeepBytes = bytes.slice(7, 11)
 
-      val stateType = if (stateTypeByte == StateType.Utxo.stateTypeCode) {
-        StateType.Utxo
-      } else if (stateTypeByte == StateType.Digest.stateTypeCode) {
-        StateType.Digest
-      } else {
-        throw new Exception(s"unknown state type: $stateTypeByte")
-      }
+      val stateType = StateType.fromCode(stateTypeByte)
 
       new ModeFeature(
         stateType,

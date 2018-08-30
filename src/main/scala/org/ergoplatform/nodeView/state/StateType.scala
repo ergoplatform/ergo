@@ -1,27 +1,39 @@
 package org.ergoplatform.nodeView.state
 
 import io.circe.Encoder
+import org.ergoplatform.nodeView.state.StateType.StateTypeCode
 
 sealed trait StateType {
-  def stateTypeCode: Byte
+  def stateTypeCode: StateTypeCode
 
   def stateTypeName: String
+
   def requireProofs: Boolean
+
   override def toString: String = stateTypeName
 }
 
 object StateType {
+  type StateTypeCode = Byte
 
   case object Utxo extends StateType {
-    override val stateTypeCode: Byte = 0: Byte
+    override val stateTypeCode: StateTypeCode = 0: Byte
     override val stateTypeName: String = "utxo"
     override val requireProofs: Boolean = false
   }
 
   case object Digest extends StateType {
-    override val stateTypeCode: Byte = 1: Byte
+    override val stateTypeCode: StateTypeCode = 1: Byte
     override val stateTypeName: String = "digest"
     override val requireProofs: Boolean = true
+  }
+
+  def fromCode(code: StateTypeCode): StateType = if (code == Utxo.stateTypeCode) {
+    Utxo
+  } else if (code == Digest.stateTypeCode) {
+    Digest
+  } else {
+    throw new Exception(s"Unkown state type code $code")
   }
 
   type UtxoType = Utxo.type
@@ -34,6 +46,7 @@ object StateType {
   sealed trait Evidence[ST <: StateType, S <: ErgoState[S]]
 
   implicit object UtxoEvidence extends Evidence[UtxoType, UtxoState]
+
   implicit object DigestEvidence extends Evidence[DigestType, DigestState]
 
   /** This is for json representation of [[StateType]] instances

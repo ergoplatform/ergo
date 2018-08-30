@@ -15,8 +15,6 @@ class WagnerAlg(k: Int,
   def prove(initialMap: Map[Int, BigInt],
             h: Int,
             finalH: BigInt): Seq[PrivateSolution] = {
-    assert((n - h) % (k + 1) == 0, s"${n - h} % ${k + 1} != 0")
-
     log(s"Going to find solutions form ${initialMap.size} elements for $k rounds, $n bits elements, " +
       s"hardness $h and final difficulty $finalH in group $p")
 
@@ -58,6 +56,7 @@ class WagnerAlg(k: Int,
     }
 
     val sols = wagnerStep(1, initialMap.toSeq.map(e => (e._2, Seq(e._1))).sortBy(_._1))
+    log(s"${sols.length} solutions found")
 
     sols.map { i =>
       PrivateSolution(i._2.map(index => initialMap(index)))
@@ -69,17 +68,17 @@ class WagnerAlg(k: Int,
                finalH: BigInt): Try[Unit] = Try {
     require(solution.numbers.size == BigInt(2).pow(k), s"${solution.numbers.size} != ${BigInt(2).pow(k)}")
 
-    val roundIntervals: Map[Int, BigInt] = (1 to k + 1).map(i => i -> (BigInt(2).pow(n - i * (h / (k + 1))))).toMap
-    val revercedRoundIntervals: Map[Int, BigInt] = roundIntervals.map(i => i._1 -> (p - i._2))
-
-    def hasCollision(sum: BigInt, round: Int): Boolean = {
-      sum < roundIntervals(round) || sum > revercedRoundIntervals(round)
-    }
-
     def check(ints: Seq[BigInt], round: Int): Unit = {
+      val atMost: BigInt = if (round != k) {
+        BigInt(2).pow(n - round * (h / (k + 1)))
+      } else finalH
+      val atLeast: BigInt = if (round != k) {
+        p - atMost
+      } else p
+
       if (round < k) {
         val sums: Seq[BigInt] = ints.grouped(2).map(p => p.head + p.last).map(_.mod(p)).toSeq
-        sums.foreach(s => require(hasCollision(s, round), s"Incorrect sum $s at round $round from $ints"))
+        sums.foreach(sum => require(sum < atMost || sum > atLeast, s"Incorrect sum $sum at round $round from $ints"))
       } else {
         require(ints.sum.mod(p) < finalH)
       }

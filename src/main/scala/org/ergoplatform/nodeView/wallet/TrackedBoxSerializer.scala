@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
-import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.nodeView.wallet.TrackedBoxSerializer.TransactionLookup
 import org.ergoplatform.settings.Constants.ModifierIdSize
@@ -58,10 +58,10 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
   }
 
   protected def headerBits(trackedBox: TrackedBox): Array[Boolean] = {
-    Array(trackedBox.spendingStatus.spent, trackedBox.onchainStatus.onchain, trackedBox.certainty.certain)
+    Array(trackedBox.spendingStatus.spent, trackedBox.chainStatus.onchain, trackedBox.certainty.certain)
   }
 
-  protected def readHeaderBits(r: ByteReader): (SpendingStatus, OnchainStatus, BoxCertainty) = {
+  protected def readHeaderBits(r: ByteReader): (SpendingStatus, ChainStatus, BoxCertainty) = {
     val bits = r.getBits(size = 3)
     (readSpendingStatus(bits(0)), readOnchainStatus(bits(1)), readCertainty(bits(2)))
   }
@@ -71,7 +71,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     parser(certainty) flatMap { trackedBox =>
       accumulateErrors
         .demand(trackedBox.spendingStatus == spendingStatus, s"$trackedBox corrupted: should be $spendingStatus")
-        .demand(trackedBox.onchainStatus == onchainStatus, s"$trackedBox corrupted: should be $onchainStatus")
+        .demand(trackedBox.chainStatus == onchainStatus, s"$trackedBox corrupted: should be $onchainStatus")
         .result(trackedBox)
         .toTry
     }
@@ -80,7 +80,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
   private def readCertainty(bit: Boolean): BoxCertainty =
     Seq(Certain, Uncertain).find(_.certain == bit).getOrElse(Uncertain)
 
-  private def readOnchainStatus(bit: Boolean): OnchainStatus =
+  private def readOnchainStatus(bit: Boolean): ChainStatus =
     Seq(Onchain, Offchain).find(_.onchain == bit).getOrElse(Offchain)
 
   private def readSpendingStatus(bit: Boolean): SpendingStatus =

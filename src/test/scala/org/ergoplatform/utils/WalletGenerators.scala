@@ -8,17 +8,31 @@ import sigmastate.Values
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   def trackedBoxGen: Gen[TrackedBox] = {
-    Gen.oneOf(unspentBoxGen, spentOffchainBoxGen, spentOnchainBoxGen)
+    Gen.oneOf(
+      unspentOffchainBoxGen,
+      unspentOnchainBoxGen,
+      spentOffchainBoxGen,
+      spentPartiallyOffchainBoxGen,
+      spentOnchainBoxGen)
   }
 
-  def unspentBoxGen: Gen[TrackedBox] = {
+  def unspentOffchainBoxGen: Gen[TrackedBox] = {
     for {
       (boxes, tx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
-      height <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, height, ergoBox, certainty)
+    } yield TrackedBox(tx, outIndex, None, ergoBox, certainty)
+  }
+
+  def unspentOnchainBoxGen: Gen[TrackedBox] = {
+    for {
+      (boxes, tx) <- validErgoTransactionGen
+      outIndex <- outIndexGen(tx)
+      height <- heightGen()
+      ergoBox <- Gen.oneOf(boxes)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield TrackedBox(tx, outIndex, Some(height), ergoBox, certainty)
   }
 
   def spentOffchainBoxGen: Gen[TrackedBox] = {
@@ -26,10 +40,20 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       (boxes, tx) <- validErgoTransactionGen
       (_, spendingTx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
-      heightOpt <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, heightOpt, Some(spendingTx), None, ergoBox, certainty)
+    } yield TrackedBox(tx, outIndex, None, Some(spendingTx), None, ergoBox, certainty)
+  }
+
+  def spentPartiallyOffchainBoxGen: Gen[TrackedBox] = {
+    for {
+      (boxes, tx) <- validErgoTransactionGen
+      (_, spendingTx) <- validErgoTransactionGen
+      outIndex <- outIndexGen(tx)
+      height <- heightGen()
+      ergoBox <- Gen.oneOf(boxes)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), None, ergoBox, certainty)
   }
 
   def spentOnchainBoxGen: Gen[TrackedBox] = {

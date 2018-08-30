@@ -1,9 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import io.circe.Encoder
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.api.ApiEncoderOption.HideDetails
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, bytesToId}
@@ -62,7 +66,7 @@ case class TrackedBox(
   /**
     * Whether the box is confirmed or not
     */
-  def onchainStatus: OnchainStatus = {
+  def chainStatus: ChainStatus = {
     if (creationHeight.isEmpty || spendingTx.nonEmpty && spendingHeight.isEmpty) Offchain else Onchain
   }
 

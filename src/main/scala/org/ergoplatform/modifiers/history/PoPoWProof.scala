@@ -100,9 +100,9 @@ case class PoPoWProof(m: Byte,
   }
 
   override def compare(proof: PoPoWProof): Int = {
-    val lca = lca(proof, this.innerchain.length - 1, proof.innerchain.length - 1)
-    val proofA = bestArg(this, lca)
-    val proofB = bestArg(proof, lca)
+    val lcaValue = lca(proof, this.innerchain.length - 1, proof.innerchain.length - 1)
+    val proofA = bestArg(this, lcaValue)
+    val proofB = bestArg(proof, lcaValue)
     proofA.compare(proofB)
   }
 

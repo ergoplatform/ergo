@@ -13,7 +13,7 @@ import scorex.core.{VersionTag, bytesToVersion}
 import scorex.core.transaction.state.MinimalState
 import scorex.util.ScorexLogging
 import scorex.crypto.authds.{ADDigest, ADKey}
-import scorex.crypto.encode.Base16
+import scorex.util.encode.Base16
 import sigmastate.Values.{IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}

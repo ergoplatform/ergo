@@ -3,7 +3,8 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 

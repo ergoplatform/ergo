@@ -6,7 +6,8 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 import scala.util.Random

@@ -6,7 +6,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.ModifierId
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 
 import scala.util.Failure
 

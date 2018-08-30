@@ -6,7 +6,8 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 

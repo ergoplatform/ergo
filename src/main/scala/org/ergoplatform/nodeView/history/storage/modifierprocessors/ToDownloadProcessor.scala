@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.util.{Success, Try}
 

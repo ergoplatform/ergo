@@ -14,7 +14,8 @@ import org.ergoplatform.settings.Algos
 import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
@@ -261,7 +262,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
         case (validation, ((candidate, maybeId), index)) =>
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
-            val box = candidate.toBox(idToBytes(txId), index.toShort)
+            val box = candidate.toBox(txId, index.toShort)
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }

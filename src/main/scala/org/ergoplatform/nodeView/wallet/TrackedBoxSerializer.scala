@@ -174,7 +174,7 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
 
   protected def readHeaderBits(r: ByteReader): (BoxCertainty, SpendingStatus, ChainStatus) = {
     val bits = r.getBits(size = 3)
-    (readCertainty(bits(0)), readSpendingStatus(bits(2)), readOnchainStatus(bits(1)))
+    (readCertainty(bits(0)), readSpendingStatus(bits(2)), readChainStatus(bits(1)))
   }
 
   protected def readHeader(r: ByteReader,
@@ -193,7 +193,7 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
   private def readCertainty(bit: Boolean): BoxCertainty =
     Seq(Certain, Uncertain).find(_.certain == bit).getOrElse(Uncertain)
 
-  private def readOnchainStatus(bit: Boolean): ChainStatus =
+  private def readChainStatus(bit: Boolean): ChainStatus =
     Seq(Onchain, Offchain).find(_.onchain == bit).getOrElse(Offchain)
 
   private def readSpendingStatus(bit: Boolean): SpendingStatus =

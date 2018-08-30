@@ -1,10 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import io.circe.Encoder
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.api.ApiEncoderOption.HideDetails
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
-import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, bytesToId}
@@ -24,7 +27,7 @@ sealed trait TrackedBox extends ScorexLogging {
   /**
     * Whether the box is confirmed or not
     */
-  def onchainStatus: OnchainStatus
+  def chainStatus: ChainStatus
 
   /**
     * Whether the box is definitely belongs to the user or not
@@ -32,7 +35,7 @@ sealed trait TrackedBox extends ScorexLogging {
   def certainty: BoxCertainty
 
   final def spent: Boolean = spendingStatus.spent
-  final def onchain: Boolean = onchainStatus.onchain
+  final def onchain: Boolean = chainStatus.onchain
   final def certain: Boolean = certainty.certain
 
   /**
@@ -89,6 +92,22 @@ sealed trait TrackedBox extends ScorexLogging {
     * @return updated box
     */
   def makeCertain(): TrackedBox
+
+  override def toString: String = {
+    getClass.getSimpleName + " " + TrackedBox.encoder(this)
+  }
+}
+
+object TrackedBox extends ApiCodecs {
+  val encoder: Encoder[TrackedBox] = { trackedBox =>
+    val opts = HideDetails
+    trackedBox match {
+      case b: UnspentOffchainBox => unspentOffchainBoxEncoder(opts)(b)
+      case b: UnspentOnchainBox => unspentOnchainBoxEncoder(opts)(b)
+      case b: SpentOffchainBox => spentOffchainBoxEncoder(opts)(b)
+      case b: SpentOnchainBox => spentOnchainBoxEncoder(opts)(b)
+    }
+  }
 }
 
 sealed trait UnspentBox extends TrackedBox {
@@ -101,11 +120,11 @@ sealed trait SpentBox extends TrackedBox {
 }
 
 sealed trait OffchainBox extends TrackedBox {
-  final def onchainStatus: OnchainStatus = Offchain
+  final def chainStatus: ChainStatus = Offchain
 }
 
 sealed trait OnchainBox extends TrackedBox {
-  final def onchainStatus: OnchainStatus = Onchain
+  final def chainStatus: ChainStatus = Onchain
 }
 
 case class UnspentOffchainBox(creationTx: ErgoTransaction,

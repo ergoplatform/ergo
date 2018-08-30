@@ -8,7 +8,12 @@ import sigmastate.Values
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   def trackedBoxGen: Gen[TrackedBox] = {
-    Gen.oneOf(unspentOffchainBoxGen, unspentOnchainBoxGen, spentOffchainBoxGen, spentOnchainBoxGen)
+    Gen.oneOf(
+      unspentOffchainBoxGen,
+      unspentOnchainBoxGen,
+      spentOffchainBoxGen,
+      spentPartiallyOffchainBoxGen,
+      spentOnchainBoxGen)
   }
 
   def unspentOffchainBoxGen: Gen[UnspentOffchainBox] = {
@@ -36,10 +41,22 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       (boxes, tx) <- validErgoTransactionGen
       (_, spendingTx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
-      heightOpt <- Gen.option(heightGen())
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield SpentOffchainBox(tx, outIndex, heightOpt, spendingTx, ergoBox, certainty)
+    } yield SpentOffchainBox(tx, outIndex, None, spendingTx, ergoBox, certainty)
+  }
+
+
+
+  def spentPartiallyOffchainBoxGen: Gen[SpentOffchainBox] = {
+    for {
+      (boxes, tx) <- validErgoTransactionGen
+      (_, spendingTx) <- validErgoTransactionGen
+      outIndex <- outIndexGen(tx)
+      height <- heightGen()
+      ergoBox <- Gen.oneOf(boxes)
+      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
+    } yield SpentOffchainBox(tx, outIndex, Some(height), spendingTx, ergoBox, certainty)
   }
 
   def spentOnchainBoxGen: Gen[SpentOnchainBox] = {

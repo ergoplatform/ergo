@@ -64,7 +64,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
-          log.info(s"Uncertain box is mine! $uncertainBox")
+          log.debug(s"Uncertain box is mine! $uncertainBox")
           val certainBox = uncertainBox.makeCertain()
           registry.makeTransition(uncertainBox, certainBox)
         case Failure(_) =>

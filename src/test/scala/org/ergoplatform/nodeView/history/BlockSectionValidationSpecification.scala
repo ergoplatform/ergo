@@ -47,6 +47,14 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     val moreOMV = (0 until Extension.MaxOptionalFields + 1) map (_ => kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get)
     applicableCheck(extension.copy(mandatoryFields = moreOMV), header, history, correct = true)
     applicableCheck(extension.copy(mandatoryFields = moreOMV ++ o), header, history)
+    // validation of key duplicates in mandatory fields
+    val validMKV = kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get
+    applicableCheck(extension.copy(mandatoryFields = Seq(validMKV)), header, history, correct = true)
+    applicableCheck(extension.copy(mandatoryFields = Seq(validMKV, validMKV)), header, history)
+    // validation of key duplicates in optional fields
+    val validOKV = kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize).sample.get
+    applicableCheck(extension.copy(optionalFields = Seq(validOKV)), header, history, correct = true)
+    applicableCheck(extension.copy(optionalFields = Seq(validOKV, validOKV)), header, history)
 
     // common checks
     commonChecks(history, extension, header)

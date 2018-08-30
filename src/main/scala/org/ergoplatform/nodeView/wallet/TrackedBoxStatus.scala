@@ -7,11 +7,11 @@ object BoxCertainty {
   case object Uncertain extends BoxCertainty(false)
 }
 
-sealed abstract class OnchainStatus(val onchain: Boolean)
+sealed abstract class ChainStatus(val onchain: Boolean)
 
-object OnchainStatus {
-  case object Onchain extends OnchainStatus(true)
-  case object Offchain extends OnchainStatus(false)
+object ChainStatus {
+  case object Onchain extends ChainStatus(true)
+  case object Offchain extends ChainStatus(false)
 }
 
 sealed abstract class SpendingStatus(val spent: Boolean)

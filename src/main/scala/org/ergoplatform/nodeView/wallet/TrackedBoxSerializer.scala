@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
-import org.ergoplatform.nodeView.wallet.OnchainStatus.{Offchain, Onchain}
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.nodeView.wallet.TrackedBoxSerializer.TransactionLookup
 import org.ergoplatform.settings.Constants.ModifierIdSize
@@ -172,14 +172,14 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
     Array(trackedBox.certain, trackedBox.onchain, trackedBox.spent)
   }
 
-  protected def readHeaderBits(r: ByteReader): (BoxCertainty, SpendingStatus, OnchainStatus) = {
+  protected def readHeaderBits(r: ByteReader): (BoxCertainty, SpendingStatus, ChainStatus) = {
     val bits = r.getBits(size = 3)
     (readCertainty(bits(0)), readSpendingStatus(bits(2)), readOnchainStatus(bits(1)))
   }
 
   protected def readHeader(r: ByteReader,
                            expectedSpendingStatus: SpendingStatus,
-                           expectedOnchainStatus: OnchainStatus,
+                           expectedOnchainStatus: ChainStatus,
                            boxTypeName: String)
                           (parser: BoxCertainty => Try[T]): Try[T] = {
     val (certainty, spendingStatus, onchainStatus) = readHeaderBits(r)
@@ -193,7 +193,7 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
   private def readCertainty(bit: Boolean): BoxCertainty =
     Seq(Certain, Uncertain).find(_.certain == bit).getOrElse(Uncertain)
 
-  private def readOnchainStatus(bit: Boolean): OnchainStatus =
+  private def readOnchainStatus(bit: Boolean): ChainStatus =
     Seq(Onchain, Offchain).find(_.onchain == bit).getOrElse(Offchain)
 
   private def readSpendingStatus(bit: Boolean): SpendingStatus =

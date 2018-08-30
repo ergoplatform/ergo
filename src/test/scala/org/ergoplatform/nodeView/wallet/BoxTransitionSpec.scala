@@ -374,7 +374,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
     forAll(spentOnchainBoxGen) { box =>
       val height = Gen.choose(box.spendingHeight + 1, Integer.MAX_VALUE).sample.value
       registry.put(box)
-      registry.makeTransition(box.boxId, ProcessRollback(box.spendingHeight))
+      registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val same = registry.byId(box.boxId).value
       same shouldBe box

@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.encode.Base16
+import scorex.util.encode.Base16
 
 import scala.util.Success
 

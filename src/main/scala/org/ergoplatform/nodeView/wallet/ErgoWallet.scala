@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
@@ -10,7 +11,6 @@ import scorex.core.transaction.wallet.Vault
 import scorex.core.utils.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 
 class ErgoWallet(nodeViewHolderRef: ActorRef,

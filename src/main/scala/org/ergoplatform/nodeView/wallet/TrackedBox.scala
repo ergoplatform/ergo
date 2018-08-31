@@ -80,6 +80,6 @@ object TrackedBox {
     apply(creationTx, creationOutIndex, creationHeight, None, None, box, certainty)
   }
 
-  implicit def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
+  def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
 
 }

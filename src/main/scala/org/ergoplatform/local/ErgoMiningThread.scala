@@ -22,7 +22,9 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
   private var candidate: CandidateBlock = startCandidate
 
   protected def mineCmd(): Unit =
-    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) { self ! MineBlock }
+    context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
+      self ! MineBlock
+    }
 
 
   override def preStart(): Unit = {

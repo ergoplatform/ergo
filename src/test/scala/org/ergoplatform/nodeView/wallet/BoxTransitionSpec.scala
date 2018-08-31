@@ -11,6 +11,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 10)
 
   def heightGen: Gen[Int] = Gen.choose(0, Integer.MAX_VALUE)
+
   def spendingTxGen: Gen[ErgoTransaction] = invalidErgoTransactionGen
 
   property("Creation Confirmation from Unspent Off-chain Box") {

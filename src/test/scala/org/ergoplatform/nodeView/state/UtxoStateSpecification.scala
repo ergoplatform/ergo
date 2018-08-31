@@ -8,15 +8,13 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
-import org.ergoplatform.nodeView.state.ErgoState.genesisEmissionBox
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
@@ -24,7 +22,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
 
   property("valid coinbase transaction generation when emission box is present") {
-    val (us, bh) = createUtxoState()
+    val (us, _) = createUtxoState()
     us.emissionBoxOpt should not be None
     val tx = ErgoMiner.createCoinbase(us, Seq(), TrueLeaf, us.constants.emission)
     us.validate(tx) shouldBe 'success
@@ -74,14 +72,14 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("concurrent applyModifier() and proofsForTransactions()") {
-    implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
+    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
 
     var bh = BoxHolder(Seq(genesisEmissionBox))
     var us = createUtxoState(bh)
 
     var height: Int = 0
     // generate chain of correct full blocks
-    val chain = (0 until 10) map { i =>
+    val chain = (0 until 10) map { _ =>
       val header = invalidHeaderGen.sample.get
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
@@ -246,9 +244,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     //Different state
     val (us2, bh2) = {
-      lazy val genesisSeed = Long.MaxValue
-      lazy val rndGen = new scala.util.Random(genesisSeed)
-
       lazy val initialBoxes: Seq[ErgoBox] =
         (1 to 1).map(_ => ErgoBox(value = 10000, TrueLeaf))
 
@@ -302,7 +297,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)
-          .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, i) =>
+          .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, _) =>
             val state = sb._1
             val block = validFullBlock(parentOpt = Some(sb._2.last.header), state)
             (state.applyModifier(block).get, sb._2 ++ Seq(block))

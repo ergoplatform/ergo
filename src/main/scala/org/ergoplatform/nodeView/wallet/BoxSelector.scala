@@ -24,8 +24,8 @@ trait BoxSelector {
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */
-  def select(inputBoxes: Iterator[UnspentBox],
-             filterFn: UnspentBox => Boolean,
+  def select(inputBoxes: Iterator[TrackedBox],
+             filterFn: TrackedBox => Boolean,
              targetBalance: Long,
              targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult]
 }

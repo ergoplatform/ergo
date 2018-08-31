@@ -15,149 +15,38 @@ import sigmastate.utils.{ByteReader, ByteWriter}
 
 import scala.util.{Failure, Try}
 
-class TrackedBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[TrackedBox] {
+class TrackedBoxSerializer(txLookup: TransactionLookup)
+  extends Serializer[TrackedBox]
+    with ModifierValidator
+    with ScorexEncoding  {
+
+  def toBytes(trackedBox: TrackedBox): Array[Byte] = makeBytes(write(trackedBox, _))
+  def parseBytes(bytes: Array[Byte]): Try[TrackedBox] = read(startReader(bytes))
 
   def write(trackedBox: TrackedBox, w: ByteWriter): Unit = {
-    trackedBox match {
-      case b: UnspentOffchainBox => new UnspentOffchainBoxSerializer(txLookup).write(b, w)
-      case b: UnspentOnchainBox => new UnspentOnchainBoxSerializer(txLookup).write(b, w)
-      case b: SpentOffchainBox => new SpentOffchainBoxSerializer(txLookup).write(b, w)
-      case b: SpentOnchainBox => new SpentOnchainBoxSerializer(txLookup).write(b, w)
-    }
+    w.putBits(headerBits(trackedBox))
+      .putBytes(idToBytes(trackedBox.creationTxId))
+      .putShort(trackedBox.creationOutIndex)
+      .putOption(trackedBox.creationHeight)(_.putInt(_))
+      .putOption(trackedBox.spendingTxId)((r, id) => r.putBytes(idToBytes(id)))
+      .putOption(trackedBox.spendingHeight)(_.putInt(_))
+    ErgoBoxSerializer.write(trackedBox.box, w)
   }
 
-  override def read(r: ByteReader): Try[TrackedBox] = {
-    val pos = r.position
-    val (_, spendingStatus, onchainStatus) = readHeaderBits(r)
-    r.position = pos
-
-    (spendingStatus, onchainStatus) match {
-      case (Unspent, Offchain) => new UnspentOffchainBoxSerializer(txLookup).read(r)
-      case (Unspent, Onchain) => new UnspentOnchainBoxSerializer(txLookup).read(r)
-      case (Spent, Offchain) => new SpentOffchainBoxSerializer(txLookup).read(r)
-      case (Spent, Onchain) => new SpentOnchainBoxSerializer(txLookup).read(r)
-    }
-  }
-
-}
-
-object TrackedBoxSerializer {
-  type TransactionLookup = ModifierId => Option[ErgoTransaction]
-}
-
-class UnspentOffchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[UnspentOffchainBox] {
-
-  def write(unspentOffchainBox: UnspentOffchainBox, w: ByteWriter): Unit = {
-    import unspentOffchainBox._
-    w.putBits(headerBits(unspentOffchainBox))
-      .putBytes(idToBytes(creationTx.id))
-      .putShort(creationOutIndex)
-    ErgoBoxSerializer.write(box, w)
-  }
-
-  def read(r: ByteReader): Try[UnspentOffchainBox] = {
-    readHeader(r, Unspent, Offchain, "UnspentOffchainBox"){ certainty =>
-      readTx(r, txLookup) { tx =>
-        val outIndex = r.getShort()
-        readErgoBox(r) { box =>
-          UnspentOffchainBox(tx, outIndex, box, certainty)
-        }
-      }
-    }
-  }
-}
-
-class UnspentOnchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[UnspentOnchainBox] {
-
-  def write(unspentOnchainBox: UnspentOnchainBox, w: ByteWriter): Unit = {
-    import unspentOnchainBox._
-    w.putBits(headerBits(unspentOnchainBox))
-      .putBytes(idToBytes(creationTx.id))
-      .putShort(creationOutIndex)
-      .putInt(creationHeight)
-    ErgoBoxSerializer.write(box, w)
-  }
-
-  def read(r: ByteReader): Try[UnspentOnchainBox] = {
-    readHeader(r, Unspent, Onchain, "UnspentOnchainBox"){ certainty =>
-      readTx(r, txLookup) { tx =>
-        val outIndex = r.getShort()
-        val height = r.getInt()
-        readErgoBox(r) { box =>
-          UnspentOnchainBox(tx, outIndex, height, box, certainty)
-        }
-      }
-    }
-  }
-
-}
-
-class SpentOffchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[SpentOffchainBox] {
-
-  def write(spentOffchainBox: SpentOffchainBox, w: ByteWriter): Unit = {
-    import spentOffchainBox._
-    w.putBits(headerBits(spentOffchainBox))
-      .putBytes(idToBytes(creationTx.id))
-      .putShort(creationOutIndex)
-      .putOption(creationHeightOpt)(_.putInt(_))
-      .putBytes(idToBytes(spendingTx.id))
-    ErgoBoxSerializer.write(box, w)
-  }
-
-  def read(r: ByteReader): Try[SpentOffchainBox] = {
-    readHeader(r, Spent, Offchain, "SpentOffchainBox"){ certainty =>
+  def read(r: ByteReader): Try[TrackedBox] = {
+    readHeader(r) { certainty =>
       readTx(r, txLookup) { creationTx =>
-        val outIndex = r.getShort()
-        val creationHeight = r.getOption(r.getInt)
-        readTx(r, txLookup) { spendingTx =>
+        val creationOutIndex = r.getShort()
+        val creationHeight = r.getOption(r.getInt())
+        readTxOpt(r, txLookup) { spendingTx =>
+          val spendingHeight = r.getOption(r.getInt())
           readErgoBox(r) { box =>
-            SpentOffchainBox(creationTx, outIndex, creationHeight, spendingTx, box, certainty)
+            TrackedBox(creationTx, creationOutIndex, creationHeight, spendingTx, spendingHeight, box, certainty)
           }
         }
       }
     }
   }
-
-}
-
-class SpentOnchainBoxSerializer(txLookup: TransactionLookup) extends TypedBoxSerializer[SpentOnchainBox] {
-
-  def write(spentOnchainBox: SpentOnchainBox, w: ByteWriter): Unit = {
-    import spentOnchainBox._
-    w.putBits(headerBits(spentOnchainBox))
-      .putBytes(idToBytes(creationTx.id))
-      .putShort(creationOutIndex)
-      .putInt(creationHeight)
-      .putBytes(idToBytes(spendingTx.id))
-      .putInt(spendingHeight)
-    ErgoBoxSerializer.write(box, w)
-  }
-
-  def read(r: ByteReader): Try[SpentOnchainBox] = {
-    readHeader(r, Spent, Onchain, "SpentOnchainBox"){ certainty =>
-      readTx(r, txLookup) { creationTx =>
-        val outIndex = r.getShort()
-        val creationHeight = r.getInt
-        readTx(r, txLookup) { spendingTx =>
-          val spendingHeight = r.getInt()
-          readErgoBox(r) { box =>
-            SpentOnchainBox(creationTx, outIndex, creationHeight, spendingTx, spendingHeight, box, certainty)
-          }
-        }
-      }
-    }
-  }
-
-}
-
-trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierValidator with ScorexEncoding {
-
-  def toBytes(trackedBox: T): Array[Byte] = makeBytes(write(trackedBox, _))
-  def parseBytes(bytes: Array[Byte]): Try[T] = read(startReader(bytes))
-
-  def write(trackedBox: T, w: ByteWriter): Unit
-  def read(r: ByteReader): Try[T]
-
 
   protected def startWriter(): ByteWriter = sigmastate.serialization.Serializer.startWriter()
   protected def startReader(bytes: Array[Byte]): ByteReader = sigmastate.serialization.Serializer.startReader(bytes, 0)
@@ -169,25 +58,23 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
   }
 
   protected def headerBits(trackedBox: TrackedBox): Array[Boolean] = {
-    Array(trackedBox.certain, trackedBox.onchain, trackedBox.spent)
+    Array(trackedBox.spendingStatus.spent, trackedBox.chainStatus.onchain, trackedBox.certainty.certain)
   }
 
-  protected def readHeaderBits(r: ByteReader): (BoxCertainty, SpendingStatus, ChainStatus) = {
+  protected def readHeaderBits(r: ByteReader): (SpendingStatus, ChainStatus, BoxCertainty) = {
     val bits = r.getBits(size = 3)
-    (readCertainty(bits(0)), readSpendingStatus(bits(2)), readChainStatus(bits(1)))
+    (readSpendingStatus(bits(0)), readChainStatus(bits(1)), readCertainty(bits(2)))
   }
 
-  protected def readHeader(r: ByteReader,
-                           expectedSpendingStatus: SpendingStatus,
-                           expectedOnchainStatus: ChainStatus,
-                           boxTypeName: String)
-                          (parser: BoxCertainty => Try[T]): Try[T] = {
-    val (certainty, spendingStatus, onchainStatus) = readHeaderBits(r)
-    accumulateErrors
-      .demand(spendingStatus == expectedSpendingStatus, s"$boxTypeName should be $expectedSpendingStatus")
-      .demand(onchainStatus == expectedOnchainStatus, s"$boxTypeName should be $expectedOnchainStatus")
-      .result(Try(parser(certainty)).flatten)
-      .toTry.flatten
+  protected def readHeader(r: ByteReader)(parser: BoxCertainty => Try[TrackedBox]): Try[TrackedBox] = {
+    val (spendingStatus, chainStatus, certainty) = readHeaderBits(r)
+    parser(certainty) flatMap { trackedBox =>
+      accumulateErrors
+        .demand(trackedBox.spendingStatus == spendingStatus, s"$trackedBox corrupted: should be $spendingStatus")
+        .demand(trackedBox.chainStatus == chainStatus, s"$trackedBox corrupted: should be $chainStatus")
+        .result(trackedBox)
+        .toTry
+    }
   }
 
   private def readCertainty(bit: Boolean): BoxCertainty =
@@ -199,7 +86,13 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
   private def readSpendingStatus(bit: Boolean): SpendingStatus =
     Seq(Spent, Unspent).find(_.spent == bit).getOrElse(Unspent)
 
-  protected def readTx(r: ByteReader, txLookup: TransactionLookup)(parser: ErgoTransaction => Try[T]): Try[T] = {
+  protected def readTxOpt(r: ByteReader, txLookup: TransactionLookup)
+                         (parser: Option[ErgoTransaction] => Try[TrackedBox]): Try[TrackedBox] = {
+    r.getOption(readTx(r, txLookup)(tx => parser(Option(tx)))).getOrElse(parser(None))
+  }
+
+  protected def readTx(r: ByteReader, txLookup: TransactionLookup)
+                      (parser: ErgoTransaction => Try[TrackedBox]): Try[TrackedBox] = {
     val txId = bytesToId(r.getBytes(ModifierIdSize))
     txLookup(txId) match {
       case Some(tx) => parser(tx)
@@ -207,7 +100,12 @@ trait TypedBoxSerializer[T <: TrackedBox] extends Serializer[T] with ModifierVal
     }
   }
 
-  protected def readErgoBox(r: ByteReader)(parser: ErgoBox => T): Try[T] = {
+  protected def readErgoBox(r: ByteReader)(parser: ErgoBox => TrackedBox): Try[TrackedBox] = {
     ErgoBoxSerializer.read(r) map { box => parser(box) }
   }
+
+}
+
+object TrackedBoxSerializer {
+  type TransactionLookup = ModifierId => Option[ErgoTransaction]
 }

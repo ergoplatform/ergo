@@ -6,6 +6,8 @@ import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
 import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
+import scala.annotation.tailrec
+
 class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
@@ -52,7 +54,7 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     chain.foreach { fb =>
       modifiersCache.put(fb.header.id, fb.header)
       modifiersCache.put(fb.header.transactionsId, fb.blockTransactions)
-      modifiersCache.put(fb.header.ADProofsId, fb.aDProofs.get)
+      modifiersCache.put(fb.header.ADProofsId, fb.adProofs.get)
     }
 
     //The history is empty - we can apply only a header at height == 0 at this moment.
@@ -83,31 +85,32 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
 
     val chain = genChain(1, history)
 
-    chain.foreach{fb =>
-      history = history.append(fb.header).get._1
-      history = history.append(fb.blockTransactions).get._1
-    }
-
+    chain.foreach(fb => history = applyBlock(history, fb))
 
     val chain1 = genChain(5, history).tail
 
     val chain2 = genChain(10, history).tail
 
-    chain1.foreach{fb =>
-      history = history.append(fb.header).get._1
-      history = history.append(fb.blockTransactions).get._1
+    chain1.foreach(fb => history = applyBlock(history, fb))
+
+    chain2.foreach(fb => history = history.append(fb.header).get._1)
+
+    history.bestFullBlockOpt.get shouldBe chain1.last
+    history.bestHeaderOpt.get shouldBe chain2.last.header
+
+    chain2.flatMap(_.blockSections).foreach(s => modifiersCache.put(s.id, s))
+
+    @tailrec
+    def applyLoop(): Unit = {
+      modifiersCache.popCandidate(history) match {
+        case Some(mod) =>
+          history.append(mod)
+          applyLoop()
+        case None =>
+          modifiersCache.size shouldBe 0
+          history.bestFullBlockOpt.get shouldBe chain2.last
+      }
     }
-
-    history.fullBlockHeight shouldBe history.headersHeight
-
-
-    chain2.foreach{fb =>
-      history = history.append(fb.header).get._1
-      //history = history.append(fb.blockTransactions).get._1
-    }
-
-    println(history.fullBlockHeight)
-
-    println(history.headersHeight)
+    applyLoop()
   }
 }

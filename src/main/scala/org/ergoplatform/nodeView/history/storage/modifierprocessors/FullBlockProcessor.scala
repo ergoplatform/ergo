@@ -138,10 +138,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
-      .flatMap { id => typedModifierById[Header](id) }
-      .flatMap { h =>
-        Seq(h.ADProofsId, h.transactionsId)
-      }
+      .flatMap(id => typedModifierById[Header](id))
+      .flatMap(_.sectionIds.map(_._2))
     historyStorage.remove(toRemove)
   }
 

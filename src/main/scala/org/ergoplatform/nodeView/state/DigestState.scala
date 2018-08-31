@@ -36,10 +36,12 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock if notInitialized => Success(Unit)
+    case fb: ErgoFullBlock if notInitialized =>
+      log.info(s"Initializing state with fb ${fb.id}")
+      Success(Unit)
 
     case fb: ErgoFullBlock =>
-      fb.aDProofs match {
+      fb.adProofs match {
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>

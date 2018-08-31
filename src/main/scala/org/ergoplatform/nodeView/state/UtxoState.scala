@@ -113,7 +113,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
           val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
           val proofHash = ADProofs.proofDigest(proofBytes)
-          if (fb.aDProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+          if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
           if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
             throw new Error("Storage kept roothash is not equal to the declared one")

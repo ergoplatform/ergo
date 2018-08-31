@@ -5,7 +5,7 @@ import java.util.concurrent.Executors
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -19,7 +19,6 @@ import scala.util.{Random, Try}
 
 
 class UtxoStateSpecification extends ErgoPropertyTest {
-
 
   property("valid coinbase transaction generation when emission box is present") {
     val (us, _) = createUtxoState()
@@ -65,7 +64,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }
@@ -88,7 +87,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id, Seq(), Seq()), Some(adProofs))
       us = us.applyModifier(fb).get
       fb
     }
@@ -100,7 +99,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       (0 until 1000) foreach { _ =>
         Try {
           val boxes = stateReader.randomBox().toSeq
-          val txs = validTransactionsFromBoxes(4, boxes, Seq.empty, Seq.empty, new Random)._1
+          val txs = validTransactionsFromBoxes(400, boxes, new Random)._1
           stateReader.proofsForTransactions(txs).get
         }
       }
@@ -138,32 +137,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
       us.applyTransactions(txs, digest, height = 1).get
-    }
-  }
-
-  //todo: FIX is needed before any new major release!!!
-  ignore("applyTransactions() - double spending") {
-    forAll(boxesHolderGen) { bh =>
-      val txs_ = validTransactionsFromBoxHolder(bh)._1
-
-      val txs = txs_ ++ txs_
-
-      val us = createUtxoState(bh)
-      val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
-    }
-  }
-
-  //todo: FIX is needed before any new major release!!!
-  ignore("applyTransactions() - double spending #2") {
-    forAll(boxesHolderGen) { bh =>
-      val txs_ = validTransactionsFromBoxHolder(bh)._1
-
-      val us = createUtxoState(bh)
-      val digest = us.proofsForTransactions(txs_).get._2
-
-      val txs = txs_ ++ txs_
-      us.applyTransactions(txs, digest, height = 1).isSuccess shouldBe false
     }
   }
 
@@ -215,7 +188,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }

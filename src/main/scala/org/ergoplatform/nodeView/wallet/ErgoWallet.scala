@@ -13,7 +13,6 @@ import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 
-
 class ErgoWallet(nodeViewHolderRef: ActorRef,
                  historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)(implicit val actorSystem: ActorSystem)

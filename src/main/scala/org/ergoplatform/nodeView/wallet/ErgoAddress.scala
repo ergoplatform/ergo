@@ -212,6 +212,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
         case Failure(exception) => Left(DecodingFailure(exception.toString, cursor.history))
       }
     }
+
     for {
       addressStr <- cursor.as[String]
       address <- decodeString(addressStr)

@@ -18,9 +18,10 @@ import scala.util.{Failure, Try}
 class TrackedBoxSerializer(txLookup: TransactionLookup)
   extends Serializer[TrackedBox]
     with ModifierValidator
-    with ScorexEncoding  {
+    with ScorexEncoding {
 
   def toBytes(trackedBox: TrackedBox): Array[Byte] = makeBytes(write(trackedBox, _))
+
   def parseBytes(bytes: Array[Byte]): Try[TrackedBox] = read(startReader(bytes))
 
   def write(trackedBox: TrackedBox, w: ByteWriter): Unit = {
@@ -49,6 +50,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
   }
 
   protected def startWriter(): ByteWriter = sigmastate.serialization.Serializer.startWriter()
+
   protected def startReader(bytes: Array[Byte]): ByteReader = sigmastate.serialization.Serializer.startReader(bytes, 0)
 
   protected def makeBytes(encoder: ByteWriter => Unit): Array[Byte] = {

@@ -201,6 +201,7 @@ class WalletStorage extends ScorexLogging {
 
   /**
     * Do tracked box state transition on a spending transaction (confirmed or not to come)
+    *
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertToSpent(trackedBox: TrackedBox,
@@ -226,6 +227,7 @@ class WalletStorage extends ScorexLogging {
 
   /**
     * Do tracked box state transition on a creating transaction got confirmed
+    *
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertToConfirmed(trackedBox: TrackedBox, creationHeight: Height): Option[TrackedBox] = {
@@ -241,6 +243,7 @@ class WalletStorage extends ScorexLogging {
 
   /**
     * Do tracked box state transition on a rollback to a certain height
+    *
     * @param toHeight - height to roll back to
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
@@ -261,6 +264,7 @@ class WalletStorage extends ScorexLogging {
 
   /**
     * Handle a command to make this box "certain" (definitely hold by the user)
+    *
     * @return updated box
     */
   def convertToCertain(trackedBox: TrackedBox): Option[TrackedBox] = {

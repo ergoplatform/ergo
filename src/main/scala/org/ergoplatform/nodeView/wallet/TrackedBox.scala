@@ -11,58 +11,36 @@ import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, bytesToId}
 
 /**
-  * A generic interface for a box tracked by a wallet. A TrackedBox instantiation contains box itself as well as
+  * A box tracked by a wallet that contains Ergo box itself as well as
   * its state (e.g. spent or not, confirmed or not etc).
+  *
+  * @param creationTx Transaction created the box
+  * @param creationOutIndex Output index in the creation transaction
+  * @param creationHeight Height of the creation transaction block in blockchain if known
+  * @param spendingTx Transaction which spends the box if exists and known
+  * @param spendingHeight Height of the spending transaction block in blockchain if known
+  * @param box Underlying Ergo box
+  * @param certainty Whether the box is definitely belongs to the user or not
   */
-case class TrackedBox(
-                      /**
-                        * Transaction created the box
-                        */
-                      creationTx: ErgoTransaction,
-
-                      /**
-                        * Output index in the creation transaction
-                        */
+case class TrackedBox(creationTx: ErgoTransaction,
                       creationOutIndex: Short,
-
-                      /**
-                        * Height of the creation transaction block in blockchain if known
-                        */
                       creationHeight: Option[Height],
-
-                      /**
-                        * Transaction which spends the box if exists and known
-                        */
                       spendingTx: Option[ErgoTransaction],
-
-                      /**
-                        * Height of the spending transaction block in blockchain if known
-                        */
                       spendingHeight: Option[Height],
-
-                      /**
-                        * Underlying Ergo box
-                        */
                       box: ErgoBox,
-
-                      /**
-                        * Whether the box is definitely belongs to the user or not
-                        */
                       certainty: BoxCertainty) {
 
   require(spendingHeight.isEmpty || creationHeight.nonEmpty,
     s"Onchain transaction $encodedSpendingTxId at height $spendingHeight " +
     s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
 
-  /**
-    * Whether the box is spent or not
+  /** Whether the box is spent or not
     */
   def spendingStatus: SpendingStatus = {
     if (spendingTx.isEmpty) Unspent else Spent
   }
 
-  /**
-    * Whether the box is confirmed or not
+  /** Whether the box is confirmed or not
     */
   def chainStatus: ChainStatus = {
     if (creationHeight.isEmpty || spendingTx.nonEmpty && spendingHeight.isEmpty) Offchain else Onchain

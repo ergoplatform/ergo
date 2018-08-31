@@ -36,7 +36,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with UtxoStateReader {
 
 
-  override def rootHash: ADDigest = persistentProver.digest
+  override def rootHash: ADDigest = persistentProver.synchronized {
+    persistentProver.digest
+  }
 
   private def onAdProofGenerated(proof: ADProofs): Unit = {
     if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
@@ -47,7 +49,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override val maxRollbackDepth = 10
 
-  override def rollbackTo(version: VersionTag): Try[UtxoState] = {
+  override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
     store.get(Algos.versionToBAW(version)) match {
@@ -66,41 +68,43 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       height: Height) = Try {
-    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = transactions.map { tx =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-          case Some(box) => box
-          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+                                       height: Height) = persistentProver.synchronized {
+    Try {
+      val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+      val totalCost = transactions.map { tx =>
+        tx.statelessValidity.get
+        val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+          createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+            case Some(box) => box
+            case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+          }
         }
+        tx.statefulValidity(boxesToSpend, stateContext).get
+      }.sum
+
+      if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
+      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          persistentProver.performOneOperation(m)
+        })
+      }.get
+
+      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+          s"${Algos.encode(persistentProver.digest)} given")
       }
-      tx.statefulValidity(boxesToSpend, stateContext).get
-    }.sum
-
-    if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
-    val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-    mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-      t.flatMap(_ => {
-        persistentProver.performOneOperation(m)
-      })
-    }.get
-
-    if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-      throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-        s"${Algos.encode(persistentProver.digest)} given")
     }
   }
 
   //todo: utxo snapshot could go here
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = persistentProver.synchronized {
-    mod match {
-      case fb: ErgoFullBlock =>
-        val height = fb.header.height
+  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+    case fb: ErgoFullBlock =>
+      val height = fb.header.height
 
-        log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+      persistentProver.synchronized {
         val inRoot = rootHash
 
         val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
@@ -130,15 +134,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
+      }
 
-      case h: Header =>
-        Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+    case h: Header =>
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
-      case a: Any =>
-        log.info(s"Unhandled modifier: $a")
-        Failure(new Exception("unknown modifier"))
-
-    }
+    case a: Any =>
+      log.info(s"Unhandled modifier: $a")
+      Failure(new Exception("unknown modifier"))
   }
 
   @SuppressWarnings(Array("OptionGet"))

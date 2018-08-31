@@ -14,13 +14,13 @@ import scorex.core.{ModifierId, bytesToId}
   * A box tracked by a wallet that contains Ergo box itself as well as
   * its state (e.g. spent or not, confirmed or not etc).
   *
-  * @param creationTx Transaction created the box
+  * @param creationTx       Transaction created the box
   * @param creationOutIndex Output index in the creation transaction
-  * @param creationHeight Height of the creation transaction block in blockchain if known
-  * @param spendingTx Transaction which spends the box if exists and known
-  * @param spendingHeight Height of the spending transaction block in blockchain if known
-  * @param box Underlying Ergo box
-  * @param certainty Whether the box is definitely belongs to the user or not
+  * @param creationHeight   Height of the creation transaction block in blockchain if known
+  * @param spendingTx       Transaction which spends the box if exists and known
+  * @param spendingHeight   Height of the spending transaction block in blockchain if known
+  * @param box              Underlying Ergo box
+  * @param certainty        Whether the box is definitely belongs to the user or not
   */
 case class TrackedBox(creationTx: ErgoTransaction,
                       creationOutIndex: Short,
@@ -32,7 +32,7 @@ case class TrackedBox(creationTx: ErgoTransaction,
 
   require(spendingHeight.isEmpty || creationHeight.nonEmpty,
     s"Onchain transaction $encodedSpendingTxId at height $spendingHeight " +
-    s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
+      s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
 
   /** Whether the box is spent or not
     */

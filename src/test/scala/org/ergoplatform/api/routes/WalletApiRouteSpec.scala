@@ -4,16 +4,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.{Pay2SAddress, PaymentRequest, PaymentRequestDecoder, PaymentRequestEncoder}
+import org.ergoplatform.nodeView.wallet.{Pay2SAddress, PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.{FlatSpec, Matchers}
-import scorex.crypto.authds.ADKey
 import sigmastate.Values
-import sigmastate.Values.TrueLeaf
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class WalletApiRouteSpec extends FlatSpec
   with Matchers

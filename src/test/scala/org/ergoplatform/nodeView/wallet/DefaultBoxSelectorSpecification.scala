@@ -12,18 +12,18 @@ import sigmastate.Values
 class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   import DefaultBoxSelector.select
 
-  private val noFilter: UnspentBox => Boolean = _ => true
+  private val noFilter: TrackedBox => Boolean = _ => true
 
   property("returns None when it is impossible to select coins") {
     val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box = ErgoBox(1, Values.TrueLeaf)
-    val uBox = UnspentOffchainBox(parentTx, 0, box, BoxCertainty.Certain)
+    val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain)
 
     //target amount is too high
     select(Seq(uBox).toIterator, noFilter, 10, Map()) shouldBe None
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, box => box.onchain, 1, Map()) shouldBe None
+    select(Seq(uBox).toIterator, box => box.chainStatus.onchain, 1, Map()) shouldBe None
 
     //no target asset in the input box
     select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)) shouldBe None
@@ -38,9 +38,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val box2 = ErgoBox(10, Values.TrueLeaf)
     val box3 = ErgoBox(100, Values.TrueLeaf)
 
-    val uBox1 = UnspentOnchainBox(parentTx, 0, 100, box1, BoxCertainty.Certain)
-    val uBox2 = UnspentOffchainBox(parentTx, 1, box2, BoxCertainty.Certain)
-    val uBox3 = UnspentOnchainBox(parentTx, 2, 100, box3, BoxCertainty.Certain)
+    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, BoxCertainty.Certain)
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -61,7 +61,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s3.get.boxes shouldBe Seq(box1, box2)
 
     //box2 should be filtered out
-    val s4 = select(uBoxes.toIterator, box => box.onchain, 11, Map())
+    val s4 = select(uBoxes.toIterator, box => box.chainStatus.onchain, 11, Map())
     s4.isDefined shouldBe true
     s4.get.changeBoxes.size == 1
     s4.get.changeBoxes.head._1 shouldBe 90
@@ -84,9 +84,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val box2 = ErgoBox(10, Values.TrueLeaf, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
     val box3 = ErgoBox(100, Values.TrueLeaf, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
-    val uBox1 = UnspentOnchainBox(parentTx, 0, 100, box1, BoxCertainty.Certain)
-    val uBox2 = UnspentOffchainBox(parentTx, 1, box2, BoxCertainty.Certain)
-    val uBox3 = UnspentOnchainBox(parentTx, 2, 100, box3, BoxCertainty.Certain)
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -102,7 +102,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s2.get.changeBoxes.head._2(assetId1) shouldBe 90
     s2.get.boxes shouldBe Seq(box1, box3)
 
-    select(uBoxes.toIterator, box => box.onchain, 1, Map(assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, box => box.chainStatus.onchain, 1, Map(assetId2 -> 1)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1000)) shouldBe None
 
@@ -114,7 +114,7 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     s3.get.changeBoxes.head._2(assetId2) shouldBe 9
     s3.get.boxes shouldBe Seq(box1, box2, box3)
 
-    select(uBoxes.toIterator, box => box.onchain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, box => box.chainStatus.onchain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
   }
 
   property("properly selects coins - assets w. multiple change boxes") {
@@ -140,9 +140,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 
-    val uBox1 = UnspentOnchainBox(parentTx, 0, 100, box1, BoxCertainty.Certain)
-    val uBox2 = UnspentOffchainBox(parentTx, 1, box2, BoxCertainty.Certain)
-    val uBox3 = UnspentOnchainBox(parentTx, 2, 100, box3, BoxCertainty.Certain)
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain)
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 

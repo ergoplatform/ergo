@@ -2,55 +2,53 @@ package org.ergoplatform.nodeView.wallet
 
 import io.circe.Encoder
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.api.ApiEncoderOption.HideDetails
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.wallet.BoxCertainty.Certain
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierId, bytesToId}
-import scorex.core.utils.ScorexLogging
 
 /**
-  * A generic interface for a box tracked by a wallet. A TrackedBox instantiation contains box itself as well as
+  * A box tracked by a wallet that contains Ergo box itself as well as
   * its state (e.g. spent or not, confirmed or not etc).
+  *
+  * @param creationTx Transaction created the box
+  * @param creationOutIndex Output index in the creation transaction
+  * @param creationHeight Height of the creation transaction block in blockchain if known
+  * @param spendingTx Transaction which spends the box if exists and known
+  * @param spendingHeight Height of the spending transaction block in blockchain if known
+  * @param box Underlying Ergo box
+  * @param certainty Whether the box is definitely belongs to the user or not
   */
-sealed trait TrackedBox extends ScorexLogging {
+case class TrackedBox(creationTx: ErgoTransaction,
+                      creationOutIndex: Short,
+                      creationHeight: Option[Height],
+                      spendingTx: Option[ErgoTransaction],
+                      spendingHeight: Option[Height],
+                      box: ErgoBox,
+                      certainty: BoxCertainty) {
 
-  /**
-    * Whether the box is spent or not
+  require(spendingHeight.isEmpty || creationHeight.nonEmpty,
+    s"Onchain transaction $encodedSpendingTxId at height $spendingHeight " +
+    s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
+
+  /** Whether the box is spent or not
     */
-  def spendingStatus: SpendingStatus
+  def spendingStatus: SpendingStatus = {
+    if (spendingTx.isEmpty) Unspent else Spent
+  }
 
-  /**
-    * Whether the box is confirmed or not
+  /** Whether the box is confirmed or not
     */
-  def chainStatus: ChainStatus
-
-  /**
-    * Whether the box is definitely belongs to the user or not
-    */
-  def certainty: BoxCertainty
-
-  final def spent: Boolean = spendingStatus.spent
-  final def onchain: Boolean = chainStatus.onchain
-  final def certain: Boolean = certainty.certain
-
-  /**
-    * Transaction created the box
-    */
-  def creationTx: ErgoTransaction
-
-  /**
-    * Output index in the transaction
-    */
-  def creationOutIndex: Short
-
-  val box: ErgoBox
+  def chainStatus: ChainStatus = {
+    if (creationHeight.isEmpty || spendingTx.nonEmpty && spendingHeight.isEmpty) Offchain else Onchain
+  }
 
   lazy val boxId: ModifierId = bytesToId(box.id)
+
+  def encodedBoxId: String = Algos.encode(boxId)
 
   def value: Long = box.value
 
@@ -58,210 +56,30 @@ sealed trait TrackedBox extends ScorexLogging {
     bytesToId(id) -> amt
   }.toMap
 
-  /**
-    * Register this box in a wallet storage
-    */
-  def register(storage: WalletStorage): Unit = storage.put(this)
+  def creationTxId: ModifierId = creationTx.id
 
-  /**
-    * Remove this box from a wallet storage
-    */
-  def deregister(storage: WalletStorage): Unit = storage.remove(boxId)
+  def encodedCreationTxId: String = Algos.encode(creationTxId)
 
-  /**
-    * Do state transition on a spending transaction (confirmed or not to come)
-    * @return Some(trackedBox), if box state has been changed, None otherwise
-    */
-  def transition(spendingTransaction: ErgoTransaction, spendingHeightOpt: Option[Height]): Option[TrackedBox]
+  def spendingTxId: Option[ModifierId] = spendingTx.map(_.id)
 
-  /**
-    * Do state transition on a creating transaction got confirmed
-    * @return Some(trackedBox), if box state has been changed, None otherwise
-    */
-  def transition(creationHeight: Height): Option[TrackedBox]
-
-  /**
-    * Do state transition on a rollback to a certain height
-    * @param toHeight - height to oll back to
-    * @return Some(trackedBox), if box state has been changed, None otherwise
-    */
-  def transitionBack(toHeight: Height): Option[TrackedBox]
-
-  /**
-    * Handle a command to make this box "certain" (definitely hold by the user)
-    * @return updated box
-    */
-  def makeCertain(): TrackedBox
+  def encodedSpendingTxId: Option[String] = spendingTxId.map(Algos.encode)
 
   override def toString: String = {
     getClass.getSimpleName + " " + TrackedBox.encoder(this)
   }
+
 }
 
-object TrackedBox extends ApiCodecs {
-  val encoder: Encoder[TrackedBox] = { trackedBox =>
-    val opts = HideDetails
-    trackedBox match {
-      case b: UnspentOffchainBox => unspentOffchainBoxEncoder(opts)(b)
-      case b: UnspentOnchainBox => unspentOnchainBoxEncoder(opts)(b)
-      case b: SpentOffchainBox => spentOffchainBoxEncoder(opts)(b)
-      case b: SpentOnchainBox => spentOnchainBoxEncoder(opts)(b)
-    }
-  }
-}
+object TrackedBox {
 
-sealed trait UnspentBox extends TrackedBox {
-  final def spendingStatus: SpendingStatus = Unspent
-}
-
-sealed trait SpentBox extends TrackedBox {
-  final def spendingStatus: SpendingStatus = Spent
-  val spendingTx: ErgoTransaction
-}
-
-sealed trait OffchainBox extends TrackedBox {
-  final def chainStatus: ChainStatus = Offchain
-}
-
-sealed trait OnchainBox extends TrackedBox {
-  final def chainStatus: ChainStatus = Onchain
-}
-
-case class UnspentOffchainBox(creationTx: ErgoTransaction,
-                              creationOutIndex: Short,
-                              box: ErgoBox,
-                              certainty: BoxCertainty) extends UnspentBox with OffchainBox {
-  override def register(registry: WalletStorage): Unit = {
-    super.register(registry)
-    log.info("New offchain box arrived: " + this)
-    if (certain) registry.increaseBalances(this)
+  /**
+    * Create unspent tracked box
+    */
+  def apply(creationTx: ErgoTransaction, creationOutIndex: Short, creationHeight: Option[Height],
+            box: ErgoBox, certainty: BoxCertainty): TrackedBox = {
+    apply(creationTx, creationOutIndex, creationHeight, None, None, box, certainty)
   }
 
-  override def deregister(registry: WalletStorage): Unit = {
-    super.deregister(registry)
-    if (certain) registry.decreaseBalances(this)
-  }
+  implicit def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
 
-  def transition(creationHeight: Height): Option[TrackedBox] =
-    Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box, certainty))
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(_) => log.warn(s"Onchain transaction ${spendingTransaction.id} is spending offchain box $box"); None
-      case None => Some(SpentOffchainBox(creationTx, creationOutIndex, None, spendingTransaction, box, certainty))
-    }
-  }
-
-  def transitionBack(toHeight: Int): Option[TrackedBox] = None
-
-  def makeCertain(): UnspentOffchainBox = if (certain) this else copy(certainty = Certain)
-}
-
-case class UnspentOnchainBox(creationTx: ErgoTransaction,
-                             creationOutIndex: Short,
-                             creationHeight: Int,
-                             box: ErgoBox,
-                             certainty: BoxCertainty) extends UnspentBox with OnchainBox {
-
-  override def register(registry: WalletStorage): Unit = {
-    super.register(registry)
-    log.info("New onchain box arrived: " + this)
-    registry.putToConfirmedIndex(creationHeight, boxId)
-    if (certain) registry.increaseBalances(this)
-  }
-
-  override def deregister(registry: WalletStorage): Unit = {
-    super.deregister(registry)
-    if (certain) registry.decreaseBalances(this)
-  }
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    Some(heightOpt match {
-      case Some(h) =>
-        SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box, certainty)
-      case None =>
-        SpentOffchainBox(creationTx, creationOutIndex, Some(creationHeight), spendingTransaction, box, certainty)
-    })
-  }
-
-  def transition(creationHeight: Height): Option[TrackedBox] = {
-    log.warn(s"Double creation of UncertainUnspentOnchainBox for $boxId")
-    None
-  }
-
-  def transitionBack(toHeight: Height): Option[TrackedBox] = {
-    if (creationHeight > toHeight) {
-      Some(UnspentOffchainBox(creationTx, creationOutIndex, box, certainty))
-    } else {
-      None
-    }
-  }
-
-  def makeCertain(): UnspentOnchainBox = if (certain) this else copy(certainty = Certain)
-}
-
-case class SpentOffchainBox(creationTx: ErgoTransaction,
-                            creationOutIndex: Short,
-                            creationHeightOpt: Option[Int],
-                            spendingTx: ErgoTransaction,
-                            box: ErgoBox,
-                            certainty: BoxCertainty) extends SpentBox with OffchainBox {
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    heightOpt match {
-      case Some(h) =>
-        creationHeightOpt match {
-          case Some(creationHeight) =>
-            Some(SpentOnchainBox(creationTx, creationOutIndex, creationHeight, spendingTransaction, h, box, certainty))
-          case None =>
-            log.error(s"Invalid state for ${Algos.encode(box.id)}: no creation height, but spent on-chain.")
-            None
-        }
-      case None =>
-        log.warn(s"Double spending of an unconfirmed box $boxId")
-        //todo: handle double-spending strategy for an unconfirmed tx
-        None
-    }
-  }
-
-  def transition(creationHeight: Height): Option[TrackedBox] = this.creationHeightOpt match {
-    case Some(_) => log.warn(s"Double creation of $boxId"); None
-    case None => Some(copy(creationHeightOpt = Some(creationHeight)))
-  }
-
-  def transitionBack(toHeight: Height): Option[TrackedBox] = creationHeightOpt match {
-    case Some(h) if h > toHeight => Some(copy(creationHeightOpt = None))
-    case _ => None
-  }
-
-  def makeCertain(): SpentOffchainBox = if (certain) this else copy(certainty = Certain)
-}
-
-case class SpentOnchainBox(creationTx: ErgoTransaction,
-                           creationOutIndex: Short,
-                           creationHeight: Height,
-                           spendingTx: ErgoTransaction,
-                           spendingHeight: Height,
-                           box: ErgoBox,
-                           certainty: BoxCertainty) extends SpentBox with OnchainBox {
-
-  override def register(registry: WalletStorage): Unit = {
-    super.register(registry)
-    registry.putToConfirmedIndex(spendingHeight, boxId)
-  }
-
-  def transition(spendingTransaction: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = None
-
-  def transition(creationHeight: Height): Option[TrackedBox] = None
-
-  def transitionBack(toHeight: Height): Option[TrackedBox] = {
-    (toHeight < spendingHeight, toHeight < creationHeight) match {
-      case (false, false) => None
-      case (true, false) => Some(UnspentOnchainBox(creationTx, creationOutIndex, creationHeight, box, certainty))
-      case (true, true) => Some(UnspentOffchainBox(creationTx, creationOutIndex, box, certainty))
-      case (false, true) => log.warn(s"Wrong heights. Spending: $spendingHeight, creation: $creationHeight"); None
-    }
-  }
-
-  def makeCertain(): SpentOnchainBox = if (certain) this else copy(certainty = Certain)
 }

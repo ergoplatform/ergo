@@ -65,8 +65,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.debug(s"Uncertain box is mine! $uncertainBox")
-          val certainBox = uncertainBox.makeCertain()
-          registry.makeTransition(uncertainBox, certainBox)
+          registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case Failure(_) =>
         //todo: remove after some time? remove spent after some time?
       }
@@ -76,9 +75,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
     tx.inputs.foreach { inp =>
       val boxId = bytesToId(inp.boxId)
-      if (registry.contains(boxId)) {
-        registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
-      }
+      registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
   }
 
@@ -90,24 +87,18 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         case Some(_) =>
           val idxShort = outIndex.toShort
           val box = outCandidate.toBox(tx.serializedId, idxShort)
-
-          registry.byId(bytesToId(box.id)) match {
-            case Some(oldBox) =>
-              heightOpt match {
-                case Some(h) =>
-                  registry.makeTransition(oldBox, CreationConfirmation(h))
-                  true
-                case None =>
-                  log.warn(s"Double registration of the offchain box: ${oldBox.boxId}")
-                  false
-              }
-            case None =>
-              val bu = heightOpt match {
-                case Some(h) => UnspentOnchainBox(tx, idxShort, h, box, Uncertain)
-                case None => UnspentOffchainBox(tx, idxShort, box, Uncertain)
-              }
-              bu.register(registry)
-              true
+          val boxId = bytesToId(box.id)
+          if (registry.contains(boxId)) {
+            heightOpt match {
+              case Some(h) =>
+                registry.makeTransition(boxId, CreationConfirmation(h))
+              case None =>
+                log.warn(s"Double registration of the offchain box: $boxId")
+                false
+            }
+          } else {
+            registry.register(TrackedBox(tx, idxShort, heightOpt, box, Uncertain))
+            true
           }
         case None =>
           false
@@ -143,12 +134,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       height.until(heightTo, -1).foreach { h =>
         val toRemove = registry.confirmedAt(h)
         toRemove.foreach { boxId =>
-          registry.byId(boxId).foreach { tb =>
-            registry.makeTransition(tb, ProcessRollback(heightTo))
-          }
+          registry.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
-
       height = heightTo
   }
 
@@ -156,7 +144,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
     require(payTo.forall(_.value > 0), "Non-positive Ergo value")
     require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
-
 
     val targetBalance = payTo.map(_.value).sum
 
@@ -168,7 +155,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   } */
 
     //we currently do not use off-chain boxes to create a transaction
-    def filterFn(bu: UnspentBox) = bu.onchain
+    def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
 
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
       val inputs = r.boxes.toIndexedSeq

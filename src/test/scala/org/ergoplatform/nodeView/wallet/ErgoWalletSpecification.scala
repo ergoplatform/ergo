@@ -29,7 +29,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, blocking}
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 
 
 class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues with ScorexLogging {
@@ -102,7 +102,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
   property("on-chain scan") {
     withWalletFixture { fixture =>
       import fixture._
-      val block = applyNextBlock(pubKey)
+      val block = sendNextBlock(pubKey)
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val confirmedBalance = getConfirmedBalances.balance
@@ -117,7 +117,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
   ignore("on-chain box spending") {
     withWalletFixture { fixture =>
       import fixture._
-      val block = applyNextBlock(pubKey)
+      val block = sendNextBlock(pubKey)
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val confirmedBalance = getConfirmedBalances.balance
@@ -133,7 +133,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
       val spendingTx = makeSpendingTx(boxesToSpend, pubKey, proofBytes, balanceToReturn)
 
       //throws java.lang.Exception: Key 0b00769ac389c8a3fdd457e4ddfcef4558105e6ec82e719b02d94750c1acf2db does not exist
-      val spendingBlock = applyBlock(makeNextBlock(Seq(spendingTx)))
+      val spendingBlock = sendBlock(makeNextBlock(Seq(spendingTx)))
       wallet.scanPersistent(spendingBlock)
       blocking(Thread.sleep(scanTime(spendingBlock)))
 
@@ -148,7 +148,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
   property("off-chain transaction becomes onchain") {
     withWalletFixture { fixture =>
       import fixture._
-      val block = applyNextBlock(pubKey)
+      val block = sendNextBlock(pubKey)
       val sumBalance = sumOutputs(block)
 
       block.transactions.foreach { tx =>
@@ -178,7 +178,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
       val versionId = scorex.core.versionToId(initialState.version)
       val initialHeight = getHistory.heightOf(versionId)
 
-      val block = applyNextBlock(pubKey)
+      val block = sendNextBlock(pubKey)
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
@@ -206,7 +206,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
   property("successfully generates a transaction") {
     withWalletFixture { fixture =>
       import fixture._
-      val block = applyNextBlock(pubKey)
+      val block = sendNextBlock(pubKey)
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val confirmedBalance = getConfirmedBalances.balance
@@ -238,7 +238,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
 
       val initialState = getCurrentState
 
-      val block = applyNextBlock(p2s.script)
+      val block = sendNextBlock(p2s.script)
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val confirmedBalance = getConfirmedBalances.balance
@@ -262,7 +262,7 @@ class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues w
   }
 }
 
-class WalletFixture extends WalletFixtureUtil {
+class WalletFixture extends WalletFixtureUtil with ScorexLogging {
 
   object BlocksGenerator extends ErgoTestHelpers with ChainGenerator
 
@@ -306,7 +306,7 @@ class WalletFixture extends WalletFixtureUtil {
 
   def init(): Seq[ErgoFullBlock] = {
     actorSystem.eventStream.subscribe(testProbe.ref, classOf[SyntacticallySuccessfulModifier[_]])
-    genChain(3).map(applyBlock)
+    genChain(3).map(sendBlock)
   }
 
   def runAndClose[T](test: WalletFixture => T): T = {
@@ -334,7 +334,14 @@ class WalletFixture extends WalletFixtureUtil {
     Await.result((nodeViewHolderRef ? request).mapTo[CurView], awaitDuration)
   }
 
-  def applyBlock(block: ErgoFullBlock): ErgoFullBlock = {
+
+  def sendNextBlock(injectedScript: Value[SBoolean.type]): ErgoFullBlock = {
+    val txGen = creationTxGen(Some(arbScriptBoxCandidateGen(injectedScript)))
+    val nextBlock = makeNextBlock(Seq(txGen.sample.value))
+    sendBlock(nextBlock)
+  }
+
+  def sendBlock(block: ErgoFullBlock): ErgoFullBlock = {
     nodeViewHolderRef ! LocallyGeneratedModifier(block.header)
     testProbe.expectMsgType[SyntacticallySuccessfulModifier[Header]]
     if (settings.nodeSettings.verifyTransactions) {
@@ -352,23 +359,18 @@ class WalletFixture extends WalletFixtureUtil {
     block
   }
 
-  def applyNextBlock(injectedScript: Value[SBoolean.type]): ErgoFullBlock = {
-    val nextBlock = makeNextBlock(creationTxSeqGen(Some(arbScriptBoxCandidateGen(injectedScript))).sample.value)
-    applyBlock(nextBlock)
-  }
-
   def makeNextBlock(txs: Seq[ErgoTransaction]): ErgoFullBlock = {
     val currentView = getCurrentView
-    val parent = currentView.history.bestHeaderOpt
-    val (adProofs, stateDigest) = currentView.state.proofsForTransactions(txs).get
-    val time = timeProvider.time()
-    val ext = ExtensionCandidate(Seq(), Seq())
-    DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext).get
-  }
-
-  def creationTxSeqGen(neededOutputGen: Option[Gen[ErgoBoxCandidate]] = None): Gen[Seq[ErgoTransaction]] = {
-    val txCount = Gen.choose(1, 15).sample.getOrElse(5)
-    Gen.listOfN(txCount, creationTxGen(neededOutputGen))
+    currentView.state.proofsForTransactions(txs) match {
+      case Failure(e) =>
+        log.error(s"Failed to prove transactions while creating new block: $txs", e)
+        throw new AssertionError(s"Transaction prove failure: $e", e)
+      case Success((adProofs, stateDigest)) =>
+        val time = timeProvider.time()
+        val ext = ExtensionCandidate(Seq(), Seq())
+        val parent = currentView.history.bestHeaderOpt
+        DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext).get
+    }
   }
 
   def creationTxGen(neededOutputGen: Option[Gen[ErgoBoxCandidate]] = None): Gen[ErgoTransaction] = {

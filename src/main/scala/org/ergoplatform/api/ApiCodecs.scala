@@ -44,7 +44,7 @@ trait ApiCodecs {
 
   implicit val difficultyEncoder: Encoder[Difficulty] = bigIntEncoder
 
-  implicit val bytesEncoder: Encoder[Array[Byte]] =  Algos.encode(_).asJson
+  implicit val bytesEncoder: Encoder[Array[Byte]] = Algos.encode(_).asJson
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
 
@@ -62,7 +62,7 @@ trait ApiCodecs {
 
   implicit val adKeyEncoder: Encoder[ADKey] = _.array.asJson
 
-  implicit val adKeyDecoder: Decoder[ADKey] = bytesDecoder(ADKey @@  _)
+  implicit val adKeyDecoder: Decoder[ADKey] = bytesDecoder(ADKey @@ _)
 
   def bytesDecoder[T](transform: Array[Byte] => T): Decoder[T] = { implicit cursor =>
     for {
@@ -87,7 +87,7 @@ trait ApiCodecs {
     valueDecoder(_.asInstanceOf[EvaluatedValue[SType]])
   }
 
-  def valueDecoder[T](transform: Value[SType] => T): Decoder[T]  = { implicit cursor: ACursor =>
+  def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
       fromThrows(transform(ValueSerializer.deserialize(bytes)))
     }
@@ -136,8 +136,8 @@ trait ApiCodecs {
     import v._
     Json.obj(
       "height" -> height.asJson,
-      "balance" ->   balance.asJson,
-      "assets" ->   assetBalances.toSeq.asJson
+      "balance" -> balance.asJson,
+      "assets" -> assetBalances.toSeq.asJson
     )
   }
 
@@ -173,6 +173,7 @@ object ApiEncoderOption {
   }
 
   case object ShowDetails extends Detalization(true)
+
   case object HideDetails extends Detalization(false)
 
 }

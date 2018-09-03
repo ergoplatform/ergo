@@ -10,8 +10,8 @@ import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import sigmastate._
 import sigmastate.Values.{IntConstant, TaggedByteArray, Value}
+import sigmastate._
 import sigmastate.serialization.{DataSerializer, ValueSerializer}
 import sigmastate.utils.ByteBufferReader
 import sigmastate.utxo.{DeserializeContext, Slice}

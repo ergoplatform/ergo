@@ -13,8 +13,7 @@ import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 
 
-class ErgoWallet(nodeViewHolderRef: ActorRef,
-                 historyReader: ErgoHistoryReader,
+class ErgoWallet(historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
@@ -59,9 +58,8 @@ class ErgoWallet(nodeViewHolderRef: ActorRef,
 
 
 object ErgoWallet {
-  def readOrGenerate(nodeViewHolderRef: ActorRef,
-                     historyReader: ErgoHistoryReader,
+  def readOrGenerate(historyReader: ErgoHistoryReader,
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(nodeViewHolderRef, historyReader, settings)
+    new ErgoWallet(historyReader, settings)
   }
 }

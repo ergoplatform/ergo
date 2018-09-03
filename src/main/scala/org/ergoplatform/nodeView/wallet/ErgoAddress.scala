@@ -62,7 +62,7 @@ import scala.util.{Failure, Success, Try}
   *
   * Prefix byte = network type + address type
   *
-  * checksum = hash256(prefix byte ++ content bytes)
+  * checksum = blake2b256(prefix byte ++ content bytes)
   *
   * address = prefix byte ++ content bytes ++ checksum
   *
@@ -172,7 +172,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 
   import ErgoAddressEncoder._
 
-  implicit private val ergoAddressEncoder = this
+  implicit private val ergoAddressEncoder: ErgoAddressEncoder = this
 
   val ChecksumLength = 4
 

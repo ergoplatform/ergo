@@ -32,6 +32,7 @@ import scala.util.Random
 
 
 class ErgoWalletSpecification extends ErgoPropertyTest {
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
 
   property("successfully scans an offchain transaction") {
     withWalletFixture { fixture =>

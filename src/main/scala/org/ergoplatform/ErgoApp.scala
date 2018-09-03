@@ -76,7 +76,7 @@ class ErgoApp(args: Seq[String]) extends Application {
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
 
   if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGen ! StartGeneration
   }
 }

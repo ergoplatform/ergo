@@ -2,10 +2,15 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import sigmastate.Values
 
 trait WalletGenerators extends ErgoTransactionGenerators {
+
+  private val ergoSettings = ErgoSettings.read(None)
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(

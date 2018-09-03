@@ -44,7 +44,7 @@ import scala.util.{Failure, Success, Try}
   * For an address type, we form content bytes as follows:
   *
   * P2PK - serialized (compressed) public key
-  * P2sH - 160 bit of the script
+  * P2sH - 192 bit of the script
   * P2S  - serialized script
   *
   * Address examples for testnet:
@@ -105,10 +105,10 @@ case class Pay2SHAddress(scriptHash: Array[Byte]) extends ErgoAddress {
 
   override val contentBytes: Array[Byte] = scriptHash
 
-  //script checked in "P2SH - 160 bits" test in sigma repository
+  //similar script checked in "P2SH - 160 bits" test in sigma repository, but here we use 192 bits
   override val script: Value[SBoolean.type] = {
     val scriptId = 1: Byte
-    val hashEquals = EQ(Slice(CalcBlake2b256(TaggedByteArray(scriptId)), IntConstant(0), IntConstant(20)),
+    val hashEquals = EQ(Slice(CalcBlake2b256(TaggedByteArray(scriptId)), IntConstant(0), IntConstant(24)),
       scriptHash)
     val scriptIsCorrect = DeserializeContext(scriptId, SBoolean)
     AND(hashEquals, scriptIsCorrect)
@@ -127,7 +127,7 @@ object Pay2SHAddress {
 
   def apply(script: Value[SBoolean.type]): Pay2SHAddress = {
     val sb = ValueSerializer.serialize(script)
-    val sbh = ErgoAddressEncoder.hash160(sb)
+    val sbh = ErgoAddressEncoder.hash192(sb)
     Pay2SHAddress(sbh)
   }
 
@@ -223,5 +223,5 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 object ErgoAddressEncoder {
   def hash256(input: Array[Byte]): Digest32 = Blake2b256(input)
 
-  def hash160(input: Array[Byte]): Array[Byte] = hash256(input).take(20)
+  def hash192(input: Array[Byte]): Array[Byte] = hash256(input).take(24)
 }

@@ -21,29 +21,53 @@ class WagnerAlg(k: Int,
     @tailrec
     def wagnerStep(round: Int, sortedX: Seq[(BigInt, Seq[Int])]): Seq[(BigInt, Seq[Int])] = {
       val X: mutable.ArrayBuffer[(BigInt, Seq[Int])] = mutable.ArrayBuffer[(BigInt, Seq[Int])]()
-      val atMost: BigInt = if (round != k) {
-        BigInt(2).pow(n - round * (h / (k + 1)))
-      } else finalH
-      val atLeast: BigInt = if (round != k) {
-        p - atMost
-      } else p
+      val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
+      val atLeast: BigInt = if (round != k) p - atMost else p
       log(s"Round $round: search sums 0-$atMost || $atLeast-$p from ${sortedX.size} elements")
+
 
       @tailrec
       def loop(left: Int, right: Int): Unit = if (left < right) {
         val x = sortedX(left)
-        val y = sortedX(right)
-        if (distinctIndices(x._2, y._2)) {
-          val sumMod = (x._1 + y._1).mod(p)
-          if (sumMod <= atMost || sumMod >= atLeast) {
-            X.append(sumMod -> (x._2 ++ y._2))
-          }
-          if (sumMod > halfP) {
-            loop(left + 1, right)
-          } else {
-            loop(left, right - 1)
-          }
+        var r: Int = left + 1
+        var continue: Boolean = true
+        var firstValidRight: Option[Int] = None
+        if (x._1 < atMost) {
+          // element itself is in the valid position, should search for close elements
+          do {
+            val y = sortedX(r)
+            val sum = (x._1 + y._1).mod(p)
+            if (distinctIndices(x._2, y._2) && sum <= atMost) {
+              X.append(sum -> (x._2 ++ y._2))
+              r = r + 1
+            } else {
+              continue = false
+            }
+          } while (continue)
         }
+
+        // from right till sum is too small
+        continue = true
+        r = right
+        var previouSum = halfP
+        do {
+          val y = sortedX(r)
+          join(x, y, atMost, atLeast) match {
+            case (_, Some(jr)) =>
+              // found some solution, try less element
+              if (firstValidRight.isEmpty) firstValidRight = Some(r)
+              X.append(jr)
+              r = r - 1
+            case (sum, _) if firstValidRight.isEmpty && sum < previouSum && r > left =>
+              // we might start from too high right,
+              previouSum = sum
+              r = r - 1
+            case (sum, _) =>
+              continue = false
+          }
+        } while (continue)
+
+        loop(left + 1, firstValidRight.getOrElse(right))
       }
 
       loop(0, sortedX.size - 1)
@@ -69,12 +93,8 @@ class WagnerAlg(k: Int,
     require(solution.numbers.size == BigInt(2).pow(k), s"${solution.numbers.size} != ${BigInt(2).pow(k)}")
 
     def check(ints: Seq[BigInt], round: Int): Unit = {
-      val atMost: BigInt = if (round != k) {
-        BigInt(2).pow(n - round * (h / (k + 1)))
-      } else finalH
-      val atLeast: BigInt = if (round != k) {
-        p - atMost
-      } else p
+      val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
+      val atLeast: BigInt = if (round != k) p - atMost else p
 
       if (round < k) {
         val sums: Seq[BigInt] = ints.grouped(2).map(p => p.head + p.last).map(_.mod(p)).toSeq
@@ -85,6 +105,15 @@ class WagnerAlg(k: Int,
     }
 
     check(solution.numbers, 1)
+  }
+
+  private def join(x: (BigInt, Seq[Int]), y: (BigInt, Seq[Int]), atMost: BigInt, atLeast: BigInt): (BigInt, Option[(BigInt, Seq[Int])]) = {
+    val sum = (x._1 + y._1).mod(p)
+    if (distinctIndices(x._2, y._2) && (sum >= atLeast || sum <= atMost)) {
+      sum -> Some(sum -> (x._2 ++ y._2))
+    } else {
+      sum -> None
+    }
   }
 
   private def distinctIndices(a: Seq[Int], b: Seq[Int]): Boolean = !a.exists(v => b.contains(v))

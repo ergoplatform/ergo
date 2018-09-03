@@ -28,15 +28,16 @@ class KSumPoWSpecification extends ErgoPropertyTest {
   property("Sum to interval") {
     val h = n - 5
     val finalH = 30
+
     forAll(Gen.choose(0, 2000)) { size: Int =>
       val rnd = new Random(size)
       val list = (0 until size).map(i => (i, BigInt(rnd.nextLong()).mod(p))).toMap
       val sols = alg.prove(list, h, finalH)
       sols.foreach(sol => alg.validate(sol, h, finalH) shouldBe 'success)
-      sols.foreach(sol => (sol.numbers.sum.mod(p) < finalH) shouldBe true)
+      sols.foreach(sol => require(sol.numbers.sum.mod(p) <= finalH, s"${sol.numbers.sum.mod(p)} < $finalH"))
     }
 
-    val list = (0 until p).map(i => (i, BigInt(Random.nextLong()).mod(p))).toMap
+    val list = (0 until 200).map(i => (i, BigInt(Random.nextLong()).mod(p))).toMap
     val sols = alg.prove(list, h, finalH)
     sols.exists(sol => sol.numbers.sum.mod(p) > 0) shouldBe true
   }

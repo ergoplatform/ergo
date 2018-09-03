@@ -53,8 +53,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val readers = Readers(history, state, memPool, wallet)
 
 
-  val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)
-  val inetAddr2 = new InetSocketAddress("93.93.93.93",27017)
+  val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
+  val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
   val ts1 = System.currentTimeMillis() - 100
   val ts2 = System.currentTimeMillis() + 100
 
@@ -87,7 +87,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
 
   class MinerStub extends Actor {
-    def receive = { case MiningStatusRequest => sender() ! minerInfo }
+    def receive = {
+      case MiningStatusRequest => sender() ! minerInfo
+    }
   }
 
   object MinerStub {
@@ -95,7 +97,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object NodeViewStub {
@@ -103,7 +107,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NetworkControllerStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object NetworkControllerStub {
@@ -111,7 +117,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class PeerManagerStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object PeerManagerStub {
@@ -170,7 +178,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   def generateHistory(verifyTransactions: Boolean = true,
                       stateType: StateType = StateType.Digest,
                       PoPoWBootstrap: Boolean = false,
-                      blocksToKeep: Int  = 100,
+                      blocksToKeep: Int = 100,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 

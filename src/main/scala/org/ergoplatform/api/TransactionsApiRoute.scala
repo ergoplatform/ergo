@@ -33,7 +33,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(tx.id)
   }
 
-  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_ , limit) =>
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_, limit) =>
     // todo offset
     ApiResponse(getUnconfirmedTransactions(limit))
   }

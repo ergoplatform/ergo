@@ -14,12 +14,11 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import scorex.core.ModifierId
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
+import sigmastate.Values.{FalseLeaf, TrueLeaf, Value}
 import sigmastate._
-import sigmastate.Values.{TrueLeaf, FalseLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 

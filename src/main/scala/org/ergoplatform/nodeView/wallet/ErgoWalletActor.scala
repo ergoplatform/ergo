@@ -1,23 +1,22 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Actor
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.{ModifierId, bytesToId}
 import scorex.core.utils.ScorexLogging
+import scorex.core.{ModifierId, bytesToId}
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
-import scala.collection.Map
-import scala.collection.mutable
-import scala.util.{Failure, Random, Success, Try}
+import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Random, Success, Try}
 
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])

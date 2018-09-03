@@ -6,7 +6,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.{Pay2SAddress, PaymentRequest, PaymentRequestEncoder}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.{FlatSpec, Matchers}
 import sigmastate.Values
@@ -19,9 +19,11 @@ class WalletApiRouteSpec extends FlatSpec
 
   val prefix = "/wallet"
 
-  val ergoSettigns = ErgoSettings.read(None)
-  implicit val requestEncoder = new PaymentRequestEncoder(ergoSettigns)
+  val ergoSettings = ErgoSettings.read(None)
+  implicit val requestEncoder = new PaymentRequestEncoder(ergoSettings)
   val route = WalletApiRoute(readersRef, nodeViewRef, settings).route
+
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
 
   it should "generate transaction" in {
     val amount = 100L

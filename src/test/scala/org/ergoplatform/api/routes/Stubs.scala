@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
-import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoProvingInterpreter, ErgoWalletReader, P2PKAddress}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
@@ -129,6 +129,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class WalletActorStub extends Actor {
     def seed = "walletstub"
 
+    private implicit val addressEncoder = new ErgoAddressEncoder(settings)
     private val prover = new ErgoProvingInterpreter(seed, 2)
     private val trackedAddresses: mutable.Buffer[ErgoAddress] =
       mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)

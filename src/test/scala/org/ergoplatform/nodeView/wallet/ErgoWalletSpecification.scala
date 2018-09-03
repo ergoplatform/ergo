@@ -13,10 +13,9 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.utils.{ChainGenerator, ErgoTestHelpers}
+import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import org.scalatest.{Matchers, OptionValues, PropSpec}
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
@@ -32,7 +31,8 @@ import scala.concurrent.{Await, ExecutionContext, blocking}
 import scala.util.{Failure, Random, Success}
 
 
-class ErgoWalletSpecification extends PropSpec with Matchers with OptionValues with ScorexLogging {
+class ErgoWalletSpecification extends ErgoPropertyTest {
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
 
   property("off-chain scan") {
     withWalletFixture { fixture =>

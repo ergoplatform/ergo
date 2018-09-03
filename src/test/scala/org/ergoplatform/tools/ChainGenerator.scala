@@ -38,10 +38,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
       -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
-    val chainSettings = ChainSettings(blockInterval, 256, 8, pow,
-      settings.chainSettings.monetary)
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
-      nodeSettings, CacheSettings.default, settings.scorexSettings)
+    val fullHistorySettings: ErgoSettings = settings.copy(directory = dir.getAbsolutePath, nodeSettings = nodeSettings)
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
   if (history.bestHeaderOpt.nonEmpty) {

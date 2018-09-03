@@ -47,15 +47,15 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
-    val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+    val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings,
+      testingSettings = TestingSettings(transactionGeneration = true, 100))
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
     val listener = system.actorOf(Props(new Listener))
 
-    val testingSettings = TestingSettings(transactionGeneration = true, 100)
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, testingSettings)
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGen ! StartGeneration
 
     minerRef ! StartMining

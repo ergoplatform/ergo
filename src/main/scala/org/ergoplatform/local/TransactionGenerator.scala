@@ -7,8 +7,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.nodeView.wallet.{ErgoWallet, Pay2SAddress, PaymentRequest}
-import org.ergoplatform.settings.TestingSettings
+import org.ergoplatform.nodeView.wallet.{ErgoAddressEncoder, ErgoWallet, Pay2SAddress, PaymentRequest}
+import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.core.utils.ScorexLogging
@@ -29,15 +29,17 @@ import scala.util.{Random, Try}
   * check its correctness), then, if transaction is successfully adopted by node view holder components, repeat.
   */
 class TransactionGenerator(viewHolder: ActorRef,
-                           settings: TestingSettings) extends Actor with ScorexLogging {
+                           settings: ErgoSettings) extends Actor with ScorexLogging {
 
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
 
+  private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
+
   override def receive: Receive = {
     case StartGeneration =>
-      log.info("Starting testing transactions generation, with maxTransactionsPerBlock = " +
-        settings.maxTransactionsPerBlock)
+      log.info("Starting testing transactions generation, with maxTransactionsPerBlock = " + MaxTransactionsPerBlock)
 
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
         currentFullHeight = v.history.headersHeight
@@ -51,7 +53,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       val fbh = fb.header.height
       if (fbh > currentFullHeight) {
         currentFullHeight = fbh
-        transactionsPerBlock = Random.nextInt(settings.maxTransactionsPerBlock) + 1
+        transactionsPerBlock = Random.nextInt(MaxTransactionsPerBlock) + 1
         log.info(s"Going to generate $transactionsPerBlock transactions upon receiving a block at height $fbh")
         self ! Attempt
       }
@@ -94,14 +96,14 @@ object TransactionGenerator {
 }
 
 object TransactionGeneratorRef {
-  def props(viewHolder: ActorRef, settings: TestingSettings): Props =
+  def props(viewHolder: ActorRef, settings: ErgoSettings): Props =
     Props(new TransactionGenerator(viewHolder, settings))
 
-  def apply(viewHolder: ActorRef, settings: TestingSettings)
+  def apply(viewHolder: ActorRef, settings: ErgoSettings)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolder, settings))
 
-  def apply(viewHolder: ActorRef, settings: TestingSettings, name: String)
+  def apply(viewHolder: ActorRef, settings: ErgoSettings, name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolder, settings), name)
 }

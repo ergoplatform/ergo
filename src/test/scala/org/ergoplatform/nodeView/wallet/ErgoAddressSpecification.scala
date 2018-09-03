@@ -7,6 +7,8 @@ import sigmastate.serialization.ValueSerializer
 
 class ErgoAddressSpecification extends ErgoPropertyTest {
 
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
+
   def addressRoundtrip(addr: ErgoAddress): Assertion = {
     val settings = ErgoSettings.read(None)
     val encoder = ErgoAddressEncoder(settings)

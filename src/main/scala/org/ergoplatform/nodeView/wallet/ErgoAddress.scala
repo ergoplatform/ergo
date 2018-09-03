@@ -100,7 +100,7 @@ object P2PKAddress {
   val addressTypePrefix: Byte = 1: Byte
 
   def apply(pubkey: ProveDlog)(implicit encoder: ErgoAddressEncoder): P2PKAddress = {
-    val bs = pubkey.h.getEncoded(true)
+    val bs = ValueSerializer.serialize(pubkey)
     new P2PKAddress(pubkey, bs)
   }
 }

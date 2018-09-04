@@ -115,7 +115,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     }
   }
 
-  property("on-chain box spending") {
+  ignore("on-chain box spending") {
     withWalletFixture { fixture =>
       import fixture._
       val block = sendNextBlock(pubKey)
@@ -270,7 +270,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
   }
 }
 
-class WalletFixture extends WalletFixtureUtil with ScorexLogging {
+class WalletFixture extends ScorexLogging {
 
   object BlocksGenerator extends ErgoTestHelpers with ChainGenerator
 
@@ -423,13 +423,6 @@ class WalletFixture extends WalletFixtureUtil with ScorexLogging {
   def makeOutput(balance: Long, script: Value[SBoolean.type] = Values.TrueLeaf): ErgoBoxCandidate = {
     new ErgoBoxCandidate(balance, script)
   }
-
-}
-
-
-trait WalletFixtureUtil {
-
-  def settings: ErgoSettings
 
   def scanningInterval: Long = settings.walletSettings.scanningInterval.toMillis
 

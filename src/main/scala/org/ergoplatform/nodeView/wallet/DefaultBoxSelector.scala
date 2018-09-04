@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.AssetUtils.{mergeAssets, subtractAssets}
 import scorex.core.ModifierId
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -41,52 +42,51 @@ object DefaultBoxSelector extends BoxSelector {
   }
 
   override def select(inputBoxes: Iterator[TrackedBox],
-                      filterFn: TrackedBox => Boolean,
+                      externalFilter: TrackedBox => Boolean,
                       targetBalance: Long,
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
-
     //mutable structures to collect results
     val res = mutable.Buffer[ErgoBox]()
     var currentBalance = 0L
     val currentAssets = mutable.Map[ModifierId, Long]()
 
-    def collect(unspentBox: TrackedBox) = {
+    def pickUp(unspentBox: TrackedBox) = {
       currentBalance = currentBalance + unspentBox.value
       mergeAssets(currentAssets, unspentBox.assets)
       res += unspentBox.box
     }
 
-    def successMet = currentBalance >= targetBalance && targetAssets.forall { case (id, targetAmt) =>
-      currentAssets.getOrElse(id, 0L) >= targetAmt
-    }
+    def balanceMet = currentBalance >= targetBalance
+    def assetsMet = targetAssets.forall { case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt }
+
+    @tailrec
+    def pickBoxes(boxesIterator: Iterator[TrackedBox],
+                  filterFn: TrackedBox => Boolean,
+                  successFn: => Boolean): Boolean =
+      if (successFn) { true }
+      else if (!boxesIterator.hasNext) { false }
+      else {
+        val box = boxesIterator.next()
+        if (filterFn(box)) pickUp(box)
+        pickBoxes(boxesIterator, filterFn, successFn)
+      }
 
     //first, we pick all the boxes until ergo target balance is met
-    inputBoxes.find { bc =>
-      if (filterFn(bc)) collect(bc)
-      currentBalance >= targetBalance
-    }
-    if (!successMet) {
+    if (pickBoxes(inputBoxes, externalFilter, balanceMet)) {
       //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
       //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
-      inputBoxes.find { bc =>
-        if (filterFn(bc) && {
-          bc.assets.exists { case (id, _) =>
-            val targetAmt = targetAssets.getOrElse(id, 0L)
-            lazy val currentAmt = currentAssets.getOrElse(id, 0L)
-            targetAmt > 0 && targetAmt > currentAmt
-          }
-        }) {
-          collect(bc)
-        }
-        successMet
+      if (pickBoxes(inputBoxes, bc => externalFilter(bc) && bc.assets.exists { case (id, _) =>
+        val targetAmt = targetAssets.getOrElse(id, 0L)
+        lazy val currentAmt = currentAssets.getOrElse(id, 0L)
+        targetAmt > 0 && targetAmt > currentAmt
+      }, assetsMet)) {
+        subtractAssets(currentAssets, targetAssets)
+        val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
+        val changeBalance = currentBalance - targetBalance
+        formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))
+      } else {
+        None
       }
-    }
-
-    if (successMet) {
-      subtractAssets(currentAssets, targetAssets)
-      val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
-      val changeBalance = currentBalance - targetBalance
-      formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))
     } else {
       None
     }

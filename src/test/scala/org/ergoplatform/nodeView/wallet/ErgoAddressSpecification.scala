@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalatest.Assertion
 import sigmastate.serialization.ValueSerializer
@@ -10,9 +9,7 @@ class ErgoAddressSpecification extends ErgoPropertyTest {
   private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
 
   def addressRoundtrip(addr: ErgoAddress): Assertion = {
-    val settings = ErgoSettings.read(None)
-    val encoder = ErgoAddressEncoder(settings)
-    encoder.fromString(encoder.toString(addr)).get shouldBe addr
+    ergoAddressEncoder.fromString(ergoAddressEncoder.toString(addr)).get shouldBe addr
   }
 
   property("P2PK roundtrip") {

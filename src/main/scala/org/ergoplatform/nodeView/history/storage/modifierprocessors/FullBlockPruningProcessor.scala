@@ -9,7 +9,7 @@ import org.ergoplatform.settings.NodeConfigurationSettings
   */
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
-  private[history] var minimalFullBlockHeightVar: Int = Int.MaxValue
+  @volatile private[history] var minimalFullBlockHeightVar = Int.MaxValue
 
   /**
     * Start height to download full blocks.
@@ -50,5 +50,10 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
       0
     }
   }
+
+  /** true if we estimate, that our chain is synced with the network.
+    * Start downloading full blocks after that
+    */
+  def isHeadersChainSynced: Boolean = minimalFullBlockHeightVar < Int.MaxValue
 
 }

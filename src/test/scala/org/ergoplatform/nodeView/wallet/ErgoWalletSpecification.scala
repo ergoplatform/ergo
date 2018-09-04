@@ -353,8 +353,7 @@ class WalletFixture extends WalletFixtureUtil with ScorexLogging {
     nodeViewHolderRef ! LocallyGeneratedModifier(block.header)
     testProbe.expectMsgType[SyntacticallySuccessfulModifier[Header]]
     if (settings.nodeSettings.verifyTransactions) {
-      nodeViewHolderRef ! LocallyGeneratedModifier(block.blockTransactions)
-      nodeViewHolderRef ! LocallyGeneratedModifier(block.adProofs.get)
+      block.blockSections.foreach(s => nodeViewHolderRef ! LocallyGeneratedModifier(s))
       settings.nodeSettings.stateType match {
         case StateType.Digest =>
           testProbe.expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]

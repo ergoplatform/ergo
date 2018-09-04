@@ -12,10 +12,11 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ChainGenerator, ErgoPropertyTest, ErgoTestHelpers}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
+import org.scalatest.Inspectors
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
@@ -114,7 +115,7 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
     }
   }
 
-  ignore("on-chain box spending") {
+  property("on-chain box spending") {
     withWalletFixture { fixture =>
       import fixture._
       val block = sendNextBlock(pubKey)
@@ -127,7 +128,14 @@ class ErgoWalletSpecification extends ErgoPropertyTest {
       confirmedBalance should be > 0L
       confirmedBalance shouldBe sumBalance
 
-      val boxesToSpend = someOf(block.transactions.flatMap(_.outputs)).sample.value
+      val utxoState = getCurrentState
+      Inspectors.forAll(outputs(block)) { box =>
+        val found = utxoState.boxById(box.id)
+        log.error(s"Looking for Box ${Algos.encode(box.id)} in UTXO state: ${found.nonEmpty}")
+        found should not be empty
+      }
+
+      val boxesToSpend = someOf(outputs(block)).sample.value
       val balanceToSpend = sum(boxesToSpend)
       val balanceToReturn = Gen.choose(1, balanceToSpend - 1).sample.value
       val spendingTx = makeSpendingTx(boxesToSpend, pubKey, proofBytes, balanceToReturn)
@@ -325,7 +333,7 @@ class WalletFixture extends WalletFixtureUtil with ScorexLogging {
 
   def getHistory: ErgoHistory = getCurrentView.history
 
-  def getCurrentState: ErgoState[_] = getCurrentView.state
+  def getCurrentState: UtxoState = getCurrentView.state
 
   type CurView = CurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool]
 
@@ -434,7 +442,7 @@ trait WalletFixtureUtil {
 
   def scanTime(block: ErgoFullBlock): Long = scanTime(outputs(block).size)
 
-  def scanTime(boxCount: Int): Long = boxCount * scanningInterval + 700
+  def scanTime(boxCount: Int): Long = boxCount * scanningInterval + 1000
 
   def offlineScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 

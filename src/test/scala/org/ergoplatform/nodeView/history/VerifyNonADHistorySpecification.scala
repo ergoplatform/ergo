@@ -16,7 +16,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val chain = genChain(6, history)
     if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
-      history.isHeadersChainSyncedVar = true
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     chain.foreach(fb => history.append(fb.extension).get)
@@ -46,7 +45,6 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
 
     if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
-      history.isHeadersChainSyncedVar = true
     }
 
     // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis

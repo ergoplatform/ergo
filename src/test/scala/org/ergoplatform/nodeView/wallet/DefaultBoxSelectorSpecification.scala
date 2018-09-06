@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.wallet
 
 
-import scorex.core.{bytesToId, idToBytes}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.core.{bytesToId, idToBytes}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 

@@ -65,7 +65,7 @@ case class TrackedBox(creationTx: ErgoTransaction,
   def encodedSpendingTxId: Option[String] = spendingTxId.map(Algos.encode)
 
   override def toString: String = {
-    getClass.getSimpleName + " " + TrackedBox.encoder(this)
+    getClass.getSimpleName + " " + TrackedBox.encoder(this).noSpaces
   }
 
 }
@@ -80,6 +80,6 @@ object TrackedBox {
     apply(creationTx, creationOutIndex, creationHeight, None, None, box, certainty)
   }
 
-  implicit def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
+  def encoder: Encoder[TrackedBox] = ErgoTransaction.trackedBoxEncoder(HideDetails)
 
 }

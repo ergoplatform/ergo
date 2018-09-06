@@ -11,11 +11,10 @@ import org.ergoplatform.nodeView.wallet.{ErgoAddressEncoder, ErgoWallet, Pay2SAd
 import org.ergoplatform.settings.{ErgoSettings, TestingSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
-import scorex.core.utils.ScorexLogging
 import sigmastate.Values
 
-import scala.util.{Random, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Random, Try}
 import scorex.util.ScorexLogging
 
 

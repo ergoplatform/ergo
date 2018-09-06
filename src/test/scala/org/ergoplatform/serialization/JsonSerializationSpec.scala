@@ -1,8 +1,8 @@
 package org.ergoplatform.serialization
 
-import io.circe.{ACursor, Decoder, Encoder}
 import io.circe.parser.parse
 import io.circe.syntax._
+import io.circe.{ACursor, Decoder, Encoder}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiCodecs

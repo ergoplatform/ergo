@@ -19,8 +19,8 @@ import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
 
-import scala.concurrent.duration._
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {

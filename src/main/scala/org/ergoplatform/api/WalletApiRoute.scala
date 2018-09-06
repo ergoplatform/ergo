@@ -28,7 +28,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)
   }
 
-  private def withWallet[T : Encoder](op: ErgoWalletReader => Future[T]): Route = {
+  private def withWallet[T: Encoder](op: ErgoWalletReader => Future[T]): Route = {
     withWalletOp(op)(ApiResponse.apply[T])
   }
 

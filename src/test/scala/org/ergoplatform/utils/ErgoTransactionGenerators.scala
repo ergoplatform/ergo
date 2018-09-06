@@ -2,13 +2,13 @@ package org.ergoplatform.utils
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -62,10 +62,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   }
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = {
-   for {
-     cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-     assets <- additionalTokensGen(cnt)
-   } yield assets
+    for {
+      cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+      assets <- additionalTokensGen(cnt)
+    } yield assets
   }
 
   def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
@@ -179,7 +179,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ErgoTransaction(inputs, newBoxes)
   }
 
-  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]]  = {
+  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
       val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)

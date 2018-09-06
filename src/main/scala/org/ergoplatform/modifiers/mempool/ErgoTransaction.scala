@@ -247,7 +247,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
   override def serializeBody(tx: ErgoTransaction, w: ByteWriter): Unit =
-    flattenedTxSerializer.toBytes(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray))
+    flattenedTxSerializer.serializeBody(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
 
   override def parseBody(r: ByteReader): ErgoTransaction = {
     val ftx = flattenedTxSerializer.parseBody(r)

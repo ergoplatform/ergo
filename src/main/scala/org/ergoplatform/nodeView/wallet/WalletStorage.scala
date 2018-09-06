@@ -7,8 +7,8 @@ import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
-import scorex.core.utils.ScorexLogging
-import scorex.core.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
+import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 

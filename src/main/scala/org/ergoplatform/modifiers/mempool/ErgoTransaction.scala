@@ -1,20 +1,22 @@
 package org.ergoplatform.modifiers.mempool
 
+import java.nio.ByteBuffer
+
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
+import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
-import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
@@ -23,6 +25,7 @@ import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 import sigmastate.serialization.{Serializer => SSerializer}
+import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{AvlTreeData, SBoolean, SType}
 
 import scala.collection.mutable
@@ -232,8 +235,8 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
         case (validation, ((candidate, maybeId), index)) =>
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
-            val box = candidate.toBox(idToBytes(txId), index.toShort)
-            validation.demandEqualArrays(boxId, box.id, "Bad identifier for Ergo box. It could also be skipped")
+            val box = candidate.toBox(txId, index.toShort)
+            validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }
     }
@@ -243,11 +246,17 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 }
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-  override def toBytes(tx: ErgoTransaction): Array[Byte] =
-    flattenedTxSerializer.toBytes(tx.inputs, tx.outputCandidates)
+  override def serializeBody(tx: ErgoTransaction, w: ByteWriter): Unit =
+    flattenedTxSerializer.toBytes(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray))
 
-  override def parseBody(bytes: Array[Byte], pos: Position): (ErgoTransaction, Consumed) = {
-    val ((inputs, outputCandidates), consumed) = flattenedTxSerializer.parseBody(bytes, pos)
-    ErgoTransaction(inputs, outputCandidates, Some(consumed)) -> consumed
+  override def parseBody(r: ByteReader): ErgoTransaction = {
+    val ftx = flattenedTxSerializer.parseBody(r)
+    ErgoTransaction(ftx.inputs, ftx.outputCandidates)
+  }
+
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoTransaction] = Try {
+    val buf = ByteBuffer.wrap(bytes)
+    buf.position(0)
+    parseBody(new ByteBufferReader(buf))
   }
 }

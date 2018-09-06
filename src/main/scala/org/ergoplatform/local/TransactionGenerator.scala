@@ -16,6 +16,7 @@ import sigmastate.Values
 
 import scala.util.{Random, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scorex.util.ScorexLogging
 
 
 /**

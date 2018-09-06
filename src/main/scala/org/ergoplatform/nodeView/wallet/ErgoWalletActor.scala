@@ -9,8 +9,8 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierId, bytesToId}
-import scorex.core.utils.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
 
@@ -87,7 +87,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
         case Some(_) =>
           val idxShort = outIndex.toShort
-          val box = outCandidate.toBox(tx.serializedId, idxShort)
+          val box = outCandidate.toBox(tx.id, idxShort)
           val boxId = bytesToId(box.id)
           if (registry.contains(boxId)) {
             heightOpt match {

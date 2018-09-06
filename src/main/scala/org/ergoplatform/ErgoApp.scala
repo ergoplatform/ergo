@@ -17,7 +17,7 @@ import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 import scala.concurrent.Await

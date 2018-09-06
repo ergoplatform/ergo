@@ -8,7 +8,7 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,

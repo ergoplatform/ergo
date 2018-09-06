@@ -20,7 +20,8 @@ import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 import scorex.crypto.hash.Digest32
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}

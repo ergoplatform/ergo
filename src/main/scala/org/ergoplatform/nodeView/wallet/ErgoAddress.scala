@@ -8,8 +8,8 @@ import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
-import scorex.crypto.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util.encode.Base58
 import sigmastate._
 import sigmastate.Values.{IntConstant, TaggedByteArray, Value}
 import sigmastate.serialization.{DataSerializer, ValueSerializer}

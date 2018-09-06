@@ -20,7 +20,7 @@ import org.scalatest.Inspectors
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SyntacticallySuccessfulModifier
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{ByteArrayConstant, Value}

@@ -20,7 +20,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.asynchttpclient.Dsl._
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._

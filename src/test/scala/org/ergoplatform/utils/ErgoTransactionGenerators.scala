@@ -12,6 +12,7 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util._
 import sigmastate._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -23,13 +24,17 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
+  val boxIndexGen: Gen[Short] = for {
+    v <- Gen.chooseNum(0, Short.MaxValue)
+  } yield v.toShort
+
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- ergoPropositionGen
     value <- positiveIntGen
     reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
+    boxId: Short <-  boxIndexGen
+  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId.toModifierId, boxId)
 
   val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
     length <- Gen.chooseNum(1, 100)
@@ -76,19 +81,22 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     prop <- trueLeafGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-    ar <- additionalRegistersGen
-    tokens <- additionalTokensGen
-  } yield ErgoBox(value, prop, tokens, ar, transactionId, boxId)
+    boxId: Short <- boxIndexGen
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    ar <- additionalRegistersGen(regNum)
+    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    tokens <- additionalTokensGen(tokensCount)
+  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
     prop <- propositionGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-    ar <- additionalRegistersGen
-  } yield ErgoBox(value, prop, tokens, ar, transactionId, boxId)
+    boxId: Short <- boxIndexGen
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    ar <- additionalRegistersGen(regNum)
+  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen

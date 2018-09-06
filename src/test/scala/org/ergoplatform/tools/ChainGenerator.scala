@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._

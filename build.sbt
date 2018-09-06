@@ -14,13 +14,12 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "1f5b7c39-SNAPSHOT"
+val scorexVersion = "41f3db48-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "scrypto" % "2.1.2").exclude("ch.qos.logback", "logback-classic"),
-  "org.scorexfoundation" %% "sigma-state" % "0.9.5-SNAPSHOT",
+  ("org.scorexfoundation" %% "sigma-state" % "0.10.0").exclude("ch.qos.logback", "logback-classic"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.14").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",

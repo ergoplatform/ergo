@@ -6,7 +6,6 @@ import scorex.core.ModifierId
 import scorex.core.transaction.MempoolReader
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Success
 
@@ -21,11 +20,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     */
   protected[mempool] var waitedForAssembly: Map[Set[ModifierId], (Promise[MemPoolResponse], Seq[ModifierId])] = Map.empty
 
-  override def getById(id: ModifierId): Option[ErgoTransaction] = unconfirmed.get(id)
+  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = unconfirmed.get(modifierId)
 
   override def contains(id: ModifierId): Boolean = unconfirmed.contains(id)
 
-  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(getById)
+  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(modifierById)
 
   override def size: Int = unconfirmed.size
 
@@ -41,7 +40,7 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
       // filtering fully-built queries and completing of a promise
       if (newKey.isEmpty) {
         val (promise, allIds) = p._2
-        promise complete Success(allIds.map(id => getById(id).get))
+        promise complete Success(allIds.map(id => modifierById(id).get))
         None
       } else {
         Some(newKey -> p._2)

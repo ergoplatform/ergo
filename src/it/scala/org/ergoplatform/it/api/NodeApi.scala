@@ -14,7 +14,7 @@ import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.util._
 import org.slf4j.LoggerFactory
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
 import scala.concurrent.{ExecutionContext, Future}

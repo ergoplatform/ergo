@@ -200,11 +200,7 @@ case class ErgoAddressEncoder(settings: ErgoSettings) {
 
       addressType match {
         case P2PKAddress.addressTypePrefix =>
-          val buf = ByteBuffer.wrap(bs)
-          val r = new ByteBufferReader(buf).mark()
-          val ge = DataSerializer.deserialize[SGroupElement.type](SGroupElement, r)
-          val pd = ProveDlog(ge)
-          new P2PKAddress(pd, bs)
+          new P2PKAddress(ValueSerializer.deserialize(bs).asInstanceOf[ProveDlog], bs)
         case Pay2SHAddress.addressTypePrefix =>
           new Pay2SHAddress(bs)
         case Pay2SAddress.addressTypePrefix =>

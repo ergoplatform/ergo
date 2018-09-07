@@ -23,8 +23,6 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected val timeProvider: NetworkTimeProvider
 
-  private[history] var isHeadersChainSyncedVar: Boolean = false
-
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
   def headerIdsAtHeight(height: Int): Seq[ModifierId]
@@ -35,15 +33,12 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
-  /**
-    * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+  /** return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
     */
-  def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
+  def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /**
-    *
-    * @return Next `howMany` modifier ids satisfying `filter` condition our node should download
-    *         to synchronize full block chain with headers chain
+  /** return Next `howMany` modifier ids satisfying `filter` condition our node should download
+    * to synchronize full block chain with headers chain
     */
   def nextModifiersToDownload(howMany: Int, contidion: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
@@ -85,7 +80,6 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
-      isHeadersChainSyncedVar = true
       pruningProcessor.updateBestFullBlock(header)
       Seq.empty
     } else {

@@ -20,8 +20,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
-
+import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
+import scorex.util.ScorexLogging
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.language.postfixOps

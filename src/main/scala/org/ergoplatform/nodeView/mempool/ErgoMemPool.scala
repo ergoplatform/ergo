@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.transaction.MemoryPool
 
 import scala.collection.concurrent.TrieMap

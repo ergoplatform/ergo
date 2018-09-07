@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 case class BoxSelectionResult(boxes: Seq[ErgoBox],
                               changeBoxes: Seq[(Long, Map[ModifierId, Long])])

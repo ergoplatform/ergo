@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 import io.netty.channel.Channel
 import io.netty.channel.group.DefaultChannelGroup
 import io.netty.util.concurrent.GlobalEventExecutor
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.concurrent.{Future, Promise}
 

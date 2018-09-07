@@ -3,12 +3,12 @@ package org.ergoplatform.api
 import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
 import io.circe.{Encoder, Json}
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
-final case class EmissionApiRoute(emission: CoinsEmission, ergoSettings: ErgoSettings)
+final case class EmissionApiRoute(emission: EmissionRules, ergoSettings: ErgoSettings)
                                  (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   import EmissionApiRoute._
@@ -26,10 +26,10 @@ final case class EmissionApiRoute(emission: CoinsEmission, ergoSettings: ErgoSet
 
 object EmissionApiRoute {
 
-  def emissionInfoAtHeight(height: Long, ce: CoinsEmission): EmissionInfo = {
-    val minerReward = ce.emissionAtHeight(height)
-    val totalCoinsIssued = ce.issuedCoinsAfterHeight(height)
-    val totalRemainCoins = ce.coinsTotal - totalCoinsIssued
+  def emissionInfoAtHeight(height: Long, emissionRules: EmissionRules): EmissionInfo = {
+    val minerReward = emissionRules.emissionAtHeight(height)
+    val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
+    val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued
     EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins)
   }
 

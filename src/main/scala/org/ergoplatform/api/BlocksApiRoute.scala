@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.api.http.ApiResponse
 
 import scala.concurrent.Future

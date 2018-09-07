@@ -8,8 +8,10 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.{ModifierId, bytesToId}
+import org.ergoplatform.utils.AssetUtils
+import scorex.core.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
@@ -149,10 +151,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
     val targetAssets = mutable.Map[ModifierId, Long]()
 
-    /* todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-  payTo.map(_.additionalTokens).foreach { boxTokens =>
-    AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
-  } */
+    payTo.map(_.additionalTokens).foreach { boxTokens =>
+      AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
+    }
 
     //we currently do not use off-chain boxes to create a transaction
     def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
@@ -165,7 +166,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
 
         // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
-        val assets = IndexedSeq() //cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+        val assets = cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
 
         new ErgoBoxCandidate(chb, changeAddress, assets)
       }

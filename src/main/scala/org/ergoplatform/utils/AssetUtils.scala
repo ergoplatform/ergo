@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 import scala.collection.mutable
 

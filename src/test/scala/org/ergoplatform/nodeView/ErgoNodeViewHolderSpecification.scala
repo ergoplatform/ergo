@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoNodeViewHolderTestHelpers
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}

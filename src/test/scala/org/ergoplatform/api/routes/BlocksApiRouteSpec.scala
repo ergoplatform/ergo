@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.scalatest.OptionValues._
 import org.scalatest.{FlatSpec, Matchers}
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
 

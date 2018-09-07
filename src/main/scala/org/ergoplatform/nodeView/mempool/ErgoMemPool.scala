@@ -1,8 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool._
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.transaction.MemoryPool
 
 import scala.collection.concurrent.TrieMap
@@ -40,13 +39,13 @@ class ErgoMemPool private[mempool](val unconfirmed: TrieMap[ModifierId, ErgoTran
   }
 
   override def filter(condition: (ErgoTransaction) => Boolean): ErgoMemPool = {
-    unconfirmed.retain { (k, v) =>
+    unconfirmed.retain { case (k, v) =>
       condition(v)
     }
     this
   }
-
 }
+
 
 object ErgoMemPool {
 

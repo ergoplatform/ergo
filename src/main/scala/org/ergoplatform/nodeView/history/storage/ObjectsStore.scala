@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 import scala.util.Try
 

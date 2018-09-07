@@ -66,11 +66,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
 
-    // should be able to apply only when headers chain is synchronized
-    history.isHeadersChainSyncedVar = false
-    history.applicableTry(section) shouldBe 'failure
-    history.isHeadersChainSyncedVar = true
-
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success
     history.pruningProcessor.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1

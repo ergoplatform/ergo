@@ -13,12 +13,11 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.ModifierId
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.Values.{FalseLeaf, TrueLeaf, Value}
 import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
@@ -26,14 +25,18 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
+  lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
+
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
+  lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
+
+  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     height <- positiveIntGen

@@ -13,7 +13,7 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val minerConfig = Docker.nodeConfigs.head
 
   val nonGeneratingConfig = nonGeneratingPeerConfig.withFallback(Docker.nodeConfigs(1))
-  val onlineGeneratingConfigs = Docker.nodeConfigs.slice(2, 2).map(onlineGeneratingPeerConfig.withFallback)
+  val onlineGeneratingConfigs = Docker.nodeConfigs.slice(2, 4).map(onlineGeneratingPeerConfig.withFallback)
   val nodeConfigs = minerConfig +: nonGeneratingConfig +: onlineGeneratingConfigs
 
   val nodes: List[Node] = docker.startNodes(nodeConfigs).success.value
@@ -32,4 +32,3 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
     Await.result(result, 10.minutes)
   }
 }
-

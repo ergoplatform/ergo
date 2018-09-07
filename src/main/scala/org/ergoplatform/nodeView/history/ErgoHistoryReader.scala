@@ -10,7 +10,8 @@ import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSetting
 import scorex.core._
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag

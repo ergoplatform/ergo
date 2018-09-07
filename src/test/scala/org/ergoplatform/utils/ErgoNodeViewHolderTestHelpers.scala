@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoS
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.scalatest.BeforeAndAfterAll
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.testkit.utils.NoShrink
 

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.AssetUtils.{mergeAssets, subtractAssets}
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 import scala.annotation.tailrec
 import scala.collection.mutable

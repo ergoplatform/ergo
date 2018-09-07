@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.nio.ByteBuffer
 import java.util
 
 import com.google.common.primitives.Ints
@@ -12,8 +11,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base58
 import sigmastate._
 import sigmastate.Values.{IntConstant, TaggedByteArray, Value}
-import sigmastate.serialization.{DataSerializer, ValueSerializer}
-import sigmastate.utils.ByteBufferReader
+import sigmastate.serialization.ValueSerializer
 import sigmastate.utxo.{DeserializeContext, Slice}
 
 import scala.util.{Failure, Success, Try}

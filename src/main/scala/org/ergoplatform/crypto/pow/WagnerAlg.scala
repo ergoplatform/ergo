@@ -7,14 +7,22 @@ import scala.collection.mutable
 import scala.util.Try
 
 class WagnerAlg(k: Int,
-                n: Int,
                 p: BigInt) extends ScorexLogging {
 
   val halfP: BigInt = p / 2
+  val n: Int = bitLength(p)
+
+  /**
+    * Filter initial elements, to ensure uniqueness and prove
+    */
+  def filterAndProve(elements: Seq[BigInt],
+                     finalH: BigInt): Seq[PrivateSolution] = {
+    prove(elements.zipWithIndex.toMap.map(_.swap), finalH)
+  }
 
   def prove(initialMap: Map[Int, BigInt],
-            h: Int,
             finalH: BigInt): Seq[PrivateSolution] = {
+    val h = bitLength(p - finalH)
     log(s"Going to find solutions form ${initialMap.size} elements for $k rounds, $n bits elements, " +
       s"hardness $h and final difficulty $finalH in group $p")
 
@@ -24,7 +32,6 @@ class WagnerAlg(k: Int,
       val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
       val atLeast: BigInt = if (round != k) p - atMost else p
       log(s"Round $round: search sums 0-$atMost || $atLeast-$p from ${sortedX.size} elements")
-
 
       @tailrec
       def loop(left: Int, right: Int): Unit = if (left < right) {
@@ -88,8 +95,8 @@ class WagnerAlg(k: Int,
   }
 
   def validate(solution: PrivateSolution,
-               h: Int,
                finalH: BigInt): Try[Unit] = Try {
+    val h = bitLength(p - finalH)
     require(solution.numbers.size == BigInt(2).pow(k), s"${solution.numbers.size} != ${BigInt(2).pow(k)}")
 
     def check(ints: Seq[BigInt], round: Int): Unit = {
@@ -120,4 +127,5 @@ class WagnerAlg(k: Int,
 
   private def log(str: String): Unit = logger.debug(str)
 
+  private def bitLength(bi: BigInt): Int = bi.toByteArray.length * 8
 }

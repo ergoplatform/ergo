@@ -6,8 +6,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
 
-class WagnerAlg(k: Int,
-                p: BigInt) extends ScorexLogging {
+class WagnerAlg(val k: Int,
+                val p: BigInt) extends ScorexLogging {
 
   val halfP: BigInt = p / 2
   val n: Int = bitLength(p)

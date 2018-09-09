@@ -14,13 +14,13 @@ class SupowSpecification extends ErgoPropertyTest {
     val k = 2
     val alg = new WagnerAlg(k, p)
     val finalH = 0
-    forAll(Gen.choose(0, 2000)) { size: Int =>
+    forAll(Gen.choose(0, 50)) { size: Int =>
       val rnd = new Random(size)
       val initialMap = (0 until size).map(i => BigInt(rnd.nextLong()).mod(p))
       val sols = alg.filterAndProve(initialMap, finalH)
       sols.foreach(sol => alg.validate(sol, finalH) shouldBe 'success)
-      sols.foreach(sol => sol.numbers.sum.mod(p) shouldBe finalH)
-      sols.foreach(sol => !sols.exists(_.numbers == sol.numbers))
+      sols.foreach(sol => sol.numbers.map(_._2).sum.mod(p) shouldBe finalH)
+      sols.foreach(sol => !sols.exists(_.numbers sameElements sol.numbers))
     }
   }
 
@@ -30,17 +30,12 @@ class SupowSpecification extends ErgoPropertyTest {
     val alg = new WagnerAlg(k, p)
     val finalH = 30
 
-    forAll(Gen.choose(0, 2000)) { size: Int =>
+    forAll(Gen.choose(0, 40)) { size: Int =>
       val rnd = new Random(size)
       val initialMap = (0 until size).map(i => BigInt(rnd.nextLong()).mod(p))
       val sols = alg.filterAndProve(initialMap, finalH)
       sols.foreach(sol => alg.validate(sol, finalH) shouldBe 'success)
-      sols.foreach(sol => require(sol.numbers.sum.mod(p) <= finalH, s"${sol.numbers.sum.mod(p)} < $finalH"))
     }
-
-    val list = (0 until 200).map(i => (i, BigInt(Random.nextLong()).mod(p))).toMap
-    val sols = alg.prove(list, finalH)
-    sols.exists(sol => sol.numbers.sum.mod(p) > 0) shouldBe true
   }
 
   property("Supow should generate solution from random 2^k secrets if difficulty = 0") {
@@ -49,14 +44,14 @@ class SupowSpecification extends ErgoPropertyTest {
     val finalH = pow.group.p
     val k = 2
 
-    forAll { seed: Array[Byte] =>
+    forAll { seed: String =>
       val taskSeed = Blake2b256(seed)
       val supow = Supow(seed, BigInt(2).pow(k).toInt, k)
       val solutions = supow.prove(finalH, taskSeed)
-      solutions.size shouldBe 1
-      supow.verify(solutions.head, finalH)
+      //      todo any combination of initial secrets is valid.
+      //      solutions.size shouldBe 1
+      supow.verify(solutions.head) shouldBe 'success
     }
-
   }
 
 

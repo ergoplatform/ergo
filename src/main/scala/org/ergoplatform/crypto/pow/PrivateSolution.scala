@@ -1,3 +1,3 @@
 package org.ergoplatform.crypto.pow
 
-case class PrivateSolution(numbers: Seq[BigInt])
+case class PrivateSolution(numbers: Seq[(Int, BigInt)])

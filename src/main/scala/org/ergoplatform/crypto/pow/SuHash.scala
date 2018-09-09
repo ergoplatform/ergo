@@ -1,5 +1,6 @@
 package org.ergoplatform.crypto.pow
 
+import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
 
 /**
@@ -14,5 +15,5 @@ trait SuHash {
   * TODO ensure correct distribution of outputs
   */
 class DefaultSuHash(val p: BigInt) extends SuHash {
-  override def hash(input: Array[Byte]): BigInt = BigInt(Blake2b256(input)).mod(p)
+  override def hash(input: Array[Byte]): BigInt = BigIntegers.fromUnsignedByteArray(Blake2b256(input)).mod(p)
 }

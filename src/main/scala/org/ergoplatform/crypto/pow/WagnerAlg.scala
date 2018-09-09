@@ -46,7 +46,11 @@ class WagnerAlg(val k: Int,
             val sum = (x._1 + y._1).mod(p)
             if (distinctIndices(x._2, y._2) && sum <= atMost) {
               X.append(sum -> (x._2 ++ y._2))
-              r = r + 1
+              if (r < right) {
+                r = r + 1
+              } else {
+                continue = false
+              }
             } else {
               continue = false
             }
@@ -87,10 +91,11 @@ class WagnerAlg(val k: Int,
     }
 
     val sols = wagnerStep(1, initialMap.toSeq.map(e => (e._2, Seq(e._1))).sortBy(_._1))
+    sols.foreach(s => log(s"Solution with indexes ${s._2} found"))
     log(s"${sols.length} solutions found")
 
     sols.map { i =>
-      PrivateSolution(i._2.map(index => initialMap(index)))
+      PrivateSolution(i._2.map(e => (e, initialMap(e))))
     }
   }
 
@@ -111,7 +116,7 @@ class WagnerAlg(val k: Int,
       }
     }
 
-    check(solution.numbers, 1)
+    check(solution.numbers.map(_._2), 1)
   }
 
   private def join(x: (BigInt, Seq[Int]), y: (BigInt, Seq[Int]), atMost: BigInt, atLeast: BigInt): (BigInt, Option[(BigInt, Seq[Int])]) = {

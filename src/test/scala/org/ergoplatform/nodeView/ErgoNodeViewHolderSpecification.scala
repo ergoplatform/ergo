@@ -2,170 +2,132 @@ package org.ergoplatform.nodeView
 
 import java.io.File
 
-import akka.actor.ActorRef
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.ErgoNodeViewHolderTestHelpers
-import scorex.util.ModifierId
+import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
+import scorex.testkit.utils.NoShrink
+import scorex.util.ModifierId
 
-class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
+class ErgoNodeViewHolderSpecification extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
   private val t1 = TestCase("check genesis state") { fixture =>
     import fixture._
-    nodeViewRef ! checkAfterGenesisState(nodeViewConfig)
-    expectMsg(true)
+    getCurrentState.rootHash shouldBe getAfterGenesisStateDigest
   }
 
   private val t2 = TestCase("check history after genesis") { fixture =>
     import fixture._
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
+    getBestHeaderOpt shouldBe None
   }
 
   private val t3 = TestCase("apply valid block header") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
 
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe -1
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
     //sending header
-    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(0)
-
-    nodeViewRef ! heightOf(block.header.id, nodeViewConfig)
-    expectMsg(Some(0))
-
-    nodeViewRef ! lastHeadersLength(10, nodeViewConfig)
-    expectMsg(1)
-
-    nodeViewRef ! openSurfaces(nodeViewConfig)
-    expectMsg(Seq(block.header.id))
-
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(Some(block.header))
+    getHistoryHeight shouldBe 0
+    getHeightOf(block.header.id) shouldBe Some(0)
+    getLastHeadersLength(10) shouldBe 1
+    getOpenSurfaces shouldBe Seq(block.header.id)
+    getBestHeaderOpt shouldBe Some(block.header)
   }
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
-
-    nodeViewRef ! LocallyGeneratedModifier(genesis.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier(genesis.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    if (nodeViewConfig.verifyTransactions) {
-      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+    if (verifyTransactions) {
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.blockTransactions)
       expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
-      nodeViewRef ! LocallyGeneratedModifier(genesis.adProofs.get)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.adProofs.get)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
-      nodeViewRef ! LocallyGeneratedModifier(genesis.extension)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
-
-      nodeViewRef ! bestFullBlock(nodeViewConfig)
-      expectMsg(Some(genesis))
+      getBestFullBlockOpt shouldBe Some(genesis)
     }
   }
 
   private val t5 = TestCase("apply full blocks after genesis") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-
-    applyBlock(nodeViewRef, genesis, nodeViewConfig)
+    applyBlock(genesis)
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
-
-    applyBlock(nodeViewRef, block, nodeViewConfig)
-    if (nodeViewConfig.verifyTransactions) {
-      nodeViewRef ! bestFullBlock(nodeViewConfig)
-      expectMsg(Some(block))
+    applyBlock(block)
+    if (verifyTransactions) {
+      getBestFullBlockOpt shouldBe Some(block)
     }
 
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(Some(block.header))
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(1)
-
-    nodeViewRef ! lastHeadersLength(10, nodeViewConfig)
-    expectMsg(2)
+    getBestHeaderOpt shouldBe Some(block.header)
+    getHistoryHeight shouldBe 1
+    getLastHeadersLength(10) shouldBe 2
   }
 
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
-    if (nodeViewConfig.stateType == Utxo) {
-      val (_, bh) = createUtxoState(Some(nodeViewRef))
+    if (stateType == Utxo) {
+      val (_, bh) = createUtxoState(Some(nodeViewHolderRef))
       val tx = validTransactionsFromBoxHolder(bh)._1.head
       subscribeEvents(classOf[FailedTransaction[_]])
-      nodeViewRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       expectNoMsg()
-      nodeViewRef ! poolSize(nodeViewConfig)
-      expectMsg(1)
+      getPoolSize shouldBe 1
     }
   }
 
   private val t7 = TestCase("apply invalid full block") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
-    if (nodeViewConfig.verifyTransactions) {
-      applyBlock(nodeViewRef, genesis, nodeViewConfig)
+    if (verifyTransactions) {
+      applyBlock(genesis)
 
       val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
       val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
 
-      applyBlock(nodeViewRef, block, nodeViewConfig)
-      nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-      expectMsg(Some(block.header))
-
-      if (nodeViewConfig.verifyTransactions) {
-        nodeViewRef ! rootHash(nodeViewConfig)
-        expectMsg(Algos.encode(wusAfterBlock.rootHash))
+      applyBlock(block)
+      getBestHeaderOpt shouldBe Some(block.header)
+      if (verifyTransactions) {
+        getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
       }
-
-      nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-      expectMsg(Some(block.header))
+      getBestHeaderOpt shouldBe Some(block.header)
 
       val brokenBlock = generateInvalidFullBlock(block.header, wusAfterBlock)
-      applyBlock(nodeViewRef, brokenBlock, nodeViewConfig)
+      applyBlock(brokenBlock)
 
       val brokenBlock2 = generateInvalidFullBlock(block.header, wusAfterBlock)
       brokenBlock2.header should not be brokenBlock.header
+      applyBlock(brokenBlock2)
 
-      applyBlock(nodeViewRef, brokenBlock2, nodeViewConfig)
-
-      nodeViewRef ! bestFullBlock(nodeViewConfig)
-      expectMsg(Some(block))
-      nodeViewRef ! rootHash(nodeViewConfig)
-      expectMsg(Algos.encode(wusAfterBlock.rootHash))
-      nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-      expectMsg(Some(block.header))
+      getBestFullBlockOpt shouldBe Some(block)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getBestHeaderOpt shouldBe Some(block.header)
     }
   }
 
@@ -173,10 +135,12 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     val extensionIn = extensionGen.sample.get
     val brokenBlockIn = validFullBlock(Some(parentHeader), parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head
-    val newInput = headTx.inputs.head.copy(boxId = ADKey @@ Algos.hash("wrong input"))
+    val wrongBoxId: ADKey = ADKey @@ Algos.hash("wrong input")
+    val newInput = headTx.inputs.head.copy(boxId = wrongBoxId)
     val brokenTransactionsIn = brokenBlockIn.blockTransactions
       .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlockIn.blockTransactions.txs.tail)
-    val brokenHeader = brokenBlockIn.header.copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
+    val brokenHeader = brokenBlockIn.header
+      .copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
     val brokenTransactions = brokenTransactionsIn.copy(headerId = brokenHeader.id)
     val brokenProofs = brokenBlockIn.adProofs.get.copy(headerId = brokenHeader.id)
     val extension = extensionIn.copy(headerId = brokenHeader.id)
@@ -185,160 +149,110 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
 
   private val t8 = TestCase("switching for a better chain") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
-    applyBlock(nodeViewRef, genesis, nodeViewConfig)
-
-    nodeViewRef ! rootHash(nodeViewConfig)
-    expectMsg(Algos.encode(wusAfterGenesis.rootHash))
+    applyBlock(genesis)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
 
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-
-    applyBlock(nodeViewRef, chain1block1, nodeViewConfig)
-
-    nodeViewRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-    if (nodeViewConfig.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(Some(chain1block1.header))
+    val expectedBestFullBlockOpt = if (verifyTransactions) Some(chain1block1) else None
+    applyBlock(chain1block1)
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
 
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-
-    applyBlock(nodeViewRef, chain2block1, nodeViewConfig)
-
-    nodeViewRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Option[ErgoFullBlock]] { v =>
-      v.history.bestFullBlockOpt
-    }
-    if (nodeViewConfig.verifyTransactions) expectMsg(Some(chain1block1)) else expectMsg(None)
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(Some(chain1block1.header))
+    applyBlock(chain2block1)
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
-
     chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 
-    applyBlock(nodeViewRef, chain2block2, nodeViewConfig)
-    if (nodeViewConfig.verifyTransactions) {
-      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
-      expectMsg(Some(chain2block2.header.encodedId))
+    applyBlock(chain2block2)
+    if (verifyTransactions) {
+      getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
     }
 
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(Some(chain2block2.header))
-
-    nodeViewRef ! rootHash(nodeViewConfig)
-    expectMsg(Algos.encode(chain2block2.header.stateRoot))
-
+    getBestHeaderOpt shouldBe Some(chain2block2.header)
+    getRootHash shouldBe Algos.encode(chain2block2.header.stateRoot)
   }
 
   private val t9 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
     import fixture._
-    if (nodeViewConfig.stateType == StateType.Utxo) {
-      val (us, bh) = createUtxoState(Some(nodeViewRef))
+    if (stateType == StateType.Utxo) {
+      val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
       val genesis = validFullBlock(parentOpt = None, us, bh)
 
-      nodeViewRef ! LocallyGeneratedModifier(genesis.header)
-      nodeViewRef ! LocallyGeneratedModifier(genesis.blockTransactions)
-      nodeViewRef ! LocallyGeneratedModifier(genesis.extension)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.header)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
 
-      nodeViewRef ! bestFullBlock(nodeViewConfig)
-      expectMsg(Some(genesis))
-
-      nodeViewRef ! modifierById(genesis.adProofs.get.id)
-      expectMsg(genesis.adProofs)
+      getBestFullBlockOpt shouldBe Some(genesis)
+      getModifierById(genesis.adProofs.get.id) shouldBe genesis.adProofs
     }
   }
 
   private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
-    if (nodeViewConfig.verifyTransactions) {
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    applyBlock(genesis)
 
-      val (us, bh) = createUtxoState(Some(nodeViewRef))
-      val genesis = validFullBlock(parentOpt = None, us, bh)
-      val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    applyBlock(block1)
+    getBestFullBlockOpt shouldBe Some(block1)
+    getRootHash shouldBe Algos.encode(block1.header.stateRoot)
 
-      applyBlock(nodeViewRef, genesis, nodeViewConfig)
+    stopNodeViewHolder()
+    val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
+    for (file <- stateDir.listFiles) file.delete
+    startNodeViewHolder()
 
-      val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-
-      applyBlock(nodeViewRef, block1, nodeViewConfig)
-      nodeViewRef ! bestFullBlock(nodeViewConfig)
-      expectMsg(Some(block1))
-
-      nodeViewRef ! rootHash(nodeViewConfig)
-      expectMsg(Algos.encode(block1.header.stateRoot))
-
-      system.stop(nodeViewRef)
-      val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
-      for (file <- stateDir.listFiles) file.delete
-
-      withRecoveredNodeViewRef { nodeViewRef2 =>
-        nodeViewRef2 ! rootHash(nodeViewConfig)
-        expectMsg(Algos.encode(block1.header.stateRoot))
-      }
-    }
+    getRootHash shouldBe Algos.encode(block1.header.stateRoot)
   }
 
   private val t11 = TestCase("apply payload in incorrect order") { fixture =>
     import fixture._
-    if (nodeViewConfig.verifyTransactions) {
-      val (us, bh) = createUtxoState(Some(nodeViewRef))
-      val genesis = validFullBlock(parentOpt = None, us, bh)
-      val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
-      applyBlock(nodeViewRef, genesis, nodeViewConfig)
+    applyBlock(genesis)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
 
-      nodeViewRef ! rootHash(nodeViewConfig)
-      expectMsg(Algos.encode(wusAfterGenesis.rootHash))
+    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
 
-      val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-      val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
-      val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+    nodeViewHolderRef ! LocallyGeneratedModifier(chain2block1.header)
+    applyBlock(chain2block2)
+    getBestHeaderOpt shouldBe Some(chain2block2.header)
+    getBestFullBlockEncodedId shouldBe Some(genesis.header.encodedId)
 
-      nodeViewRef ! LocallyGeneratedModifier(chain2block1.header)
-      applyBlock(nodeViewRef, chain2block2, nodeViewConfig)
-
-      nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-      expectMsg(Some(chain2block2.header))
-
-      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
-      expectMsg(Some(genesis.header.encodedId))
-      applyPayload(nodeViewRef, chain2block1, nodeViewConfig)
-
-      nodeViewRef ! bestFullBlockEncodedId(nodeViewConfig)
-      expectMsg(Some(chain2block2.header.encodedId))
-    }
+    applyPayload(chain2block1)
+    getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
   }
 
   private val t12 = TestCase("Do not apply txs with wrong header id") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
-    logger.error(s"HERE ${block.adProofs.toString}")
-
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe -1
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
 
     //sending header
-    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(0)
-
-    nodeViewRef ! heightOf(block.header.id, nodeViewConfig)
-    expectMsg(Some(0))
+    getHistoryHeight shouldBe 0
+    getHeightOf(block.header.id) shouldBe Some(0)
 
     val randomId = modifierIdGen.sample.get
     val wrongTxs1 = block.blockTransactions.copy(headerId = randomId)
@@ -361,37 +275,33 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
       block.blockTransactions.copy(txs = wrongTxs)
     }
 
-    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs1)
+    nodeViewHolderRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs1)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 
-    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs2)
+    nodeViewHolderRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs2)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 
-    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs3)
+    nodeViewHolderRef ! LocallyGeneratedModifier[BlockTransactions](wrongTxs3)
     expectMsgType[SyntacticallyFailedModification[BlockTransactions]]
 
-    nodeViewRef ! LocallyGeneratedModifier[BlockTransactions](block.blockTransactions)
+    nodeViewHolderRef ! LocallyGeneratedModifier[BlockTransactions](block.blockTransactions)
     expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
   }
 
   private val t13 = TestCase("Do not apply wrong adProofs") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
-    logger.error(s"HERE ${block.adProofs.toString}")
+    getBestHeaderOpt shouldBe None
 
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getHistoryHeight shouldBe -1
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
 
     //sending header
-    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
     val randomId = modifierIdGen.sample.get
@@ -399,75 +309,55 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     val wrongProofs1 = block.adProofs.map(_.copy(headerId = randomId))
     val wrongProofs2 = block.adProofs.map(_.copy(proofBytes = wrongProofsBytes))
 
-    nodeViewRef ! LocallyGeneratedModifier[ADProofs](wrongProofs1.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs1.get)
     expectMsgType[SyntacticallyFailedModification[ADProofs]]
-    nodeViewRef ! LocallyGeneratedModifier[ADProofs](wrongProofs2.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs2.get)
     expectMsgType[SyntacticallyFailedModification[ADProofs]]
 
-    nodeViewRef ! LocallyGeneratedModifier[ADProofs](block.adProofs.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](block.adProofs.get)
     expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
   }
 
   private val t14 = TestCase("do not apply genesis block header if " +
-    "it's not equal to genesisId from config") { fixture =>
+                             "it's not equal to genesisId from config") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    updateConfig(genesisIdConfig(modifierIdGen.sample))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
 
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe -1
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
 
     //sending header
-    nodeViewRef ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallyFailedModification[Header]]
-    nodeViewRef ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe -1
   }
 
-  private val t15 = TestCase("apply genesis block header if " +
-    "it's equal to genesisId from config") { fixture =>
+  private val t15 = TestCase("apply genesis block header if it's equal to genesisId from config") { fixture =>
     import fixture._
-
-    val (us, bh) = createUtxoState(Some(nodeViewRef))
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
+    updateConfig(genesisIdConfig(Some(ModifierId @@ Algos.encode(block.header.id))))
 
-    val nodeViewDir1: java.io.File = createTempDir
-    val nodeViewRef1: ActorRef = actorRef(
-      nodeViewConfig.copy(genesisId = Some(ModifierId @@ Algos.encode(block.header.id))),
-      Option(nodeViewDir1)
-    )
-
-    nodeViewRef1 ! bestHeaderOpt(nodeViewConfig)
-    expectMsg(None)
-
-    nodeViewRef1 ! historyHeight(nodeViewConfig)
-    expectMsg(-1)
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe -1
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
 
-    nodeViewRef1 ! LocallyGeneratedModifier[Header](block.header)
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
-
-    nodeViewRef1 ! historyHeight(nodeViewConfig)
-    expectMsg(0)
-
-    nodeViewRef1 ! heightOf(block.header.id, nodeViewConfig)
-    expectMsg(Some(0))
+    getHistoryHeight shouldBe 0
+    getHeightOf(block.header.id) shouldBe Some(0)
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
-
-  allConfigs.foreach { c =>
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
         t.run(c)
@@ -475,11 +365,9 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
     }
   }
 
-  val verifyingTxCases = List(t12, t13)
+  val verifyingTxCases = List(t10, t11, t12, t13)
 
-  val verifyTxConfigs = allConfigs.filter(_.verifyTransactions)
-
-  verifyTxConfigs.foreach { c =>
+  NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>
       property(s"${t.name} - $c") {
         t.run(c)
@@ -488,10 +376,13 @@ class ErgoNodeViewHolderSpecification extends ErgoNodeViewHolderTestHelpers {
   }
 
   val genesisIdTestCases = List(t14, t15)
+  def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
+    protoSettings.copy(chainSettings = protoSettings.chainSettings.copy(genesisId = expectedGenesisIdOpt))
+  }
 
   genesisIdTestCases.foreach { t =>
-    property(s"${t.name}") {
-      t.run(configWithExpectedGenesisId)
+    property(t.name) {
+      t.run(NodeViewTestConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = true))
     }
   }
 }

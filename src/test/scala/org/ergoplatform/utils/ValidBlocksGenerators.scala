@@ -49,9 +49,10 @@ trait ValidBlocksGenerators
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
-  private def validTransactionsFromBoxes(sizeLimit: Int,
-                                         stateBoxesIn: Seq[ErgoBox],
-                                         rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+
+  protected def validTransactionsFromBoxes(sizeLimit: Int,
+                                           stateBoxesIn: Seq[ErgoBox],
+                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     val outBoxesLength = stateBoxesIn.length
 
     @tailrec

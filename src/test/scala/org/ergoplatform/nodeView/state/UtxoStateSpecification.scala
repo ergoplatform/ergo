@@ -5,7 +5,7 @@ import java.util.concurrent.Executors
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest

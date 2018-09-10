@@ -1,13 +1,13 @@
 package org.ergoplatform.tools
 
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.MonetarySettings
 
 import scala.annotation.tailrec
 
 object CoinEmissionPrinter extends App {
 
-  val emissionCurve = new CoinsEmission(MonetarySettings(10080, 2160, 7500000000L, 300000000, "b9deff2a27d270e0978e1814f9a62d1bf8092521042fd2b0c531b59629c586ff01"))
+  val emissionCurve = new EmissionRules(MonetarySettings(10080, 2160, 7500000000L, 300000000, "b9deff2a27d270e0978e1814f9a62d1bf8092521042fd2b0c531b59629c586ff01"))
   val blocksPerHour = 30
 
   //  // Number of coins issued after slow start period

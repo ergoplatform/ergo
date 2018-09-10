@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistorySpecification
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 
@@ -73,11 +73,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     history.applicableTry(section) shouldBe 'success
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
-
-    // should be able to apply only when headers chain is synchronized
-    history.isHeadersChainSyncedVar = false
-    history.applicableTry(section) shouldBe 'failure
-    history.isHeadersChainSyncedVar = true
 
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success

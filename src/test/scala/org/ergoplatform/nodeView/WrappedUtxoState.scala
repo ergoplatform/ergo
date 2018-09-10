@@ -6,7 +6,7 @@ import java.io.File
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
@@ -60,7 +60,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
 object WrappedUtxoState {
   def apply(boxHolder: BoxHolder,
             dir: File,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
     val constants = StateConstants(nodeViewHolderRef, emission, 200)
     val emissionBox = Some(ErgoState.genesisEmissionBox(constants.emission))

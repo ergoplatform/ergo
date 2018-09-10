@@ -8,7 +8,7 @@ import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.EquihashPowScheme
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoNodeViewRef
@@ -20,8 +20,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings, ScorexLogging}
-
+import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
+import scorex.util.ScorexLogging
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -54,7 +54,7 @@ object BenchRunner extends ScorexLogging {
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-    val ce = new CoinsEmission(ergoSettings.chainSettings.monetary)
+    val ce = new EmissionRules(ergoSettings.chainSettings.monetary)
     val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
     val timeProvider = new NetworkTimeProvider(ntpSettings)
 

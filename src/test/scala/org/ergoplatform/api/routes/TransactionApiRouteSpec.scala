@@ -40,6 +40,7 @@ class TransactionApiRouteSpec extends FlatSpec
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+      responseAs[String] shouldEqual tx.id
     }
   }
 

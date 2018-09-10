@@ -145,10 +145,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   @SuppressWarnings(Array("OptionGet"))
-  override def rollbackVersions: Iterable[VersionTag] = persistentProver.storage.rollbackVersions.map { v =>
-    bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+  override def rollbackVersions: Iterable[VersionTag] = persistentProver.synchronized {
+    persistentProver.storage.rollbackVersions.map { v =>
+      bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+    }
   }
-
 }
 
 object UtxoState {

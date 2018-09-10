@@ -68,7 +68,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       height: Height) = persistentProver.synchronized {
+                                       height: Height) =
     Try {
       val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
       val totalCost = transactions.map { tx =>
@@ -84,19 +84,21 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
       if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
-      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-        t.flatMap(_ => {
-          persistentProver.performOneOperation(m)
-        })
-      }.get
+      persistentProver.synchronized {
 
-      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-          s"${Algos.encode(persistentProver.digest)} given")
+        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+        mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+          t.flatMap(_ => {
+            persistentProver.performOneOperation(m)
+          })
+        }.get
+
+        if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+          throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+            s"${Algos.encode(persistentProver.digest)} given")
+        }
       }
     }
-  }
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {

@@ -54,15 +54,16 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
-  def boxById(id: ADKey): Option[ErgoBox] =
+  def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver
       .unauthenticatedLookup(id)
       .map(ErgoBoxSerializer.parseBytes)
       .flatMap(_.toOption)
+  }
 
-  def randomBox(): Option[ErgoBox] =
+  def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
-
+  }
 
   /**
     * Generate proofs for specified transactions if applied to current state
@@ -70,7 +71,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
     */
-  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
     val rootHash = persistentProver.digest
     log.debug(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {

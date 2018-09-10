@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.state
 
+import java.util.concurrent.Executors
+
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -12,13 +14,14 @@ import scorex.core._
 import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
-import scala.util.Random
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.util.{Random, Try}
 
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("valid coinbase transaction generation when emission box is present") {
-    val (us, bh) = createUtxoState()
+    val (us, _) = createUtxoState()
     us.emissionBoxOpt should not be None
     val tx = ErgoMiner.createCoinbase(us, Seq(), TrueLeaf, us.constants.emission)
     us.validate(tx) shouldBe 'success
@@ -31,7 +34,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     forAll { seed: Int =>
       val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
-      us.extractEmissionBox(block)  should not be None
+      us.extractEmissionBox(block) should not be None
       lastBlockOpt = Some(block.header)
       bh = blBh._2
       us = us.applyModifier(block).get
@@ -64,6 +67,46 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
+    }
+  }
+
+  property("concurrent applyModifier() and proofsForTransactions()") {
+    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
+
+    var bh = BoxHolder(Seq(genesisEmissionBox))
+    var us = createUtxoState(bh)
+
+    var height: Int = 0
+    // generate chain of correct full blocks
+    val chain = (0 until 10) map { _ =>
+      val header = invalidHeaderGen.sample.get
+      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val txs = t._1
+      bh = t._2
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      height = height + 1
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id, Seq(), Seq()), Some(adProofs))
+      us = us.applyModifier(fb).get
+      fb
+    }
+    // create new genesis state
+    var us2 = createUtxoState(BoxHolder(Seq(genesisEmissionBox)))
+    val stateReader = us2.getReader.asInstanceOf[UtxoState]
+    // parallel thread that generates proofs
+    Future {
+      (0 until 1000) foreach { _ =>
+        Try {
+          val boxes = stateReader.randomBox().toSeq
+          val txs = validTransactionsFromBoxes(400, boxes, new Random)._1
+          stateReader.proofsForTransactions(txs).get
+        }
+      }
+    }
+    // apply chain of headers full block to state
+    chain.foreach { fb =>
+      us2 = us2.applyModifier(fb).get
     }
   }
 
@@ -174,9 +217,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     //Different state
     val (us2, bh2) = {
-      lazy val genesisSeed = Long.MaxValue
-      lazy val rndGen = new scala.util.Random(genesisSeed)
-
       lazy val initialBoxes: Seq[ErgoBox] =
         (1 to 1).map(_ => ErgoBox(value = 10000, TrueLeaf))
 
@@ -230,7 +270,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)
-          .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, i) =>
+          .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, _) =>
             val state = sb._1
             val block = validFullBlock(parentOpt = Some(sb._2.last.header), state)
             (state.applyModifier(block).get, sb._2 ++ Seq(block))

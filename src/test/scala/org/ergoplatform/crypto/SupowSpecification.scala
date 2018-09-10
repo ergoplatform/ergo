@@ -49,8 +49,23 @@ class SupowSpecification extends ErgoPropertyTest {
       val supow = Supow(seed, BigInt(2).pow(k).toInt, k)
       val solutions = supow.prove(finalH, taskSeed)
       //      todo any combination of initial secrets is valid.
-      //      solutions.size shouldBe 1
-      supow.verify(solutions.head) shouldBe 'success
+      solutions.nonEmpty shouldBe true
+      solutions.foreach(s => supow.verify(s) shouldBe 'success)
+    }
+  }
+
+  property("Supow should generate valid solutions") {
+    implicit val hash = new DefaultSuHash(pow.group.p)
+
+    val finalH = BigInt(pow.group.p) / 2
+    val k = 2
+
+    forAll(Gen.choose(900, 1000)) { size: Int =>
+      val taskSeed = Blake2b256(size.toString)
+      val supow = Supow(size.toString, size, k)
+      val solutions = supow.prove(finalH, taskSeed)
+      solutions.foreach(s => supow.verify(s) shouldBe 'success)
+      solutions.nonEmpty shouldBe true
     }
   }
 

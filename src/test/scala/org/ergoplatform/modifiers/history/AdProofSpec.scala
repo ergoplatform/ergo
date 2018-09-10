@@ -9,6 +9,7 @@ import scorex.core.{ModifierId, bytesToId}
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
+import scorex.util._
 import sigmastate.Values.TrueLeaf
 
 class AdProofSpec extends ErgoPropertyTest {
@@ -26,7 +27,7 @@ class AdProofSpec extends ErgoPropertyTest {
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = ErgoBox(0, TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte), 0)
+    val zeroBox = ErgoBox(0, TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId, 0)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 

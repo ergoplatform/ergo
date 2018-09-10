@@ -8,14 +8,15 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
                         testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
-                        cacheSettings: CacheSettings,
-                        scorexSettings: ScorexSettings)
+                        scorexSettings: ScorexSettings,
+                        walletSettings: WalletSettings,
+                        cacheSettings: CacheSettings)
 
 object ErgoSettings extends ScorexLogging
   with PowSchemeReaders
@@ -36,6 +37,7 @@ object ErgoSettings extends ScorexLogging
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
+    val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
@@ -44,7 +46,9 @@ object ErgoSettings extends ScorexLogging
       ErgoApp.forceStopApplication()
     }
 
-    consistentSettings(ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, cacheSettings, scorexSettings))
+    consistentSettings(
+      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings)
+    )
   }
 
   private def readConfigFromPath(userConfigPath: Option[String]): Config = {

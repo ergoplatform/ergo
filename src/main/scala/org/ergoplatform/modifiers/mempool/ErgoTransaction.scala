@@ -1,20 +1,22 @@
 package org.ergoplatform.modifiers.mempool
 
+import java.nio.ByteBuffer
+
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeTransaction.flattenedTxSerializer
+import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
-import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
@@ -23,6 +25,7 @@ import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.Serializer.{Consumed, Position}
 import sigmastate.serialization.{Serializer => SSerializer}
+import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{AvlTreeData, SBoolean, SType}
 
 import scala.collection.mutable
@@ -111,7 +114,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
-          .demandEqualArrays(box.id, input.boxId, s"Box id doesn't match input")
+          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
           .map(_ + scriptCost)
@@ -125,11 +128,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
         validation.validateSeq(outAssets) {
           case (validation, (outAssetId, outAmount)) =>
-            val inAmount = inAssets.remove(outAssetId).getOrElse(-1)
+            val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
             validation
-              .validate(inAmount == outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+              .validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                 fatal(s"Assets preservation rule is broken in $this. " +
-                  s"Amount in: $inAmount, out: $outAmount, Asset in: $newAssetId out: $outAssetId")
+                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
               }
         }
       }
@@ -178,36 +181,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     } yield Input(boxId, proof)
   }
 
-  implicit private val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
-    _.map { case (key, value) =>
-      s"R${key.number}" -> valueEncoder(value)
-    }.asJson
-  }
-
-  implicit private val assetEncoder: Encoder[Tuple2[ErgoBox.TokenId, Long]] = { asset =>
-    Json.obj(
-      "tokenId" -> asset._1.asJson,
-      "amount" -> asset._2.asJson
-    )
-  }
-
-  implicit private val outputEncoder: Encoder[ErgoBox] = { box =>
-    Json.obj(
-      "boxId" -> box.id.asJson,
-      "value" -> box.value.asJson,
-      "proposition" -> valueEncoder(box.proposition),
-      "assets" -> box.additionalTokens.asJson,
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
-    )
-  }
-
-  implicit private val identifierDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
-    ErgoBox.registerByName.get(key).collect {
-      case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
-    }
-  }
-
-  implicit private val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
+  implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
     for {
       tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]
       amount <- cursor.downField("amount").as[Long]
@@ -247,7 +221,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                          (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
     accumulateErrors
       .validateOrSkip(txId) { (validation, id) =>
-        validation.demandEqualIds(id, tx.id, s"Bad identifier for Ergo transaction. It could also be skipped")
+        validation.demandEqualIds(id, tx.id, "Bad identifier for Ergo transaction. It could also be skipped")
       }
       .validate(tx.validateStateless)
       .result(tx)
@@ -261,7 +235,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
         case (validation, ((candidate, maybeId), index)) =>
           validation.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
-            val box = candidate.toBox(idToBytes(txId), index.toShort)
+            val box = candidate.toBox(txId, index.toShort)
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }
@@ -272,11 +246,17 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 }
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-  override def toBytes(tx: ErgoTransaction): Array[Byte] =
-    flattenedTxSerializer.toBytes(tx.inputs, tx.outputCandidates)
+  override def serializeBody(tx: ErgoTransaction, w: ByteWriter): Unit =
+    flattenedTxSerializer.serializeBody(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
 
-  override def parseBody(bytes: Array[Byte], pos: Position): (ErgoTransaction, Consumed) = {
-    val ((inputs, outputCandidates), consumed) = flattenedTxSerializer.parseBody(bytes, pos)
-    ErgoTransaction(inputs, outputCandidates, Some(consumed)) -> consumed
+  override def parseBody(r: ByteReader): ErgoTransaction = {
+    val ftx = flattenedTxSerializer.parseBody(r)
+    ErgoTransaction(ftx.inputs, ftx.outputCandidates)
+  }
+
+  override def parseBytes(bytes: Array[Byte]): Try[ErgoTransaction] = Try {
+    val buf = ByteBuffer.wrap(bytes)
+    buf.position(0)
+    parseBody(new ByteBufferReader(buf))
   }
 }

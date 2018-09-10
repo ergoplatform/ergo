@@ -36,7 +36,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
         case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
-          Some(tx.outputs.head)
+          tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")
           None
@@ -77,7 +77,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(t => java.util.Arrays.equals(t, rootHash))) {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
-        s"Possible reason - state update is in process."))
+        "Possible reason - state update is in process."))
     } else {
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }

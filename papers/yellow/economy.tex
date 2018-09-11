@@ -1,0 +1,44 @@
+\section{Economic survivability}
+
+We distinct 2 properties required for a long-term survivability of the chain:
+
+\begin{itemize}
+    \item{} Coins protected by scripts that no-one can spent (e.g. because keys are lost)
+    should be returned into circullation.
+    Otherwise after the end of the initial coins emission, their quantity
+    in the circullation will reduce and will eventually reach 0.
+    \item{} Nothing should be kept in the State forever for free.
+    Otherwise State size will be infinitelly increase, reducing chain performance
+    characteristics and increasing full nodes requirements.
+\end{itemize}
+
+To achieve this, we propose the following modifications to the consensus rules.
+Register $R2$ of the box should contain tuple $(tx\_id, out\_num,
+last\_height)$. $last\_height$ field is used to determine the block height
+at the start of the subsidized period $SP$. Transaction can only be put in the
+block of height $h$ if for every created box $h - max\_drift<R2.last\_height<h$.
+
+Once the subsidized period for the box ends (that is,
+$current\_block\_height\ge R2.last\_height + SP$), anyone can
+create the new box with the exactly the same content (including the guarding
+script) except the monetary value and $last\_height$.  The monetary value is
+reduced by $KB$ where $B$ is the box size and $K$ is the storage cost of one byte.
+Thus, $KB$ coins are to be paid to a miner.
+If box value is less that $KB$, all box content including tokens goes to miner.
+$last\_height$ is replaced with the new height that is at least
+$current\_block\_height - max\_drift$, so that the subsidized period starts over.
+
+We propose the following concrete parameters:
+\begin{itemize}
+    \item{} $K$ - cost of storage of 1 byte of data in a State for 1 block.
+    Should be determined by miner votes, $10^{-6} (Ergo/byte)$ by default.
+    \item{} $max\_drift$ - maximum amount of time difference between transaction
+    creation and it's inclusion into blockchain.
+    It is predefined $max\_drift = 2016 = 3$ days.
+    \item{} $SP$ - number of blocks, box can be stored in a State for free untouched.
+    Since Ergo have tokens as a first-class citizens, it might be possible that tokens value
+    sufficiently exceed Ergo value in a box, thus $SP$ should be big enough to protect users
+    that only keep tokens in their boxes.
+    However, $SP$ should not exceed emission length to reward miners.
+    It is predefined $SP = 2102400 = 8$ years.
+\end{itemize}

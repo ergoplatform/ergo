@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage

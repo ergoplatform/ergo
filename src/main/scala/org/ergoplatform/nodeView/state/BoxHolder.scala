@@ -27,6 +27,11 @@ class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, ErgoBox]) {
   def take(howMany: Int): (Seq[ErgoBox], BoxHolder) =
     (boxes.take(howMany).values.toSeq, new BoxHolder(boxes.drop(howMany)))
 
+  def take(condition: ErgoBox => Boolean): (Seq[ErgoBox], BoxHolder) = {
+    val (filtered, remained) = boxes.partition(b => condition(b._2))
+    (filtered.values.toSeq, new BoxHolder(remained))
+  }
+
   def sortedBoxes: Set[ErgoBox] = boxes.keySet.map(k => boxes(k))
 
   override def toString: String = s"BoxHolder(${boxes.size} boxes inside)"

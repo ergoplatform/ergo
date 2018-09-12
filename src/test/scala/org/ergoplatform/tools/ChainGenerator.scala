@@ -29,12 +29,13 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
   val n: Char = 96
   val k: Char = 5
-  val txsSize: Int = 100 * 1024
   val pow = new EquihashPowScheme(n, k)
   val blockInterval = 2.minute
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
+  val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
+
   val miningDelay = 1.second
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,

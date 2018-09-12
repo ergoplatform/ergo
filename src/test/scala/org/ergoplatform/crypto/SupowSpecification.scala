@@ -1,6 +1,6 @@
 package org.ergoplatform.crypto
 
-import org.ergoplatform.crypto.pow.{DefaultSuHash, Supow, WagnerAlg}
+import org.ergoplatform.crypto.pow.{NumericHash, Supow, WagnerAlg}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
@@ -39,7 +39,7 @@ class SupowSpecification extends ErgoPropertyTest {
   }
 
   property("Supow should generate solution from random 2^k secrets if difficulty = 0") {
-    implicit val hash = new DefaultSuHash(pow.group.p)
+    implicit val hash = new NumericHash(pow.group.p)
 
     val finalH = pow.group.p
     val k = 2
@@ -55,7 +55,7 @@ class SupowSpecification extends ErgoPropertyTest {
   }
 
   property("Supow should generate valid solutions") {
-    implicit val hash = new DefaultSuHash(pow.group.p)
+    implicit val hash = new NumericHash(pow.group.p)
 
     val finalH = BigInt(pow.group.p) / 100000000
     val k = 2

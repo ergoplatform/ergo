@@ -8,7 +8,7 @@ import scorex.crypto.hash.Blake2b256
 import scala.util.Try
 
 class Supow(secretsMap: Map[Int, PrivateKey],
-            val k: Int)(implicit hash: SuHash) extends ScorexLogging {
+            val k: Int)(implicit hash: NumericHash) extends ScorexLogging {
 
   val prover: WagnerAlg = new WagnerAlg(k, group.p)
 
@@ -69,7 +69,7 @@ object Supow {
 
   def apply(seedStr: String,
             size: Long,
-            k: Int)(implicit hash: SuHash): Supow = {
+            k: Int)(implicit hash: NumericHash): Supow = {
     val secrets = (1L to size).map(i => BigInt(BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr).take(30))))
     new Supow(secrets.zipWithIndex.map(_.swap).toMap, k)
   }

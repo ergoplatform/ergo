@@ -57,7 +57,7 @@ class SupowSpecification extends ErgoPropertyTest {
   property("Supow should generate valid solutions") {
     implicit val hash = new DefaultSuHash(pow.group.p)
 
-    val finalH = BigInt(pow.group.p) / 2
+    val finalH = BigInt(pow.group.p) / 100000000
     val k = 2
 
     forAll(Gen.choose(900, 1000)) { size: Int =>

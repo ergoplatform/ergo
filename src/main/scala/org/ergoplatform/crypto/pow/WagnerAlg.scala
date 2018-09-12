@@ -22,16 +22,16 @@ class WagnerAlg(val k: Int,
 
   def prove(initialMap: Map[Int, BigInt],
             finalH: BigInt): Seq[PrivateSolution] = {
-    val h = bitLength(p - finalH)
+    val h = calcH(finalH)
     log(s"Going to find solutions form ${initialMap.size} elements for $k rounds, $n bits elements, " +
       s"hardness $h and final difficulty $finalH in group $p")
 
     @tailrec
     def wagnerStep(round: Int, sortedX: Seq[(BigInt, Seq[Int])]): Seq[(BigInt, Seq[Int])] = {
       val X: mutable.ArrayBuffer[(BigInt, Seq[Int])] = mutable.ArrayBuffer[(BigInt, Seq[Int])]()
-      val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
-      val atLeast: BigInt = if (round != k) p - atMost else p
+      val (atMost, atLeast) = calcInterval(round, h, finalH)
       log(s"Round $round: search sums 0-$atMost || $atLeast-$p from ${sortedX.size} elements")
+
 
       @tailrec
       def loop(left: Int, right: Int): Unit = if (left < right) {
@@ -101,12 +101,11 @@ class WagnerAlg(val k: Int,
 
   def validate(solution: PrivateSolution,
                finalH: BigInt): Try[Unit] = Try {
-    val h = bitLength(p - finalH)
+    val h = calcH(finalH)
     require(solution.numbers.size == BigInt(2).pow(k), s"${solution.numbers.size} != ${BigInt(2).pow(k)}")
 
     def check(ints: Seq[BigInt], round: Int): Unit = {
-      val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
-      val atLeast: BigInt = if (round != k) p - atMost else p
+      val (atMost, atLeast) = calcInterval(round, h, finalH)
 
       if (round < k) {
         val sums: Seq[BigInt] = ints.grouped(2).map(p => p.head + p.last).map(_.mod(p)).toSeq
@@ -132,5 +131,16 @@ class WagnerAlg(val k: Int,
 
   private def log(str: String): Unit = logger.debug(str)
 
-  private def bitLength(bi: BigInt): Int = bi.toByteArray.length * 8
+  private def bitLength(bi: BigInt): Int = {
+    assert(bi >= 0, "only positive numbers are allowed")
+    bi.bigInteger.bitLength()
+  }
+
+  def calcH(finalH: BigInt): Int = bitLength(p) - bitLength(finalH)
+
+  def calcInterval(round: Int, h: Int, finalH: BigInt): (BigInt, BigInt) = {
+    val atMost: BigInt = if (round != k) BigInt(2).pow(n - round * (h / (k + 1))) else finalH
+    val atLeast: BigInt = if (round != k) p - atMost else p
+    (atMost, atLeast)
+  }
 }

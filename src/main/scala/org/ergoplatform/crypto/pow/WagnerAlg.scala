@@ -1,6 +1,6 @@
 package org.ergoplatform.crypto.pow
 
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.mutable

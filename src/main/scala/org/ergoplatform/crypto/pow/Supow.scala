@@ -2,7 +2,7 @@ package org.ergoplatform.crypto.pow
 
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 import scorex.crypto.hash.Blake2b256
 
 import scala.util.Try

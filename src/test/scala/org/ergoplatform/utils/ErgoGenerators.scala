@@ -21,6 +21,8 @@ import sigmastate.Values.{FalseLeaf, TrueLeaf, Value}
 import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
+import scala.util.Random
+
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
@@ -123,4 +125,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
+
+  def randomInt(maximum: Long): Int = {
+    if (maximum < Int.MaxValue) Random.nextInt(maximum.toInt) + 1 else Random.nextInt(Int.MaxValue - 1) + 1
+  }
 }

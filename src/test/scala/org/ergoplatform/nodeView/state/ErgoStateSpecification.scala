@@ -59,10 +59,12 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.boxChanges() should generate operations in the same order") {
     var (us, bh) = createUtxoState()
+    var parentOpt: Option[Header] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
+      parentOpt = Some(block.header)
       bh = blBh._2
       us = us.applyModifier(block).get
 

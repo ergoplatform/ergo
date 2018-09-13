@@ -15,7 +15,8 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 
@@ -45,7 +46,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
   private def init: Receive = {
-    case Readers(h, s, _) =>
+    case Readers(h, s, _, _) =>
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),

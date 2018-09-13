@@ -19,9 +19,8 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
   private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-    minFullHeight.foreach{h =>
+    minFullHeight.foreach { h =>
       inHistory.pruningProcessor.minimalFullBlockHeightVar = h
-      inHistory.isHeadersChainSyncedVar = true
     }
 
     if (height > 0) {
@@ -51,7 +50,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
     history = applyChain(history, fork1)
 
-    fork2.foreach{ fb =>
+    fork2.foreach { fb =>
       modifiersCache.put(fb.header.id, fb.header)
     }
     history.applicable(fork2.head.header) shouldBe true

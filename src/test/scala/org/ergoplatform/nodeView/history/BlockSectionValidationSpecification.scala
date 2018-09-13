@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistorySpecification
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 
@@ -47,6 +47,14 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     val moreOMV = (0 until Extension.MaxOptionalFields + 1) map (_ => kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get)
     applicableCheck(extension.copy(mandatoryFields = moreOMV), header, history, correct = true)
     applicableCheck(extension.copy(mandatoryFields = moreOMV ++ o), header, history)
+    // validation of key duplicates in mandatory fields
+    val validMKV = kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get
+    applicableCheck(extension.copy(mandatoryFields = Seq(validMKV)), header, history, correct = true)
+    applicableCheck(extension.copy(mandatoryFields = Seq(validMKV, validMKV)), header, history)
+    // validation of key duplicates in optional fields
+    val validOKV = kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize).sample.get
+    applicableCheck(extension.copy(optionalFields = Seq(validOKV)), header, history, correct = true)
+    applicableCheck(extension.copy(optionalFields = Seq(validOKV, validOKV)), header, history)
 
     // common checks
     commonChecks(history, extension, header)
@@ -65,11 +73,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     history.applicableTry(section) shouldBe 'success
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
-
-    // should be able to apply only when headers chain is synchronized
-    history.isHeadersChainSyncedVar = false
-    history.applicableTry(section) shouldBe 'failure
-    history.isHeadersChainSyncedVar = true
 
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success

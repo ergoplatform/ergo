@@ -1,36 +1,65 @@
 package org.ergoplatform.nodeView.wallet
 
-
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
-import scala.util.{Success, Try}
-
-class ErgoWallet extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
-  with ScorexLogging {
+import scala.util.{Failure, Success, Try}
 
 
+class ErgoWallet(historyReader: ErgoHistoryReader,
+                 settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
+  extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
-  //todo: implement
-  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = this
+  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
 
-  //todo: implement
-  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = this
+  def watchFor(address: ErgoAddress): ErgoWallet = {
+    actor ! WatchFor(address)
+    this
+  }
 
-  //todo: implement
-  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = this
+  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
+    actor ! ScanOffchain(tx)
+    this
+  }
 
-  //todo: implement
-  override def rollback(to: VersionTag): Try[ErgoWallet] = Success(this)
+  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
+    txs.foreach(tx => scanOffchain(tx))
+    this
+  }
+
+  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
+    modifier match {
+      case fb: ErgoFullBlock =>
+        actor ! ScanOnchain(fb)
+      case _ =>
+        log.warn("Only a full block is expected in ErgoWallet.scanPersistent")
+    }
+    this
+  }
+
+  override def rollback(to: VersionTag): Try[ErgoWallet] =
+    historyReader.heightOf(scorex.core.versionToId(to)) match {
+      case Some(height) =>
+        actor ! Rollback(height)
+        Success(this)
+      case None =>
+        Failure(new Exception(s"Height of a modifier with id $to not found"))
+    }
 
   override type NVCT = this.type
 }
 
+
 object ErgoWallet {
-  @SuppressWarnings(Array("UnusedMethodParameter"))
-  def readOrGenerate(settings: ErgoSettings): ErgoWallet = new ErgoWallet
+  def readOrGenerate(historyReader: ErgoHistoryReader,
+                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(historyReader, settings)
+  }
 }

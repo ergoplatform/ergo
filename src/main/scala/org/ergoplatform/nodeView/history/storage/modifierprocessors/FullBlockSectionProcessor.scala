@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierId
+import scorex.core.{ModifierId, bytesToId}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult, ValidationState}
@@ -131,6 +131,13 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
             }
             .validate(e.optionalFields.forall(_._2.lengthCompare(Extension.MaxOptionalFieldValueSize) <= 0)) {
               fatal(s"Extension ${m.encodedId} optional field value length > ${Extension.MaxOptionalFieldValueSize}")
+            }
+            .validate(e.mandatoryFields.map(kv => bytesToId(kv._1)).distinct.length == e.mandatoryFields.length) {
+              //todo this check may be done in general mandatory fields check
+              fatal(s"Extension ${m.encodedId} contains duplicate mandatory keys")
+            }
+            .validate(e.optionalFields.map(kv => bytesToId(kv._1)).distinct.length == e.optionalFields.length) {
+              fatal(s"Extension ${m.encodedId} contains duplicate optionalFields keys")
             }
         case _ =>
           // todo some validations of block transactions, including size limit, should go there.

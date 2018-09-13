@@ -1,7 +1,9 @@
 package org.ergoplatform.settings
 
 import io.iohk.iodb.ByteArrayWrapper
-import scorex.core._
+import scorex.core.VersionTag
+import scorex.core.versionToBytes
+import scorex.util._
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree

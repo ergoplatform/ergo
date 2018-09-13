@@ -4,7 +4,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -13,27 +13,30 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.ModifierId
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
+import sigmastate.Values.{FalseLeaf, TrueLeaf, Value}
 import sigmastate._
-import sigmastate.Values.{TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
+  lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
+
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = for {
+  lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
+
+  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     height <- positiveIntGen
@@ -72,6 +75,19 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     val x = SerializedAdProof @@ genBoundedBytes(32, 32 * 1024)
     x
   }
+
+  def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
+    key <- genBytes(keySize)
+    value <- genBytes(valuesSize)
+  } yield (key, value)
+
+  lazy val extensionGen: Gen[Extension] = for {
+    headerId <- modifierIdGen
+    mandatoryElements <- Gen.listOf(kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
+    optionalElementsElements <- Gen.listOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
+  } yield Extension(headerId,
+    mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
+    optionalElementsElements.take(Extension.MaxOptionalFields))
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]

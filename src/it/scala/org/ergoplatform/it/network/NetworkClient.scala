@@ -8,12 +8,12 @@ import io.netty.channel._
 import io.netty.channel.group.ChannelGroup
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.nio.NioSocketChannel
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 import scala.concurrent.{Future, Promise}
 
 class NetworkClient(chainId: Char,
-                    nodeName: String,
+                    networkNodeName: String,
                     nonce: Long,
                     allChannels: ChannelGroup) extends ScorexLogging {
 

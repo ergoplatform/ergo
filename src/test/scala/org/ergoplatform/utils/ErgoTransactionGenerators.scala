@@ -2,16 +2,17 @@ package org.ergoplatform.utils
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util._
 import sigmastate._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -23,68 +24,86 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
+  val boxIndexGen: Gen[Short] = for {
+    v <- Gen.chooseNum(0, Short.MaxValue)
+  } yield v.toShort
+
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- ergoPropositionGen
     value <- positiveIntGen
     reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
-  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId, boxId)
+    boxId: Short <-  boxIndexGen
+  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId.toModifierId, boxId)
 
   val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
     length <- Gen.chooseNum(1, 100)
     bytes <- Gen.listOfN(length, arbByte.arbitrary)
   } yield ByteArrayConstant(bytes.toArray)
 
-  def additionalRegistersGen(cnt: Byte): Seq[Gen[(NonMandatoryRegisterId, EvaluatedValue[SType])]] = {
-    (0 until cnt)
-      .map(_ + ErgoBox.startingNonMandatoryIndex)
-      .map(rI => ErgoBox.registerByIndex(rI.toByte).asInstanceOf[NonMandatoryRegisterId])
-      .map { r =>
-        for {
-          arr <- byteArrayConstGen
-          v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
-        } yield r -> v.asInstanceOf[EvaluatedValue[SType]]
-      }
+  def additionalRegistersGen: Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
+    for {
+      cnt <- Gen.choose(0: Byte, ErgoBox.nonMandatoryRegistersCount)
+      registers <- additionalRegistersGen(cnt)
+    } yield registers
   }
 
-  def additionalTokensGen(cnt: Byte): Seq[Gen[(TokenId, Long)]] =
-    (0 until cnt).map { _ =>
-      for {
-        id <- Digest32 @@ boxIdGen
-        amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-      } yield id -> amt
+  def additionalRegistersGen(cnt: Byte): Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
+    Gen.listOfN(cnt, evaluatedValueGen) map { values =>
+      ErgoBox.nonMandatoryRegisters.take(cnt).zip(values).toMap
     }
+  }
+
+  def evaluatedValueGen: Gen[EvaluatedValue[SType]] = {
+    for {
+      arr <- byteArrayConstGen
+      v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
+    } yield v.asInstanceOf[EvaluatedValue[SType]]
+  }
+
+  def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = {
+    for {
+      cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+      assets <- additionalTokensGen(cnt)
+    } yield assets
+  }
+
+  def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
+
+  def assetGen: Gen[(TokenId, Long)] = {
+    for {
+      id <- boxIdGen
+      amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
+    } yield Digest32 @@ id -> amt
+  }
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
+    boxId: Short <- boxIndexGen
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
+    ar <- additionalRegistersGen(regNum)
     tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
-  } yield ErgoBox(value, prop, tokens.asScala, ar.asScala.toMap, transactionId, boxId)
+    tokens <- additionalTokensGen(tokensCount)
+  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
     prop <- propositionGen
     value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- Arbitrary.arbitrary[Short]
+    boxId: Short <- boxIndexGen
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
-  } yield ErgoBox(value, prop, tokens, ar.asScala.toMap, transactionId, boxId)
+    ar <- additionalRegistersGen(regNum)
+  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
     value <- positiveIntGen
-    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
-    ar <- Gen.sequence(additionalRegistersGen(regNum))
-    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-    tokens <- Gen.sequence(additionalTokensGen(tokensCount))
-  } yield new ErgoBoxCandidate(value, prop, tokens.asScala, ar.asScala.toMap)
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+  } yield new ErgoBoxCandidate(value, prop, tokens, ar)
 
   lazy val inputGen: Gen[Input] = for {
     boxId <- boxIdGen
@@ -160,7 +179,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ErgoTransaction(inputs, newBoxes)
   }
 
-  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]]  = {
+  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
       val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)
@@ -207,6 +226,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen
     txs <- invalidBlockTransactionsGen
+    extension <- extensionGen
     proof <- randomADProofsGen
-  } yield ErgoFullBlock(header, txs, Some(proof))
+  } yield ErgoFullBlock(header, txs, extension, Some(proof))
 }
+
+object ErgoTransactionGenerators extends ErgoTransactionGenerators

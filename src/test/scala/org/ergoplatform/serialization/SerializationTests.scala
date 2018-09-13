@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import org.scalatest.Assertion
@@ -19,6 +20,13 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
       val bytes = serializer.toBytes(b)
       bytes shouldEqual serializer.toBytes(recovered)
       bytes.length shouldEqual recovered.size
+    }
+  }
+
+  property("Serializers should be defined for all block sections") {
+    val block = invalidErgoFullBlockGen.sample.get
+    block.toSeq.foreach { s =>
+      Constants.modifierSerializers.get(s.modifierTypeId) should not be None
     }
   }
 
@@ -44,6 +52,10 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
 
   property("ErgoStateContext serialization") {
     checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
+  }
+
+  property("Extension serialization") {
+    checkSerializationRoundtrip(extensionGen, ExtensionSerializer)
   }
 
   property("ErgoBox serialization") {

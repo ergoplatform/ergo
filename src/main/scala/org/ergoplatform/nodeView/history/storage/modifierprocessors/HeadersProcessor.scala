@@ -11,10 +11,11 @@ import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.core._
+import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 
 import scala.annotation.tailrec
@@ -51,7 +52,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ idToBytes(id)))
 
-  protected def validityKey(id: ModifierId): ByteArrayWrapper =
+  protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
@@ -89,9 +90,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
-    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = toInsert(h)
+    val dataToInsert: (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = toInsert(h)
 
-    historyStorage.insert(Algos.idToBAW(h.id), dataToInsert._1, Seq(dataToInsert._2))
+    historyStorage.insert(Algos.idToBAW(h.id), dataToInsert._1, dataToInsert._2)
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>
@@ -108,7 +109,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Data, we should add and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], ErgoPersistentModifier) = {
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     if (h.isGenesis) {
       genesisToInsert(h, requiredDifficulty)
@@ -131,7 +132,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, h)
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifiersToInsert(h))
   }
 
   /**
@@ -144,9 +145,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      h)
+      modifiersToInsert(h))
   }
 
+  private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
+    if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
+      // extension is empty, generate it and insert to history
+      Seq(header, Extension(header.id, Seq(), Seq()))
+    } else {
+      Seq(header)
+    }
+  }
 
   /**
     * Row to storage, that put this orphaned block id to the end of header ids at this height

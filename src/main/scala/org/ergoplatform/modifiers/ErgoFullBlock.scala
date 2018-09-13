@@ -1,44 +1,49 @@
 package org.ergoplatform.modifiers
 
-import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import io.circe.{Encoder, Json}
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
-                         aDProofs: Option[ADProofs])
+                         extension: Extension,
+                         adProofs: Option[ADProofs])
   extends ErgoPersistentModifier
     with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = Seq(header, blockTransactions) ++ aDProofs.toSeq
+  override type M = ErgoFullBlock
 
   override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
-
-  override val parentId: ModifierId = header.parentId
 
   override def serializedId: Array[Byte] = header.serializedId
 
   override lazy val id: ModifierId = header.id
 
-  override type M = ErgoFullBlock
+  override def parentId: ModifierId = header.parentId
 
-  override lazy val serializer: Serializer[ErgoFullBlock] =
-    throw new Error("Should never try to serialize ErgoFullBlock")
+  lazy val mandatoryBlockSections: Seq[BlockSection] = Seq(blockTransactions, extension)
+
+  lazy val blockSections: Seq[BlockSection] = adProofs.toSeq ++ mandatoryBlockSections
+
+  lazy val toSeq: Seq[ErgoPersistentModifier] = header +: blockSections
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 
   override val sizeOpt: Option[Int] = None
 
-  override lazy val size = {
+  override lazy val size: Int = {
     val hSize = header.size
     val btSize = blockTransactions.size
-    val adSize = aDProofs.map(_.size).getOrElse(0)
+    val adSize = adProofs.map(_.size).getOrElse(0)
     hSize + btSize + adSize
   }
+
+  override lazy val serializer: Serializer[ErgoFullBlock] = throw new Error("Never try to serialize ErgoFullBlock")
+
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -48,7 +53,8 @@ object ErgoFullBlock extends ApiCodecs {
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
-      "adProofs" -> b.aDProofs.map(_.asJson).getOrElse(Map.empty[String, String].asJson),
+      "extension" -> b.extension.asJson,
+      "adProofs" -> b.adProofs.asJson,
       "size" -> b.size.asJson
     )
 

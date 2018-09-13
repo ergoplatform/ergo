@@ -1,11 +1,11 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import org.ergoplatform.api.{BlocksApiRoute, EmissionApiRoute, InfoRoute, TransactionsApiRoute}
+import org.ergoplatform.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
@@ -17,10 +17,10 @@ import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.io.Source
 
 class ErgoApp(args: Seq[String]) extends Application {
@@ -32,7 +32,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
+  lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -51,7 +51,9 @@ class ErgoApp(args: Seq[String]) extends Application {
     PeersApiRoute(peerManagerRef, networkControllerRef, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings)
+  )
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
@@ -63,11 +65,6 @@ class ErgoApp(args: Seq[String]) extends Application {
     minerRef ! StartMining
   }
 
-  if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings.testingSettings)
-    txGen ! StartGeneration
-  }
-
   val actorsToStop = Seq(minerRef,
     peerManagerRef,
     networkControllerRef,
@@ -77,10 +74,14 @@ class ErgoApp(args: Seq[String]) extends Application {
     nodeViewHolderRef
   )
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
+
+  if (ergoSettings.testingSettings.transactionGeneration) {
+    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
+    txGen ! StartGeneration
+  }
 }
 
 object ErgoApp extends ScorexLogging {
-
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
@@ -93,5 +94,4 @@ object ErgoApp extends ScorexLogging {
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
   }
-
 }

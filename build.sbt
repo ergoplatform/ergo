@@ -1,28 +1,29 @@
-import sbt.Keys._
+import sbt.Keys.{licenses, _}
 import sbt._
 
-organization := "org.ergoplatform"
+lazy val commonSettings = Seq(
+  organization := "org.ergoplatform",
+  name := "ergo",
+  version := "1.6.0-SNAPSHOT",
+  scalaVersion := "2.12.6",
+  resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
+    "SonaType" at "https://oss.sonatype.org/content/groups/public",
+    "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+    "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
+  homepage := Some(url("http://ergoplatform.org/")),
+  licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
+)
 
-name := "ergo"
-
-version := "1.5.3"
-
-scalaVersion := "2.12.6"
-
-resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
-  "SonaType" at "https://oss.sonatype.org/content/groups/public",
-  "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-  "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
-
-val scorexVersion = "1f5b7c39-SNAPSHOT"
+val scorexVersion = "41f3db48-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "scrypto" % "2.1.2").exclude("ch.qos.logback", "logback-classic"),
-  "org.scorexfoundation" %% "sigma-state" % "0.9.5-SNAPSHOT",
+  ("org.scorexfoundation" %% "sigma-state" % "0.10.0")
+    .exclude("ch.qos.logback", "logback-classic")
+    .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  ("org.scorexfoundation" %% "avl-iodb" % "0.2.14").exclude("ch.qos.logback", "logback-classic"),
+  ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   "javax.xml.bind" % "jaxb-api" % "2.+",
@@ -70,10 +71,6 @@ val opts = Seq(
 javaOptions in run ++= opts
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
 
-homepage := Some(url("http://ergoplatform.org/"))
-
-licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
-
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
   val versionExtractor = """(\d+)\.(\d+)\.(\d+).*""".r
@@ -102,7 +99,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest extend(Test))
+configs(IntegrationTest extend (Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
@@ -140,7 +137,7 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 val Bench = config("bench") extend Test
 
-inConfig(Bench)(Defaults.testSettings ++  Seq(
+inConfig(Bench)(Defaults.testSettings ++ Seq(
   fork in run := true,
   classDirectory := (classDirectory in Compile).value,
   dependencyClasspath := (dependencyClasspath in Compile).value
@@ -149,3 +146,10 @@ inConfig(Bench)(Defaults.testSettings ++  Seq(
 compile in Bench := (compile in Bench).dependsOn(compile in Test).value
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
+
+lazy val ergo = (project in file(".")).settings(commonSettings: _*)
+
+lazy val benchmarks = (project in file("benchmarks"))
+  .settings(commonSettings, name := "ergo-benchmarks")
+  .dependsOn(ergo % "test->test")
+  .enablePlugins(JmhPlugin)

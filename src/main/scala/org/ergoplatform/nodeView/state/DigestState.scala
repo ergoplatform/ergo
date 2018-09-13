@@ -11,7 +11,8 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
 import scorex.crypto.hash.Digest32
@@ -36,10 +37,12 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock if notInitialized => Success(Unit)
+    case fb: ErgoFullBlock if notInitialized =>
+      log.info(s"Initializing state with fb ${fb.id}")
+      Success(Unit)
 
     case fb: ErgoFullBlock =>
-      fb.aDProofs match {
+      fb.adProofs match {
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>

@@ -34,7 +34,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
-  lazy val emission = new CoinsEmission(ergoSettings.chainSettings.monetary)
+  lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)

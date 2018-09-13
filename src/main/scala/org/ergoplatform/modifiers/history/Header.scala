@@ -11,12 +11,13 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
+import scorex.core.ModifierTypeId
 import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.util._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
@@ -31,7 +32,7 @@ case class Header(version: Version,
                   timestamp: Timestamp,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
-                  extensionHash: Digest32,
+                  extensionRoot: Digest32,
                   equihashSolution: EquihashSolution,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
@@ -67,7 +68,10 @@ case class Header(version: Version,
 
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  lazy val sectionIds: Seq[ModifierId] = Seq(ADProofsId, transactionsId)
+  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+
+  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
+    (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
@@ -78,11 +82,7 @@ case class Header(version: Version,
   /**
     * Checks, that modifier m corresponds t this header
     */
-  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = m match {
-    case p: ADProofs => java.util.Arrays.equals(ADProofsRoot, p.digest)
-    case t: BlockTransactions => java.util.Arrays.equals(transactionsRoot, t.digest)
-    case _ => false
-  }
+  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 
   /**
     * Estimate that this Header is new enough to possibly be the best header
@@ -110,7 +110,7 @@ object Header {
       "stateRoot" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
-      "extensionHash" -> Algos.encode(h.extensionHash).asJson,
+      "extensionHash" -> Algos.encode(h.extensionRoot).asJson,
       "equihashSolutions" -> Algos.encode(h.equihashSolution.bytes).asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
@@ -130,7 +130,7 @@ object HeaderSerializer extends Serializer[Header] {
       h.transactionsRoot,
       h.stateRoot,
       Longs.toByteArray(h.timestamp),
-      h.extensionHash,
+      h.extensionRoot,
       RequiredDifficulty.toBytes(h.nBits),
       Ints.toByteArray(h.height))
 
@@ -184,6 +184,7 @@ object HeaderSerializer extends Serializer[Header] {
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
       val repeatN: Int = bytes.slice(index, index + 1).head
+      require(repeatN > 0)
       val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
       val links: Seq[ModifierId] = Array.fill(repeatN)(link)
       parseInterlinks(index + 33, endIndex, acc ++ links)

@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import net.ceedubs.ficus.readers.ValueReader
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 
 trait ModifierIdReader {
 

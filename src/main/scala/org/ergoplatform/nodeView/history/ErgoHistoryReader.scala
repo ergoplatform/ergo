@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
@@ -10,7 +10,8 @@ import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSetting
 import scorex.core._
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
@@ -31,7 +32,7 @@ trait ErgoHistoryReader
   protected val chainSettings: ChainSettings
   protected val config: NodeConfigurationSettings
 
-  protected val historyStorage: HistoryStorage
+  protected[history] val historyStorage: HistoryStorage
 
   /**
     * Is there's no history, even genesis block
@@ -65,6 +66,7 @@ trait ErgoHistoryReader
   }.ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
 
   /** Get modifier of expected type by its identifier
+    *
     * @param id - modifier id
     * @tparam T - expected Type
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
@@ -206,9 +208,7 @@ trait ErgoHistoryReader
     modifier match {
       case header: Header =>
         validate(header)
-      case m: BlockTransactions =>
-        validate(m)
-      case m: ADProofs =>
+      case m: BlockSection =>
         validate(m)
       case m: PoPoWProof =>
         validate(m)
@@ -220,9 +220,12 @@ trait ErgoHistoryReader
   }
 
   def getFullBlock(header: Header): Option[ErgoFullBlock] = {
-    (typedModifierById[BlockTransactions](header.transactionsId), typedModifierById[ADProofs](header.ADProofsId)) match {
-      case (Some(txs), Some(proofs)) => Some(ErgoFullBlock(header, txs, Some(proofs)))
-      case (Some(txs), None) if !config.stateType.requireProofs => Some(ErgoFullBlock(header, txs, None))
+    (typedModifierById[BlockTransactions](header.transactionsId),
+      typedModifierById[Extension](header.extensionId),
+      typedModifierById[ADProofs](header.ADProofsId)) match {
+      case (Some(txs), Some(ext), Some(proofs)) => Some(ErgoFullBlock(header, txs, ext, Some(proofs)))
+      case (Some(txs), Some(ext), None) if !config.stateType.requireProofs =>
+        Some(ErgoFullBlock(header, txs, ext, None))
       case _ => None
     }
   }

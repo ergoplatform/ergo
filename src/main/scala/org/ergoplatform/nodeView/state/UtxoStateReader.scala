@@ -36,7 +36,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
         case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
-          Some(tx.outputs.head)
+          tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")
           None
@@ -54,15 +54,16 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
-  def boxById(id: ADKey): Option[ErgoBox] =
+  def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver
       .unauthenticatedLookup(id)
       .map(ErgoBoxSerializer.parseBytes)
       .flatMap(_.toOption)
+  }
 
-  def randomBox(): Option[ErgoBox] =
+  def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
-
+  }
 
   /**
     * Generate proofs for specified transactions if applied to current state
@@ -70,14 +71,14 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
     */
-  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
     val rootHash = persistentProver.digest
     log.debug(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(t => java.util.Arrays.equals(t, rootHash))) {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
-        s"Possible reason - state update is in process."))
+        "Possible reason - state update is in process."))
     } else {
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }

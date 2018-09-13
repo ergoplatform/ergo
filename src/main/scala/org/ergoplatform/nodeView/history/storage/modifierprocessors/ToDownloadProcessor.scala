@@ -79,8 +79,8 @@ trait ToDownloadProcessor extends ScorexLogging {
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       pruningProcessor.updateBestFullBlock(header)
+      log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       Seq.empty
     } else {
       Seq.empty

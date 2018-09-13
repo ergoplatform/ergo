@@ -11,10 +11,10 @@ import scorex.core.utils
 import scala.util.Try
 
 case class ModeFeature(stateType: StateType,
-                  verifyingTransactions: Boolean,
-                  popowBootstrapping: Boolean,
-                  popowSuffix: Int,
-                  blocksToKeep: Int) extends PeerFeature {
+                       verifyingTransactions: Boolean,
+                       popowBootstrapping: Boolean,
+                       popowSuffix: Int,
+                       blocksToKeep: Int) extends PeerFeature {
 
   override val featureId: Id = 16: Byte
 

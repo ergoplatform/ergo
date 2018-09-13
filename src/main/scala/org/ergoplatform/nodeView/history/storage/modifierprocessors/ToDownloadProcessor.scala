@@ -1,9 +1,10 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderChain}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 import scorex.core.{ModifierId, ModifierTypeId}
 
 import scala.annotation.tailrec
@@ -22,8 +23,6 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected val timeProvider: NetworkTimeProvider
 
-  private[history] var isHeadersChainSyncedVar: Boolean = false
-
   def bestFullBlockOpt: Option[ErgoFullBlock]
 
   def headerIdsAtHeight(height: Int): Seq[ModifierId]
@@ -34,21 +33,18 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
-  /**
-    * @return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+  /** return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
     */
-  def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
+  def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /**
-    *
-    * @return Next `howMany` modifier ids satisfying `filter` condition our node should download
-    *         to synchronize full block chain with headers chain
+  /** return Next `howMany` modifier ids satisfying `filter` condition our node should download
+    * to synchronize full block chain with headers chain
     */
   def nextModifiersToDownload(howMany: Int, contidion: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
     def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
       if (acc.lengthCompare(howMany) >= 0) {
-        acc
+        acc.take(howMany)
       } else {
         headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
           case Some(bestHeaderAtThisHeight) =>
@@ -84,7 +80,6 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
-      isHeadersChainSyncedVar = true
       pruningProcessor.updateBestFullBlock(header)
       Seq.empty
     } else {
@@ -93,12 +88,13 @@ trait ToDownloadProcessor extends ScorexLogging {
   }
 
   private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+    lazy val emptyExtensionId: ModifierId = Extension(h.id).id
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {
-      Seq((BlockTransactions.modifierTypeId, h.transactionsId), (ADProofs.modifierTypeId, h.ADProofsId))
+      h.sectionIds.filterNot(_._2 == emptyExtensionId)
     } else {
-      Seq((BlockTransactions.modifierTypeId, h.transactionsId))
+      h.sectionIds.tail.filterNot(_._2 == emptyExtensionId)
     }
   }
 

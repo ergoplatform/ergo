@@ -6,8 +6,8 @@ import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
-
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object HistoryExtractor extends ScorexLogging {
@@ -31,7 +31,7 @@ object HistoryExtractor extends ScorexLogging {
       val b = h.getFullBlock(header).get
       ModifierWriter.write(b.header)(os)
       ModifierWriter.write(b.blockTransactions)(os)
-      b.aDProofs.foreach { p => ModifierWriter.write(p)(os) }
+      b.adProofs.foreach { p => ModifierWriter.write(p)(os) }
       os.flush()
     }
     os.close()

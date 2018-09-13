@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.settings.Algos
 import scorex.core.transaction.state.StateReader
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
 
 trait ErgoStateReader extends StateReader with ScorexLogging {

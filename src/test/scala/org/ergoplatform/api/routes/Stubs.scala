@@ -7,24 +7,29 @@ import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers}
+import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.network.peer.PeerInfo
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
+import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.util.Success
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
@@ -34,19 +39,22 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val history = applyChain(generateHistory(), chain)
 
-  lazy val state = { boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
-    DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
-  }
+  lazy val state = {
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
+    }
   }.sample.get
+
+  lazy val wallet = new WalletStub
 
   val txs = chain.head.transactions
 
   lazy val memPool = ErgoMemPool.empty.put(txs).get
-  lazy val readers = Readers(history, state, memPool)
+  lazy val readers = Readers(history, state, memPool, wallet)
 
 
-  val inetAddr1 = new InetSocketAddress("92.92.92.92",27017)
-  val inetAddr2 = new InetSocketAddress("93.93.93.93",27017)
+  val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
+  val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
   val ts1 = System.currentTimeMillis() - 100
   val ts2 = System.currentTimeMillis() + 100
 
@@ -79,7 +87,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
 
   class MinerStub extends Actor {
-    def receive = { case MiningStatusRequest => sender() ! minerInfo }
+    def receive = {
+      case MiningStatusRequest => sender() ! minerInfo
+    }
   }
 
   object MinerStub {
@@ -87,7 +97,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object NodeViewStub {
@@ -95,7 +107,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NetworkControllerStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object NetworkControllerStub {
@@ -103,11 +117,42 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class PeerManagerStub extends Actor {
-    def receive = { case _ => println("hey") }
+    def receive = {
+      case _ => println("hey")
+    }
   }
 
   object PeerManagerStub {
     def props() = Props(new PeerManagerStub)
+  }
+
+  class WalletActorStub extends Actor {
+    def seed = "walletstub"
+
+    private implicit val addressEncoder = new ErgoAddressEncoder(settings)
+    private val prover = new ErgoProvingInterpreter(seed, 2)
+    private val trackedAddresses: mutable.Buffer[ErgoAddress] =
+      mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+
+
+    def receive: Receive = {
+
+      case ReadTrackedAddresses =>
+        sender ! trackedAddresses
+
+      case GenerateTransaction(payTo) =>
+        val input = ErgoTransactionGenerators.inputGen.sample.value
+        val tx = ErgoTransaction(IndexedSeq(input), payTo.toIndexedSeq)
+        sender ! Success(tx)
+    }
+  }
+
+  object WalletActorStub {
+    def props(): Props = Props(new WalletActorStub)
+  }
+
+  class WalletStub extends ErgoWalletReader {
+    val actor = system.actorOf(WalletActorStub.props())
   }
 
 
@@ -133,10 +178,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   def generateHistory(verifyTransactions: Boolean = true,
                       stateType: StateType = StateType.Digest,
                       PoPoWBootstrap: Boolean = false,
-                      blocksToKeep: Int  = 100,
+                      blocksToKeep: Int = 100,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
@@ -144,12 +190,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
+    val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
+    val chainSettings =
+      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, CacheSettings.default, scorexSettings)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

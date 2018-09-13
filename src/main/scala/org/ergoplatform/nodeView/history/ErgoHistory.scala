@@ -8,12 +8,13 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor, PoPoWProofsProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 
 import scala.util.Try
 
@@ -69,7 +70,7 @@ trait ErgoHistory
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
-        val nonMarkedIds = (Seq(fb.header.id, fb.blockTransactions.id) ++ fb.aDProofs.map(_.id))
+        val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
         if (nonMarkedIds.nonEmpty) {
@@ -93,7 +94,7 @@ trait ErgoHistory
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
-                                       progressInfo: ProgressInfo[ErgoPersistentModifier],
+                                       progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
@@ -195,7 +196,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -205,7 +206,7 @@ object ErgoHistory extends ScorexLogging {
           with FullPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -216,7 +217,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
@@ -226,7 +227,7 @@ object ErgoHistory extends ScorexLogging {
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
-          override protected val historyStorage: HistoryStorage = db
+          override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: PowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }

@@ -5,10 +5,11 @@ import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
-import scorex.core.ModifierId
-import scorex.core.utils.{ScorexEncoding, ScorexLogging}
+import scorex.util.ModifierId
+import scorex.core.utils.ScorexEncoding
+import scorex.util.ScorexLogging
 
-import scala.util.Failure
+import scala.util.{Failure, Try}
 
 /**
   * Storage for Ergo history
@@ -64,11 +65,11 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
+             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = Try {
     objectsToInsert.foreach { o =>
       modifiersCache.put(o.id, o)
       // TODO saving object to disc may be async here for performance reasons
-      objectsStore.put(o)
+      objectsStore.put(o).get
     }
     if (indexesToInsert.nonEmpty) {
       indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
@@ -77,6 +78,9 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
         Seq.empty,
         indexesToInsert)
     }
+  }.recoverWith { case e =>
+    log.error("Unable to perform insert", e)
+    Failure(e)
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>

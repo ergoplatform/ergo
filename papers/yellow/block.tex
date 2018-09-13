@@ -56,12 +56,12 @@ Extension is a key-value storage for a variety of data.
 It contains 2 parts:
 \begin{itemize}
     \item{\em Mandatory fields } - fields which keys are set via consensus rules and may be changed
-    via soft/hard forks only. This fields have 4 bytes key and at most 64 bytes value.
+    via soft/hard forks only. These fields have 4 bytes key and at most 64 bytes value.
     Value length is known for all peers and this limit only important due to soft forks -
     it is allowed to add at most 1 new key to this section per epoch (256 blocks between
     difficulty recalculation), if key is not known to a peer it assumes that soft fork that
     added this key was performed.
     \item{\em Optional fields } - random data miner may add to a block. This section contains at most 2
-    elements with 32 byte key size and at most 32 byte value size.
+    elements with 32 byte key size and at most 64 byte value size.
 \end{itemize}
 

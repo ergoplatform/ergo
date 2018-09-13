@@ -4,23 +4,24 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{R4, TokenId}
+import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoStateReader}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform._
-import scapi.sigma.DLogProtocol.DLogProverInput
+import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 import scorex.crypto.hash.Digest32
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
@@ -28,6 +29,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -36,8 +38,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: CoinsEmission,
-                minerPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
+                emission: EmissionRules,
+                extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -46,20 +48,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
-  private val minerProp: Value[SBoolean.type] = minerPropOpt.getOrElse {
-    //TODO extract from wallet when it will be implemented
-    DLogProverInput(
-      BigIntegers.fromUnsignedByteArray(ergoSettings.scorexSettings.network.nodeName.getBytes())
-    ).publicImage
+  private var publicKeyOpt: Option[P2PKAddress] = None
+
+  private def minerPropOpt: Option[Value[SBoolean.type]] = extPropOpt.orElse {
+    publicKeyOpt.map(_.pubkey)
   }
 
   override def preStart(): Unit = {
+    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+      v.vault.randomPublicKey().onComplete { keyTry =>
+        publicKeyOpt = keyTry.toOption
+      }
+    }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
 
-  override def postStop(): Unit = killAllThreads
-
-  private def killAllThreads: Unit = {
+  override def postStop(): Unit = {
     log.warn("Stopping miner's threads.")
     miningThreads.foreach(_ ! PoisonPill)
     miningThreads.clear()
@@ -67,7 +71,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def unknownMessage: Receive = {
     case m =>
-      log.warn(s"Unexpected message $m")
+      log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
   private def miningStatus: Receive = {
@@ -77,12 +81,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
-      log.info("Starting Mining")
-      isMining = true
-      miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidateOpt.get, timeProvider)(context)
-      miningThreads.foreach(_ ! candidateOpt.get)
+      candidateOpt.foreach { candidate =>
+        log.info("Starting Mining")
+        isMining = true
+        miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, timeProvider)(context)
+        miningThreads.foreach(_ ! candidate)
+      }
     case StartMining if candidateOpt.isEmpty =>
-      requestCandidate
+      requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
@@ -102,7 +108,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       * That means that our candidate is outdated. Should produce new candidate for ourselves.
       * Stop all current threads and re-run them with newly produced candidate.
       */
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) => requestCandidate
+    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) => requestCandidate()
 
     /**
       * Non obvious but case when mining is enabled, but miner doesn't started yet. Initialization case.
@@ -126,10 +132,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     unknownMessage
 
   private def onReaders: Receive = {
-    case Readers(h, s, m) if s.isInstanceOf[UtxoStateReader] =>
-      createCandidate(h, m, s.asInstanceOf[UtxoStateReader]) match {
-        case Success(candidate) => procCandidateBlock(candidate)
-        case Failure(e) => log.warn("Failed to produce candidate block.", e)
+    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
+      minerPropOpt.foreach { minerProp =>
+        createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
+          case Success(candidate) => procCandidateBlock(candidate)
+          case Failure(e) => log.warn("Failed to produce candidate block.", e)
+        }
       }
   }
 
@@ -140,13 +148,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  private def createCandidate(history: ErgoHistoryReader,
+  private def createCandidate(minerProp: Value[SBoolean.type],
+                              history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    // todo: size should be limitedby network, size limit should be chosen by miners votes. fix after voting implementation
+    // todo: size should be chosen by miners votes. fix after voting implementation
     val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
     var totalSize = 0
     val emissionBox = state.emissionBoxOpt
@@ -164,28 +173,25 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // the pool
     val txsNoConflict = fixTxsConflicts(externalTransactions)
 
-    // TODO use wallet to extract boxes from transactions in this block miner can spend. Use wallet when create coinbase
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
     val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
     val txs = txsNoConflict :+ coinbase
 
-    val (adProof, adDigest) = state.proofsForTransactions(txs).get
+    state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
+      val timestamp = timeProvider.time()
+      val nBits: Long = bestHeaderOpt
+        .map(parent => history.requiredDifficultyAfter(parent))
+        .map(d => RequiredDifficulty.encodeCompactBits(d))
+        .getOrElse(Constants.InitialNBits)
 
-    val timestamp = timeProvider.time()
+      // todo fill with interlinks and other useful values after nodes update
+      val extensionCandidate = ExtensionCandidate(Seq(), Seq())
 
-    val nBits: Long = bestHeaderOpt
-      .map(parent => history.requiredDifficultyAfter(parent))
-      .map(d => RequiredDifficulty.encodeCompactBits(d))
-      .getOrElse(Constants.InitialNBits)
+      CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate)
+    }
+  }.flatten
 
-    //TODO real extension should be there. Hash from empty array for now to be able to implement it later without forks
-    val extensionHash = Algos.hash(Array[Byte]())
-
-    CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionHash)
-  }
-
-  def requestCandidate: Unit = readersHolderRef ! GetReaders
-
+  def requestCandidate(): Unit = readersHolderRef ! GetReaders
 }
 
 
@@ -194,38 +200,40 @@ object ErgoMiner extends ScorexLogging {
   def createCoinbase(state: UtxoStateReader,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
-                     emission: CoinsEmission): ErgoTransaction = {
-    state.emissionBoxOpt match {
-      case Some(emissionBox) =>
-        assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
-        ErgoMiner.createCoinbase(emissionBox, state.stateContext.height, feeBoxes, minerProp, emission)
-      case None =>
-        val inputs = feeBoxes
-          .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-        val feeAmount = feeBoxes.map(_.value).sum
-        val feeTokens = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens)
-        val rewardBox: ErgoBoxCandidate = new ErgoBoxCandidate(feeAmount, minerProp, feeTokens, Map())
-        ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(rewardBox))
+                     emissionRules: EmissionRules): ErgoTransaction = {
+    val emissionBoxOpt = state.emissionBoxOpt
+    emissionBoxOpt foreach { emissionBox =>
+      assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
+    createCoinbase(emissionBoxOpt, state.stateContext.height, feeBoxes, minerProp, emissionRules)
   }
 
-  def createCoinbase(emissionBox: ErgoBox,
+  def createCoinbase(emissionBoxOpt: Option[ErgoBox],
                      height: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
-                     emission: CoinsEmission): ErgoTransaction = {
+                     emission: EmissionRules): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
-    val prop = emissionBox.proposition
-    val emissionAmount = emission.emissionAtHeight(height)
-    val newEmissionBox: ErgoBoxCandidate =
-      new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
-    val inputBoxes = (emissionBox +: feeBoxes).toIndexedSeq
+
+    val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
+      case Some(emissionBox) =>
+        val prop = emissionBox.proposition
+        val emissionAmount = emission.emissionAtHeight(height)
+        val newEmissionBox: ErgoBoxCandidate =
+          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
+
+        ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
+      case None => (feeBoxes, 0L, None)
+    }
+
     val inputs = inputBoxes
       .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      .toIndexedSeq
 
     val feeAmount = feeBoxes.map(_.value).sum
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+
     //todo: a miner is creating a new asset, remove it after playing for a while
     val newAsset: (TokenId, Long) = (Digest32 @@ inputBoxes.head.id) -> 1000
     val minerAssets = feeAssets :+ newAsset
@@ -234,7 +242,7 @@ object ErgoMiner extends ScorexLogging {
 
     ErgoTransaction(
       inputs,
-      IndexedSeq(newEmissionBox, minerBox)
+      IndexedSeq(newEmissionBoxOpt, Some(minerBox)).flatten
     )
   }
 
@@ -269,7 +277,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
     Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
 
@@ -277,7 +285,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
@@ -287,7 +295,7 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: CoinsEmission,
+            emission: EmissionRules,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission), name)

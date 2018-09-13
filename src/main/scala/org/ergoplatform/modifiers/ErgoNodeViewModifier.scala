@@ -9,7 +9,7 @@ trait ErgoNodeViewModifier { self: BytesSerializable =>
 
   val sizeOpt: Option[Int]
 
-  lazy val size = sizeOpt.getOrElse(bytes.length)
+  lazy val size: Int = sizeOpt.getOrElse(bytes.length)
 
   def serializedId: Array[Byte]
 

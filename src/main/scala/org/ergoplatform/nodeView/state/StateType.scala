@@ -3,13 +3,13 @@ package org.ergoplatform.nodeView.state
 import io.circe.Encoder
 import org.ergoplatform.nodeView.state.StateType.StateTypeCode
 
+import scala.reflect.ClassTag
+
 sealed trait StateType {
   def stateTypeCode: StateTypeCode
 
   def stateTypeName: String
-
   def requireProofs: Boolean
-
   override def toString: String = stateTypeName
 }
 
@@ -45,9 +45,13 @@ object StateType {
     */
   sealed trait Evidence[ST <: StateType, S <: ErgoState[S]]
 
-  implicit object UtxoEvidence extends Evidence[UtxoType, UtxoState]
+  implicit final object UtxoEvidence extends Evidence[UtxoType, UtxoState]
 
-  implicit object DigestEvidence extends Evidence[DigestType, DigestState]
+  implicit final object DigestEvidence extends Evidence[DigestType, DigestState]
+
+  def forState[T <: ErgoState[T]](implicit tag: ClassTag[T]): StateType = {
+    if (classOf[DigestState].isAssignableFrom(tag.runtimeClass)) Digest else Utxo
+  }
 
   /** This is for json representation of [[StateType]] instances
     */

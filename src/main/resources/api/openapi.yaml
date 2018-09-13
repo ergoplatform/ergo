@@ -41,7 +41,7 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/SValue'
           example:
-            '1': '7c'
+            '1': '0101'
 
     ErgoTransactionOutput:
       type: object
@@ -66,12 +66,7 @@ components:
           items:
             $ref: '#/components/schemas/Asset'
         additionalRegisters:
-          description: Additional registers
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            R4: '7c'
+          $ref: '#/components/schemas/Registers'
 
     ErgoTransaction:
       type: object
@@ -96,6 +91,33 @@ components:
           description: Size in bytes
           type: integer
           format: int32
+
+    ErgoAddress:
+      description: Encoded Ergo Address
+      type: string
+      example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
+
+    PaymentRequest:
+      description: request to generate payment transaction to a given address
+      type: object
+      required:
+        - address
+        - value
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        value:
+          description: Payment amount
+          type: integer
+          format: int64
+          example: 1
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        registers:
+          $ref: '#/components/schemas/Registers'
 
     FullBlock:
       description: Block with header and transactions
@@ -162,7 +184,7 @@ components:
         equihashSolutions:
           description: Base16-encoded equihash solutions
           type: string
-          example: 11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh
+          example: '11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh'
         height:
           type: integer
           format: int32
@@ -250,7 +272,7 @@ components:
       properties:
         address:
           type: string
-          example: 127.0.0.1:5673
+          example: '127.0.0.1:5673'
         name:
           type: string
           example: mynode
@@ -328,7 +350,7 @@ components:
           type: string
           nullable: true
           description: Can be 'null' if state is empty (no full block is applied since node launch)
-          example: Dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+          example: 'Dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
         stateType:
           type: string
           enum:
@@ -337,7 +359,7 @@ components:
         stateVersion:
           description: Can be 'null' if no full block is applied since node launch
           type: string
-          example: Fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+          example: 'Fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
           nullable: true
         isMining:
           type: boolean
@@ -381,19 +403,19 @@ components:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long
       type: string
       format: base16
-      example: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     TransactionId:
       description: Base16-encoded transaction id bytes
       type: string
       format: base16
-      example: 2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     Proposition:
       description: Base16-encoded proposition bytes
       type: string
       format: base16
-      example: 7c
+      example: '0101'
 
     Transactions:
       description: Ergo transaction objects
@@ -416,47 +438,55 @@ components:
           format: int64
           example: 1000
 
+    Registers:
+      description: Ergo box registers
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/SValue'
+      example:
+        R4: '0101'
+
     SValue:
-      description: Base-16 envoded serialized Sigma-state value
+      description: Base-16 encoded serialized Sigma-state value
       type: string
       format: base16
-      example: 7c
+      example: '0101'
 
     ModifierId:
       description: Base16-encoded 32 byte modifier id
       type: string
       format: base16
-      example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     Digest32:
       description: Base16-encoded 32 byte digest
       type: string
       format: base16
-      example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     ADDigest:
       description: Base16-encoded 33 byte digest - digest with extra byte with tree height
       type: string
       format: base16
-      example: 333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     SerializedAdProof:
       description: Base16-encoded ad proofs
       type: string
       format: base16
-      example: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     SpendingProofBytes:
       description: Base16-encoded spending proofs
       type: string
       format: base16
-      example: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     BlockSignature:
       description: Base16-encoded block signature
       type: string
       format: base16
-      example: 5ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      example: '5ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
     Timestamp:
       description: Basic timestamp definition
@@ -477,6 +507,24 @@ components:
         totalRemainCoins:
           type: integer
           format: int64
+
+    BalancesSnapshot:
+      description: Amount of Ergo tokens and assets
+      type: object
+      required:
+        - height
+        - balance
+      properties:
+        height:
+          type: integer
+          format: int32
+        balance:
+          type: integer
+          format: int64
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
 
 paths:
   /blocks:
@@ -514,8 +562,8 @@ paths:
                 description: Array of header ids
                 items:
                   type: string
-                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
-                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
+                  example: 'D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4'
+                example: ['D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4']
         default:
           description: Error
           content:
@@ -523,7 +571,7 @@ paths:
               schema:
                 type: string
                 # Parameter `offset` is out of range
-                example: invalid.offset.out.of.range
+                example: 'invalid.offset.out.of.range'
     post:
       summary: Send a mined block
       operationId: sendMinedBlock
@@ -544,7 +592,7 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                example: invalid.block
+                example: 'invalid.block'
 
   /blocks/at/{blockHeight}:
     get:
@@ -568,10 +616,10 @@ paths:
               schema:
                 type: array
                 description: Array of header ids
-                example: ["D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4"]
+                example: ['D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4']
                 items:
                   type: string
-                  example: D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4
+                  example: 'D2bXMwWN8P9nWJ9qqwZJLauAdcZHX9n6s91QQ9vK6Zu4'
         '404':
           description: Blocks at this height doesn't exist
         default:
@@ -581,7 +629,7 @@ paths:
               schema:
                 type: string
                 # Provided height is invalid
-                example: invalid.block.height
+                example: 'invalid.block.height'
 
   /blocks/{headerId}:
     get:
@@ -613,7 +661,7 @@ paths:
               schema:
                 type: string
                 # Provided header id is invalid
-                example: invalid.block.id
+                example: 'invalid.block.id'
 
   /blocks/{headerId}/header:
     get:
@@ -645,7 +693,7 @@ paths:
               schema:
                 type: string
                 # Provided header id is invalid
-                example: invalid.block.id
+                example: 'invalid.block.id'
 
   /blocks/{headerId}/transactions:
     get:
@@ -677,7 +725,7 @@ paths:
               schema:
                 type: string
                 # Provided header id is invalid
-                example: invalid.block.id
+                example: 'invalid.block.id'
 
   /blocks/{headerId}/size:
     get:
@@ -713,7 +761,7 @@ paths:
               schema:
                 type: string
                 # Provided header id is invalid
-                example: invalid.block.id
+                example: 'invalid.block.id'
 
 
   /blocks/candidateBlock:
@@ -820,7 +868,7 @@ paths:
                   # Provided timestamp is invalid
                   # Provided amount in invalid
                   # Provided box nonce in invalid
-                example: invalid.transaction.signature, invalid.transaction.timestamp, invalid.transaction.value, invalid.box.nonce, invalid.json
+                example: 'bad.request' #invalid.transaction.signature, invalid.transaction.timestamp, invalid.transaction.value, invalid.box.nonce, invalid.json
 
   /transactions/unconfirmed:
     parameters:
@@ -919,7 +967,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: 127.0.0.1:5673
+              example: '127.0.0.1:5673'
       responses:
         '200':
           description: Attempt to connect to the peer
@@ -929,7 +977,7 @@ paths:
             text/plain; charset=UTF-8:
               schema:
                 type: string
-                example: invalid.peer.address, invalid.json
+                example: 'invalid.peer.address' #invalid.json
 
   /peers/blacklisted:
     get:
@@ -967,7 +1015,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+                example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
         default:
           description: Error
           content:
@@ -995,7 +1043,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+                example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
         default:
           description: Error
           content:
@@ -1015,7 +1063,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: 7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV
+              example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
       responses:
         '200':
           description: Base16-encoded 32 byte hash
@@ -1023,7 +1071,138 @@ paths:
             application/json:
               schema:
                 type: string
-                example: 6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ
+                example: '6QLZkR1RdHvF7gUw7oms1XdQM6kc9kxpmyHRADN5x7uQ'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/balances:
+    get:
+      summary: Get total amount of confirmed Ergo tokens and assets
+      operationId: walletBalances
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Get total amount of confirmed Ergo tokens and assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+
+  /wallet/balances/unconfirmed:
+    get:
+      summary: Get amount of unconfirmed Ergo tokens and assets
+      operationId: walletBalancesUnconfirmed
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Get amount of unconfirmed Ergo tokens and assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/addresses:
+    get:
+      summary: Get wallet addresses
+      operationId: walletAddresses
+      tags:
+      - wallet
+      responses:
+        '200':
+          description: String with encoded wallet addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/generate:
+    post:
+      summary: Generate a transaction from payment
+      operationId: walletTransactionGenerate
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad payment request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/payment:
+    post:
+      summary: Generate and send a transaction from payment
+      operationId: walletTransactionGenerateAndSend
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: Bad payment request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
         default:
           description: Error
           content:

@@ -5,7 +5,7 @@ import org.ergoplatform.utils.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._
-import scorex.core.ModifierId
+import scorex.util.ModifierId
 import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
 
 import scala.concurrent.duration._

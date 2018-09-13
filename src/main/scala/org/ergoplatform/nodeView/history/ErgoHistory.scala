@@ -13,7 +13,8 @@ import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStor
 import org.ergoplatform.settings._
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.{NetworkTimeProvider, ScorexLogging}
+import scorex.core.utils.NetworkTimeProvider
+import scorex.util.ScorexLogging
 
 import scala.util.Try
 

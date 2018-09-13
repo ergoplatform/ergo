@@ -39,6 +39,7 @@ trait HistorySpecification extends ErgoPropertyTest {
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
@@ -46,12 +47,13 @@ trait HistorySpecification extends ErgoPropertyTest {
       PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
-    val chainSettings = ChainSettings(blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme,
+    val walletSettings: WalletSettings = null
+    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme,
       settings.chainSettings.monetary)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, CacheSettings.default, scorexSettings)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block.Timestamp
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 

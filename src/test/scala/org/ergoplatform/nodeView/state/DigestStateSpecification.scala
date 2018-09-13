@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core._
@@ -32,12 +33,15 @@ class DigestStateSpecification extends ErgoPropertyTest {
   property("validate() - valid block") {
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
+    var parentOpt: Option[Header] = None
+
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
+      parentOpt = Some(block.header)
     }
   }
 

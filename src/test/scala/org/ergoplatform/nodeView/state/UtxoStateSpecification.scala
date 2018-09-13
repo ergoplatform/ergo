@@ -40,7 +40,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       us = us.applyModifier(block).get
 
       us.emissionBoxOpt should not be None
-      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.toSeq, TrueLeaf, us.constants.emission)
+      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == TrueLeaf).toSeq, TrueLeaf, us.constants.emission)
       us.validate(tx) shouldBe 'success
     }
   }

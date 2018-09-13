@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.mining.emission.EmissionRules
@@ -17,7 +18,7 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
-import sigmastate.Values.TrueLeaf
+import sigmastate.Values.{TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
@@ -54,6 +55,7 @@ trait ValidBlocksGenerators
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     val outBoxesLength = stateBoxesIn.length
+    var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
     def loop(stateBoxes: Seq[ErgoBox],
@@ -75,12 +77,14 @@ trait ValidBlocksGenerators
       val currentSize = acc.map(_.bytes.length).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
 
-      stateBoxes.find(_ == genesisEmissionBox) match {
+      stateBoxes.find(isEmissionBox) match {
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
-          // Extract money to anyoneCanSpend output and forget about emission box for tests
-          val tx = ErgoMiner.createCoinbase(Some(emissionBox), 0, Seq.empty, TrueLeaf, emission)
-          val remainedBoxes = stateBoxes.filter(_ != genesisEmissionBox)
-          val newSelfBoxes = selfBoxes ++ tx.outputs.filter(_.proposition == TrueLeaf)
+          // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
+          val height: Int = (emissionBox.additionalRegisters(R4).value.asInstanceOf[Long] + 1).toInt
+          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, TrueLeaf, emission)
+          val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
+          createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))
+          val newSelfBoxes = selfBoxes ++ tx.outputs.filter(b => !isEmissionBox(b))
           loop(remainedBoxes, newSelfBoxes, tx +: acc, rnd)
 
         case _ =>
@@ -101,7 +105,7 @@ trait ValidBlocksGenerators
             val totalAmount = (consumedSelfBoxes ++ stateBoxes).map(_.value).sum
             val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(outBoxesLength) + 1)
             val tx = new ErgoTransaction(inputs, outputs)
-            ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs)
+            ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
           }
       }
     }
@@ -109,10 +113,17 @@ trait ValidBlocksGenerators
     loop(stateBoxesIn, Seq.empty, Seq.empty, rnd)
   }
 
+  /**
+    * Simplified check that box is an emission box
+    */
+  private def isEmissionBox(box: ErgoBox): Boolean = box.proposition == genesisEmissionBox.proposition
+
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder,
                                      rnd: Random,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
-    val (boxes, drainedBh) = boxHolder.take(rnd.nextInt(txSizeLimit / 100) + 1)
+    val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
+    val (regularBoxes, drainedBh) = boxHolderWithoutEmission.take(rnd.nextInt(txSizeLimit / 100) + 1)
+    val boxes = emissionBox ++ regularBoxes
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)
     txs.foreach(_.statelessValidity.get)

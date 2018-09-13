@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.bench.misc.CrawlerConfig
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.utils.ScorexLogging
+import scorex.util.ScorexLogging
 
 class CrawlerActor(c: CrawlerConfig) extends Actor with ScorexLogging {
 

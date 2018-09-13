@@ -7,7 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.api.EmissionApiRoute
-import org.ergoplatform.mining.emission.CoinsEmission
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -21,7 +21,7 @@ class EmissionApiRouteSpec extends FlatSpec
   implicit val timeout = RouteTestTimeout(15.seconds.dilated)
 
   val ergoSettings = ErgoSettings.read(None)
-  val coinEmission = new CoinsEmission(ergoSettings.chainSettings.monetary)
+  val coinEmission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   val prefix = "/emission/at"
   val route = EmissionApiRoute(coinEmission, ergoSettings).route

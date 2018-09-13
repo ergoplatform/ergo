@@ -20,7 +20,7 @@ case class NodeViewTestConfig(stateType: StateType,
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,
-        PoPoWBootstrap = popowBootstrap
+        poPoWBootstrap = popowBootstrap
       )
     )
   }

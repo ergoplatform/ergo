@@ -40,14 +40,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
   override protected def validate(m: BlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId).map { header =>
-      val minimalHeight = m match {
-        case proofs: ADProofs if contains(header.transactionsId) =>
-          // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
-          -1
-        case _ => pruningProcessor.minimalFullBlockHeight
-      }
-
-      PayloadValidator.validate(m, header, minimalHeight).toTry
+      PayloadValidator.validate(m, header).toTry
     }.getOrElse(Failure(new RecoverableModifierError(s"Header for modifier $m is not defined")))
   }
 
@@ -89,7 +82,16 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
+    def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
+
+      // This should be lazy to evaluate AFTER isHeadersChainSynced check
+      lazy val minimalHeight = m match {
+        case proofs: ADProofs if contains(header.transactionsId) =>
+          // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
+          -1
+        case _ => pruningProcessor.minimalFullBlockHeight
+      }
+
       modifierSpecificValidation(m, header)
         .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")

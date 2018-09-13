@@ -47,7 +47,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   stateDir.mkdirs()
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
-  adjust(history)
+  allowToApplyOldBlocks(history)
   val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, emission, 1))
   log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
@@ -89,7 +89,11 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     }
   }
 
-  private def adjust(history: ErgoHistory): Unit = {
+  /**
+    * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
+    * first apply headers chain, and apply full blocks only after that
+    */
+  private def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
     val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])

@@ -77,6 +77,7 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success
     history.pruningProcessor.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1
+    history.pruningProcessor.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
     history.pruningProcessor.minimalFullBlockHeightVar = 0
 

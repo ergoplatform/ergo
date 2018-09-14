@@ -40,7 +40,7 @@ trait ToDownloadProcessor extends ScorexLogging {
   /** return Next `howMany` modifier ids satisfying `filter` condition our node should download
     * to synchronize full block chain with headers chain
     */
-  def nextModifiersToDownload(howMany: Int, contidion: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
+  def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
     def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
       if (acc.lengthCompare(howMany) >= 0) {
@@ -49,7 +49,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
           case Some(bestHeaderAtThisHeight) =>
             val toDownload = requiredModifiersForHeader(bestHeaderAtThisHeight)
-              .filter(m => contidion(m._2))
+              .filter(m => condition(m._2))
             continuation(height + 1, acc ++ toDownload)
           case None => acc
         }
@@ -57,7 +57,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     }
 
     bestFullBlockOpt match {
-      case _ if !isHeadersChainSynced =>
+      case _ if !isHeadersChainSynced || !config.verifyTransactions =>
         Seq.empty
       case Some(fb) =>
         continuation(fb.header.height + 1, Seq.empty)
@@ -74,7 +74,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
-    } else if (header.height >= pruningProcessor.minimalFullBlockHeight) {
+    } else if (isHeadersChainSynced && header.height >= pruningProcessor.minimalFullBlockHeight) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {

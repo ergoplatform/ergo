@@ -84,11 +84,11 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  ignore("on-chain box spending") {
+  property("on-chain box spending") {
     withFixture { implicit w =>
       val p2pk = getTrackedAddresses.head
       val genesisBlock = makeGenesisBlock(p2pk.script)
-
+      applyBlock(genesisBlock) shouldBe 'success
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
 
@@ -103,8 +103,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToReturn = randomInt(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
 
-      //throws java.lang.Exception: Key 0b00769ac389c8a3fdd457e4ddfcef4558105e6ec82e719b02d94750c1acf2db does not exist
-      val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+      val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx)) // throws Exception: Key ... does not exist
       applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       blocking(Thread.sleep(scanTime(spendingBlock)))
@@ -142,7 +141,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("on-chain rollback") {
+  property("on-chain spending rollback") {
     withFixture { implicit w =>
       val p2pk = getTrackedAddresses.head
       val genesisBlock = makeGenesisBlock(p2pk.script)

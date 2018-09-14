@@ -26,7 +26,7 @@ class WalletStorage extends ScorexLogging {
 
   private val registry = mutable.Map[ModifierId, TrackedBox]()
 
-  private val confirmedIndex = mutable.TreeMap[Height, Seq[ModifierId]]()
+  private val confirmedIndex = mutable.TreeMap[Height, Set[ModifierId]]()
 
   private val unspentBoxes = mutable.TreeSet[ModifierId]()
 
@@ -73,11 +73,11 @@ class WalletStorage extends ScorexLogging {
   }
 
   private def putToConfirmedIndex(height: Height, boxId: ModifierId): Unit = {
-    confirmedIndex.put(height, confirmedIndex.getOrElse(height, Seq.empty) :+ boxId)
+    confirmedIndex.put(height, confirmedIndex.getOrElse(height, Set.empty) + boxId)
   }
 
-  def confirmedAt(height: Height): Seq[ModifierId] = {
-    confirmedIndex.getOrElse(height, Seq.empty)
+  def confirmedAt(height: Height): Set[ModifierId] = {
+    confirmedIndex.getOrElse(height, Set.empty)
   }
 
   private var _confirmedBalance: Long = 0
@@ -150,7 +150,7 @@ class WalletStorage extends ScorexLogging {
   }
 
   def makeTransition(boxId: ModifierId, transition: Transition): Boolean = {
-    registry.get(boxId) exists { trackedBox =>
+    registry.get(boxId).exists { trackedBox =>
       val targetBox: Option[TrackedBox] = convertBox(trackedBox, transition)
       targetBox.foreach(register)
       targetBox.nonEmpty
@@ -179,9 +179,9 @@ class WalletStorage extends ScorexLogging {
     if (trackedBox.spendingStatus == Unspent) {
       log.info(s"New ${trackedBox.chainStatus} box arrived: " + trackedBox)
     }
-    if (trackedBox.chainStatus == Onchain) {
-      putToConfirmedIndex(trackedBox.creationHeight.get, trackedBox.boxId)
-    }
+    trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
+    trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
+
     if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
       increaseBalances(trackedBox)
     }

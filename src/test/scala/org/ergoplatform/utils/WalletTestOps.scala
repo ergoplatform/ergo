@@ -5,7 +5,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet}
+import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet, P2PKAddress}
 import org.ergoplatform.settings.ErgoSettings
 import sigmastate.{SBoolean, SLong}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
@@ -15,6 +15,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 trait WalletTestOps extends NodeViewBaseOps {
+
+  def emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
 
   override def initSettings: ErgoSettings = {
     val settings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
@@ -74,13 +76,20 @@ trait WalletTestOps extends NodeViewBaseOps {
                      addressToSpend: ErgoAddress,
                      balanceToReturn: Long = 0): ErgoTransaction = {
     val proof = ProverResult(addressToSpend.contentBytes, ContextExtension.empty)
-    val inputs = boxesToSpend.map(box => Input(box.id, proof))
+    makeSpendingTx(boxesToSpend, proof, balanceToReturn, addressToSpend.script)
+  }
+
+  def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
+                     proofToSpend: ProverResult,
+                     balanceToReturn: Long,
+                     scriptToReturn: Value[SBoolean.type]): ErgoTransaction = {
+    val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
     val spendingOutput = IndexedSeq(new ErgoBoxCandidate(balanceToSpend, TrueLeaf))
     val outputs = if (balanceToReturn == 0) {
       spendingOutput
     } else {
-      new ErgoBoxCandidate(balanceToReturn, addressToSpend.script) +: spendingOutput
+      new ErgoBoxCandidate(balanceToReturn, scriptToReturn) +: spendingOutput
     }
     ErgoTransaction(inputs.toIndexedSeq, outputs)
   }

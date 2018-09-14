@@ -6,9 +6,8 @@ import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
-import sigmastate.Values.ByteArrayConstant
+import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
 import sigmastate._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{Await, blocking}
 import scala.util.Random
@@ -21,8 +20,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("off-chain scan") {
     withFixture { implicit w =>
       val pubKey = getTrackedAddresses.head.script
-      val emptyProof = ProverResult(Array.emptyByteArray, ContextExtension(Map.empty))
-      val fakeInput = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProof))
+      val fakeInput = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
 
       val bs0 = getUnconfirmedBalances
       bs0.balance shouldBe 0
@@ -141,6 +139,52 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
+  property("on-chain rollback") {
+    withFixture { implicit w =>
+      val pubKey = getTrackedAddresses.head.script
+      val genesisBlock = makeGenesisBlock(TrueLeaf)
+      val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
+
+      applyBlock(genesisBlock) shouldBe 'success
+      val initialState = getCurrentState
+      val initialHeight = getHistory.heightOf(scorex.core.versionToId(initialState.version))
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val initialBalance = getConfirmedBalances.balance
+
+      val balance = randomInt(sum(boxesToSpend))
+      val spendingTx = makeSpendingTx(boxesToSpend, emptyProverResult, balance, pubKey)
+      val block = makeNextBlock(getUtxoState, Seq(spendingTx))
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(scanTime(block)))
+      val historyHeight = getHistory.headersHeight
+
+      val balanceBeforeRollback = getConfirmedBalances.balance
+      val unconfirmedBeforeRollback = getUnconfirmedBalances.balance
+
+      wallet.rollback(initialState.version)
+      blocking(Thread.sleep(100))
+      val balanceAfterRollback = getConfirmedBalances.balance
+      val unconfirmedAfterRollback = getUnconfirmedBalances.balance
+
+      log.info(s"Initial height: $initialHeight")
+      log.info(s"Initial balance: $initialBalance")
+      log.info(s"History height: $historyHeight")
+      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Unconfirmed balance: $unconfirmedBeforeRollback")
+      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Unconfirmed balance after rollback: $unconfirmedAfterRollback")
+
+      initialBalance shouldBe 0L
+
+      balanceBeforeRollback shouldBe balance
+      unconfirmedBeforeRollback shouldBe 0L
+
+      balanceAfterRollback shouldBe 0L
+      unconfirmedAfterRollback shouldBe balance
+    }
+  }
+
   property("on-chain spending rollback") {
     withFixture { implicit w =>
       val p2pk = getTrackedAddresses.head
@@ -155,9 +199,56 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
+      val spendingTx = makeSpendingTx(boxesToSpend, p2pk)
+      val block = makeNextBlock(getUtxoState, Seq(spendingTx))
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(scanTime(block)))
+      val historyHeight = getHistory.headersHeight
+
+      val balanceBeforeRollback = getConfirmedBalances.balance
+      val unconfirmedBeforeRollback = getUnconfirmedBalances.balance
+
+      wallet.rollback(initialState.version)
+      blocking(Thread.sleep(100))
+      val balanceAfterRollback = getConfirmedBalances.balance
+      val unconfirmedAfterRollback = getUnconfirmedBalances.balance
+
+      log.info(s"Initial height: $initialHeight")
+      log.info(s"Initial balance: $initialBalance")
+      log.info(s"Balance to spend: $sumBalance")
+      log.info(s"History height: $historyHeight")
+      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Unconfirmed balance: $unconfirmedBeforeRollback")
+      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Unconfirmed balance after rollback: $unconfirmedAfterRollback")
+
+      initialBalance shouldBe sumBalance
+
+      balanceBeforeRollback shouldBe 0L
+      unconfirmedBeforeRollback shouldBe 0L
+
+      balanceAfterRollback shouldBe initialBalance
+      unconfirmedAfterRollback shouldBe 0L
+    }
+  }
+
+  property("on-chain spending with return rollback") {
+    withFixture { implicit w =>
+      val p2pk = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(p2pk.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, p2pk.script)
+      val sumBalance = sum(boxesToSpend)
+
+      applyBlock(genesisBlock) shouldBe 'success
+      val initialState = getCurrentState
+      val initialHeight = getHistory.heightOf(scorex.core.versionToId(initialState.version))
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val initialBalance = getConfirmedBalances.balance
+
       val balanceToReturn = randomInt(sumBalance)
-      val tx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
-      val block = makeNextBlock(getUtxoState, Seq(tx))
+      val spendingTx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
+      val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight

@@ -84,11 +84,9 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
 
-      // This should be lazy to evaluate AFTER isHeadersChainSynced check
       lazy val minimalHeight = m match {
-        case proofs: ADProofs if contains(header.transactionsId) =>
-          // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
-          -1
+        // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
+        case proofs: ADProofs if contains(header.transactionsId) => -1
         case _ => pruningProcessor.minimalFullBlockHeight
       }
 

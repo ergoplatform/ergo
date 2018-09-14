@@ -83,13 +83,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
-
-      lazy val minimalHeight = m match {
-        // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
-        case proofs: ADProofs if contains(header.transactionsId) => -1
-        case _ => pruningProcessor.minimalFullBlockHeight
-      }
-
       modifierSpecificValidation(m, header)
         .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
@@ -100,13 +93,20 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(isHeadersChainSynced) {
           error("Headers chain is not synced yet")
         }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        .validate(isHistoryADProof(m, header) || shouldDownloadBlockAtHeight(header.height)) {
+          fatal(s"Too old modifier ${m.encodedId}: " +
+                s"${header.height} < ${pruningProcessor.minimalFullBlockHeight}")
         }
         .validate(!historyStorage.contains(m.id)) {
           error(s"Modifier ${m.encodedId} is already in history")
         }
         .result
+    }
+
+    private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
+      // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
+      case proofs: ADProofs if contains(header.transactionsId) => true
+      case _ => false
     }
 
     /**

@@ -12,19 +12,22 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = 0
 
-  /**
-    * Whether headers chain is synchronized with the network and full blocks could be downloaded.
+  /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
     * `true` if we estimate, that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 
-  /**
-    * Start height to download full blocks
+  /** Start height to download full blocks
     */
   def minimalFullBlockHeight: Int = minimalFullBlockHeightVar
 
-  /**
-    * Update minimal full block height and header chain synced flag
+  /** Check if headers chain is synchronized with the network and modifier is not too old
+    */
+  def shouldDownloadBlockAtHeight(height: Int): Boolean = {
+    isHeadersChainSynced && minimalFullBlockHeight <= height
+  }
+
+  /** Update minimal full block height and header chain synced flag
     *
     * @param header - header of new best full block
     * @return minimal height to process best full block

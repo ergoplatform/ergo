@@ -36,6 +36,7 @@ trait ToDownloadProcessor extends ScorexLogging {
   /** return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
+  def shouldDownloadBlockAtHeight(height: Int): Boolean = pruningProcessor.shouldDownloadBlockAtHeight(height)
 
   /** return Next `howMany` modifier ids satisfying `filter` condition our node should download
     * to synchronize full block chain with headers chain
@@ -74,7 +75,7 @@ trait ToDownloadProcessor extends ScorexLogging {
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
-    } else if (isHeadersChainSynced && header.height >= pruningProcessor.minimalFullBlockHeight) {
+    } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {

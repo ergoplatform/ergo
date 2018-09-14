@@ -162,8 +162,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
-      val confirmedBalance = getConfirmedBalances.balance
-      val unconfirmedBalance = getUnconfirmedBalances.balance
+
+      val balanceBeforeRollback = getConfirmedBalances.balance
+      val unconfirmedBeforeRollback = getUnconfirmedBalances.balance
 
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))
@@ -175,16 +176,18 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Balance to spend: $sumBalance")
       log.info(s"Balance to return $balanceToReturn")
       log.info(s"History height: $historyHeight")
-      log.info(s"Confirmed balance: $confirmedBalance")
-      log.info(s"Unconfirmed balance: $unconfirmedBalance")
+      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Unconfirmed balance: $unconfirmedBeforeRollback")
       log.info(s"Balance after rollback: $balanceAfterRollback")
       log.info(s"Unconfirmed balance after rollback: $unconfirmedAfterRollback")
 
       initialBalance shouldBe sumBalance
-      confirmedBalance should be > 0L
-      confirmedBalance shouldBe balanceToReturn
-      unconfirmedBalance shouldBe 0L
-      balanceAfterRollback shouldBe 0L
+
+      balanceBeforeRollback should be > 0L
+      balanceBeforeRollback shouldBe balanceToReturn
+      unconfirmedBeforeRollback shouldBe 0L
+
+      balanceAfterRollback shouldBe initialBalance
       unconfirmedAfterRollback shouldBe balanceToReturn
     }
   }

@@ -13,8 +13,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.network.Handshake
+import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
-import scorex.core.network.peer.PeerManager.ReceivableMessages.GetConnectedPeers
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
@@ -24,7 +24,7 @@ import scala.concurrent.duration._
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
 class ErgoStatsCollector(readersHolder: ActorRef,
-                         peerManager: ActorRef,
+                         networkController: ActorRef,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
   extends Actor with ScorexLogging {
@@ -34,7 +34,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.second, 10.second)(peerManager ! GetConnectedPeers)(context.system.dispatcher)
+    context.system.scheduler.schedule(10.second, 10.second)(networkController ! GetConnectedPeers)(context.system.dispatcher)
   }
 
 
@@ -141,20 +141,20 @@ object ErgoStatsCollector {
 
 object ErgoStatsCollectorRef {
   def props(readersHolder: ActorRef,
-            peerManager: ActorRef,
+            networkController: ActorRef,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoStatsCollector(readersHolder, peerManager, settings, timeProvider))
+    Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider))
 
-  def apply(readersHolder: ActorRef, peerManager: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
+  def apply(readersHolder: ActorRef, networkController: ActorRef, settings: ErgoSettings, timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, peerManager, settings, timeProvider))
+    system.actorOf(props(readersHolder, networkController, settings, timeProvider))
 
   def apply(name: String,
             readersHolder: ActorRef,
-            peerManager: ActorRef,
+            networkController: ActorRef,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, peerManager, settings, timeProvider), name)
+    system.actorOf(props(readersHolder, networkController, settings, timeProvider), name)
 }

@@ -20,8 +20,9 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
+import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers, GetConnectedPeers}
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -59,8 +60,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val ts2 = System.currentTimeMillis() + 100
 
   val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some("first")),
-    inetAddr2 -> PeerInfo(ts2, Some("second"))
+    inetAddr1 -> PeerInfo(ts1, Some(inetAddr1), Some("first"), None, Seq.empty),
+    inetAddr2 -> PeerInfo(ts2, Some(inetAddr2), Some("second"), None, Seq.empty)
   )
 
   val protocolVersion = Version("1.1.1")
@@ -74,7 +75,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class PeersManagerStub extends Actor {
     def receive = {
-      case GetConnectedPeers => sender() ! connectedPeers
       case GetAllPeers => sender() ! peers
       case GetBlacklistedPeers => sender() ! blacklistedPeers
     }
@@ -108,6 +108,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NetworkControllerStub extends Actor {
     def receive = {
+      case GetConnectedPeers => sender() ! connectedPeers
       case _ => println("hey")
     }
   }

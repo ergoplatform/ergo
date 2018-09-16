@@ -17,7 +17,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
-import scorex.core.utils.NetworkTime.Time
+import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.duration._

@@ -88,7 +88,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val genesisBlock = makeGenesisBlock(address.script)
       val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = sum(boxesToSpend)
-      applyBlock(genesisBlock)
+      applyBlock(genesisBlock) shouldBe 'success
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val unconfirmedBalance = getUnconfirmedBalances.balance
@@ -177,7 +177,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = sum(boxesToSpend)
       val initialState = getCurrentState
-      applyBlock(genesisBlock)
+      applyBlock(genesisBlock) shouldBe 'success
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val unconfirmedBalance = getUnconfirmedBalances.balance

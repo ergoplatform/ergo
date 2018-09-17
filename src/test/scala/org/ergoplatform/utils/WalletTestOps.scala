@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet, P2PKAddress}
 import org.ergoplatform.settings.ErgoSettings
 import sigmastate.{SBoolean, SLong}
@@ -55,6 +55,10 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]
 
+  def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] = {
+    getHistory.heightOf(scorex.core.versionToId(state.version))
+  }
+
   def makeGenesisBlock(script: Value[SBoolean.type])(implicit ctx: Ctx): ErgoFullBlock = {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script)))
   }
@@ -76,13 +80,13 @@ trait WalletTestOps extends NodeViewBaseOps {
                      addressToSpend: ErgoAddress,
                      balanceToReturn: Long = 0): ErgoTransaction = {
     val proof = ProverResult(addressToSpend.contentBytes, ContextExtension.empty)
-    makeSpendingTx(boxesToSpend, proof, balanceToReturn, addressToSpend.script)
+    makeTx(boxesToSpend, proof, balanceToReturn, addressToSpend.script)
   }
 
-  def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
-                     proofToSpend: ProverResult,
-                     balanceToReturn: Long,
-                     scriptToReturn: Value[SBoolean.type]): ErgoTransaction = {
+  def makeTx(boxesToSpend: Seq[ErgoBox],
+             proofToSpend: ProverResult,
+             balanceToReturn: Long,
+             scriptToReturn: Value[SBoolean.type]): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
     val spendingOutput = IndexedSeq(new ErgoBoxCandidate(balanceToSpend, TrueLeaf))

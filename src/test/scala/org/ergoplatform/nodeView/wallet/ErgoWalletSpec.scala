@@ -144,17 +144,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val pubKey = getTrackedAddresses.head.script
       val genesisBlock = makeGenesisBlock(TrueLeaf)
       val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
-
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHistory.heightOf(scorex.core.versionToId(initialState.version))
-      wallet.scanPersistent(genesisBlock)
-      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val initialHeight = getHeightOf(initialState)
       val initialBalance = getConfirmedBalances.balance
 
       val balance = randomInt(sum(boxesToSpend))
-      val spendingTx = makeSpendingTx(boxesToSpend, emptyProverResult, balance, pubKey)
-      val block = makeNextBlock(getUtxoState, Seq(spendingTx))
+      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, pubKey)
+      val block = makeNextBlock(getUtxoState, Seq(creationTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
@@ -194,7 +191,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHistory.heightOf(scorex.core.versionToId(initialState.version))
+      val initialHeight = getHeightOf(initialState)
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
@@ -241,7 +238,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHistory.heightOf(scorex.core.versionToId(initialState.version))
+      val initialHeight = getHeightOf(initialState)
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
@@ -282,7 +279,52 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("successfully generates a transaction") {
+  property("on-chain spending to off-chain rollback") {
+    withFixture { implicit w =>
+      val p2pk = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(TrueLeaf)
+      val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
+      applyBlock(genesisBlock) shouldBe 'success
+      val initialState = getCurrentState
+      val initialHeight = getHeightOf(initialState)
+
+      val balance = randomInt(sum(boxesToSpend))
+      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, p2pk.script)
+      val boxesCreated = boxesAvailable(creationTx, p2pk.script)
+      val balanceCreated = sum(boxesCreated)
+      val balanceToReturn = randomInt(balanceCreated)
+      val spendingTx = makeSpendingTx(boxesCreated, p2pk, balanceToReturn)
+      val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(scanTime(block)))
+      val historyHeight = getHistory.headersHeight
+
+      val balanceBeforeRollback = getConfirmedBalances.balance
+      val unconfirmedBeforeRollback = getUnconfirmedBalances.balance
+
+      wallet.rollback(initialState.version)
+      blocking(Thread.sleep(100))
+      val balanceAfterRollback = getConfirmedBalances.balance
+      val unconfirmedAfterRollback = getUnconfirmedBalances.balance
+
+      log.info(s"Initial height: $initialHeight")
+      log.info(s"Balance created: $balanceCreated")
+      log.info(s"History height: $historyHeight")
+      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Unconfirmed balance: $unconfirmedBeforeRollback")
+      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Unconfirmed balance after rollback: $unconfirmedAfterRollback")
+
+      balanceCreated shouldBe balance
+      balanceBeforeRollback shouldBe balanceToReturn
+      unconfirmedBeforeRollback shouldBe 0L
+
+      balanceAfterRollback shouldBe 0L
+      unconfirmedAfterRollback shouldBe balance + balanceToReturn
+    }
+  }
+
+  property("transaction generation") {
     withFixture { implicit w =>
       val pubKey = getTrackedAddresses.head.script
       val genesisBlock = makeGenesisBlock(pubKey)

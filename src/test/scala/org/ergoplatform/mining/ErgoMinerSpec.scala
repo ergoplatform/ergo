@@ -139,7 +139,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       system.terminate()
     }
 
-  it should "work correctly with 2 coinbase txs in pool" in new TestKit(ActorSystem()) {
+  it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
     val tmpDir = createTempDir
 
     type msgType = SemanticallySuccessfulModifier[_]

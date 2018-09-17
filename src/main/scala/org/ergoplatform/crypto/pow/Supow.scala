@@ -12,6 +12,12 @@ class Supow(secretsMap: Map[Int, PrivateKey],
 
   val prover: WagnerAlg = new WagnerAlg(k, group.p)
 
+  /**
+    * Using secrets from `secretsMap` and `message`, generates a sequence of pseudo-random numbers.
+    * Finds such `2^k` numbers, which sum is in range from 0 to finalH.
+    * Generates public solution from the private one.
+    *
+    */
   def prove(finalH: BigInt, message: Array[Byte]): Seq[PublicSolution] = {
     log.debug("Generate initial list")
     val initialMap: Map[Int, BigInt] = secretsMap.map { is =>
@@ -25,6 +31,12 @@ class Supow(secretsMap: Map[Int, PrivateKey],
     prover.prove(initialMap, finalH).map(pr => privateToPublic(pr, message, finalH, secretsMap))
   }
 
+  /**
+    * Verifies, that prover really found `2^k` numbers that uses `s.message` as a seed and
+    * sums to number from 0 to finalH.
+    * Also checks, that search was done via Wagners algorithm.
+    * TODO implement algorithm binding
+    */
   def verify(s: PublicSolution): Try[Unit] = Try {
     val publicKeys: Seq[ECPoint] = s.pairs.flatMap { p =>
       val pk0 = p._2

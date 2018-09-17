@@ -265,7 +265,7 @@ class WalletStorage extends ScorexLogging {
   /**
     * Handle a command to make this box "certain" (definitely hold by the user)
     *
-    * @return updated box
+    * @return updated box or None
     */
   def convertToCertain(trackedBox: TrackedBox): Option[TrackedBox] = {
     if (trackedBox.certainty == Certain) None else Some(trackedBox.copy(certainty = Certain))

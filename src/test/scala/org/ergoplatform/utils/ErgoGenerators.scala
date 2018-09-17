@@ -126,7 +126,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
 
-  def randomInt(maximum: Long): Int = {
-    if (maximum < Int.MaxValue) Random.nextInt(maximum.toInt) + 1 else Random.nextInt(Int.MaxValue - 1) + 1
+  /** Random long from 1 to maximum - 1
+    * @param maximum should be positive
+    */
+  def randomLong(maximum: Long): Long = {
+    if (maximum < 3) 1 else Math.abs(Random.nextLong()) % (maximum - 2) + 1
   }
+
 }

@@ -60,17 +60,17 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   property("off-chain box spending") {
     withFixture { implicit w =>
-      val p2pk = getTrackedAddresses.head
-      val tx = makeGenesisTx(p2pk.script)
+      val address = getTrackedAddresses.head
+      val tx = makeGenesisTx(address.script)
       wallet.scanOffchain(tx)
-      val boxesToSpend = boxesAvailable(tx, p2pk.script)
+      val boxesToSpend = boxesAvailable(tx, address.script)
       val balanceToSpend = sum(boxesToSpend)
       blocking(Thread.sleep(offchainScanTime(tx)))
       val unconfirmedBalance = getUnconfirmedBalances.balance
       unconfirmedBalance shouldEqual balanceToSpend
 
       val balanceToReturn = randomInt(balanceToSpend)
-      val spendingTx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx)))
 
@@ -82,16 +82,47 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
+  ignore("off-chain spending of the on-chain box") {
+    withFixture { implicit w =>
+      val address = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(address.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
+      val sumBalance = sum(boxesToSpend)
+      applyBlock(genesisBlock)
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val unconfirmedBalance = getUnconfirmedBalances.balance
+      val confirmedBalance = getConfirmedBalances.balance
+
+      val spendingTx = makeSpendingTx(boxesToSpend, address)
+      wallet.scanOffchain(spendingTx)
+      blocking(Thread.sleep(offchainScanTime(spendingTx)))
+      val confirmedAfterSpending = getConfirmedBalances.balance
+      val unconfirmedAfterSpending = getUnconfirmedBalances.balance
+
+      log.info(s"Sum balance: $sumBalance")
+      log.info(s"Balance before spending: $confirmedBalance")
+      log.info(s"Unconfirmed balance before spending: $unconfirmedBalance")
+      log.info(s"After spending before rollback: $confirmedAfterSpending")
+      log.info(s"Unconfirmed after spending before rollback: $unconfirmedAfterSpending")
+
+      confirmedBalance shouldBe sumBalance
+      unconfirmedBalance shouldBe 0L
+      confirmedAfterSpending shouldBe 0L //TODO: shouldBe sumBalance
+      unconfirmedAfterSpending shouldBe 0L
+    }
+  }
+
   property("on-chain box spending") {
     withFixture { implicit w =>
-      val p2pk = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(p2pk.script)
+      val address = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(address.script)
       applyBlock(genesisBlock) shouldBe 'success
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
 
       val confirmedBalance = getConfirmedBalances.balance
-      val boxesToSpend = boxesAvailable(genesisBlock, p2pk.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val balanceToSpend = sum(boxesToSpend)
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $balanceToSpend")
@@ -99,7 +130,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       confirmedBalance shouldBe balanceToSpend
 
       val balanceToReturn = randomInt(balanceToSpend)
-      val spendingTx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
 
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx)) // throws Exception: Key ... does not exist
       applyBlock(spendingBlock) shouldBe 'success
@@ -139,6 +170,44 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
+  ignore("off-chain spending rollback") {
+    withFixture { implicit w =>
+      val address = getTrackedAddresses.head
+      val genesisBlock =  makeGenesisBlock(address.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
+      val sumBalance = sum(boxesToSpend)
+      val initialState = getCurrentState
+      applyBlock(genesisBlock)
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val unconfirmedBalance = getUnconfirmedBalances.balance
+      val confirmedBalance = getConfirmedBalances.balance
+
+      val spendingTx = makeSpendingTx(boxesToSpend, address)
+      wallet.scanOffchain(spendingTx)
+      blocking(Thread.sleep(offchainScanTime(spendingTx)))
+      val confirmedAfterSpending = getConfirmedBalances.balance
+      val unconfirmedAfterSpending = getUnconfirmedBalances.balance
+      wallet.rollback(initialState.version)
+      val balanceAfterRollback = getConfirmedBalances.balance
+      val unconfirmedAfterRollback = getUnconfirmedBalances.balance
+
+      log.info(s"Sum balance: $sumBalance")
+      log.info(s"Balance before spending: $confirmedBalance")
+      log.info(s"Unconfirmed balance before spending: $unconfirmedBalance")
+      log.info(s"After spending before rollback: $confirmedAfterSpending")
+      log.info(s"Unconfirmed after spending before rollback: $unconfirmedAfterSpending")
+      log.info(s"After rollback: $unconfirmedAfterRollback")
+
+      confirmedBalance shouldBe sumBalance
+      unconfirmedBalance shouldBe 0L
+      confirmedAfterSpending shouldBe 0L //TODO: shouldBe sumBalance
+      unconfirmedAfterSpending shouldBe 0L
+      balanceAfterRollback shouldBe 0L //TODO:  shouldBe sumBalance
+      unconfirmedAfterRollback shouldBe 0L
+    }
+  }
+
   property("on-chain rollback") {
     withFixture { implicit w =>
       val pubKey = getTrackedAddresses.head.script
@@ -146,7 +215,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHeightOf(initialState)
       val initialBalance = getConfirmedBalances.balance
 
       val balance = randomInt(sum(boxesToSpend))
@@ -164,7 +232,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceAfterRollback = getConfirmedBalances.balance
       val unconfirmedAfterRollback = getUnconfirmedBalances.balance
 
-      log.info(s"Initial height: $initialHeight")
       log.info(s"Initial balance: $initialBalance")
       log.info(s"History height: $historyHeight")
       log.info(s"Confirmed balance: $balanceBeforeRollback")
@@ -184,19 +251,18 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   property("on-chain spending rollback") {
     withFixture { implicit w =>
-      val p2pk = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(p2pk.script)
-      val boxesToSpend = boxesAvailable(genesisBlock, p2pk.script)
+      val address = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(address.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = sum(boxesToSpend)
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHeightOf(initialState)
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
-      val spendingTx = makeSpendingTx(boxesToSpend, p2pk)
+      val spendingTx = makeSpendingTx(boxesToSpend, address)
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
@@ -210,7 +276,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceAfterRollback = getConfirmedBalances.balance
       val unconfirmedAfterRollback = getUnconfirmedBalances.balance
 
-      log.info(s"Initial height: $initialHeight")
       log.info(s"Initial balance: $initialBalance")
       log.info(s"Balance to spend: $sumBalance")
       log.info(s"History height: $historyHeight")
@@ -231,20 +296,19 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   property("on-chain spending with return rollback") {
     withFixture { implicit w =>
-      val p2pk = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(p2pk.script)
-      val boxesToSpend = boxesAvailable(genesisBlock, p2pk.script)
+      val address = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(address.script)
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = sum(boxesToSpend)
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHeightOf(initialState)
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
       val balanceToReturn = randomInt(sumBalance)
-      val spendingTx = makeSpendingTx(boxesToSpend, p2pk, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
@@ -258,7 +322,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceAfterRollback = getConfirmedBalances.balance
       val unconfirmedAfterRollback = getUnconfirmedBalances.balance
 
-      log.info(s"Initial height: $initialHeight")
       log.info(s"Initial balance: $initialBalance")
       log.info(s"Balance to spend: $sumBalance")
       log.info(s"Balance to return $balanceToReturn")
@@ -281,19 +344,18 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   property("on-chain spending to off-chain rollback") {
     withFixture { implicit w =>
-      val p2pk = getTrackedAddresses.head
+      val address = getTrackedAddresses.head
       val genesisBlock = makeGenesisBlock(TrueLeaf)
       val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      val initialHeight = getHeightOf(initialState)
 
       val balance = randomInt(sum(boxesToSpend))
-      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, p2pk.script)
-      val boxesCreated = boxesAvailable(creationTx, p2pk.script)
+      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, address.script)
+      val boxesCreated = boxesAvailable(creationTx, address.script)
       val balanceCreated = sum(boxesCreated)
       val balanceToReturn = randomInt(balanceCreated)
-      val spendingTx = makeSpendingTx(boxesCreated, p2pk, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesCreated, address, balanceToReturn)
       val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
@@ -307,7 +369,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceAfterRollback = getConfirmedBalances.balance
       val unconfirmedAfterRollback = getUnconfirmedBalances.balance
 
-      log.info(s"Initial height: $initialHeight")
       log.info(s"Balance created: $balanceCreated")
       log.info(s"History height: $historyHeight")
       log.info(s"Confirmed balance: $balanceBeforeRollback")

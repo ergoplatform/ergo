@@ -69,7 +69,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val unconfirmedBalance = getUnconfirmedBalances.balance
       unconfirmedBalance shouldEqual balanceToSpend
 
-      val balanceToReturn = randomInt(balanceToSpend)
+      val balanceToReturn = randomLong(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx)))
@@ -129,7 +129,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       confirmedBalance should be > 0L
       confirmedBalance shouldBe balanceToSpend
 
-      val balanceToReturn = randomInt(balanceToSpend)
+      val balanceToReturn = randomLong(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
 
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx)) // throws Exception: Key ... does not exist
@@ -217,7 +217,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialState = getCurrentState
       val initialBalance = getConfirmedBalances.balance
 
-      val balance = randomInt(sum(boxesToSpend))
+      val balance = randomLong(sum(boxesToSpend))
       val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, pubKey)
       val block = makeNextBlock(getUtxoState, Seq(creationTx))
       wallet.scanPersistent(block)
@@ -307,7 +307,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
-      val balanceToReturn = randomInt(sumBalance)
+      val balanceToReturn = randomLong(sumBalance)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
@@ -350,11 +350,11 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
 
-      val balance = randomInt(sum(boxesToSpend))
+      val balance = randomLong(sum(boxesToSpend))
       val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, address.script)
       val boxesCreated = boxesAvailable(creationTx, address.script)
       val balanceCreated = sum(boxesCreated)
-      val balanceToReturn = randomInt(balanceCreated)
+      val balanceToReturn = randomLong(balanceCreated)
       val spendingTx = makeSpendingTx(boxesCreated, address, balanceToReturn)
       val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
       wallet.scanPersistent(block)

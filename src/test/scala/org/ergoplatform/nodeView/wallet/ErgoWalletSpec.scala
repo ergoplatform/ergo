@@ -103,8 +103,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Sum balance: $sumBalance")
       log.info(s"Balance before spending: $confirmedBalance")
       log.info(s"Unconfirmed balance before spending: $unconfirmedBalance")
-      log.info(s"After spending before rollback: $confirmedAfterSpending")
-      log.info(s"Unconfirmed after spending before rollback: $unconfirmedAfterSpending")
+      log.info(s"After spending: $confirmedAfterSpending")
+      log.info(s"Unconfirmed after spending: $unconfirmedAfterSpending")
 
       confirmedBalance shouldBe sumBalance
       unconfirmedBalance shouldBe 0L

@@ -166,8 +166,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                          remainingCost: Long,
                          remainingSize: Long,
                          acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
-    mempoolTxs match {
-      case tx :: tail if remainingCost > ExpectedTxCost && remainingSize > ExpectedTxSize =>
+    mempoolTxs.headOption match {
+      case Some(tx) if remainingCost > ExpectedTxCost && remainingSize > ExpectedTxSize =>
         Try {
           // check, that transaction does not try to spend `idsToExclude`
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
@@ -177,10 +177,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
             // valid transaction with small enough computations
-            collectTxs(state, idsToExclude, tail, remainingCost - costConsumed, remainingSize - tx.size, tx +: acc)
+            collectTxs(state, idsToExclude, mempoolTxs.tail, remainingCost - costConsumed, remainingSize - tx.size,
+              tx +: acc)
           case _ =>
             // incorrect or too expensive transaction
-            collectTxs(state, idsToExclude, tail, remainingCost, remainingSize, acc)
+            collectTxs(state, idsToExclude, mempoolTxs.tail, remainingCost, remainingSize, acc)
         }
       case _ =>
         // enough transactions collected, exclude conflicting transactions and return

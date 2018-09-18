@@ -154,10 +154,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   /**
-    * @return subsequence of valid non-conflicting transactions from `mempoolTxs`
-    *         with total cost, that does not exceeds `remainingCost`
-    *         total size, that does not exceeds `remainingSize`
-    *         and that does not try to spend any of `idsToExclude`
+    * Return subsequence of valid non-conflicting transactions from `mempoolTxs`
+    * with total cost, that does not exceeds `remainingCost`
+    * total size, that does not exceeds `remainingSize`
+    * and that does not try to spend any of `idsToExclude`
     */
   @tailrec
   private def collectTxs(state: UtxoStateReader,

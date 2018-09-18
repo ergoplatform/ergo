@@ -10,8 +10,8 @@ import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -20,7 +20,7 @@ import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.util.ModifierId
 import sigmastate.SBoolean
@@ -28,6 +28,7 @@ import sigmastate.Values.{TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
@@ -87,7 +88,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     // wait for 1 block to be generated
     testProbe.expectMsgClass(newBlockDuration, newBlock)
 
-    // wait for mempool to contain 1000 transactions
+    @tailrec
     def loop(toSend: Int): Unit = {
       val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == prop)
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
@@ -98,7 +99,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
-        nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
+        // workaround to put tx in mempool without too much logs.
+        nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+          v.pool.put(tx)
+        }
       }
       if (toSend > toSpend.size) {
         Thread.sleep(1000)
@@ -106,7 +110,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       }
     }
 
+    // Generate and send `desiredSize` transactions to mempool
     loop(desiredSize)
+
+    pool.size should be > 10
 
     // wait for mempool to be cleaned
     while (pool.size > 0) {

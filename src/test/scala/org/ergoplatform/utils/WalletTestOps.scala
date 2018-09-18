@@ -5,7 +5,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet, P2PKAddress}
+import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet}
 import org.ergoplatform.settings.ErgoSettings
 import sigmastate.{SBoolean, SLong}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
@@ -89,12 +89,8 @@ trait WalletTestOps extends NodeViewBaseOps {
              scriptToReturn: Value[SBoolean.type]): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
-    val spendingOutput = IndexedSeq(new ErgoBoxCandidate(balanceToSpend, TrueLeaf))
-    val outputs = if (balanceToReturn == 0) {
-      spendingOutput
-    } else {
-      new ErgoBoxCandidate(balanceToReturn, scriptToReturn) +: spendingOutput
-    }
-    ErgoTransaction(inputs.toIndexedSeq, outputs)
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf)) else None
+    val creatingOutput = if (balanceToReturn > 0) Some(new ErgoBoxCandidate(balanceToReturn, scriptToReturn)) else None
+    ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }
 }

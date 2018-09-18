@@ -15,7 +15,7 @@ import scorex.util.ScorexLogging
 import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success}
 
 
 /**
@@ -73,11 +73,12 @@ class TransactionGenerator(viewHolder: ActorRef,
         }
       }
 
-    case txTry: Try[ErgoTransaction]@unchecked =>
-      txTry.foreach { tx =>
-        log.info("Locally generated tx: " + tx)
-        viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      }
+    case Success(tx: ErgoTransaction@unchecked) =>
+      log.info("Locally generated tx: " + tx)
+      viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+
+    case Failure(e) =>
+      log.info(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
   }

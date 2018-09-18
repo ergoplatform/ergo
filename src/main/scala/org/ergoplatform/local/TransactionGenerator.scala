@@ -7,15 +7,15 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
-import org.ergoplatform.nodeView.wallet.{ErgoAddressEncoder, ErgoWallet, Pay2SAddress, PaymentRequest}
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
+import scorex.util.ScorexLogging
 import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Random, Try}
-import scorex.util.ScorexLogging
 
 
 /**
@@ -31,8 +31,10 @@ import scorex.util.ScorexLogging
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
+  private val fee: Long = 100000
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
+  private var propositions: Seq[P2PKAddress] = Seq()
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
@@ -43,6 +45,7 @@ class TransactionGenerator(viewHolder: ActorRef,
 
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
         currentFullHeight = v.history.headersHeight
+        v.vault.publicKeys(0, 100).onComplete(_.foreach(pks => propositions = pks))
 
         context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
 
@@ -59,19 +62,14 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
 
     case Attempt =>
-      //todo: real prop, assets
+      //todo: assets
       transactionsPerBlock = transactionsPerBlock - 1
-      if (transactionsPerBlock >= 0) {
-        val newOutsCount = Random.nextInt(50) + 1
-        val newOuts = (1 to newOutsCount).map { _ =>
-          val value = Random.nextInt(50) + 1
-          val prop = if (Random.nextBoolean()) Values.TrueLeaf else Values.FalseLeaf
-
-          PaymentRequest(Pay2SAddress(prop), value, None, None)
-        }
-
+      if (transactionsPerBlock >= 0 && propositions.nonEmpty) {
+        val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+        val amountToPay = (Random.nextInt(10) + 1) * 100000000
+        val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          v.vault.generateTransaction(newOuts).onComplete(t => self ! t.flatten)
+          v.vault.generateTransaction(Seq(feeOut, paymentOut)).onComplete(t => self ! t.flatten)
         }
       }
 

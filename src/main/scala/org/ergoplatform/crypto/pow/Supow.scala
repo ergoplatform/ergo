@@ -10,7 +10,7 @@ import scala.util.Try
 class Supow(secretsMap: Map[Int, PrivateKey],
             val k: Int)(implicit hash: NumericHash) extends ScorexLogging {
 
-  val prover: WagnerAlg = new WagnerAlg(k, group.p)
+  val prover: WagnerAlg = new WagnerAlg(k, p)
 
   /**
     * Using secrets from `secretsMap` and `message`, generates a sequence of pseudo-random numbers.
@@ -44,10 +44,10 @@ class Supow(secretsMap: Map[Int, PrivateKey],
       Seq(pk0, pk1)
     }
     val rand: Seq[(ECPoint, BigInt)] = publicKeys.map(pk => pk -> pseudoRandom(s.message, pk))
-    val secretsSum = s.pairs.map(_._1).sum.mod(group.p)
+    val secretsSum = s.pairs.map(_._1).sum.mod(p)
     val XSum: BigInt = secretsSum - rand.map(_._2).sum
     val leftSide: ECPoint = publicKeys.reduce((a, b) => a.add(b))
-    val exp = (publicKeys.map(pk => pseudoRandom(s.message, pk)).sum + XSum).mod(group.p)
+    val exp = (publicKeys.map(pk => pseudoRandom(s.message, pk)).sum + XSum).mod(p)
     val rightSide: ECPoint = group.exponentiate(group.generator, exp.bigInteger)
     require(leftSide == rightSide, s"Incorrect pubkey solution: $leftSide == $rightSide")
   }
@@ -61,7 +61,7 @@ class Supow(secretsMap: Map[Int, PrivateKey],
     val pairs = secrets.grouped(2).map { s =>
       val s0 = s.head
       val s1 = s.last
-      val sum = (s0 + s1).mod(group.p)
+      val sum = (s0 + s1).mod(p)
       val p0 = group.exponentiate(group.generator, s0.bigInteger)
       (sum, p0)
     }.toSeq
@@ -82,7 +82,7 @@ object Supow {
   def apply(seedStr: String,
             size: Long,
             k: Int)(implicit hash: NumericHash): Supow = {
-    val secrets = (1L to size).map(i => BigInt(BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr).take(30))))
+    val secrets = (1L to size).map(i => BigInt(BigIntegers.fromUnsignedByteArray(Blake2b256.hash(i + seedStr))))
     new Supow(secrets.zipWithIndex.map(_.swap).toMap, k)
   }
 }

@@ -39,9 +39,9 @@ class SupowSpecification extends ErgoPropertyTest {
   }
 
   property("Supow should generate solution from random 2^k secrets if difficulty = 0") {
-    implicit val hash = new NumericHash(pow.group.p)
+    implicit val hash = new NumericHash(pow.p)
 
-    val finalH = pow.group.p
+    val finalH = pow.p
     val k = 2
 
     forAll { seed: String =>
@@ -55,9 +55,9 @@ class SupowSpecification extends ErgoPropertyTest {
   }
 
   property("Supow should generate valid solutions") {
-    implicit val hash = new NumericHash(pow.group.p)
+    implicit val hash = new NumericHash(pow.p)
 
-    val finalH = BigInt(pow.group.p) / 100000000
+    val finalH = pow.p / 100000000
     val k = 2
 
     forAll(Gen.choose(900, 1000)) { size: Int =>

@@ -11,6 +11,7 @@ package object pow {
   type SecretsSum = BigInt
 
   val group: BcDlogFp[EcPointType] = CryptoConstants.dlogGroup
+  val p: BigInt = group.q
 
   def genPk(s: PrivateKey): ECPoint = group.exponentiate(group.generator, s.bigInteger)
 

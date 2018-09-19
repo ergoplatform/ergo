@@ -34,22 +34,20 @@ class TransactionGenerator(viewHolder: ActorRef,
   private val fee: Long = 100000
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
-  private var propositions: Seq[P2PKAddress] = Seq()
+  @volatile private var propositions: Seq[P2PKAddress] = Seq()
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
 
   override def receive: Receive = {
     case StartGeneration =>
       log.info("Starting testing transactions generation, with maxTransactionsPerBlock = " + MaxTransactionsPerBlock)
+      context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
+      context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoFullBlock]])
 
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
         currentFullHeight = v.history.headersHeight
         v.vault.publicKeys(0, 100).onComplete(_.foreach(pks => propositions = pks))
-
-        context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
-
-        context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoFullBlock]])
       }
 
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if fb.isInstanceOf[ErgoFullBlock] =>

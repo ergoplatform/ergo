@@ -190,8 +190,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
       }
 
-    case r: ReadPublicKeys =>
-      sender() ! publicKeys.slice(r.from, r.until)
+    case ReadPublicKeys(from, until) =>
+      sender() ! publicKeys.slice(from, until)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))

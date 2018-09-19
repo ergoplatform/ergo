@@ -5,10 +5,11 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos
-import scorex.core._
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.util.Try

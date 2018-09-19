@@ -73,12 +73,39 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx)))
-
       val balanceAfterSpending = getUnconfirmedBalances.balance
+
       log.info(s"Unconfirmed balance: $unconfirmedBalance")
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
-      balanceAfterSpending shouldEqual (unconfirmedBalance - balanceToSpend + balanceToReturn)
+      balanceAfterSpending shouldEqual balanceToReturn
+    }
+  }
+
+  ignore("off-chain double spending") {
+    withFixture { implicit w =>
+      val address = getTrackedAddresses.head
+      val tx = makeGenesisTx(address.script)
+      wallet.scanOffchain(tx)
+      val boxesToSpend = boxesAvailable(tx, address.script)
+      val balanceToSpend = sum(boxesToSpend)
+      blocking(Thread.sleep(offchainScanTime(tx)))
+      val unconfirmedBalance = getUnconfirmedBalances.balance
+
+      val balanceToReturn = randomLong(balanceToSpend)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
+      val doubleSpendingTx = makeSpendingTx(boxesToSpend, address, randomLong(balanceToSpend))
+      wallet.scanOffchain(Seq(spendingTx, doubleSpendingTx))
+      wallet.scanOffchain(doubleSpendingTx)
+      blocking(Thread.sleep(offchainScanTime(tx) + offchainScanTime(doubleSpendingTx) * 2))
+      val balanceAfterSpending = getUnconfirmedBalances.balance
+
+      log.info(s"Unconfirmed balance: $unconfirmedBalance")
+      log.info(s"Balance to spent: $balanceToSpend")
+      log.info(s"Balance to return back: $balanceToReturn")
+      unconfirmedBalance shouldEqual balanceToSpend
+
+      balanceAfterSpending shouldEqual balanceToReturn
     }
   }
 
@@ -195,6 +222,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       blocking(Thread.sleep(offchainScanTime(spendingTx)))
       val confirmedAfterSpending = getConfirmedBalances.balance
       val unconfirmedAfterSpending = getUnconfirmedBalances.balance
+
       wallet.rollback(initialState.version)
       val balanceAfterRollback = getConfirmedBalances.balance
       val unconfirmedAfterRollback = getUnconfirmedBalances.balance
@@ -203,15 +231,16 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Balance before spending: $confirmedBalance")
       log.info(s"Unconfirmed balance before spending: $unconfirmedBalance")
       log.info(s"After spending before rollback: $confirmedAfterSpending")
-      log.info(s"Unconfirmed after spending before rollback: $unconfirmedAfterSpending")
-      log.info(s"After rollback: $unconfirmedAfterRollback")
+      log.info(s"Unconfirmed balance after spending before rollback: $unconfirmedAfterSpending")
+      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Unconfirmed balance after rollback: $unconfirmedAfterRollback")
 
       confirmedBalance shouldBe sumBalance
       unconfirmedBalance shouldBe 0L
       confirmedAfterSpending shouldBe 0L
       unconfirmedAfterSpending shouldBe balanceToReturn
       balanceAfterRollback shouldBe 0L
-      unconfirmedAfterRollback shouldBe balanceToReturn // This looks strange, I know, but currently that's what we have
+      unconfirmedAfterRollback shouldBe balanceToReturn // This looks strange I know, but currently that's what we have
     }
   }
 

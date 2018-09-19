@@ -93,7 +93,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(isHeadersChainSynced) {
           error("Headers chain is not synced yet")
         }
-        .validate(isHistoryADProof(m, header) || shouldDownloadBlockAtHeight(header.height)) {
+        .validate(isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
           fatal(s"Too old modifier ${m.encodedId}: " +
                 s"${header.height} < ${pruningProcessor.minimalFullBlockHeight}")
         }
@@ -105,7 +105,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
       // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
-      case proofs: ADProofs if contains(header.transactionsId) => true
+      case _: ADProofs if contains(header.transactionsId) => true
       case _ => false
     }
 

@@ -1,29 +1,28 @@
 package org.ergoplatform.nodeView.history
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistorySpecification
-import scorex.util.ModifierId
-import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
+import scorex.util.ModifierId
 
 class BlockSectionValidationSpecification extends HistorySpecification {
 
   property("BlockTransactions validation") {
-    var (history, block) = init()
+    val (history, block) = init()
     commonChecks(history, block.blockTransactions, block.header)
   }
 
   property("ADProofs validation") {
-    var (history, block) = init()
+    val (history, block) = init()
     commonChecks(history, block.adProofs.get, block.header)
   }
 
   property("Extension validation") {
-    var (history, block) = init()
+    val (history, block) = init()
 
     val header = block.header
     val extension = block.extension
@@ -79,7 +78,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     history.pruningProcessor.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1
     history.pruningProcessor.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
-    history.pruningProcessor.minimalFullBlockHeightVar = 0
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success

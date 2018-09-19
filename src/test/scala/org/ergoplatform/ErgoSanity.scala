@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
 import org.scalacheck.Gen
 import scorex.core.settings.NetworkSettings
@@ -55,11 +55,11 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
     DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
       Constants.InitialNBits,
-      ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
-      Digest32 @@ Array.fill(hashLength)(0.toByte),
-      Digest32 @@ Array.fill(hashLength)(0.toByte),
+      ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Digest32 @@ Array.fill(hashLength)(0.toByte)
+      Digest32 @@ Array.fill(HashLength)(0.toByte)
     ).get
   }
 

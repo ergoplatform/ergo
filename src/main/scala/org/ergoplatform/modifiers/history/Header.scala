@@ -99,7 +99,7 @@ object Header {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
-  lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.hashLength)(0: Byte))
+  lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 
   implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
     Map(

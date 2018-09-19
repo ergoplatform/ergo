@@ -1,7 +1,8 @@
 package org.ergoplatform.modifiers
 
 import org.ergoplatform.settings.Algos
-import scorex.core._
+import scorex.core.ModifierTypeId
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.hash.Digest32
 
 /**

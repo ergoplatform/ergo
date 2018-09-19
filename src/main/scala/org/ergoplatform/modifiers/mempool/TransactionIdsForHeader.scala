@@ -5,9 +5,10 @@ import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.Algos
-import scorex.core._
+import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.core.serialization.Serializer
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
 

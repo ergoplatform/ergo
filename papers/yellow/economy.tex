@@ -3,11 +3,11 @@
 We outline 2 properties required for a long-term survivability of the chain:
 
 \begin{itemize}
-    \item{} Coins which no one can spent (e.g. because keys are lost)
-    should be returned into circullation. Otherwise, after the end of the initial coins emission, amount of the coins
+    \item{} Coins with lost keys should be returned into circullation.
+    Otherwise, after the end of the initial coins emission, amount of the coins
     in the circullation always decreases and will eventually reach 0.
     \item{} Nothing should be kept in the state forever and for free.
-    Otherwise, the size of the state is always increasing in the the long, reducing clients performance
+    Otherwise, the size of the state is always increasing, reducing clients performance
     and thus increasing requirements to run a client.
 \end{itemize}
 
@@ -15,30 +15,27 @@ To achieve this, we propose the following modifications to the consensus rules.
 Register $R2$ of the box will contain tuple $(tx\_id, out\_num,
 last\_height)$. $last\_height$ field is used to determine the block height
 at the moment of transaction generation. Transaction can only be put in the
-block of height $h$ if for every created box $h - max\_drift < R2.last\_height < h$.
+block of height $h$ if for every created box $R2.last\_height < h$.
 
 Once the subsidized period for the box ends (that is,
-$current\_block\_height \ge R2.last\_height + SP$), anyone can
+$current\_block\_height \ge R2.last\_height + SP$), anyone (presumably a miner) can
 create the new box with the exactly the same content (including the guarding
 script) except the monetary value and $R2$ content. The monetary value is
-reduced by no more $K \cdot B$, where $B$ is the box size and $K$ is the storage cost of one byte.
-Thus, at most $K \cdot B$ coins are to be paid to a miner.
+reduced by $K \cdot B$, where $B$ is the box size and $K$ is the storage cost of one byte.
+Thus, $K \cdot B$ coins are to be paid to the miner.
 If box value is less that $K \cdot B$, all box content including tokens goes to miner.
-
-%$last\_height$ is replaced with the new height that is at least
-%$current\_block\_height - max\_drift$, so that the subsidized period starts over.
+$R2.tx\_id$ and $R2.out\_num$ content of created box should contain correct transaction id
+and index, while $R2.last\_height$ should be set to $R2.last\_height$ of spending box
+plus $SP$, to ensure that subsidized period starts over.
 
 We propose the following concrete parameters:
 \begin{itemize}
     \item{} $K$ - cost of storage of 1 byte of data in a State for 1 block.
     Should be determined by miner votes, $10^{-6} (Ergo/byte)$ by default.
-    \item{} $max\_drift$ - maximum amount of time difference between transaction
-    creation and its inclusion into the blockchain.
-    It is predefined constant $max\_drift = 2016 = 3$ days.
     \item{} $SP$ - number of blocks, box can be stored in a State for free untouched.
     Since Ergo have tokens as a first-class citizens, it might be possible that tokens value
     sufficiently exceed Ergo value in a box, thus $SP$ should be big enough to protect users
     that only keep tokens in their boxes.
     However, $SP$ should not exceed emission length to reward miners.
-    It is predefined $SP = 2102400 = 8$ years.
+    It is predefined $SP = 1051200 = 4$ years.
 \end{itemize}

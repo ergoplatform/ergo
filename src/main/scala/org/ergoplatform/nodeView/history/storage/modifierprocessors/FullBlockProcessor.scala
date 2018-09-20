@@ -47,7 +47,9 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   protected def isValidFirstFullBlock(header: Header): Boolean = {
-    header.height == pruningProcessor.minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
+    pruningProcessor.isHeadersChainSynced &&
+      header.height == pruningProcessor.minimalFullBlockHeight &&
+      bestFullBlockIdOpt.isEmpty
   }
 
   private def processValidFirstBlock: BlockProcessing = {

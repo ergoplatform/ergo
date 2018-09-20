@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "1.6.0-SNAPSHOT",
+  version := "1.6.1-SNAPSHOT",
   scalaVersion := "2.12.6",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",

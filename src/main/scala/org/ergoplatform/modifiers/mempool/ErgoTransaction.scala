@@ -78,7 +78,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statelessValidity: Try[Unit] = validateStateless.toTry
 
-  /** Stateless transaction validation with result returned as [[ValidationResult]]
+  /** Stateless transaction validation with result returned as `ValidationResult`
     * to accumulate further validation results
     */
   def validateStateless: ValidationResult[Unit] = {

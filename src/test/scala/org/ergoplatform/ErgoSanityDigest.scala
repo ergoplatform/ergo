@@ -11,13 +11,14 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
 
-class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
+class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] with ErgoTestHelpers {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
@@ -75,8 +76,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
-      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Some(peers.head._2))
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

@@ -15,6 +15,7 @@ case class ModeFeature(stateType: StateType,
                        popowBootstrapping: Boolean,
                        popowSuffix: Int,
                        blocksToKeep: Int) extends PeerFeature {
+  override type M = ModeFeature
 
   override val featureId: Id = 16: Byte
 
@@ -22,9 +23,8 @@ case class ModeFeature(stateType: StateType,
 
   def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
 
-  override def serializer: Serializer[PeerFeature] = new Serializer[PeerFeature] {
-    override def toBytes(pf: PeerFeature): Array[Id] = {
-      val mf = pf.asInstanceOf[ModeFeature] //todo: fix!
+  override def serializer: Serializer[ModeFeature] = new Serializer[ModeFeature] {
+    override def toBytes(mf: ModeFeature): Array[Id] = {
 
       val stateTypeByte = mf.stateType.stateTypeCode
       val verifyingTransactionsByte = booleanToByte(mf.verifyingTransactions)

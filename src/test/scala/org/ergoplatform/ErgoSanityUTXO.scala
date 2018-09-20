@@ -10,12 +10,13 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
 
-class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
+class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
 
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
 
@@ -67,8 +68,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
-      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Some(peers.head._2))
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

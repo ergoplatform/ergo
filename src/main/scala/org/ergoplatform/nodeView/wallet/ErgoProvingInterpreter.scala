@@ -74,7 +74,7 @@ class ErgoProvingInterpreter(seed: String,
               ContextExtension.empty)
 
           prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
-            val newTC = totalCost + proverResult.asInstanceOf[CostedProverResult].cost
+            val newTC = totalCost + proverResult.cost
             if (newTC > maxCost) {
               Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
             } else {
@@ -83,7 +83,7 @@ class ErgoProvingInterpreter(seed: String,
           }
         }
     }.map { case (inputs, _) =>
-      ErgoTransaction(inputs, unsignedTx.outputCandidates)
+      ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
     }
   }.flatten
 }

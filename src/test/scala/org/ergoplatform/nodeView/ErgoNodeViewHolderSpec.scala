@@ -73,7 +73,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, fixture.settings).applyModifier(genesis).get
     applyBlock(genesis) shouldBe 'success
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -103,7 +103,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, fixture.settings).applyModifier(genesis).get
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
@@ -151,7 +151,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, fixture.settings).applyModifier(genesis).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
@@ -199,7 +199,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, fixture.settings).applyModifier(genesis).get
     applyBlock(genesis) shouldBe 'success
 
     val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -219,7 +219,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, fixture.settings).applyModifier(genesis).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)

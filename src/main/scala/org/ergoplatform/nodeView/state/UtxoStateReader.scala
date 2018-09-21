@@ -24,9 +24,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
-  override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
-    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))
-
   /**
     *
     * @param fb - ergo full block

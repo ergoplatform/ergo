@@ -170,6 +170,8 @@ object DigestState extends ScorexLogging with ScorexEncoding {
             .update(version, rootHash, Seq()).get //sync store
         }
         state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
+      case (None, None) if store.lastVersionID.isEmpty =>
+        ErgoState.generateGenesisDigestState(dir, settings)
       case (None, None) =>
         val version = bytesToVersion(store.lastVersionID.get.data)
         val rootHash = store.get(Algos.versionToBAW(version)).get.data

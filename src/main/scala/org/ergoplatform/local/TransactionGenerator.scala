@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.util.ScorexLogging
 import sigmastate.Values
 
@@ -42,6 +42,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   override def receive: Receive = {
     case StartGeneration =>
       log.info("Starting testing transactions generation, with maxTransactionsPerBlock = " + MaxTransactionsPerBlock)
+      context.system.eventStream.subscribe(self, classOf[FailedTransaction[ErgoTransaction]])
       context.system.eventStream.subscribe(self, classOf[SuccessfulTransaction[ErgoTransaction]])
       context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoFullBlock]])
 
@@ -79,6 +80,12 @@ class TransactionGenerator(viewHolder: ActorRef,
       log.info(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
+
+    case FailedTransaction(tx: ErgoTransaction@unchecked, e) =>
+      if (tx.outputs.exists(s => propositions.contains(s.proposition))) {
+        log.warn("Failed tocally generated tx: " + tx, e)
+        self ! Attempt
+      }
   }
 }
 

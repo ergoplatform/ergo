@@ -43,7 +43,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
   private implicit val addressEncoder = ErgoAddressEncoder(settings)
-  private val publicKeys = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+  private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
@@ -191,7 +191,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       }
 
     case ReadPublicKeys(from, until) =>
-      publicKeys.slice(from, until)
+      sender() ! publicKeys.slice(from, until)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -208,6 +208,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(payTo) =>
       sender() ! generateTransactionWithOutputs(payTo)
+
+    case m =>
+      log.warn(s"Got unhandled message $m")
   }
 }
 

@@ -12,7 +12,7 @@ import scala.concurrent.ExecutionContext
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
   */
-class NodeViewFixture(protoSettings: ErgoSettings, val testName: String = "") extends NodeViewTestContext {
+class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext { self =>
 
   implicit val actorSystem: ActorSystem = ActorSystem()
   implicit val executionContext: ExecutionContext = actorSystem.dispatchers.lookup("scorex.executionContext")
@@ -21,15 +21,15 @@ class NodeViewFixture(protoSettings: ErgoSettings, val testName: String = "") ex
   private val fileUtils = new scorex.testkit.utils.FileUtils {}
   val nodeViewDir: java.io.File = fileUtils.createTempDir
   @volatile var settings: ErgoSettings = protoSettings.copy(directory = nodeViewDir.getAbsolutePath)
-  private val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
-  private val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
+  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
+  val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
   @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings, timeProvider, emission)
   val testProbe = new TestProbe(actorSystem)
 
   /** This sender should be imported to make TestProbe work! */
   implicit val defaultSender: ActorRef = testProbe.testActor
 
-  def apply[T](test: NodeViewFixture => T): T = try test(this) finally stop()
+  def apply[T](test: self.type => T): T = try test(self) finally stop()
 
   def startNodeViewHolder(): Unit = {
     nodeViewHolderRef = ErgoNodeViewRef(settings, timeProvider, emission)
@@ -39,6 +39,7 @@ class NodeViewFixture(protoSettings: ErgoSettings, val testName: String = "") ex
     actorSystem.stop(nodeViewHolderRef)
   }
 
+  /** Restarts nodeViewHolder and applies config override */
   def updateConfig(settingsOverride: ErgoSettings => ErgoSettings): Unit = {
     stopNodeViewHolder()
     settings = settingsOverride(settings)

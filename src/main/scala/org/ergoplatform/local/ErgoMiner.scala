@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{R4, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -21,12 +21,13 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.util.ScorexLogging
 import scorex.crypto.hash.Digest32
+import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -47,6 +48,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
+  // cost of a regular transaction with one proveDlog input
+  private val ExpectedTxCost: Int = 10000
+  // size of a regular transaction with input and 2 outputs.
+  private val ExpectedTxSize: Int = 150
 
   private var publicKeyOpt: Option[P2PKAddress] = None
 
@@ -148,6 +153,42 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
+  /**
+    * Return subsequence of valid non-conflicting transactions from `mempoolTxs`
+    * with total cost, that does not exceeds `remainingCost`
+    * total size, that does not exceeds `remainingSize`
+    * and that does not try to spend any of `idsToExclude`
+    */
+  @tailrec
+  private def collectTxs(state: UtxoStateReader,
+                         idsToExclude: Seq[BoxId],
+                         mempoolTxs: Iterable[ErgoTransaction],
+                         remainingCost: Long,
+                         remainingSize: Long,
+                         acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    mempoolTxs.headOption match {
+      case Some(tx) if remainingCost > ExpectedTxCost && remainingSize > ExpectedTxSize =>
+        Try {
+          // check, that transaction does not try to spend `idsToExclude`
+          require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
+        }.flatMap { _ =>
+          // check validity and calculate transaction cost
+          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
+        } match {
+          case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
+            // valid transaction with small enough computations
+            collectTxs(state, idsToExclude, mempoolTxs.tail, remainingCost - costConsumed, remainingSize - tx.size,
+              tx +: acc)
+          case _ =>
+            // incorrect or too expensive transaction
+            collectTxs(state, idsToExclude, mempoolTxs.tail, remainingCost, remainingSize, acc)
+        }
+      case _ =>
+        // enough transactions collected, exclude conflicting transactions and return
+        fixTxsConflicts(acc)
+    }
+  }
+
   private def createCandidate(minerProp: Value[SBoolean.type],
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
@@ -155,23 +196,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    // todo: size should be chosen by miners votes. fix after voting implementation
-    val maxBlockSize = 512 * 1024 // honest miner is generating a block of no more than 512Kb
-    var totalSize = 0
-    val emissionBox = state.emissionBoxOpt
-    val externalTransactions = state
-      .filterValid(pool.unconfirmed.values.toSeq)
-      .filter(tx => !emissionBox.exists(eb => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, eb.id))))
-      .takeWhile { tx =>
-        totalSize = totalSize + tx.bytes.length
-        totalSize <= maxBlockSize
-      }
-
-    //we also filter transactions which are trying to spend the same box. Currently, we pick just the first one
-    //of conflicting transaction. Another strategy is possible(e.g. transaction with highest fee)
-    //todo: move this logic to MemPool.put? Problem we have now is that conflicting transactions are still in
-    // the pool
-    val txsNoConflict = fixTxsConflicts(externalTransactions)
+    val txsNoConflict = collectTxs(state,
+      state.emissionBoxOpt.map(_.id).toSeq,
+      pool.unconfirmed.values,
+      Constants.MaxBlockCost - Constants.CoinbaseTxCost,
+      Constants.MaxBlockSize,
+      Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
     val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)

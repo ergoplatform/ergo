@@ -61,7 +61,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val desiredSize: Int = ((Constants.MaxBlockCost / Cost.Dlog) * 2).toInt
     val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
+    private val prover = new ErgoProvingInterpreter("test1",
+      settings.walletSettings.dlogSecretsNumber,
+      addressPrefix = ergoSettings.chainSettings.addressPrefix)
     val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)

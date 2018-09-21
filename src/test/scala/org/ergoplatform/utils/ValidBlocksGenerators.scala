@@ -18,7 +18,7 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
@@ -27,10 +27,12 @@ import scala.util.{Random, Try}
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  lazy val settings: ErgoSettings = ErgoSettings.read(None)
+  lazy val settings: ErgoSettings = initSettings
   lazy val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
   lazy val stateConstants: StateConstants = StateConstants(None, emission, 200)
+
+  def initSettings: ErgoSettings = ErgoSettings.read(None)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(nodeViewHolderRef, emission, 200))
@@ -50,7 +52,7 @@ trait ValidBlocksGenerators
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
-
+  /** @param sizeLimit maximum transactions size in bytes */
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
@@ -118,6 +120,7 @@ trait ValidBlocksGenerators
     */
   private def isEmissionBox(box: ErgoBox): Boolean = box.proposition == genesisEmissionBox.proposition
 
+  /** @param txSizeLimit maximum transactions size in bytes */
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder,
                                      rnd: Random,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {

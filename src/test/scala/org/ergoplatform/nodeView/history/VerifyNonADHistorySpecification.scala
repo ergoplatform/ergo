@@ -14,7 +14,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
   property("block sections application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
-    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (!history.pruningProcessor.isHeadersChainSynced) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
@@ -43,7 +43,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt.get shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
-    if (history.pruningProcessor.minimalFullBlockHeight == Int.MaxValue) {
+    if (!history.pruningProcessor.isHeadersChainSynced) {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
 

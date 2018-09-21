@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Actor
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -37,7 +38,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   //todo: pass as a class argument, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector
 
-  private val prover = new ErgoProvingInterpreter(seed, settings.walletSettings.dlogSecretsNumber)
+  private val prover = new ErgoProvingInterpreter(seed,
+    settings.walletSettings.dlogSecretsNumber,
+    settings.chainSettings.addressPrefix)
 
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
@@ -61,8 +64,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf))
       )
 
+      val contextMetadata = Metadata(settings.chainSettings.addressPrefix)
       val context =
-        ErgoLikeContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx, box, ContextExtension.empty)
+        ErgoLikeContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx, box, contextMetadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>

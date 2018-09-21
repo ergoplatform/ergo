@@ -40,7 +40,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val history = applyChain(generateHistory(), chain)
 
   lazy val state = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
     }
   }.sample.get
@@ -130,7 +130,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def seed = "walletstub"
 
     private implicit val addressEncoder = new ErgoAddressEncoder(settings)
-    private val prover = new ErgoProvingInterpreter(seed, 2)
+    private val prover = new ErgoProvingInterpreter(seed, 2,
+      addressPrefix = settings.chainSettings.addressPrefix)
     private val trackedAddresses: mutable.Buffer[ErgoAddress] =
       mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 

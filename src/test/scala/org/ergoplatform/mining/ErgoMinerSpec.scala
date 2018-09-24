@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
@@ -58,7 +58,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((Constants.MaxBlockCost / Cost.Dlog) * 2).toInt
+    val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
     val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
     private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)

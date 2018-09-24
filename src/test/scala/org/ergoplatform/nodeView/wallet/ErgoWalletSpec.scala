@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils._
@@ -19,6 +20,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
+  private val interpreterMetadata = Metadata(settings.chainSettings.addressPrefix)
+
 
   property("Generate transaction with multiple inputs") {
     withFixture { implicit w =>
@@ -34,7 +37,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx = Await.result(wallet.generateTransaction(requests), awaitDuration).get
       val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(_.id sameElements i.boxId).get)
-      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, context, interpreterMetadata) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success
@@ -45,7 +48,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx2 = Await.result(wallet.generateTransaction(requests2), awaitDuration).get
       val context2 = ErgoStateContext(block.header.height, block.header.stateRoot)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(_.id sameElements i.boxId).get)
-      tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
+      tx2.statefulValidity(boxesToSpend2, context2, interpreterMetadata) shouldBe 'success
     }
   }
 

@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
@@ -82,7 +82,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         tx.statefulValidity(boxesToSpend, stateContext).get
       }.sum
 
-      if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+      if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
       persistentProver.synchronized {
 

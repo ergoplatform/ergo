@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -199,8 +199,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val txsNoConflict = collectTxs(state,
       state.emissionBoxOpt.map(_.id).toSeq,
       pool.unconfirmed.values,
-      Constants.MaxBlockCost - Constants.CoinbaseTxCost,
-      Constants.MaxBlockSize,
+      Parameters.MaxBlockCost - Constants.CoinbaseTxCost,
+      Parameters.MaxBlockSize,
       Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)

@@ -11,20 +11,20 @@ We outline following two properties required for long-term survivability of the 
 \end{itemize}
 
 To achieve this, we propose the following modifications to the consensus rules.
-Register $R2$ of the box will contain tuple $(tx\_id, out\_num,
+Register $R3$ of the box will contain tuple $(tx\_id, out\_num,
 last\_height)$. $last\_height$ field is used to determine the block height
 at the moment of transaction generation. Transaction can only be put in the
-block of height $h$ if for every created box $R2.last\_height < h$.
+block of height $h$ if for every created box $R3.last\_height < h$.
 
 Once the subsidized period for the box ends (that is,
-$current\_block\_height \ge R2.last\_height + SP$), anyone (presumably a miner) can
+$current\_block\_height \ge R3.last\_height + SP$), anyone (presumably a miner) can
 create the new box with the exactly the same content (including the guarding
-script) except the monetary value and $R2$ content. The monetary value is
+script) except the monetary value and $R3$ content. The monetary value is
 reduced by $K \cdot B$, where $B$ is the box size and $K$ is the storage cost of one byte.
 Thus, $K \cdot B$ coins are to be paid to the miner.
 If box value is less that $K \cdot B$, all box content including tokens goes to miner.
-$R2.tx\_id$ and $R2.out\_num$ content of created box should contain correct transaction id
-and index, while $R2.last\_height$ should be set to $R2.last\_height$ of spending box
+$R3.tx\_id$ and $R3.out\_num$ content of created box should contain correct transaction id
+and index, while $R3.last\_height$ should be set to $R3.last\_height$ of spending box
 plus $SP$, to ensure that subsidized period starts over.
 
 We propose the following concrete parameters:

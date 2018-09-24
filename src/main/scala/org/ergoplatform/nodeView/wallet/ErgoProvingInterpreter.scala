@@ -6,7 +6,7 @@ import java.util
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.SigmaProtocolPrivateInput
@@ -35,7 +35,7 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Constants.MaxBlockCost)
+                             override val maxCost: Long = Parameters.MaxBlockCost)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")

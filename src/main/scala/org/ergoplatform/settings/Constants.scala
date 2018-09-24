@@ -9,6 +9,18 @@ import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 
 
+object Parameters {
+  // Max total computation cost of a block.
+  val MaxBlockCost: Long = 1000000
+
+  // Max size of transactions section of a block.
+  val MaxBlockSize: Int = 512 * 1024
+
+  // Cost of storing 1 byte per block
+  // 10^-6 Ergo = 10^3 nanoErgs
+  val K = 1000
+}
+
 object Constants {
   val HashLength: Int = 32
   val CoinsInOneErgo: Long = 1000000000
@@ -16,12 +28,13 @@ object Constants {
   val InitialDifficulty: Difficulty = BigInt(1)
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
-  // Max total computation cost of a block. todo: move to config
-  val MaxBlockCost: Long = 1000000
-  // Max cost of coinbase transaction. todo calculate?
+
+  // Max cost of coinbase transaction. todo calculate? todo: do we need this constant
   val CoinbaseTxCost: Int = 10000
-  // Max size of transactions section of a block. todo: move to config
-  val MaxBlockSize: Int = 512 * 1024
+
+  //For how many blocks a box could be put into the state with no paying.
+  //4 years
+  val StoragePeriod: Int = 1051200
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
@@ -29,5 +42,4 @@ object Constants {
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
-
 }

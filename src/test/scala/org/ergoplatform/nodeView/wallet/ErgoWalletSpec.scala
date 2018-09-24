@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils._
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.PropSpec
@@ -16,6 +17,36 @@ import scala.util.Random
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+
+
+  property("Generate transaction with multiple inputs") {
+    withFixture { implicit w =>
+      val addresses = getTrackedAddresses
+      addresses.length should be > 1
+      val genesisBlock = makeGenesisBlock(addresses.head.script)
+      val genesisTx = genesisBlock.transactions.head
+      applyBlock(genesisBlock) shouldBe 'success
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val confirmedBalance = getConfirmedBalances.balance
+      val requests = addresses map (a => PaymentRequest(a, confirmedBalance / (addresses.length + 1), None, None))
+      val tx = Await.result(wallet.generateTransaction(requests), awaitDuration).get
+      val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
+      val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(_.id sameElements i.boxId).get)
+      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
+
+      val block = makeNextBlock(getUtxoState, Seq(tx))
+      applyBlock(block) shouldBe 'success
+      wallet.scanPersistent(block)
+      blocking(Thread.sleep(scanTime(block)))
+      val newBalance = getConfirmedBalances.balance
+      val requests2 = addresses map (a => PaymentRequest(a, newBalance / (addresses.length + 1), None, None))
+      val tx2 = Await.result(wallet.generateTransaction(requests2), awaitDuration).get
+      val context2 = ErgoStateContext(block.header.height, block.header.stateRoot)
+      val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(_.id sameElements i.boxId).get)
+      tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
+    }
+  }
 
   property("off-chain scan") {
     withFixture { implicit w =>

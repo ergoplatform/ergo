@@ -18,12 +18,14 @@ object Parameters {
 
   // Cost of storing 1 byte per block
   // 10^-6 Ergo = 10^3 nanoErgs
-  val K = 1000
+  val K = 1000.ensuring(_ == (Constants.CoinsInOneErgo * 10E-6).toInt)
 }
 
 object Constants {
   val HashLength: Int = 32
+
   val CoinsInOneErgo: Long = 1000000000
+
   val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
   val InitialDifficulty: Difficulty = BigInt(1)
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)

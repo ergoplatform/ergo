@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}

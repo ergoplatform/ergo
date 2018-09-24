@@ -1,11 +1,11 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet}
+import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.settings.ErgoSettings
 import sigmastate.{SBoolean, SLong}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}

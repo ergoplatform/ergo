@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
+import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
@@ -23,7 +24,7 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val requestEncoder = new PaymentRequestEncoder(ergoSettings)
   val route = WalletApiRoute(readersRef, nodeViewRef, settings).route
 
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   it should "generate transaction" in {
     val amount = 100L

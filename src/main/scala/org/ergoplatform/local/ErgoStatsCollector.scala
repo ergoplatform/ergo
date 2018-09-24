@@ -12,9 +12,9 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.network.Handshake
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import scorex.core.network.peer.PeerInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
@@ -81,7 +81,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   private def onConnectedPeers: Receive = {
-    case peers: Seq[Handshake@unchecked] if peers.headOption.forall(_.isInstanceOf[Handshake]) =>
+    case peers: Seq[PeerInfo@unchecked] if peers.headOption.forall(_.isInstanceOf[PeerInfo]) =>
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 

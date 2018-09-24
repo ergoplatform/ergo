@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalatest.Assertion
 import sigmastate.serialization.ValueSerializer
 
 class ErgoAddressSpecification extends ErgoPropertyTest {
 
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings)
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   def addressRoundtrip(addr: ErgoAddress): Assertion = {
     ergoAddressEncoder.fromString(ergoAddressEncoder.toString(addr)).get shouldBe addr

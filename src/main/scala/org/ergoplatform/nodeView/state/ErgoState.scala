@@ -14,8 +14,9 @@ import scorex.util.ScorexLogging
 import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
+import sigmastate.lang.CheckingSigmaBuilder._
 import sigmastate.Values.{IntConstant, LongConstant}
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
+import sigmastate.utxo.{ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}
 
 import scala.collection.mutable
@@ -98,17 +99,21 @@ object ErgoState extends ScorexLogging {
     val s = emission.settings
 
     val register = R4
-    val out = ByIndex(Outputs, IntConstant(0))
-    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
+    val out = mkByIndex(Outputs, IntConstant(0))
+    val epoch = mkPlus(
+      LongConstant(1),
+      mkDivide(
+        mkMinus(Height, LongConstant(s.fixedRatePeriod)),
+        LongConstant(s.epochLength)))
+    val coinsToIssue = mkIf(mkLT(Height, LongConstant(s.fixedRatePeriod)),
       s.fixedRate,
-      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+      mkMinus(s.fixedRate, mkMultiply(s.oneEpochReduction, epoch))
     )
-    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register).get, Height)
-    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register).get)
-    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+    val sameScriptRule = mkEQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
+    val heightCorrect = mkEQ(ExtractRegisterAs[SLong.type](out, register).get, Height)
+    val heightIncreased = mkGT(Height, ExtractRegisterAs[SLong.type](Self, register).get)
+    val correctCoinsConsumed = mkEQ(coinsToIssue, mkMinus(ExtractAmount(Self), ExtractAmount(out)))
+    val lastCoins = mkLE(ExtractAmount(Self), s.oneEpochReduction)
 
     val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
     ErgoBox(emission.coinsTotal, prop, Seq(), Map(register -> LongConstant(-1)))

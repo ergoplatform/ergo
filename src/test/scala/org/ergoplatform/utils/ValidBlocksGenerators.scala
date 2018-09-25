@@ -35,11 +35,11 @@ trait ValidBlocksGenerators
   def initSettings: ErgoSettings = ErgoSettings.read(None)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(nodeViewHolderRef, emission, 200))
+    ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(nodeViewHolderRef, emission, 200), settings)
   }
 
   def createUtxoState(bh: BoxHolder): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, settings)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))

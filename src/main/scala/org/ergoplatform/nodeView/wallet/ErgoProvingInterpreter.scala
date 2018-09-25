@@ -4,6 +4,7 @@ import java.math.BigInteger
 import java.util
 
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Constants
@@ -35,6 +36,7 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
+                             addressPrefix: Byte,
                              override val maxCost: Long = Constants.MaxBlockCost)
   extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
 
@@ -71,6 +73,7 @@ class ErgoProvingInterpreter(seed: String,
               boxesToSpend,
               unsignedTx,
               inputBox,
+              Metadata(addressPrefix),
               ContextExtension.empty)
 
           prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>

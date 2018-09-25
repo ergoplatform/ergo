@@ -14,8 +14,9 @@ import scorex.util.ScorexLogging
 import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
+import sigmastate.lang.CheckingSigmaBuilder._
 import sigmastate.Values.{IntConstant, LongConstant}
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
+import sigmastate.utxo.{ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}
 
 import scala.collection.mutable
@@ -98,30 +99,35 @@ object ErgoState extends ScorexLogging {
     val s = emission.settings
 
     val register = R4
-    val out = ByIndex(Outputs, IntConstant(0))
-    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
+    val out = mkByIndex(Outputs, IntConstant(0))
+    val epoch = mkPlus(
+      LongConstant(1),
+      mkDivide(
+        mkMinus(Height, LongConstant(s.fixedRatePeriod)),
+        LongConstant(s.epochLength)))
+    val coinsToIssue = mkIf(mkLT(Height, LongConstant(s.fixedRatePeriod)),
       s.fixedRate,
-      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+      mkMinus(s.fixedRate, mkMultiply(s.oneEpochReduction, epoch))
     )
-    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
-    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
-    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+    val sameScriptRule = mkEQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
+    val heightCorrect = mkEQ(ExtractRegisterAs[SLong.type](out, register).get, Height)
+    val heightIncreased = mkGT(Height, ExtractRegisterAs[SLong.type](Self, register).get)
+    val correctCoinsConsumed = mkEQ(coinsToIssue, mkMinus(ExtractAmount(Self), ExtractAmount(out)))
+    val lastCoins = mkLE(ExtractAmount(Self), s.oneEpochReduction)
 
     val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
     ErgoBox(emission.coinsTotal, prop, Seq(), Map(register -> LongConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants): (UtxoState, BoxHolder) = {
+                               constants: StateConstants,
+                               settings: ErgoSettings): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val emissionBox = Some(genesisEmissionBox(constants.emission))
     val bh = BoxHolder(emissionBox.toSeq)
 
-    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants, settings).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
@@ -143,8 +149,8 @@ object ErgoState extends ScorexLogging {
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants, settings)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants, settings)._1
     }
   }
 }

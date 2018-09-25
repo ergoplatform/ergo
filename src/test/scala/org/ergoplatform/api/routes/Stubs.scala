@@ -3,6 +3,7 @@ package org.ergoplatform.api.routes
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorSystem, Props}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.mining.DefaultFakePowScheme
@@ -40,7 +41,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val history = applyChain(generateHistory(), chain)
 
   lazy val state = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
     }
   }.sample.get
@@ -129,8 +130,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class WalletActorStub extends Actor {
     def seed = "walletstub"
 
-    private implicit val addressEncoder = new ErgoAddressEncoder(settings)
-    private val prover = new ErgoProvingInterpreter(seed, 2)
+    private implicit val addressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+    private val prover = new ErgoProvingInterpreter(seed, 2,
+      addressPrefix = settings.chainSettings.addressPrefix)
     private val trackedAddresses: mutable.Buffer[ErgoAddress] =
       mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 

@@ -4,12 +4,12 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.ErgoLikeContext.{Height, Metadata}
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
@@ -30,7 +30,8 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: Store,
-                override val constants: StateConstants)
+                override val constants: StateConstants,
+                val settings: ErgoSettings)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
@@ -49,6 +50,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override val maxRollbackDepth = 10
 
+  override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
+    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext, Metadata(settings.chainSettings.addressPrefix)).map(_ => Unit))
+
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
@@ -56,7 +60,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash.data
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants)
+          new UtxoState(p, version, store, constants, settings)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -79,7 +83,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
           }
         }
-        tx.statefulValidity(boxesToSpend, stateContext).get
+        tx.statefulValidity(boxesToSpend, stateContext, Metadata(settings.chainSettings.addressPrefix)).get
       }.sum
 
       if (totalCost > Constants.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
@@ -127,7 +131,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
           log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
             s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-          new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
+          new UtxoState(persistentProver, idToVersion(fb.id), store, constants, settings)
         }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -139,7 +143,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       }
 
     case h: Header =>
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, settings))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -173,7 +177,7 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants): UtxoState = {
+  def create(dir: File, constants: StateConstants, settings: ErgoSettings): UtxoState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val version = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
       .getOrElse(ErgoState.genesisStateVersion)
@@ -183,14 +187,15 @@ object UtxoState {
       val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants)
+    new UtxoState(persistentProver, version, store, constants, settings)
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
-                    constants: StateConstants): UtxoState = {
+                    constants: StateConstants,
+                    settings: ErgoSettings): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
@@ -205,7 +210,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, settings)
   }
 }
 

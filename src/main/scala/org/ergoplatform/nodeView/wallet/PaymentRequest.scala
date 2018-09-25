@@ -5,7 +5,7 @@ import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate}
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
@@ -23,7 +23,7 @@ case class PaymentRequest(address: ErgoAddress,
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 
-  implicit val addressEncoder = new ErgoAddressEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
   def apply(request: PaymentRequest): Json = {
     Json.obj(
@@ -37,7 +37,7 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {
 
-  val addressEncoders: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(settings)
 
   implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
 

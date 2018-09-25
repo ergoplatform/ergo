@@ -5,6 +5,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -16,7 +17,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -173,7 +174,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
         }.flatMap { _ =>
           // check validity and calculate transaction cost
-          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
+          tx.statefulValidity(
+            tx.inputs.flatMap(i => state.boxById(i.boxId)),
+            state.stateContext,
+            Metadata(ergoSettings.chainSettings.addressPrefix))
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
             // valid transaction with small enough computations

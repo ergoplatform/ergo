@@ -307,6 +307,7 @@ components:
         - difficulty
         - currentTime
         - launchTime
+        - genesisBlockId
       properties:
         name:
           type: string

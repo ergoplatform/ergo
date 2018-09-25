@@ -1,6 +1,5 @@
 package org.ergoplatform.it.container
 
-import com.typesafe.config.ConfigFactory
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, OptionValues, Suite, TryValues}
@@ -27,24 +26,5 @@ trait IntegrationSuite
   }
 
   override protected def afterAll(): Unit = docker.close()
-
-  override val nonGeneratingPeerConfig = ConfigFactory.parseString(
-    """
-      |ergo.node.mining=false
-    """.stripMargin
-  )
-
-  override val onlineGeneratingPeerConfig = ConfigFactory.parseString(
-    """
-      |ergo.node.mining=true
-      |ergo.node.offlineGeneration=false
-    """.stripMargin
-  )
-
-  override val noDelayConfig = ConfigFactory.parseString(
-    """
-      |ergo.node.miningDelay=5ms
-    """.stripMargin
-  )
 
 }

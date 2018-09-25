@@ -47,7 +47,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
         s"containing ${candidate.transactions.size} transactions")
       powScheme.proveBlock(candidate) match {
         case Some(newBlock) =>
-          log.info("New block found: " + newBlock)
+          log.info(s"New block ${newBlock.id} with ${newBlock.transactions.size} transactions found")
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {

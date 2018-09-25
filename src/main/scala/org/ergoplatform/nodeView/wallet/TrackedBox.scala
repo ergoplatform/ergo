@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as

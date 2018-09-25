@@ -9,51 +9,41 @@ import org.ergoplatform.settings.NodeConfigurationSettings
   */
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
-  @volatile private[history] var minimalFullBlockHeightVar: Int = Int.MaxValue
+  @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
+  @volatile private[history] var minimalFullBlockHeightVar: Int = 0
 
-  /**
-    * Start height to download full blocks.
-    * Int.MaxValue when headers chain is not synchronized with the network and no full blocks download needed
+  /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
+    * `true` if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+    */
+  def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
+
+  /** Start height to download full blocks
     */
   def minimalFullBlockHeight: Int = minimalFullBlockHeightVar
 
-  /**
-    * Update minimal full block height
+  /** Check if headers chain is synchronized with the network and modifier is not too old
+    */
+  def shouldDownloadBlockAtHeight(height: Int): Boolean = {
+    isHeadersChainSynced && minimalFullBlockHeight <= height
+  }
+
+  /** Update minimal full block height and header chain synced flag
     *
     * @param header - header of new best full block
     * @return minimal height to process best full block
     */
   def updateBestFullBlock(header: Header): Int = {
-    minimalFullBlockHeightVar = minimalFullBlockHeightAfter(header)
+    minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
+      0 // keep all blocks in history
+    } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
+      // just synced with the headers chain - determine first full block to apply
+      0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+    } else {
+      // Start from config.blocksToKeep blocks back
+      Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
+    }
+    if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     minimalFullBlockHeightVar
   }
-
-  private def minimalFullBlockHeightAfter(header: Header): Int = {
-    if (!config.verifyTransactions) {
-      // we do not verify transactions at any height
-      Int.MaxValue
-    } else if (minimalFullBlockHeightVar == Int.MaxValue) {
-      // just synced with the headers chain - determine first full block to apply
-      if (config.blocksToKeep < 0) {
-        // keep all blocks in history
-        0
-      } else if (!config.stateType.requireProofs) {
-        //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
-        0
-      } else {
-        // Start from config.blocksToKeep blocks back
-        Math.max(0, header.height - config.blocksToKeep + 1)
-      }
-    } else if (config.blocksToKeep >= 0) {
-      Math.max(header.height - config.blocksToKeep + 1, minimalFullBlockHeightVar)
-    } else {
-      0
-    }
-  }
-
-  /** true if we estimate, that our chain is synced with the network.
-    * Start downloading full blocks after that
-    */
-  def isHeadersChainSynced: Boolean = minimalFullBlockHeightVar < Int.MaxValue
 
 }

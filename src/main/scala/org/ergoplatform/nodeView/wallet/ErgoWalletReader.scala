@@ -6,7 +6,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.GenerateTransaction
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadPublicKeys, ReadRandomPublicKey, ReadTrackedAddresses}
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.concurrent.Future
@@ -27,15 +27,15 @@ trait ErgoWalletReader extends VaultReader {
   def unconfirmedBalances(): Future[BalancesSnapshot] = balances(confirmed = false)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
-    (actor ? ErgoWalletActor.ReadPublicKeys).mapTo[Seq[P2PKAddress]]
+    (actor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
   }
 
   def randomPublicKey(): Future[P2PKAddress] = {
-    (actor ? ErgoWalletActor.ReadRandomPublicKey).mapTo[P2PKAddress]
+    (actor ? ReadRandomPublicKey).mapTo[P2PKAddress]
   }
 
   def trackedAddresses(): Future[Seq[ErgoAddress]] = {
-    (actor ? ErgoWalletActor.ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
+    (actor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
   }
 
   def generateTransaction(paymentRequests: Seq[PaymentRequest]): Future[Try[ErgoTransaction]] = {

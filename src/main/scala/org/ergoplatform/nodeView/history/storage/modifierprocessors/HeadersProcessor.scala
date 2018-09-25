@@ -271,7 +271,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /**
-    * Find first header with the best height <= $height which id satisfies condition $p
+    * Find first header with the best height <= `height` which id satisfies condition `p`
     *
     * @param height - start height
     * @param p      - condition to satisfy

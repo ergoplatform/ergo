@@ -21,6 +21,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
       inHistory.pruningProcessor.minimalFullBlockHeightVar = h
+      inHistory.pruningProcessor.isHeadersChainSyncedVar = true
     }
 
     if (height > 0) {

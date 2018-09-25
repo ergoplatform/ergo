@@ -3,7 +3,7 @@ language: scala
 sudo: false
 branches:
   only:
-    - v1.6
+    - v1.7
     - master
     - /^\d\.\d+$/
 jdk:

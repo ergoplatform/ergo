@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ChainGenerator, ErgoGenerators, ErgoTestHelpers, ErgoTransactionGenerators}
 import scorex.core.app.Version
@@ -209,11 +209,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     DefaultFakePowScheme.prove(
       history.bestHeaderOpt,
       Constants.InitialNBits,
-      ADDigest @@ Array.fill(hashLength + 1)(0.toByte),
-      Digest32 @@ Array.fill(hashLength)(0.toByte),
-      Digest32 @@ Array.fill(hashLength)(0.toByte),
+      ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Digest32 @@ Array.fill(hashLength)(0.toByte)
+      Digest32 @@ Array.fill(HashLength)(0.toByte)
     ).get
   }
 }

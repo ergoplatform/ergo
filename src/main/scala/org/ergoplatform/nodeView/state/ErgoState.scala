@@ -105,8 +105,8 @@ object ErgoState extends ScorexLogging {
       Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
     )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
-    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
+    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register).get, Height)
+    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register).get)
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
 

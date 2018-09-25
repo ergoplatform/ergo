@@ -73,7 +73,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
     val rootHash = persistentProver.digest
-    log.debug(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
+    log.trace(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
       Failure(new Error("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(t => java.util.Arrays.equals(t, rootHash))) {

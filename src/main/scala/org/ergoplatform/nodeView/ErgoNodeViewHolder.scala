@@ -153,8 +153,8 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, emission)
 
 
-/** This class guarantees to its inheritors the creation of correct instance of [[ErgoNodeViewHolder]]
-  * for the given instance of [[StateType]]
+/** This class guarantees to its inheritors the creation of correct instance of `ErgoNodeViewHolder`
+  * for the given instance of `StateType`
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {

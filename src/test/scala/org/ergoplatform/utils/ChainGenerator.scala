@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
@@ -23,8 +23,8 @@ trait ChainGenerator {
   val timeProvider: NetworkTimeProvider
 
   val powScheme: PowScheme = DefaultFakePowScheme
-  private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
-  private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
+  private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
+  private val EmptyDigest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())

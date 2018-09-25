@@ -51,7 +51,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scorexfoundation" % "scorex-core_2.12" % "41f3db48-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
-  "org.scorexfoundation" % "sigma-state_2.12" % "88e9d1a2-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "master-291a7812-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.11.0",
   "org.typelevel" % "cats-core_2.12" % "1.0.1",
@@ -61,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 9b2af4bc88a73313ed69a7703b2439cc25a53287
+// LIBRARY_DEPENDENCIES_HASH 0058ef775f4fa2d49b9575667308734a59262538

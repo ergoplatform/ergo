@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
 import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
@@ -216,9 +216,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
 
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id

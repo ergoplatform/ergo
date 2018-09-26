@@ -1,7 +1,7 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.settings.{Constants, MonetarySettings}
 
 import scala.annotation.tailrec
 
@@ -24,15 +24,15 @@ object CoinEmissionPrinter extends App {
   println(s"BlocksTotal = ${emissionCurve.blocksTotal}")
   println(s"BlocksPerYear = ${blocksPerYear}")
   //  println(s"SlowStartPeriod = ${emissionCurve.SlowStartPeriod}")
-  //  println(s"SlowStartFinalSupply = ${SlowStartFinalSupply / emissionCurve.CoinsInOneErgo}")
-  //  println(s"SlowStartFinalRate = ${emissionCurve.emissionAtHeight(emissionCurve.SlowStartPeriod) / emissionCurve.CoinsInOneErgo}")
-  println(s"EndRate = ${emissionCurve.emissionAtHeight(emissionCurve.blocksTotal).toDouble / emissionCurve.coinsInOneErgo}")
+  //  println(s"SlowStartFinalSupply = ${SlowStartFinalSupply / Constants.CoinsInOneErgo}")
+  //  println(s"SlowStartFinalRate = ${emissionCurve.emissionAtHeight(emissionCurve.SlowStartPeriod) / Constants.CoinsInOneErgo}")
+  println(s"EndRate = ${emissionCurve.emissionAtHeight(emissionCurve.blocksTotal).toDouble / Constants.CoinsInOneErgo}")
   println("First year supply")
   println(25000000)
-  println(FirstYearSupply / emissionCurve.coinsInOneErgo)
+  println(FirstYearSupply / Constants.CoinsInOneErgo)
   println("Total supply")
   println(100000000)
-  println(TotalSupply / emissionCurve.coinsInOneErgo)
+  println(TotalSupply / Constants.CoinsInOneErgo)
 
   println("================")
   println("age (years), total coins, current rate")
@@ -43,7 +43,7 @@ object CoinEmissionPrinter extends App {
     assert(supply + currentSupply == emissionCurve.issuedCoinsAfterHeight(height),
       s"$height: $supply == ${emissionCurve.issuedCoinsAfterHeight(height - 1)} => " +
         s"${supply + currentSupply} == ${emissionCurve.issuedCoinsAfterHeight(height)}")
-    if (height % (blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / emissionCurve.coinsInOneErgo}, ${currentSupply.toDouble / emissionCurve.coinsInOneErgo}")
+    if (height % (blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / Constants.CoinsInOneErgo}, ${currentSupply.toDouble / Constants.CoinsInOneErgo}")
     loop(height + 1, supply + currentSupply)
   }
 

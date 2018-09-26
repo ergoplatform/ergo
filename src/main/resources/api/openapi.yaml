@@ -351,7 +351,7 @@ components:
           type: string
           nullable: true
           description: Can be 'null' if state is empty (no full block is applied since node launch)
-          example: 'Dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+          example: 'dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
         stateType:
           type: string
           enum:
@@ -360,7 +360,7 @@ components:
         stateVersion:
           description: Can be 'null' if no full block is applied since node launch
           type: string
-          example: 'Fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+          example: 'fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
           nullable: true
         isMining:
           type: boolean

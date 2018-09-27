@@ -8,6 +8,8 @@
 \usepackage{amsthm}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 
 \newtheorem{axiom}{Axiom}
 
@@ -16,6 +18,7 @@
 
 \def\shownotes{1}
 \def\notesinmargins{0}
+\def\Let#1#2{\State #1 $\gets$ #2}
 
 \ifnum\shownotes=1
 \ifnum\notesinmargins=1
@@ -528,6 +531,7 @@ Two infinite loops in different threads with the following functions inside:
   }
 \end{minted}
 
+\include{pow}
 
 \include{emission}
 

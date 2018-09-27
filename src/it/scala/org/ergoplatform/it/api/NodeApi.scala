@@ -13,7 +13,7 @@ import org.asynchttpclient.Dsl.{get => _get, post => _post}
 import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.util._
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 import scorex.util.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
@@ -36,7 +36,7 @@ trait NodeApi {
 
   protected val timer: Timer = new HashedWheelTimer()
 
-  protected val log = LoggerFactory.getLogger(s"${getClass.getName} $restAddress")
+  protected val log: Logger = LoggerFactory.getLogger(s"${getClass.getName} $restAddress")
 
   def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(_get(s"http://$restAddress:$nodeRestPort$path")).build())

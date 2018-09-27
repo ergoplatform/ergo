@@ -19,6 +19,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.utils.TimeProvider.Time
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

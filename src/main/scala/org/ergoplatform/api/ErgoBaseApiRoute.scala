@@ -2,8 +2,8 @@ package org.ergoplatform.api
 
 import akka.http.scaladsl.server.{Directive, Directive1}
 import org.ergoplatform.settings.Algos
-import scorex.core._
 import scorex.core.api.http.ApiRoute
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Success
 

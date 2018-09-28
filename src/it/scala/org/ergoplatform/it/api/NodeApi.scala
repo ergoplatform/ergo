@@ -59,10 +59,9 @@ trait NodeApi {
     post(s"http://$restAddress", nodeRestPort, path,
       (rb: RequestBuilder) => rb.setHeader("Content-type", "application/json").setBody(body))
 
-  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body).flatMap(_.as[A]) match {
-    case Right(r) => r
-    case Left(e) => throw e
-  }
+  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body)
+    .flatMap(_.as[A])
+    .fold(e => throw e, r => r)
 
   def blacklist(networkIpAddress: String, hostNetworkPort: Int): Future[Unit] =
     post("/debug/blacklist", s"$networkIpAddress:$hostNetworkPort").map(_ => ())

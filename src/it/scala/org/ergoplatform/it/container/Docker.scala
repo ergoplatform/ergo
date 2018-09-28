@@ -1,8 +1,8 @@
 package org.ergoplatform.it.container
 
-import java.io.FileOutputStream
+import java.io.{File, FileOutputStream}
 import java.net.InetAddress
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{Collections, Properties, UUID, List => JList, Map => JMap}
 
@@ -15,7 +15,7 @@ import com.spotify.docker.client.DockerClient._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
-import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
+import com.spotify.docker.client.{DefaultDockerClient, DockerClient, LogStream}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.asynchttpclient.Dsl.{config, _}
@@ -80,6 +80,22 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     Future.sequence(nodes map { _.waitForStartup })
   }
 
+  def inspectContainer(id: String): ContainerInfo = client.inspectContainer(id)
+
+  def startOpenApiChecker(checkerConfig: ApiCheckerConfig): Try[ApiChecker] = Try {
+    client.pull("andyceo/openapi-checker:latest")
+
+    val containerId: String = client.createContainer(buildApiCheckerContainerConfig(checkerConfig)).id
+    client.startContainer(containerId)
+
+    val containerInfo = client.inspectContainer(containerId)
+    val ports = containerInfo.networkSettings().ports()
+
+    log.info(s"Started ApiChecker: $containerId")
+
+    ApiChecker(containerId, checkerConfig)
+  }
+
   def startNode(nodeSpecificConfig: Config, extraConfig: ExtraConfig = noExtraConfig): Try[Node] = {
     val initialSettings = buildErgoSettings(nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
@@ -90,7 +106,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
     val nodeConfig: Config = enrichNodeConfig(nodeSpecificConfig, extraConfig, ip, networkPort)
     val settings: ErgoSettings = buildErgoSettings(nodeConfig)
-    val containerConfig: ContainerConfig = buildContainerConfig(nodeConfig, settings, ip)
+    val containerConfig: ContainerConfig = buildPeerContainerConfig(nodeConfig, settings, ip)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
@@ -151,7 +167,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     actualConfig
   }
 
-  private def buildContainerConfig(nodeConfig: Config, settings: ErgoSettings, ip: String) = {
+  private def buildApiCheckerContainerConfig(cfg: ApiCheckerConfig): ContainerConfig = ContainerConfig.builder()
+    .image("andyceo/openapi-checker:latest")
+    .addVolumes(s"${cfg.specPath}", s"${cfg.paramsPath}")
+    .cmd("openapi.yaml", "--api", s"${cfg.apiAddress}", "--parameters", "parameters.yaml")
+    .build()
+
+  private def buildPeerContainerConfig(nodeConfig: Config, settings: ErgoSettings, ip: String): ContainerConfig = {
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
     val portBindings = new ImmutableMap.Builder[String, JList[PortBinding]]()
@@ -271,7 +293,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       }
       http.close()
 
-      saveLogs()
+      saveNodeLogs()
 
       nodeRepository foreach { node =>
         client.removeContainer(node.containerId, RemoveContainerParam.forceKill())
@@ -281,7 +303,26 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     }
   }
 
-  private def saveLogs(): Unit = {
+  def saveLogs(containerId: String, tag: String): Unit = {
+    val logDir: Path = Paths.get(System.getProperty("user.dir"), "target", "logs")
+    Files.createDirectories(logDir)
+
+    val fileName: String = s"$tag-$containerId"
+    val logFile: File = logDir.resolve(s"$fileName.log").toFile
+    log.info(s"Writing logs of $tag-$containerId to ${logFile.getAbsolutePath}")
+
+    val fileStream: FileOutputStream = new FileOutputStream(logFile, false)
+    client.logs(
+      containerId,
+      DockerClient.LogsParam.timestamps(),
+      DockerClient.LogsParam.follow(),
+      DockerClient.LogsParam.stdout(),
+      DockerClient.LogsParam.stderr()
+    )
+      .attach(fileStream, fileStream)
+  }
+
+  private def saveNodeLogs(): Unit = {
     val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
     nodeRepository.foreach { node =>

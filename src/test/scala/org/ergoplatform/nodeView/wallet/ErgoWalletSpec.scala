@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils._
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBoxCandidate, Input, Pay2SAddress}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
@@ -16,7 +16,7 @@ import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
 
   property("Generate transaction with multiple inputs") {

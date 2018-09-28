@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
@@ -61,7 +61,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
     val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
+    private val prover = new ErgoProvingInterpreter("test1",
+      settings.walletSettings.dlogSecretsNumber)
     val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)

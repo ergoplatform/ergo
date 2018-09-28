@@ -5,7 +5,7 @@ lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
   version := "1.6.1",
-  scalaVersion := "2.12.6",
+  scalaVersion := "2.12.7",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",

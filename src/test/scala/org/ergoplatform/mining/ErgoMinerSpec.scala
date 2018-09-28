@@ -67,7 +67,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
@@ -80,7 +80,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      emission,
       Some(prop)
     )
     minerRef ! StartMining
@@ -98,7 +97,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         val outputs = (0 until outputsPerTx).map(_ => new ErgoBoxCandidate(boxToSend.value / outputsPerTx, prop))
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
-        val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
+        val tx = prover.sign(
+          unsignedTx,
+          IndexedSeq(boxToSend),
+          ergoSettings.metadata,
+          ErgoStateContext(r.h.fullBlockHeight,
+          r.s.rootHash)).get
+
         // workaround to put tx in mempool without too much logs.
         nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
           v.pool.put(tx)
@@ -155,7 +160,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         verifyTransactions = true)
       val chainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
       val ergoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
-      val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+      val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
       val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
       val minerRef: ActorRef = ErgoMinerRef(
@@ -163,14 +168,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         nodeViewHolderRef,
         readersHolderRef,
         timeProvider,
-        emission,
         Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage))
       expectNoMessage(1 second)
       val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
       val prop1 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
 
-      val tx = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, emission)
+      val tx = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, ergoSettings.emission)
       r.s.asInstanceOf[UtxoStateReader].validate(tx) shouldBe 'success
 
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
@@ -193,7 +197,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     system.eventStream.subscribe(testProbe.ref, newBlock)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMinerRef(
@@ -201,7 +205,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      emission,
       Some(TrueLeaf)
     )
     expectNoMessage(1 second)

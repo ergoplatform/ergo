@@ -67,7 +67,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     //ErgoMiner.createCoinbase(Some(genesisEmissionBox), 0, Seq.empty, script, emission)
     val emissionBox = genesisEmissionBox
     val height = 0
-    val emissionAmount = emission.emissionAtHeight(height)
+    val emissionAmount = settings.emission.emissionAtHeight(height)
     val newEmissionAmount = emissionBox.value - emissionAmount
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
     val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))

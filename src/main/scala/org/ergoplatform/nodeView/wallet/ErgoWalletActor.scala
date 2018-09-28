@@ -24,25 +24,25 @@ import scala.util.{Failure, Random, Success, Try}
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
 
 
-class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
+class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging {
 
   import ErgoWalletActor._
 
-  private lazy val seed = settings.walletSettings.seed
+  private lazy val seed = ergoSettings.walletSettings.seed
 
-  private lazy val scanningInterval = settings.walletSettings.scanningInterval
+  private lazy val scanningInterval = ergoSettings.walletSettings.scanningInterval
 
   private val registry = new WalletStorage
 
   //todo: pass as a class argument, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector
 
-  private val prover = new ErgoProvingInterpreter(seed, settings.walletSettings.dlogSecretsNumber)
+  private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
 
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private implicit val addressEncoder = ErgoAddressEncoder(settings)
+  private implicit val addressEncoder = ErgoAddressEncoder(ergoSettings)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
@@ -62,7 +62,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       )
 
       val context =
-        ErgoLikeContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx, box, ContextExtension.empty)
+        ErgoLikeContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx,
+                        box, ergoSettings.metadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
@@ -175,7 +176,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
         inputs.map(_.id).map(id => new UnsignedInput(id)),
         (payTo ++ changeBoxCandidates).toIndexedSeq)
 
-      prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
+      prover.sign(unsignedTx, inputs, ergoSettings.metadata, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
     } match {
       case Some(tx) => tx
       case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")

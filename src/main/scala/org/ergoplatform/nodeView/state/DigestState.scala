@@ -26,10 +26,12 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: Store,
-                            settings: NodeConfigurationSettings)
+                            ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
+
+  private lazy val nodeSettings = ergoSettings.nodeSettings
 
   store.lastVersionID
     .foreach(id => assert(version == bytesToVersion(id.data), "version should always be equal to store.lastVersionID"))
@@ -67,7 +69,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, stateContext).get
+              tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
@@ -84,7 +86,7 @@ class DigestState protected(override val version: VersionTag,
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
-    case fb: ErgoFullBlock if settings.verifyTransactions =>
+    case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap { _ =>
@@ -95,15 +97,15 @@ class DigestState protected(override val version: VersionTag,
           Failure(e)
       }
 
-    case fb: ErgoFullBlock if !settings.verifyTransactions =>
+    case fb: ErgoFullBlock if !nodeSettings.verifyTransactions =>
       log.warn("Should not get full blocks from node view holders if !settings.verifyTransactions")
       Try(this)
 
-    case h: Header if !settings.verifyTransactions =>
+    case h: Header if !nodeSettings.verifyTransactions =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(h)
 
-    case h: Header if settings.verifyTransactions =>
+    case h: Header if nodeSettings.verifyTransactions =>
       log.warn("Should not get header from node view holders if settings.verifyTransactions")
       Try(this)
 
@@ -117,10 +119,10 @@ class DigestState protected(override val version: VersionTag,
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val wrappedVersion = Algos.versionToBAW(version)
     Try(store.rollback(wrappedVersion)).map { _ =>
-      store.clean(settings.keepVersions)
+      store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, settings)
+      new DigestState(version, rootHash, store, ergoSettings)
     }
   }
 
@@ -144,11 +146,11 @@ class DigestState protected(override val version: VersionTag,
     store.update(wrappedVersion,
       toRemove = Seq.empty,
       toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)) ++ additionalData)
-    new DigestState(newVersion, newRootHash, store, settings)
+    new DigestState(newVersion, newRootHash, store, ergoSettings)
   }
 
   // DigestState is not initialized yet. Waiting for first full block to apply without checks
-  private lazy val notInitialized = settings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
+  private lazy val notInitialized = nodeSettings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
 
 }
 
@@ -163,10 +165,10 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, settings.nodeSettings)
+          new DigestState(version, rootHash, store, settings)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings.nodeSettings)
+          new DigestState(inVersion, rootHash, store, settings)
             .update(version, rootHash, Seq()).get //sync store
         }
         state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
@@ -175,7 +177,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case (None, None) =>
         val version = bytesToVersion(store.lastVersionID.get.data)
         val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, settings.nodeSettings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings)
       case _ => ???
     }
   }.recoverWith { case e =>

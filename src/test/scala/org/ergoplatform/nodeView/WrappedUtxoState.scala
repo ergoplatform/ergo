@@ -10,7 +10,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
@@ -58,11 +58,12 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
 }
 
 object WrappedUtxoState {
+
   def apply(boxHolder: BoxHolder,
             dir: File,
-            emission: EmissionRules,
-            nodeViewHolderRef: Option[ActorRef]): WrappedUtxoState = {
-    val constants = StateConstants(nodeViewHolderRef, emission, 200)
+            nodeViewHolderRef: Option[ActorRef],
+            settings: ErgoSettings): WrappedUtxoState = {
+    val constants = StateConstants(nodeViewHolderRef, settings)
     val emissionBox = Some(ErgoState.genesisEmissionBox(constants.emission))
     val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, constants)
     WrappedUtxoState(us, boxHolder, constants)

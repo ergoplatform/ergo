@@ -7,12 +7,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
-import scorex.core.NodeViewHolder.CurrentView
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -48,7 +45,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
-  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, emission, 1))
+  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
   log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, boxHolder, None, Seq())

@@ -4,6 +4,7 @@ import java.math.BigInteger
 import java.util
 
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Parameters
@@ -55,6 +56,7 @@ class ErgoProvingInterpreter(seed: String,
 
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
+           metadata: Metadata,
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
@@ -71,6 +73,7 @@ class ErgoProvingInterpreter(seed: String,
               boxesToSpend,
               unsignedTx,
               inputBox,
+              metadata,
               ContextExtension.empty)
 
           prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>

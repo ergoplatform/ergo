@@ -39,7 +39,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: EmissionRules,
                 extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
@@ -173,7 +172,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
         }.flatMap { _ =>
           // check validity and calculate transaction cost
-          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
+          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext, ergoSettings.metadata)
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
             // valid transaction with small enough computations
@@ -204,7 +203,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
+    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, ergoSettings.emission)
     val txs = txsNoConflict :+ coinbase
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
@@ -307,26 +306,23 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, minerPropOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
             minerPropOpt: Option[Value[SBoolean.type]] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, minerPropOpt))
 
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission), name)
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider), name)
 }

@@ -15,7 +15,7 @@ import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import sigmastate.Values.{IntConstant, LongConstant}
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
+import sigmastate.utxo._
 import sigmastate.{SLong, _}
 
 import scala.collection.mutable
@@ -105,8 +105,8 @@ object ErgoState extends ScorexLogging {
       Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
     )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
-    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
+    val heightCorrect = EQ(OptionGet(ExtractRegisterAs[SLong.type](out, register)), Height)
+    val heightIncreased = GT(Height, OptionGet(ExtractRegisterAs[SLong.type](Self, register)))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
 

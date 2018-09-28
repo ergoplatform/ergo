@@ -6,6 +6,7 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
 import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
@@ -96,7 +97,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /**
     * @return total computation cost
     */
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = {
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       blockchainState: ErgoStateContext,
+                       metadata: Metadata): Try[Long] = {
     lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
@@ -109,7 +112,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val proof = input.spendingProof
         val proverExtension = proof.extension
 
-        def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
+        def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, metadata, proverExtension)
 
         lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
@@ -127,13 +130,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         fillAssetsMap(boxesToSpend, inAssets)
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
         validation.validateSeq(outAssets) {
-          case (validation, (outAssetId, outAmount)) =>
+          case (vld, (outAssetId, outAmount)) =>
             val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
-            validation
-              .validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-                fatal(s"Assets preservation rule is broken in $this. " +
-                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
-              }
+            vld.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+              fatal(s"Assets preservation rule is broken in $this. " +
+                s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+            }
         }
       }
       .toTry

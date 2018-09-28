@@ -42,7 +42,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private implicit val addressEncoder = ErgoAddressEncoder(ergoSettings)
+  private implicit val addressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer

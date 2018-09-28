@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
 import org.ergoplatform.local.TransactionGenerator.{Attempt, StartGeneration}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -37,7 +38,8 @@ class TransactionGenerator(viewHolder: ActorRef,
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder =
+    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   override def receive: Receive = {
     case StartGeneration =>

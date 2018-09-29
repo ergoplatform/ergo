@@ -14,6 +14,7 @@ import com.google.common.primitives.Ints
 import com.spotify.docker.client.DockerClient._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
+import com.spotify.docker.client.messages.HostConfig.Bind
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
@@ -154,22 +155,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   }
 
   private def buildApiCheckerContainerConfig(cfg: ApiCheckerConfig): ContainerConfig = {
-    val specVol: Volume = client.createVolume(
-      Volume.builder()
-        .name("openapi.yaml")
-        .mountpoint("/app/openapi.yaml")
-        .build()
-    )
-    val paramsVol: Volume = client.createVolume(
-      Volume.builder()
-        .name("parameters.yaml")
-        .mountpoint("/app/parameters.yaml")
-        .build()
-    )
+    val hostConfig: HostConfig = HostConfig.builder()
+      .appendBinds("/tmp/openapi.yaml:/app/openapi.yaml", "/tmp/parameters.yaml:/app/parameters.yaml")
+      .build()
     ContainerConfig.builder()
-      .image("andyceo/openapi-checker:latest")
-      .addVolumes(specVol.name(), paramsVol.name())
-      .cmd("openapi.yaml", "--api", s"${cfg.apiAddress}", "--parameters", "parameters.yaml")
+      .image(ApiCheckerImageLatest)
+      .cmd("openapi.yaml", "--api", s"http://${cfg.apiAddress}", "--parameters", "parameters.yaml")
+      .hostConfig(hostConfig)
       .build()
   }
 
@@ -192,7 +184,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     val configCommandLine = renderProperties(asProperties(nodeConfig))
 
     ContainerConfig.builder()
-      .image("org.ergoplatform/ergo:latest")
+      .image(ErgoImageLatest)
       .exposedPorts(restApiPort.toString, networkPort.toString)
       .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
@@ -360,6 +352,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 }
 
 object Docker extends IntegrationTestConstants {
+
+  val ErgoImageLatest: String = "org.ergoplatform/ergo:latest"
+  val ApiCheckerImageLatest: String = "andyceo/openapi-checker:latest"
 
   val dockerImageLabel = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

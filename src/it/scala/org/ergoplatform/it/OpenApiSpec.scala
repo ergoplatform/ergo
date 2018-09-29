@@ -13,9 +13,9 @@ import scala.io.Source
 
 class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
 
-  val expectedHeight: Int = 3
-  val specFilePath: String = "src/main/resources/api/openapi.yaml"
-  val paramsFilePath: String = "parameters.yaml"
+  val expectedHeight: Int = 2
+  val specFilePath: String = "/tmp/openapi.yaml"
+  val paramsFilePath: String = "/tmp/parameters.yaml"
   val paramsTemplatePath: String = "src/it/resources/parameters-template.txt"
 
   val offlineGeneratingPeer: Config = offlineGeneratingPeerConfig.withFallback(nodeSeedConfigs.head)
@@ -43,9 +43,11 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
         )
         val checker: ApiChecker = docker.startOpenApiChecker(
           ApiCheckerConfig(s"${node.restAddress}:${node.nodeRestPort}", specFilePath, paramsFilePath)
-        ).success.value
+        ).get
 
         val containerInfo: ContainerInfo = docker.inspectContainer(checker.containerId)
+
+        log.debug(containerInfo.config().volumes().toString)
 
         docker.saveLogs(checker.containerId, "openapi-checker")
 

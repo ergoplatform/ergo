@@ -292,7 +292,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     }
   }
 
-  def saveLogs(containerId: String, tag: String): Unit = {
+  private def saveLogs(containerId: String, tag: String): Unit = {
     val logDir: Path = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
 
@@ -328,7 +328,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
           DockerClient.LogsParam.follow(),
           DockerClient.LogsParam.stdout(),
           DockerClient.LogsParam.stderr()
-        )
+      )
         .attach(fileStream, fileStream)
     }
   }

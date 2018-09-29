@@ -1,5 +1,5 @@
 package org.ergoplatform.it.container
 
-case class ApiCheckerConfig(apiAddress: String, specPath: String, paramsPath: String)
+case class ApiCheckerConfig(apiAddressToCheck: String, specFilePath: String, paramsFilePath: String)
 
-case class ApiChecker(containerId: String, cfg: ApiCheckerConfig)
+case class ApiChecker(containerId: String, config: ApiCheckerConfig)

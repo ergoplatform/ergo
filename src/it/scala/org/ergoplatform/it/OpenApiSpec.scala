@@ -2,7 +2,6 @@ package org.ergoplatform.it
 
 import java.io.{File, PrintWriter}
 
-import com.spotify.docker.client.messages.ContainerInfo
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{ApiChecker, ApiCheckerConfig, IntegrationSuite, Node}
 import org.scalatest.{FreeSpec, TryValues}
@@ -14,7 +13,6 @@ import scala.io.Source
 class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
 
   val expectedHeight: Int = 2
-  val specFilePath: String = "/tmp/openapi.yaml"
   val paramsFilePath: String = "/tmp/parameters.yaml"
   val paramsTemplatePath: String = "src/it/resources/parameters-template.txt"
 
@@ -41,15 +39,14 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
               "lastHeadersCount" -> expectedHeight.toString,
               "headerId" -> headerIds.head)
         )
+
+        val apiAddressToCheck: String = s"${node.nodeInfo.networkIpAddress}:${node.nodeInfo.containerApiPort}"
+        val specFilePath: String = new File("src/main/resources/api/openapi.yaml").getAbsolutePath
         val checker: ApiChecker = docker.startOpenApiChecker(
-          ApiCheckerConfig(s"${node.restAddress}:${node.nodeRestPort}", specFilePath, paramsFilePath)
-        ).get
+          ApiCheckerConfig(apiAddressToCheck, specFilePath, paramsFilePath)
+        ).success.value
 
-        val containerInfo: ContainerInfo = docker.inspectContainer(checker.containerId)
-
-        docker.saveLogs(checker.containerId, "openapi-checker")
-
-        containerInfo.state.exitCode shouldBe 0
+        docker.waitContainer(checker.containerId).statusCode shouldBe 0
       }
 
     Await.result(result, 2.minutes)

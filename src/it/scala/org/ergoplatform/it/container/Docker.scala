@@ -14,7 +14,6 @@ import com.google.common.primitives.Ints
 import com.spotify.docker.client.DockerClient._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
-import com.spotify.docker.client.messages.HostConfig.Bind
 import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
@@ -44,6 +43,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
   private val client = DefaultDockerClient.fromEnv().build()
   private var nodeRepository = Seq.empty[Node]
+  private var apiCheckerOpt: Option[ApiChecker] = None
   private val isStopped = new AtomicBoolean(false)
 
   // This should be called after client is ready but before network created.
@@ -81,17 +81,23 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     Future.sequence(nodes map { _.waitForStartup })
   }
 
+  def waitContainer(id: String): ContainerExit = client.waitContainer(id)
+
   def inspectContainer(id: String): ContainerInfo = client.inspectContainer(id)
 
-  def startOpenApiChecker(checkerConfig: ApiCheckerConfig): Try[ApiChecker] = Try {
-    client.pull("andyceo/openapi-checker:latest")
+  def startOpenApiChecker(checkerInfo: ApiCheckerConfig): Try[ApiChecker] = Try {
+    client.pull(ApiCheckerImageLatest)
 
-    val containerId: String = client.createContainer(buildApiCheckerContainerConfig(checkerConfig)).id
+    val ip: String = ipForNode(999, networkSeed)
+    val containerId: String = client.createContainer(buildApiCheckerContainerConfig(checkerInfo, ip)).id
+    connectToNetwork(containerId, ip)
     client.startContainer(containerId)
 
     log.info(s"Started ApiChecker: $containerId")
 
-    ApiChecker(containerId, checkerConfig)
+    val checker: ApiChecker = ApiChecker(containerId, checkerInfo)
+    apiCheckerOpt = Some(checker)
+    checker
   }
 
   def startNode(nodeSpecificConfig: Config, extraConfig: ExtraConfig = noExtraConfig): Try[Node] = {
@@ -119,6 +125,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
         hostRestApiPort = extractHostPort(ports, restApiPort),
         hostNetworkPort = extractHostPort(ports, networkPort),
         containerNetworkPort = networkPort,
+        containerApiPort = restApiPort,
         apiIpAddress = containerInfo.networkSettings().ipAddress(),
         networkIpAddress = attachedNetwork.ipAddress(),
         containerId = containerId)
@@ -154,13 +161,18 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     actualConfig
   }
 
-  private def buildApiCheckerContainerConfig(cfg: ApiCheckerConfig): ContainerConfig = {
+  private def buildApiCheckerContainerConfig(checkerInfo: ApiCheckerConfig, ip: String): ContainerConfig = {
     val hostConfig: HostConfig = HostConfig.builder()
-      .appendBinds("/tmp/openapi.yaml:/app/openapi.yaml", "/tmp/parameters.yaml:/app/parameters.yaml")
+      .appendBinds(s"${checkerInfo.specFilePath}:/app/openapi.yaml", s"${checkerInfo.paramsFilePath}:/app/parameters.yaml")
       .build()
+
+    val networkingConfig: ContainerConfig.NetworkingConfig = ContainerConfig.NetworkingConfig
+      .create(Map(networkName -> endpointConfigFor(ip)).asJava)
+
     ContainerConfig.builder()
       .image(ApiCheckerImageLatest)
-      .cmd("openapi.yaml", "--api", s"http://${cfg.apiAddress}", "--parameters", "parameters.yaml")
+      .cmd("openapi.yaml", "--api", s"http://${checkerInfo.apiAddressToCheck}", "--parameters", "parameters.yaml")
+      .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
       .build()
   }
@@ -268,6 +280,11 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       http.close()
 
       saveNodeLogs()
+
+      apiCheckerOpt.foreach { checker =>
+        saveLogs(checker.containerId, "openapi-checker")
+        client.removeContainer(checker.containerId, RemoveContainerParam.forceKill())
+      }
 
       nodeRepository foreach { node =>
         client.removeContainer(node.containerId, RemoveContainerParam.forceKill())

@@ -15,7 +15,7 @@ import com.spotify.docker.client.DockerClient._
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.EndpointConfig.EndpointIpamConfig
 import com.spotify.docker.client.messages._
-import com.spotify.docker.client.{DefaultDockerClient, DockerClient, LogStream}
+import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.asynchttpclient.Dsl.{config, _}
@@ -88,9 +88,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     val containerId: String = client.createContainer(buildApiCheckerContainerConfig(checkerConfig)).id
     client.startContainer(containerId)
 
-    val containerInfo = client.inspectContainer(containerId)
-    val ports = containerInfo.networkSettings().ports()
-
     log.info(s"Started ApiChecker: $containerId")
 
     ApiChecker(containerId, checkerConfig)
@@ -100,7 +97,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     val initialSettings = buildErgoSettings(nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
     val nodeNumber = configuredNodeName.replace("node", "").toInt
-    val ip = ipForNode(nodeNumber)
+    val ip = ipForNode(nodeNumber, networkSeed)
     val restApiPort = initialSettings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = initialSettings.scorexSettings.network.bindAddress.getPort
 
@@ -136,17 +133,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     }
   }
 
-  private def asProperties(config: Config): Properties = {
-    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
-    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
-  }
-
-  private def renderProperties(props: Properties): String =
-    props.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
-
-  private def extractHostPort(portBindingMap: JMap[String, JList[PortBinding]], containerPort: Int): Int =
-    portBindingMap.get(s"$containerPort/tcp").get(0).hostPort().toInt
-
   private def buildErgoSettings(nodeConfig: Config) = {
     val actualConfig = nodeConfig
       .withFallback(suiteConfig)
@@ -167,11 +153,25 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     actualConfig
   }
 
-  private def buildApiCheckerContainerConfig(cfg: ApiCheckerConfig): ContainerConfig = ContainerConfig.builder()
-    .image("andyceo/openapi-checker:latest")
-    .addVolumes(s"${cfg.specPath}", s"${cfg.paramsPath}")
-    .cmd("openapi.yaml", "--api", s"${cfg.apiAddress}", "--parameters", "parameters.yaml")
-    .build()
+  private def buildApiCheckerContainerConfig(cfg: ApiCheckerConfig): ContainerConfig = {
+    val specVol: Volume = client.createVolume(
+      Volume.builder()
+        .name("openapi.yaml")
+        .mountpoint("/app/openapi.yaml")
+        .build()
+    )
+    val paramsVol: Volume = client.createVolume(
+      Volume.builder()
+        .name("parameters.yaml")
+        .mountpoint("/app/parameters.yaml")
+        .build()
+    )
+    ContainerConfig.builder()
+      .image("andyceo/openapi-checker:latest")
+      .addVolumes(specVol.name(), paramsVol.name())
+      .cmd("openapi.yaml", "--api", s"${cfg.apiAddress}", "--parameters", "parameters.yaml")
+      .build()
+  }
 
   private def buildPeerContainerConfig(nodeConfig: Config, settings: ErgoSettings, ip: String): ContainerConfig = {
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
@@ -221,15 +221,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       if (maxRetry == 0) throw e else createNetwork(maxRetry - 1)
   }
 
-  private def ipamToString(network: Network): String =
-    network
-      .ipam()
-      .config().asScala
-      .map { n => s"subnet=${n.subnet()}, ip range=${n.ipRange()}" }
-      .mkString(", ")
-
   private def buildNetworkConfig(): NetworkConfig = {
-    val config = IpamConfig.create(networkPrefix, networkPrefix, ipForNode(0xE))
+    val config = IpamConfig.create(networkPrefix, networkPrefix, ipForNode(0xE, networkSeed))
     val ipam = Ipam.builder()
       .driver("default")
       .config(Seq(config).asJava)
@@ -267,17 +260,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     } else {
       throw new IllegalStateException(errMsg)
     }
-  }
-
-  private def endpointConfigFor(ip: String): EndpointConfig =
-    EndpointConfig.builder()
-      .ipAddress(ip)
-      .ipamConfig(EndpointIpamConfig.builder().ipv4Address(ip).build())
-      .build()
-
-  private def ipForNode(nodeNumber: Int): String = {
-    val addressBytes = Ints.toByteArray(nodeNumber & 0xF | networkSeed)
-    InetAddress.getByAddress(addressBytes).getHostAddress
   }
 
   def stopNode(containerId: String): Unit = {
@@ -386,7 +368,36 @@ object Docker extends IntegrationTestConstants {
 
   def noExtraConfig: ExtraConfig = (_, _) => None
 
+
   private val jsonMapper = new ObjectMapper
   private val propsMapper = new JavaPropsMapper
 
+  def endpointConfigFor(ip: String): EndpointConfig =
+    EndpointConfig.builder()
+      .ipAddress(ip)
+      .ipamConfig(EndpointIpamConfig.builder().ipv4Address(ip).build())
+      .build()
+
+  def ipForNode(nodeNumber: Int, networkSeed: Int): String = {
+    val addressBytes = Ints.toByteArray(nodeNumber & 0xF | networkSeed)
+    InetAddress.getByAddress(addressBytes).getHostAddress
+  }
+
+  def ipamToString(network: Network): String =
+    network
+      .ipam()
+      .config().asScala
+      .map { n => s"subnet=${n.subnet()}, ip range=${n.ipRange()}" }
+      .mkString(", ")
+
+  def asProperties(config: Config): Properties = {
+    val jsonConfig = config.root().render(ConfigRenderOptions.concise())
+    propsMapper.writeValueAsProperties(jsonMapper.readTree(jsonConfig))
+  }
+
+  def renderProperties(props: Properties): String =
+    props.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
+
+  def extractHostPort(portBindingMap: JMap[String, JList[PortBinding]], containerPort: Int): Int =
+    portBindingMap.get(s"$containerPort/tcp").get(0).hostPort().toInt
 }

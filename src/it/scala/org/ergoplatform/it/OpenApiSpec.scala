@@ -26,7 +26,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
     .foldLeft(template) { case (s, (k, v)) => s.replaceAll(s"@$k", v) }
 
   def createParamsFile(params: Map[String, String]): Unit = {
-    val template: String = Source.fromFile(paramsTemplatePath).getLines.mkString
+    val template: String = Source.fromFile(paramsTemplatePath).getLines.map(_ + "\n").mkString
     val writer: PrintWriter = new PrintWriter(new File(paramsFilePath))
     writer.write(renderTemplate(template, params))
     writer.close()
@@ -46,8 +46,6 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
         ).get
 
         val containerInfo: ContainerInfo = docker.inspectContainer(checker.containerId)
-
-        log.debug(containerInfo.config().volumes().toString)
 
         docker.saveLogs(checker.containerId, "openapi-checker")
 

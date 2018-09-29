@@ -83,8 +83,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
   def waitContainer(id: String): ContainerExit = client.waitContainer(id)
 
-  def inspectContainer(id: String): ContainerInfo = client.inspectContainer(id)
-
   def startOpenApiChecker(checkerInfo: ApiCheckerConfig): Try[ApiChecker] = Try {
     client.pull(ApiCheckerImageLatest)
 

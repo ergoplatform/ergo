@@ -4,6 +4,7 @@ import akka.actor.Actor
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
@@ -62,7 +63,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       )
 
       val context =
-        ErgoLikeContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx,
+        new ErgoContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx,
                         box, ergoSettings.metadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {

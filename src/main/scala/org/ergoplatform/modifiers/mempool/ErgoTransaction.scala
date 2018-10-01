@@ -8,10 +8,10 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
-import org.ergoplatform.ErgoTransactionValidator.verifier
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
@@ -24,7 +24,6 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.serialization.Serializer.{Consumed, Position}
 import sigmastate.serialization.{Serializer => SSerializer}
 import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{AvlTreeData, SBoolean, SType}
@@ -112,9 +111,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val proof = input.spendingProof
         val proverExtension = proof.extension
 
-        def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, metadata, proverExtension)
+        val ctx = new ErgoContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, metadata, proverExtension)
 
-        lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
+        val verifier: ErgoInterpreter = ErgoInterpreter.instance
+        println("v: " + verifier)
+        println("b: " + box.proposition)
+        println("ctx: " + ctx)
+        val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
+        costTry.recover{case t => t.printStackTrace()}
+
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")

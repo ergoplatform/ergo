@@ -6,6 +6,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.scalatest.{FlatSpec, Matchers}
@@ -31,10 +32,12 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  ignore should "post block correclty" in {
-    //TODO wait until method will be implemented on api
-    Post(prefix) ~> route ~> check {
-      ???
+  ignore should "post block correctly" in {
+    val (st, bh) = createUtxoState()
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+
+    Post(prefix, block.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 

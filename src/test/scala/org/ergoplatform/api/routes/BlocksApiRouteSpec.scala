@@ -4,10 +4,8 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.scalatest.{FlatSpec, Matchers}
@@ -18,8 +16,7 @@ import scala.concurrent.duration._
 class BlocksApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
-  with Stubs
-  with FailFastCirceSupport {
+  with Stubs {
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
@@ -30,15 +27,6 @@ class BlocksApiRouteSpec extends FlatSpec
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
       history.headerIdsAt(50, 0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
-    }
-  }
-
-  it should "post block correctly" in {
-    val (st, bh) = createUtxoState()
-    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
-
-    Post(prefix, block.asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
     }
   }
 

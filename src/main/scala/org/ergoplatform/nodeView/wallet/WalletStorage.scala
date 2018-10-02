@@ -83,16 +83,21 @@ class WalletStorage extends ScorexLogging {
   private var _confirmedBalance: Long = 0
   private val _confirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
 
-  private var _unconfirmedBalance: Long = 0
-  private val _unconfirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
+  private var _unconfirmedDelta: Long = 0
+  private val _unconfirmedAssetDeltas: mutable.Map[ModifierId, Long] = mutable.Map()
 
   def confirmedBalance: Long = _confirmedBalance
 
   def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
 
-  def unconfirmedBalance: Long = _unconfirmedBalance
+  def unconfirmedBalance: Long = _confirmedBalance + _unconfirmedDelta
 
-  def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
+  def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = {
+    _unconfirmedAssetDeltas map { case (id, value) =>
+      val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
+      id -> newValue
+    }
+  }
 
   private def increaseBalances(unspentBox: TrackedBox): Unit = {
     if (checkUnspent(unspentBox)) {
@@ -101,8 +106,8 @@ class WalletStorage extends ScorexLogging {
         _confirmedBalance += box.value
         increaseAssets(_confirmedAssetBalances, box.additionalTokens)
       } else {
-        _unconfirmedBalance += box.value
-        increaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
+        _unconfirmedDelta += box.value
+        increaseAssets(_unconfirmedAssetDeltas, box.additionalTokens)
       }
     }
   }
@@ -114,8 +119,8 @@ class WalletStorage extends ScorexLogging {
         _confirmedBalance -= box.value
         decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
       } else {
-        _unconfirmedBalance -= box.value
-        decreaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
+        _unconfirmedDelta -= box.value
+        decreaseAssets(_unconfirmedAssetDeltas, box.additionalTokens)
       }
     }
   }

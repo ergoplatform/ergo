@@ -7,7 +7,7 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -15,13 +15,14 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.util.ModifierId
 import scorex.core.api.http.ApiResponse
+import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
-  val settings = ergoSettings.scorexSettings.restApi
+  val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("blocks") & withCors) {
     getBlocksR ~
@@ -31,6 +32,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
       getFullBlockByHeaderIdR ~
+      getModifierByIdR ~
       candidateBlockR
   }
 
@@ -52,6 +54,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = getHistory.map { history =>
     history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
   }
+
+  private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] = getHistory
+    .map { _.modifierById(modifierId) }
 
   def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
     ApiResponse(getHeaderIds(limit, offset))
@@ -75,6 +80,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     }
   }
 
+  def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>
+    ApiResponse(getModifierById(id))
+  }
+
   def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>
     ApiResponse(getLastHeaders(count))
   }
@@ -83,11 +92,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     ApiResponse(getHeaderIdsAtHeight(height))
   }
 
-  def getBlockHeaderByHeaderIdR: Route = (headerId & pathPrefix("header") & get) { id =>
+  def getBlockHeaderByHeaderIdR: Route = (modifierId & pathPrefix("header") & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.header)))
   }
 
-  def getBlockTransactionsByHeaderIdR: Route = (headerId & pathPrefix("transactions") & get) { id =>
+  def getBlockTransactionsByHeaderIdR: Route = (modifierId & pathPrefix("transactions") & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.blockTransactions)))
   }
 
@@ -95,7 +104,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     ApiResponse((miner ? MiningStatusRequest).mapTo[MiningStatusResponse])
   }
 
-  def getFullBlockByHeaderIdR: Route = (headerId & get) { id =>
+  def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
   }
 }

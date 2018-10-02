@@ -1,21 +1,21 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.util.ModifierId
+import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.util.ModifierId
 
 import scala.concurrent.Future
 
@@ -36,8 +36,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
       candidateBlockR
   }
 
-  private def getHistory: Future[ErgoHistoryReader] = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r))
-    .mapTo[ErgoHistoryReader]
+  private def getHistory: Future[ErgoHistoryReader] =
+    (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
   private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map { history =>
     history.headerIdsAtHeight(h).map(Algos.encode).asJson
@@ -64,18 +64,15 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
 
   def postBlocksR: Route = post {
     entity(as[ErgoFullBlock]) { block =>
-      complete {
-        if (ergoSettings.chainSettings.powScheme.verify(block.header)) {
-          log.info("Received a new valid block through the API: " + block)
+      if (ergoSettings.chainSettings.powScheme.verify(block.header)) {
+        log.info("Received a new valid block through the API: " + block)
 
-          viewHolderRef ! LocallyGeneratedModifier(block.header)
-          viewHolderRef ! LocallyGeneratedModifier(block.blockTransactions)
-          block.adProofs.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
+        viewHolderRef ! LocallyGeneratedModifier(block.header)
+        block.blockSections.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
 
-          StatusCodes.OK
-        } else {
-          StatusCodes.BadRequest -> "invalid.block"
-        }
+        ApiResponse.OK
+      } else {
+        BadRequest("Block is invalid")
       }
     }
   }

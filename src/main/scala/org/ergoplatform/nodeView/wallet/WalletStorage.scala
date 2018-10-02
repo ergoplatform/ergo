@@ -90,9 +90,9 @@ class WalletStorage extends ScorexLogging {
 
   def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
 
-  def unconfirmedBalance: Long = _confirmedBalance + _unconfirmedDelta
+  def balancesWithUnconfirmed: Long = _confirmedBalance + _unconfirmedDelta
 
-  def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = {
+  def assetBalancesWithUnconfirmed: scala.collection.Map[ModifierId, Long] = {
     _unconfirmedAssetDeltas map { case (id, value) =>
       val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
       id -> newValue
@@ -100,7 +100,7 @@ class WalletStorage extends ScorexLogging {
   }
 
   private def increaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
+    if (shouldUpdateBalances(unspentBox)) {
       val box = unspentBox.box
       if (unspentBox.chainStatus == Onchain) {
         _confirmedBalance += box.value
@@ -113,7 +113,7 @@ class WalletStorage extends ScorexLogging {
   }
 
   private def decreaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
+    if (shouldUpdateBalances(unspentBox)) {
       val box = unspentBox.box
       if (unspentBox.chainStatus == Onchain) {
         _confirmedBalance -= box.value
@@ -144,14 +144,6 @@ class WalletStorage extends ScorexLogging {
         balanceMap.put(wid, updBalance)
       }
     }
-  }
-
-  private def checkUnspent(trackedBox: TrackedBox): Boolean = {
-    if (trackedBox.spendingStatus == Spent) {
-      val msg = s"Cannot update balances with spent box $trackedBox"
-      log.warn(msg, new IllegalArgumentException(msg))
-    }
-    trackedBox.spendingStatus == Unspent
   }
 
   def makeTransition(boxId: ModifierId, transition: Transition): Boolean = {
@@ -186,23 +178,20 @@ class WalletStorage extends ScorexLogging {
     }
     trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
-
-    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
-      increaseBalances(trackedBox)
-    }
+    increaseBalances(trackedBox)
   }
 
   /**
     * Remove tracked box from a wallet storage
     */
   def deregister(boxId: ModifierId): Option[TrackedBox] = {
-    remove(boxId) map { removedBox =>
-      if (removedBox.spendingStatus == Unspent && removedBox.certainty == Certain) {
-        decreaseBalances(removedBox)
-      }
-      removedBox
-    }
+    val removedBox = remove(boxId)
+    removedBox.foreach(decreaseBalances)
+    removedBox
   }
+
+  private def shouldUpdateBalances(trackedBox: TrackedBox): Boolean =
+    trackedBox.certainty == Certain && trackedBox.spendingStatus == Unspent
 
   /**
     * Do tracked box state transition on a spending transaction (confirmed or not to come)

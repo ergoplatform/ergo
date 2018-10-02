@@ -225,11 +225,11 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   }
 
   def readers: Receive = {
-    case ReadBalances(confirmed) =>
-      if (confirmed) {
+    case ReadBalances(chainStatus) =>
+      if (chainStatus.onchain) {
         sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
       } else {
-        sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
+        sender() ! BalancesSnapshot(height, registry.balancesWithUnconfirmed, registry.assetBalancesWithUnconfirmed)
       }
 
     case ReadPublicKeys(from, until) =>
@@ -270,7 +270,7 @@ object ErgoWalletActor {
 
   case class GenerateTransaction(requests: Seq[TransactionRequest])
 
-  case class ReadBalances(confirmed: Boolean)
+  case class ReadBalances(chainStatus: ChainStatus)
 
   case class ReadPublicKeys(from: Int, until: Int)
 

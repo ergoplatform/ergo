@@ -1,13 +1,13 @@
 package org.ergoplatform.api.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import org.scalatest.OptionValues._
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 
@@ -18,10 +18,10 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  implicit val timeout = RouteTestTimeout(15.seconds.dilated)
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val prefix = "/blocks"
-  val route = BlocksApiRoute(readersRef, minerRef, settings).route
+  val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
 
   it should "get last blocks" in {

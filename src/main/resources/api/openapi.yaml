@@ -1179,15 +1179,15 @@ paths:
                 type: string
 
 
-  /wallet/balances/unconfirmed:
+  /wallet/balances/with_unconfirmed:
     get:
-      summary: Get amount of unconfirmed Ergo tokens and assets
+      summary: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
       operationId: walletBalancesUnconfirmed
       tags:
         - wallet
       responses:
         '200':
-          description: Get amount of unconfirmed Ergo tokens and assets
+          description: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
           content:
             application/json:
               schema:

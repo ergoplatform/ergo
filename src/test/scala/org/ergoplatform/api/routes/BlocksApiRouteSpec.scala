@@ -7,7 +7,6 @@ import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import org.scalatest.OptionValues._
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 

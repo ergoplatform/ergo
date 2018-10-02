@@ -10,10 +10,10 @@ import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
 import scorex.core.transaction.state.MinimalState
-import scorex.util.ScorexLogging
-import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
+import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
 import sigmastate.{SLong, _}

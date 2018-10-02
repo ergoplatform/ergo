@@ -1,10 +1,11 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.Header
+import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.Serializer
-import scorex.core._
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 

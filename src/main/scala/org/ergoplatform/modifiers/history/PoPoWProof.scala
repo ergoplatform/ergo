@@ -4,10 +4,11 @@ import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.core.utils.ScorexEncoding
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.annotation.tailrec
 import scala.util.Try

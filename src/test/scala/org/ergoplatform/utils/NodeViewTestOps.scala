@@ -14,8 +14,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ModificationOutcome, _}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
+import scorex.util.ModifierId
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -123,13 +124,11 @@ trait NodeViewTestOps extends NodeViewBaseOps {
   def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootHash)
   def getBestFullBlockOpt(implicit ctx: Ctx):  Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
   def getBestFullBlockEncodedId(implicit ctx: Ctx): Option[String] = getBestFullBlockOpt.map(_.header.encodedId)
-  def getOpenSurfaces(implicit ctx: Ctx): Seq[scorex.core.ModifierId] = getHistory.openSurfaceIds()
+  def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
   def getHeightOf(id: scorex.util.ModifierId)(implicit ctx: Ctx): Option[Int] = getHistory.heightOf(id)
   def getLastHeadersLength(count: Int)(implicit ctx: Ctx): Int = getHistory.lastHeaders(count).size
-
-  def getModifierById(id: scorex.core.ModifierId)(implicit ctx: Ctx): Option[ErgoPersistentModifier] =
-    getHistory.modifierById(id)
+  def getModifierById(id: ModifierId)(implicit ctx: Ctx): Option[ErgoPersistentModifier] = getHistory.modifierById(id)
 
   def getAfterGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
     ctx.settings.chainSettings.monetary.afterGenesisStateDigest

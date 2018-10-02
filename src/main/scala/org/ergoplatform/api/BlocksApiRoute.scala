@@ -19,7 +19,7 @@ import scorex.core.api.http.ApiResponse
 import scala.concurrent.Future
 
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings = ergoSettings.scorexSettings.restApi
 
@@ -34,7 +34,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
       candidateBlockR
   }
 
-  private def getHistory = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
+  private def getHistory: Future[ErgoHistoryReader] = (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r))
+    .mapTo[ErgoHistoryReader]
 
   private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map { history =>
     history.headerIdsAtHeight(h).map(Algos.encode).asJson
@@ -45,7 +46,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
   }
 
   private def getHeaderIds(limit: Int, offset: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAt(limit, offset).map(Algos.encode).asJson
+    history.headerIdsAt(limit, offset).toList.asJson
   }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = getHistory.map { history =>

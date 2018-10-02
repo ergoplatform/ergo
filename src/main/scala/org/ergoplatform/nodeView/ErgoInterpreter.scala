@@ -8,7 +8,7 @@ import sigmastate.Values.Value
 import sigmastate.interpreter.ContextExtension
 import sigmastate.interpreter.Interpreter.VerificationResult
 
-import scala.util.{Success, Try}
+import scala.util.Try
 
 class ErgoContext(override val currentHeight: Height,
                   override val lastBlockUtxoRoot: AvlTreeData,
@@ -31,15 +31,27 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
 
   override type CTX = ErgoContext
 
+  protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate): Boolean = {
+    output.value >= box.value - Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight) &&
+    ErgoBox.allRegisters.tail.forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+  }
+
   override def verify(exp: Value[SBoolean.type],
                       context: CTX,
                       proof: Array[Byte],
-                      message: Array[Byte]): Try[VerificationResult] = {
+                      message: Array[Byte]): Try[VerificationResult] = Try {
     //no proof provided and enough time since box cretion to spend it
-    if (context.currentHeight - context.self.creationHeight >= Constants.StoragePeriod && proof.length == 0) {
-      Success(true -> 0L) //todo: zero cost to validate the spending condition - is it okay?
+    if (context.currentHeight - context.self.creationHeight >= Constants.StoragePeriod
+          && proof.length == 0
+          && context.extension.values.contains(77: Byte)) {
+
+      val idx = context.extension.values(77: Byte).value.asInstanceOf[Short]
+      val outputCandidate = context.spendingTransaction.outputCandidates(idx)
+
+      //todo: zero cost to validate the spending condition - is it okay?
+      checkExpiredBox(context.self, outputCandidate) -> 0L
     } else {
-      super.verify(exp, context, proof, message)
+      super.verify(exp, context, proof, message).get
     }
   }
 }

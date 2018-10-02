@@ -105,6 +105,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       .payload(0L)
+      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.height), "box created in future")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
@@ -114,9 +115,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val ctx = new ErgoContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, metadata, proverExtension)
 
         val verifier: ErgoInterpreter = ErgoInterpreter.instance
-        println("v: " + verifier)
-        println("b: " + box.proposition)
-        println("ctx: " + ctx)
+
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover{case t => t.printStackTrace()}
 

@@ -30,7 +30,6 @@ object ErgoSettings extends ScorexLogging
     fromConfig(readConfigFromPath(userConfigPath))
   }
 
-
   def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
 

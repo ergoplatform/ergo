@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.settings.Algos.HF
@@ -27,17 +28,7 @@ case class ADProofs(headerId: ModifierId,
 
   override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
 
-  override def toString: String = {
-    val sId = Algos.encode(id)
-    val sHeaderId = Algos.encode(headerId)
-
-    /**
-      * Sometimes proofBytes could have length about 350 000 elements, it's useless to convert them into string.
-      * So decisin here is to not render them in toString method.
-      */
-    //val sProofBytes = Algos.encode(proofBytes)
-    s"ADProofs(Id:$sId,HeaderId:$sHeaderId)"
-  }
+  override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).
@@ -74,7 +65,7 @@ case class ADProofs(headerId: ModifierId,
   }
 }
 
-object ADProofs {
+object ADProofs extends ApiCodecs {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
 
   val KL = 32
@@ -102,6 +93,12 @@ object ADProofs {
       "digest" -> Algos.encode(proof.digest).asJson,
       "size" -> proof.size.asJson
     ).asJson
+
+  implicit val jsonDecoder: Decoder[ADProofs] = (c: HCursor) => for {
+    headerId <- c.downField("headerId").as[ModifierId]
+    proofBytes <- c.downField("proofBytes").as[Array[Byte]]
+    size <- c.downField("size").as[Option[Int]]
+  } yield ADProofs(headerId, SerializedAdProof @@ proofBytes, size)
 }
 
 object ADProofSerializer extends Serializer[ADProofs] {

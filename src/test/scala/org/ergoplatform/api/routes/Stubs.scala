@@ -137,8 +137,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     def receive: Receive = {
 
-      case ReadBalances(confirmed) =>
-        sender ! BalancesSnapshot(0, WalletActorStub.balance(confirmed), Map.empty)
+      case ReadBalances(chainStatus) =>
+        sender ! BalancesSnapshot(0, WalletActorStub.balance(chainStatus), Map.empty)
 
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
@@ -152,7 +152,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object WalletActorStub {
     def props(): Props = Props(new WalletActorStub)
-    def balance(confirmed: Boolean): Long = if (confirmed) confirmedBalance else unconfirmedBalance
+    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onchain) confirmedBalance else unconfirmedBalance
     def confirmedBalance: Long = 1L
     def unconfirmedBalance: Long = 2L
   }

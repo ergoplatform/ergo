@@ -38,6 +38,8 @@ object Constants {
   //4 years
   val StoragePeriod: Int = 1051200
 
+  val StorageIndexVarId: Byte = 77
+
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,

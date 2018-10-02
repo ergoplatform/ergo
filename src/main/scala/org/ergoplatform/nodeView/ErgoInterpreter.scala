@@ -40,12 +40,15 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
                       context: CTX,
                       proof: Array[Byte],
                       message: Array[Byte]): Try[VerificationResult] = Try {
+
+    lazy val varId = Constants.StorageIndexVarId
+
     //no proof provided and enough time since box cretion to spend it
     if (context.currentHeight - context.self.creationHeight >= Constants.StoragePeriod
           && proof.length == 0
-          && context.extension.values.contains(77: Byte)) {
+          && context.extension.values.contains(varId)) {
 
-      val idx = context.extension.values(77: Byte).value.asInstanceOf[Short]
+      val idx = context.extension.values(varId).value.asInstanceOf[Short]
       val outputCandidate = context.spendingTransaction.outputCandidates(idx)
 
       //todo: zero cost to validate the spending condition - is it okay?

@@ -84,7 +84,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   def waitContainer(id: String): ContainerExit = client.waitContainer(id)
 
   def startOpenApiChecker(checkerInfo: ApiCheckerConfig): Try[ApiChecker] = Try {
-    client.pull(ApiCheckerImageLatest)
+    client.pull(ApiCheckerImageStable)
 
     val ip: String = ipForNode(999, networkSeed)
     val containerId: String = client.createContainer(buildApiCheckerContainerConfig(checkerInfo, ip)).id
@@ -168,7 +168,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       .create(Map(networkName -> endpointConfigFor(ip)).asJava)
 
     ContainerConfig.builder()
-      .image(ApiCheckerImageLatest)
+      .image(ApiCheckerImageStable)
       .cmd("openapi.yaml", "--api", s"http://${checkerInfo.apiAddressToCheck}", "--parameters", "parameters.yaml")
       .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
@@ -370,6 +370,7 @@ object Docker extends IntegrationTestConstants {
 
   val ErgoImageLatest: String = "org.ergoplatform/ergo:latest"
   val ApiCheckerImageLatest: String = "andyceo/openapi-checker:latest"
+  val ApiCheckerImageStable: String = "andyceo/openapi-checker:openapi-core-0.5.0"
 
   val dockerImageLabel = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

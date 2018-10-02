@@ -20,7 +20,7 @@ class BlocksApiRouteSpec extends FlatSpec
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
-  val prefix = "/blocks"
+  val prefix: String = "/blocks"
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
   it should "get last blocks" in {
@@ -55,7 +55,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
+  val headerIdBytes: ModifierId = history.lastHeaders(1, 0).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
   ignore should "get block by header id" in {

@@ -35,8 +35,8 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
     Await.result(w.wallet.confirmedBalances(), awaitDuration)
 
-  def getUnconfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.unconfirmedBalances(), awaitDuration)
+  def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
+    Await.result(w.wallet.balancesWithUnconfirmed(), awaitDuration)
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
   def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = scanTime(block.transactions.flatMap(_.outputs).size)

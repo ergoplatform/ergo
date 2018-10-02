@@ -74,6 +74,13 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     }
   }
 
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    scanInputs(tx, heightOpt)
+    tx.outputCandidates
+      .zipWithIndex
+      .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
+  }
+
   protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
     tx.inputs.foreach { inp =>
       val boxId = bytesToId(inp.boxId)
@@ -81,31 +88,25 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     }
   }
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    scanInputs(tx, heightOpt)
+  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
+                         tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
+      registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
+  }
 
-    tx.outputCandidates.zipWithIndex.count { case (outCandidate, outIndex) =>
-      trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
-        case Some(_) =>
-          val idxShort = outIndex.toShort
-          val box = outCandidate.toBox(tx.id, idxShort)
-          val boxId = bytesToId(box.id)
-          if (registry.contains(boxId)) {
-            heightOpt match {
-              case Some(h) =>
-                registry.makeTransition(boxId, CreationConfirmation(h))
-              case None =>
-                log.warn(s"Double registration of the offchain box: $boxId")
-                false
-            }
-          } else {
-            registry.register(TrackedBox(tx, idxShort, heightOpt, box, Uncertain))
-            true
-          }
+  private def registerBox(trackedBox: TrackedBox): Boolean = {
+    if (registry.contains(trackedBox.boxId)) {
+      trackedBox.creationHeight match {
+        case Some(h) =>
+          registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
         case None =>
+          log.warn(s"Double registration of the off-chain box: ${trackedBox.boxId}")
           false
       }
-    } > 0
+    } else {
+      registry.register(trackedBox)
+      true
+    }
   }
 
   private def extractFromBlock(fb: ErgoFullBlock): Int = {

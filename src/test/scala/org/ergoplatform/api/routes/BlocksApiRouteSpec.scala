@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -17,13 +18,13 @@ import scala.concurrent.duration._
 class BlocksApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
-  with Stubs {
+  with Stubs
+  with FailFastCirceSupport {
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val prefix = "/blocks"
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
-
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
@@ -32,7 +33,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  ignore should "post block correctly" in {
+  it should "post block correctly" in {
     val (st, bh) = createUtxoState()
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
@@ -99,7 +100,6 @@ class BlocksApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val header = history.typedModifierById[Header](headerIdBytes).value
       val fullBlock = history.getFullBlock(header).value
-      val blockTransactions = fullBlock.blockTransactions
       val expected = fullBlock.blockTransactions.asJson.toString
       responseAs[String] shouldEqual expected
     }

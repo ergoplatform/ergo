@@ -13,7 +13,7 @@ case class InfoRoute(statsCollector: ActorRef,
                      settings: RESTApiSettings,
                      timeProvider: NetworkTimeProvider)
                     (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
-  override val route = withCors {
+  override val route: Route = withCors {
     info
   }
 

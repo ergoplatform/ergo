@@ -18,7 +18,7 @@ object Parameters {
 
   // Cost of storing 1 byte per block
   // 10^-6 Ergo = 10^3 nanoErgs
-  val K = 1000
+  val K: Long = 1000
 }
 
 object Constants {

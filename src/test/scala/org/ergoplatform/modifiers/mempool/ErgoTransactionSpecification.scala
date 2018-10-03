@@ -17,7 +17,7 @@ import scala.util.Random
 
 class ErgoTransactionSpecification extends ErgoPropertyTest {
 
-  protected val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
+  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(

@@ -253,15 +253,20 @@ components:
         mandatoryFields:
           description: List of mandatory key-value fields
           type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/KeyValueItem'
         optionalFields:
           description: List of optional key-value fields
           type: array
+          nullable: true
+          items:
             $ref: '#/components/schemas/KeyValueItem'
 
     KeyValueItem:
       type: array
       items:
-        $ref: '#/components/schemas/EncodedBytes'
+        $ref: '#/components/schemas/HexString'
 
     CandidateBlock:
       type: object
@@ -499,7 +504,7 @@ components:
       format: base16
       example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
 
-    EncodedBytes:
+    HexString:
       description: Base16-encoded bytes
       type: string
       format: base16

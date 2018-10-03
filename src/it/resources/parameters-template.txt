@@ -17,7 +17,6 @@ paths:
         height: 667
         difficulty: 62
         parentId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
-
       blockTransactions:
         headerId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
         transactions:
@@ -41,6 +40,11 @@ paths:
         headerId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
         proofBytes: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
         digest: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      extension:
+        headerId: 28d647bc0952109e297ccb75e5b3547819fe4758245c700d7ff22976bf2aac48
+        digest: 0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8
+        mandatoryFields:
+        optionalFields:
 
   /blocks/lastHeaders/{count}:
     get:

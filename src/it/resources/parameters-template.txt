@@ -1,0 +1,100 @@
+paths:
+
+  /blocks:
+    post:
+      header:
+        id: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        timestamp: 1524143059077
+        version: 2
+        interlinks:
+          - 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        adProofsRoot: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        stateRoot: 333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        transactionsRoot: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        nBits: 19857408
+        extensionHash: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        equihashSolutions: 11M1yYZ6GLUJJXWmBSsSiZ412y8SLWEh68WwynR77ykcoEr1QxnEWYPdTSbi7qLbHrZhGkQsQgyW3PqrZVAXtBXEZvravSZwm5rWZZorGotNXA8ZKXgwnbDAh24ZjZCcwk8SQ2zdPn7vCiL7AvQppeuqaM2NQPjsE92bCtpgqnbkh
+        height: 667
+        difficulty: 62
+        parentId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      blockTransactions:
+        headerId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        transactions:
+          - id: 2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+            inputs:
+              - boxId: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+                spendingProof:
+                  proofBytes: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+                  extension:
+                    1: 7c
+            outputs:
+              - boxId: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+                value: 147
+                proposition: 7c
+                assets:
+                  - tokenId: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+                    amount: 1000
+                additionalRegisters:
+                  R4: 7c
+      adProofs:
+        headerId: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        proofBytes: 3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+        digest: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      extension:
+        headerId: 28d647bc0952109e297ccb75e5b3547819fe4758245c700d7ff22976bf2aac48
+        digest: 0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8
+        mandatoryFields:
+        optionalFields:
+
+  /blocks/lastHeaders/{count}:
+    get:
+      count: @lastHeadersCount
+
+  /blocks/at/{blockHeight}:
+    get:
+      blockHeight: @blockHeight
+
+  /blocks/{headerId}:
+    get:
+      headerId: @headerId
+
+  /blocks/{headerId}/header:
+    get:
+      headerId: @headerId
+
+  /blocks/{headerId}/transactions:
+    get:
+      headerId: @headerId
+
+  /blocks/{headerId}/size:
+    get:
+      headerId: @headerId
+
+  /peers/connect:
+    post: 127.0.0.1:5673
+
+  /transactions:
+    post:
+      id: 2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+      inputs:
+        - boxId: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+          spendingProof:
+            proofBytes: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+            extension:
+              1: 7c
+      outputs:
+        - boxId: 1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+          value: 147
+          proposition: 7c
+          assets:
+            - tokenId: 4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117
+              amount: 1000
+          additionalRegisters:
+            R4: 7c
+
+  /utils/hash/blake2b:
+    post: 123qwe
+
+  /utils/seed/{length}:
+    get:
+      length: 123

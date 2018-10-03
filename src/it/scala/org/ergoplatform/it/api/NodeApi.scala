@@ -13,7 +13,7 @@ import org.asynchttpclient.Dsl.{get => _get, post => _post}
 import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.util._
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 import scorex.util.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
@@ -36,7 +36,7 @@ trait NodeApi {
 
   protected val timer: Timer = new HashedWheelTimer()
 
-  protected val log = LoggerFactory.getLogger(s"${getClass.getName} $restAddress")
+  protected val log: Logger = LoggerFactory.getLogger(s"${getClass.getName} $restAddress")
 
   def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(_get(s"http://$restAddress:$nodeRestPort$path")).build())
@@ -59,10 +59,9 @@ trait NodeApi {
     post(s"http://$restAddress", nodeRestPort, path,
       (rb: RequestBuilder) => rb.setHeader("Content-type", "application/json").setBody(body))
 
-  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body).flatMap(_.as[A]) match {
-    case Right(r) => r
-    case Left(e) => throw e
-  }
+  def ergoJsonAnswerAs[A](body: String)(implicit d: Decoder[A]): A = parse(body)
+    .flatMap(_.as[A])
+    .fold(e => throw e, r => r)
 
   def blacklist(networkIpAddress: String, hostNetworkPort: Int): Future[Unit] =
     post("/debug/blacklist", s"$networkIpAddress:$hostNetworkPort").map(_ => ())

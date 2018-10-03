@@ -823,6 +823,33 @@ paths:
               schema:
                 type: string
 
+  /blocks/modifier/{modifierId}:
+    get:
+      summary: Get the persistent modifier by its id
+      operationId: getModifierById
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: modifierId
+          required: true
+          description: ID of a wanted modifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Persistent modifier object
+        '404':
+          description: Modifier with this id doesn't exist
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+                # Provided modifier id is invalid
+                example: 'invalid.modifier.id'
+
   /info:
     get:
       summary: Get the information about the Node

@@ -1,8 +1,11 @@
 FROM openjdk:9-jre-slim as builder
+ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends apt-transport-https apt-utils bc dirmngr gnupg && \
     echo "deb https://dl.bintray.com/sbt/debian /" | tee -a /etc/apt/sources.list.d/sbt.list && \
     apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823 && \
+    # seems that dash package upgrade is broken in Debian, so we hold it's version before update
+    echo "dash hold" | dpkg --set-selections && \
     apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends sbt

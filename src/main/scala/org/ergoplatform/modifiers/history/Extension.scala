@@ -39,7 +39,7 @@ case class Extension(headerId: ModifierId,
   override def serializer: Serializer[Extension] = ExtensionSerializer
 
   override def toString: String = {
-    s"Extension($headerId, " +
+    s"Extension(${Algos.encode(headerId)}, " +
       s"${mandatoryFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})" +
       s"${optionalFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})"
   }
@@ -77,19 +77,22 @@ object Extension extends ApiCodecs {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  implicit val jsonEncoder: Encoder[Extension] = (e: Extension) =>
+  implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
       "digest" -> Algos.encode(e.digest).asJson,
       "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
       "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
     ).asJson
+  }
 
-  implicit val jsonDecoder: Decoder[Extension] = (c: HCursor) => for {
-    headerId <- c.downField("headerId").as[ModifierId]
-    mandatoryFields <- c.downField("mandatoryFields").as[List[(Array[Byte], Array[Byte])]]
-    optionalFields <- c.downField("optionalFields").as[List[(Array[Byte], Array[Byte])]]
-  } yield Extension(headerId, mandatoryFields, optionalFields)
+  implicit val jsonDecoder: Decoder[Extension] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      mandatoryFields <- c.downField("mandatoryFields").as[List[(Array[Byte], Array[Byte])]]
+      optionalFields <- c.downField("optionalFields").as[List[(Array[Byte], Array[Byte])]]
+    } yield Extension(headerId, mandatoryFields, optionalFields)
+  }
 }
 
 object ExtensionSerializer extends Serializer[Extension] {

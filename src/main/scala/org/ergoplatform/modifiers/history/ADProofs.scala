@@ -86,19 +86,22 @@ object ADProofs extends ApiCodecs {
         Remove(r.boxId)
     }
 
-  implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
+  implicit val jsonEncoder: Encoder[ADProofs] = { proof: ADProofs =>
     Map(
       "headerId" -> Algos.encode(proof.headerId).asJson,
       "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
       "digest" -> Algos.encode(proof.digest).asJson,
       "size" -> proof.size.asJson
     ).asJson
+  }
 
-  implicit val jsonDecoder: Decoder[ADProofs] = (c: HCursor) => for {
-    headerId <- c.downField("headerId").as[ModifierId]
-    proofBytes <- c.downField("proofBytes").as[Array[Byte]]
-    size <- c.downField("size").as[Option[Int]]
-  } yield ADProofs(headerId, SerializedAdProof @@ proofBytes, size)
+  implicit val jsonDecoder: Decoder[ADProofs] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      proofBytes <- c.downField("proofBytes").as[Array[Byte]]
+      size <- c.downField("size").as[Option[Int]]
+    } yield ADProofs(headerId, SerializedAdProof @@ proofBytes, size)
+  }
 }
 
 object ADProofSerializer extends Serializer[ADProofs] {

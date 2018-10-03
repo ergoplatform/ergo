@@ -102,7 +102,7 @@ object Header extends ApiCodecs {
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.hashLength)(0: Byte))
 
-  implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
+  implicit val jsonEncoder: Encoder[Header] = { h: Header =>
     Map(
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
@@ -119,21 +119,24 @@ object Header extends ApiCodecs {
       "version" -> h.version.asJson,
       "size" -> h.size.asJson
     ).asJson
+  }
 
-  implicit val jsonDecoder: Decoder[Header] = (c: HCursor) => for {
-    transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
-    interlinks <- c.downField("interlinks").as[List[ModifierId]]
-    adProofsRoot <- c.downField("adProofsRoot").as[Digest32]
-    stateRoot <- c.downField("stateRoot").as[ADDigest]
-    parentId <- c.downField("parentId").as[ModifierId]
-    timestamp <- c.downField("timestamp").as[Long]
-    extensionHash <- c.downField("extensionHash").as[Digest32]
-    nBits <- c.downField("nBits").as[Long]
-    height <- c.downField("height").as[Int]
-    version <- c.downField("version").as[Byte]
-    solutions <- c.downField("equihashSolutions").as[EquihashSolution]
-  } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
-    transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
+  implicit val jsonDecoder: Decoder[Header] = { c: HCursor =>
+    for {
+      transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
+      interlinks <- c.downField("interlinks").as[List[ModifierId]]
+      adProofsRoot <- c.downField("adProofsRoot").as[Digest32]
+      stateRoot <- c.downField("stateRoot").as[ADDigest]
+      parentId <- c.downField("parentId").as[ModifierId]
+      timestamp <- c.downField("timestamp").as[Long]
+      extensionHash <- c.downField("extensionHash").as[Digest32]
+      nBits <- c.downField("nBits").as[Long]
+      height <- c.downField("height").as[Int]
+      version <- c.downField("version").as[Byte]
+      solutions <- c.downField("equihashSolutions").as[EquihashSolution]
+    } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
+  }
 }
 
 object HeaderSerializer extends Serializer[Header] {

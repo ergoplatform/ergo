@@ -62,18 +62,16 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     ApiResponse(getHeaderIds(limit, offset))
   }
 
-  def postBlocksR: Route = post {
-    entity(as[ErgoFullBlock]) { block =>
-      if (ergoSettings.chainSettings.powScheme.verify(block.header)) {
-        log.info("Received a new valid block through the API: " + block)
+  def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
+    if (ergoSettings.chainSettings.powScheme.verify(block.header)) {
+      log.info("Received a new valid block through the API: " + block)
 
-        viewHolderRef ! LocallyGeneratedModifier(block.header)
-        block.blockSections.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
+      viewHolderRef ! LocallyGeneratedModifier(block.header)
+      block.blockSections.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
 
-        ApiResponse.OK
-      } else {
-        BadRequest("Block is invalid")
-      }
+      ApiResponse.OK
+    } else {
+      BadRequest("Block is invalid")
     }
   }
 

@@ -1,11 +1,12 @@
 package org.ergoplatform.api.routes
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.scalatest.{FlatSpec, Matchers}
@@ -23,17 +24,27 @@ class BlocksApiRouteSpec extends FlatSpec
   val prefix: String = "/blocks"
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
+
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(50, 0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAt(50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+    }
+  }
+
+  it should "post block correctly" in {
+    val (st, bh) = createUtxoState()
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+    val blockJson: UniversalEntity = HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+    Post(prefix, blockJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.lastHeaders(1, 0).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
+      history.lastHeaders(1).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -55,7 +66,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  val headerIdBytes: ModifierId = history.lastHeaders(1, 0).headers.head.id
+  val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
   ignore should "get block by header id" in {

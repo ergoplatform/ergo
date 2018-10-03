@@ -3,6 +3,7 @@ package org.ergoplatform.api.routes
 import java.net.InetSocketAddress
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -24,11 +25,11 @@ class TransactionApiRouteSpec extends FlatSpec
   with Stubs
   with FailFastCirceSupport {
 
-  implicit val timeout = RouteTestTimeout(15.seconds.dilated)
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val prefix = "/transactions"
-  val route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
+  val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
   val input = Input(
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),

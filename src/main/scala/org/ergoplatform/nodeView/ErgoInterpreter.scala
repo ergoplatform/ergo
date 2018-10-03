@@ -32,8 +32,12 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
   override type CTX = ErgoContext
 
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate): Boolean = {
-    output.value >= box.value - Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight) &&
-    ErgoBox.allRegisters.tail.forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+    val storageFee = Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight)
+
+    (box.value - storageFee <= 0) || {
+      output.value >= box.value - storageFee &&
+        ErgoBox.allRegisters.tail.forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+    }
   }
 
   override def verify(exp: Value[SBoolean.type],

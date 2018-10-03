@@ -50,7 +50,6 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
 
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
@@ -59,7 +58,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, minerRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

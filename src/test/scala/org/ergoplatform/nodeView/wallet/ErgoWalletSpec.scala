@@ -105,12 +105,12 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx)))
-      val balanceAfterSpending = getBalancesWithUnconfirmed.balance
+      val totalAfterSpending = getBalancesWithUnconfirmed.balance
 
       log.info(s"Total balance with unconfirmed: $totalBalance")
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
-      balanceAfterSpending shouldEqual balanceToReturn
+      totalAfterSpending shouldEqual balanceToReturn
     }
   }
 
@@ -168,7 +168,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       confirmedBalance shouldBe sumBalance
       totalBalance shouldBe sumBalance
-      confirmedAfterSpending shouldBe 0L
+      confirmedAfterSpending shouldBe sumBalance
       totalAfterSpending shouldBe balanceToReturn
     }
   }
@@ -269,7 +269,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       confirmedBalance shouldBe sumBalance
       totalBalance shouldBe sumBalance
-      confirmedAfterSpending shouldBe 0L
+      confirmedAfterSpending shouldBe sumBalance
       totalAfterSpending shouldBe balanceToReturn
       balanceAfterRollback shouldBe 0L
       totalAfterRollback shouldBe balanceToReturn
@@ -358,7 +358,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       totalBeforeRollback shouldBe 0L
 
       balanceAfterRollback shouldBe initialBalance
-      totalAfterRollback shouldBe initialBalance
+      totalAfterRollback shouldBe 0L
     }
   }
 
@@ -406,7 +406,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       totalBeforeRollback shouldBe balanceToReturn
 
       balanceAfterRollback shouldBe initialBalance
-      totalAfterRollback shouldBe initialBalance + balanceToReturn
+      totalAfterRollback shouldBe balanceToReturn
     }
   }
 
@@ -449,7 +449,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       totalBeforeRollback shouldBe balanceToReturn
 
       balanceAfterRollback shouldBe 0L
-      totalAfterRollback shouldBe balance + balanceToReturn
+      totalAfterRollback shouldBe balanceToReturn
     }
   }
 

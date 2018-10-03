@@ -41,6 +41,13 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  val offlineGeneratingPeerConfig: Config = ConfigFactory.parseString(
+    """
+      |ergo.node.mining=true
+      |ergo.node.offlineGeneration=true
+    """.stripMargin
+  )
+
   val noDelayConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.miningDelay=50ms

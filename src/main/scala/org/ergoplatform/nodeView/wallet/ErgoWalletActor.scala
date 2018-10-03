@@ -85,8 +85,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
   }
 
-  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
-    tx.inputs.foreach { inp =>
+  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    tx.inputs.forall { inp =>
       val boxId = bytesToId(inp.boxId)
       registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }

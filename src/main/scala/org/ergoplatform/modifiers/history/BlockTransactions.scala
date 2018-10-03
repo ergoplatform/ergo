@@ -52,18 +52,21 @@ object BlockTransactions extends ApiCodecs {
 
   def rootHash(serializedIds: Seq[Array[Byte]]): Digest32 = Algos.merkleTreeRoot(LeafData @@ serializedIds)
 
-  implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
+  implicit val jsonEncoder: Encoder[BlockTransactions] = { bt: BlockTransactions =>
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
       "size" -> bt.size.asJson
     ).asJson
+  }
 
-  implicit val jsonDecoder: Decoder[BlockTransactions] = (c: HCursor) => for {
-    headerId <- c.downField("headerId").as[ModifierId]
-    transactions <- c.downField("transactions").as[List[ErgoTransaction]]
-    size <- c.downField("size").as[Int]
-  } yield BlockTransactions(headerId, transactions, Some(size))
+  implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      size <- c.downField("size").as[Int]
+    } yield BlockTransactions(headerId, transactions, Some(size))
+  }
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {

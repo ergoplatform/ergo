@@ -45,7 +45,7 @@ object ErgoFullBlock extends ApiCodecs {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
 
-  implicit val jsonEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+  implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
@@ -53,18 +53,22 @@ object ErgoFullBlock extends ApiCodecs {
       "adProofs" -> b.adProofs.asJson,
       "size" -> b.size.asJson
     )
+  }
 
-  implicit val jsonDecoder: Decoder[ErgoFullBlock] = (c: HCursor) => for {
-    header <- c.downField("header").as[Header]
-    transactions <- c.downField("blockTransactions").as[BlockTransactions]
-    extension <- c.downField("extension").as[Extension]
-    adProofs <- c.downField("adProofs").as[Option[ADProofs]]
-  } yield ErgoFullBlock(header, transactions, extension, adProofs)
+  implicit val jsonDecoder: Decoder[ErgoFullBlock] = { c: HCursor =>
+    for {
+      header <- c.downField("header").as[Header]
+      transactions <- c.downField("blockTransactions").as[BlockTransactions]
+      extension <- c.downField("extension").as[Extension]
+      adProofs <- c.downField("adProofs").as[Option[ADProofs]]
+    } yield ErgoFullBlock(header, transactions, extension, adProofs)
+  }
 
-  val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+  val blockSizeEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(
       "id" -> b.header.id.asJson,
       "size" -> b.size.asJson
     )
+  }
 
 }

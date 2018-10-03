@@ -1,13 +1,14 @@
 package org.ergoplatform.api.routes
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import org.scalatest.OptionValues._
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 
@@ -18,30 +19,32 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  implicit val timeout = RouteTestTimeout(15.seconds.dilated)
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
-  val prefix = "/blocks"
-  val route = BlocksApiRoute(readersRef, minerRef, settings).route
+  val prefix: String = "/blocks"
+  val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(50, 0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAt(50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
-  ignore should "post block correclty" in {
-    //TODO wait until method will be implemented on api
-    Post(prefix) ~> route ~> check {
-      ???
+  it should "post block correctly" in {
+    val (st, bh) = createUtxoState()
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+    val blockJson: UniversalEntity = HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+    Post(prefix, blockJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.lastHeaders(1, 0).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
+      history.lastHeaders(1).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -96,7 +99,6 @@ class BlocksApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val header = history.typedModifierById[Header](headerIdBytes).value
       val fullBlock = history.getFullBlock(header).value
-      val blockTransactions = fullBlock.blockTransactions
       val expected = fullBlock.blockTransactions.asJson.toString
       responseAs[String] shouldEqual expected
     }

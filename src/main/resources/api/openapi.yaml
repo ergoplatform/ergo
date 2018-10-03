@@ -243,15 +243,25 @@ components:
       required:
         - headerId
         - digest
+        - mandatoryFields
+        - optionalFields
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
         digest:
           $ref: '#/components/schemas/Digest32'
         mandatoryFields:
-          description: List of mandatory key-value pairs
+          description: List of mandatory key-value fields
+          type: array
         optionalFields:
-          description: List of optional key-value pairs
+          description: List of optional key-value fields
+          type: array
+            $ref: '#/components/schemas/KeyValueItem'
+
+    KeyValueItem:
+      type: array
+      items:
+        $ref: '#/components/schemas/EncodedBytes'
 
     CandidateBlock:
       type: object
@@ -485,6 +495,12 @@ components:
 
     Digest32:
       description: Base16-encoded 32 byte digest
+      type: string
+      format: base16
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    EncodedBytes:
+      description: Base16-encoded bytes
       type: string
       format: base16
       example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'

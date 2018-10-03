@@ -126,6 +126,7 @@ components:
         - header
         - blockTransactions
         - adProofs
+        - extension
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
@@ -133,6 +134,8 @@ components:
           $ref: '#/components/schemas/BlockTransactions'
         adProofs:
           $ref: '#/components/schemas/BlockADProofs'
+        extension:
+          $ref: '#/components/schemas/Extension'
         size:
           description: Size in bytes
           type: integer
@@ -234,6 +237,36 @@ components:
           description: Size in bytes
           type: integer
           format: int32
+
+    Extension:
+      type: object
+      required:
+        - headerId
+        - digest
+        - mandatoryFields
+        - optionalFields
+      properties:
+        headerId:
+          $ref: '#/components/schemas/ModifierId'
+        digest:
+          $ref: '#/components/schemas/Digest32'
+        mandatoryFields:
+          description: List of mandatory key-value fields
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/KeyValueItem'
+        optionalFields:
+          description: List of optional key-value fields
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/KeyValueItem'
+
+    KeyValueItem:
+      type: array
+      items:
+        $ref: '#/components/schemas/HexString'
 
     CandidateBlock:
       type: object
@@ -467,6 +500,12 @@ components:
 
     Digest32:
       description: Base16-encoded 32 byte digest
+      type: string
+      format: base16
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    HexString:
+      description: Base16-encoded bytes
       type: string
       format: base16
       example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
@@ -733,43 +772,6 @@ paths:
                 type: string
                 # Provided header id is invalid
                 example: 'invalid.block.id'
-
-  /blocks/{headerId}/size:
-    get:
-      summary: Get the block size info by a given id
-      operationId: getBlockSizeByHeaderIdR
-      tags:
-        - blocks
-      parameters:
-        - in: path
-          name: headerId
-          required: true
-          description: identifier of a block
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Block size object
-          content:
-            application/json:
-              schema:
-                properties:
-                  id:
-                    $ref: '#/components/schemas/ModifierId'
-                  size:
-                     type: integer
-                     format: int32
-        '404':
-          description: Block with this id doesn't exist
-        default:
-          description: Error
-          content:
-            text/plain; charset=UTF-8:
-              schema:
-                type: string
-                # Provided header id is invalid
-                example: 'invalid.block.id'
-
 
   /blocks/candidateBlock:
     get:

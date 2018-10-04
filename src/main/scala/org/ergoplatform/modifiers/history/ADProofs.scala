@@ -44,7 +44,9 @@ case class ADProofs(headerId: ModifierId,
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
                      changes: StateChanges): Try[Seq[ADValue]] = Try {
-      changes.operations.flatMap(o => verifier.performOneOperation(ADProofs.changeToMod(o)).get)
+      changes.operations.flatMap { o =>
+        verifier.performOneOperation(ADProofs.changeToMod(o)).fold(e => throw e, opt => opt)
+      }
     }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,

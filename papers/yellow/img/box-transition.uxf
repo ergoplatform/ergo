@@ -1,51 +1,51 @@
-<diagram program="umletino" version="14.3.0"><zoom_level>10</zoom_level><element><id>UMLClass</id><coordinates><x>0</x><y>30</y><w>150</w><h>100</h></coordinates><panel_attributes>Unspent
+<diagram program="umletino" version="14.3.0"><zoom_level>10</zoom_level><element><id>UMLClass</id><coordinates><x>0</x><y>17</y><w>150</w><h>100</h></coordinates><panel_attributes>Unspent
 Offchain
 
 creationHeight = None
 spendingHeight = None
 
 
-</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>370</x><y>30</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
+</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>370</x><y>17</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
 Offchain
 
 creationHeight = None
 spendingHeight = None
-</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>140</x><y>60</y><w>250</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
-ProcessSpending(atHeight = None)</panel_attributes><additional_attributes>230;20;10;20</additional_attributes></element><element><id>UMLClass</id><coordinates><x>0</x><y>360</y><w>150</w><h>100</h></coordinates><panel_attributes>Unspent
+</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>140</x><y>47</y><w>250</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
+ProcessSpending(atHeight = None)</panel_attributes><additional_attributes>230;20;10;20</additional_attributes></element><element><id>UMLClass</id><coordinates><x>0</x><y>347</y><w>150</w><h>100</h></coordinates><panel_attributes>Unspent
 Onchain
 
 creationHeight = Some
 spendingHeight = None
 
 
-</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>790</x><y>360</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
+</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>370</x><y>347</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
 Onchain
 
 creationHeight = Some
 spendingHeight = Some
 
 
-</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>140</x><y>410</y><w>670</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
-ProcessSpending(atHeight = Some)</panel_attributes><additional_attributes>650;20;10;20</additional_attributes></element><element><id>Relation</id><coordinates><x>850</x><y>120</y><w>220</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
-ProcessSpending(atHeight = Some)</panel_attributes><additional_attributes>10;240;10;10</additional_attributes></element><element><id>Relation</id><coordinates><x>140</x><y>120</y><w>670</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
-ProcessSpending(atHeight = None)</panel_attributes><additional_attributes>650;10;10;240</additional_attributes></element><element><id>Relation</id><coordinates><x>30</x><y>120</y><w>140</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
+</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>140</x><y>377</y><w>250</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
+ProcessSpending(atHeight = Some)</panel_attributes><additional_attributes>230;20;10;20</additional_attributes></element><element><id>Relation</id><coordinates><x>510</x><y>107</y><w>380</w><h>310</h></coordinates><panel_attributes>lt=&lt;&lt;-
+ProcessSpending(atHeight = Some)</panel_attributes><additional_attributes>10;290;360;290;360;10</additional_attributes></element><element><id>Relation</id><coordinates><x>60</x><y>107</y><w>880</w><h>390</h></coordinates><panel_attributes>lt=&lt;&lt;-
+ProcessSpending(atHeight = None)</panel_attributes><additional_attributes>860;10;860;370;10;370;10;340</additional_attributes></element><element><id>Relation</id><coordinates><x>60</x><y>107</y><w>140</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
 CreationConfirmation
-</panel_attributes><additional_attributes>10;240;10;10</additional_attributes></element><element><id>UMLClass</id><coordinates><x>790</x><y>30</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
+</panel_attributes><additional_attributes>10;240;10;10</additional_attributes></element><element><id>UMLClass</id><coordinates><x>790</x><y>17</y><w>150</w><h>100</h></coordinates><panel_attributes>Spent
 Offchain
 
 creationHeight = Some
 spendingHeight = None
-</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>510</x><y>40</y><w>300</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
-CreationConfirmation</panel_attributes><additional_attributes>280;20;10;20</additional_attributes></element><element><id>Relation</id><coordinates><x>100</x><y>120</y><w>340</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
+</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>510</x><y>27</y><w>300</w><h>40</h></coordinates><panel_attributes>lt=&lt;&lt;-
+CreationConfirmation</panel_attributes><additional_attributes>280;20;10;20</additional_attributes></element><element><id>Relation</id><coordinates><x>100</x><y>107</y><w>330</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
 ProcessRollback(toHeight &lt; creationHeight)
 
-fg=red</panel_attributes><additional_attributes>50;10;120;120;10;240</additional_attributes></element><element><id>Relation</id><coordinates><x>880</x><y>90</y><w>350</w><h>320</h></coordinates><panel_attributes>lt=&lt;&lt;-
+fg=red</panel_attributes><additional_attributes>50;10;110;160;10;240</additional_attributes></element><element><id>Relation</id><coordinates><x>460</x><y>107</y><w>380</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
 ProcessRollback(creationHeight &lt;= toHeight &lt; spendingHeight)
 
-fg=red</panel_attributes><additional_attributes>60;10;110;10;230;110;230;300;60;300</additional_attributes></element><element><id>Relation</id><coordinates><x>510</x><y>80</y><w>300</w><h>50</h></coordinates><panel_attributes>lt=&lt;&lt;-
+fg=red</panel_attributes><additional_attributes>360;10;360;200;10;200;10;240</additional_attributes></element><element><id>Relation</id><coordinates><x>510</x><y>67</y><w>300</w><h>50</h></coordinates><panel_attributes>lt=&lt;&lt;-
 ProcessRollback(toHeight &lt; creationHeight)
 
-fg=red</panel_attributes><additional_attributes>10;20;280;20</additional_attributes></element><element><id>Relation</id><coordinates><x>470</x><y>120</y><w>380</w><h>290</h></coordinates><panel_attributes>lt=&lt;&lt;-
+fg=red</panel_attributes><additional_attributes>10;20;280;20</additional_attributes></element><element><id>Relation</id><coordinates><x>410</x><y>107</y><w>260</w><h>260</h></coordinates><panel_attributes>lt=&lt;&lt;-
 ProcessRollback(toHeight &lt; creationHeight)
 
-fg=red</panel_attributes><additional_attributes>10;10;130;130;130;270;320;270</additional_attributes></element></diagram>
+fg=red</panel_attributes><additional_attributes>10;10;10;240</additional_attributes></element></diagram>

@@ -121,7 +121,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
   def getBestHeaderOpt(implicit ctx: Ctx): Option[Header] = getHistory.bestHeaderOpt
   def getPoolSize(implicit ctx: Ctx): Int = getCurrentView.pool.size
   def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootHash)
-  def getBestFullBlockOpt(implicit ctx: Ctx):  Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
+  def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
   def getBestFullBlockEncodedId(implicit ctx: Ctx): Option[String] = getBestFullBlockOpt.map(_.header.encodedId)
   def getOpenSurfaces(implicit ctx: Ctx): Seq[scorex.core.ModifierId] = getHistory.openSurfaceIds()
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight

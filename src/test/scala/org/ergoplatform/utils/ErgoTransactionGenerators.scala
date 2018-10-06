@@ -106,9 +106,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield new ErgoBoxCandidate(value, prop, tokens, ar)
 
 
-  lazy val unspendableErgoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
+  def unspendableErgoBoxCandidateGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBoxCandidate] = for {
     prop <- falseLeafGen
-    value <- positiveIntGen
+    value <- Gen.choose(1, maxValue)
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
   } yield new ErgoBoxCandidate(value, prop, tokens, ar)

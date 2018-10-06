@@ -43,22 +43,24 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
   override def verify(exp: Value[SBoolean.type],
                       context: CTX,
                       proof: Array[Byte],
-                      message: Array[Byte]): Try[VerificationResult] = Try {
+                      message: Array[Byte]): Try[VerificationResult] = {
 
     lazy val varId = Constants.StorageIndexVarId
 
     //no proof provided and enough time since box cretion to spend it
     if (context.currentHeight - context.self.creationHeight >= Constants.StoragePeriod
-          && proof.length == 0
-          && context.extension.values.contains(varId)) {
+        && proof.length == 0
+        && context.extension.values.contains(varId)) {
 
-      val idx = context.extension.values(varId).value.asInstanceOf[Short]
-      val outputCandidate = context.spendingTransaction.outputCandidates(idx)
+      Try {
+        val idx = context.extension.values(varId).value.asInstanceOf[Short]
+        val outputCandidate = context.spendingTransaction.outputCandidates(idx)
 
-      //todo: zero cost to validate the spending condition - is it okay?
-      checkExpiredBox(context.self, outputCandidate) -> 0L
+        //todo: zero cost to validate the spending condition - is it okay?
+        checkExpiredBox(context.self, outputCandidate) -> 0L
+      }.recoverWith{case _ => super.verify(exp, context, proof, message)}
     } else {
-      super.verify(exp, context, proof, message).get
+      super.verify(exp, context, proof, message)
     }
   }
 }

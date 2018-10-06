@@ -30,7 +30,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
 
   property("expiration - successful spending w. same value") {
-    forAll(unspendableErgoBoxCandidateGen) { candidate =>
+    forAll(unspendableErgoBoxCandidateGen()) { candidate =>
       val from = candidate.toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
 
       val in = Input(from.id,
@@ -49,7 +49,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("expiration - successful spending w. max spending") {
-    forAll(unspendableErgoBoxCandidateGen) { candidate =>
+    forAll(unspendableErgoBoxCandidateGen()) { candidate =>
       val from = candidate.toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
 
       val in = Input(from.id,
@@ -70,4 +70,25 @@ class ExpirationSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("expiration - unsuccessful spending due too big storage fee charged") {
+    forAll(unspendableErgoBoxCandidateGen(Parameters.K * (Constants.StoragePeriod - 0) * 100 + 1, Long.MaxValue)) { candidate =>
+      val from = candidate.toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
+
+      val in = Input(from.id,
+        ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
+
+      val h = Constants.StoragePeriod
+
+      val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length + 1, from.value)
+
+      val feeBoxCondidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
+      val tx = ErgoTransaction(inputs = IndexedSeq(in),
+        outputCandidates = IndexedSeq(decreaseValue(updateHeight(candidate, h), fee), Some(feeBoxCondidate)).flatten)
+
+      val updContext = context.copy(height = h)
+
+      tx.statelessValidity.isSuccess shouldBe true
+      tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe false
+    }
+  }
 }

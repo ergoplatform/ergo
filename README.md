@@ -48,8 +48,8 @@ To run specific Ergo version as a service with custom config:
     sudo docker run -d \
         -p 9006:9006 \
         -p 9052:9052 \
-		-v ergo:/root/ergo/data \
-		-v /path/on/host/system/to/myergo.conf:/root/ergo/myergo.conf \
-		ergoplatform/ergo:v1.5.3 /root/ergo/myergo.conf
+        -v ergo:/root/ergo/data \
+        -v /path/on/host/system/to/myergo.conf:/root/ergo/myergo.conf \
+        ergoplatform/ergo:v1.5.3 /root/ergo/myergo.conf
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to new location in container) and open ports `9006` and `9052` on host system. Note that `9052` is used for API, so it is ok not to open it into whole Internet. Also, Ergo node works normally under NAT, so you can keep closed your `9006` port too, hence other nodes could not discover and connect to yours one, only your node could initiate connections.

@@ -1,4 +1,4 @@
-FROM openjdk:9-jre-slim as builder
+FROM openjdk:10-jre-slim as builder
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends apt-transport-https apt-utils bc dirmngr gnupg && \
@@ -15,7 +15,7 @@ RUN sbt reload clean assembly
 RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
 CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 
-FROM openjdk:9-jre-slim
+FROM openjdk:10-jre-slim
 LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
 COPY --from=builder /ergo.jar /ergo.jar
 EXPOSE 9006 9052

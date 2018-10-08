@@ -16,7 +16,7 @@ RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
 CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 
 FROM openjdk:9-jre-slim
-MAINTAINER Andrey Andreev <andyceo@yandex.ru> (@andyceo)
+LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
 COPY --from=builder /ergo.jar /ergo.jar
 EXPOSE 9006 9052
 WORKDIR /root

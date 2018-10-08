@@ -32,7 +32,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  override val route: Route = (pathPrefix("wallet") & withCors) {
+  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesRoute ~
       unconfirmedBalanceRoute ~
       addressesRoute ~

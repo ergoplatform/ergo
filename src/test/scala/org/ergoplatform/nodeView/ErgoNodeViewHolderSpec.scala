@@ -113,9 +113,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
       applyBlock(block) shouldBe 'success
       getBestHeaderOpt shouldBe Some(block.header)
-      if (verifyTransactions) {
-        getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
-      }
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
       getBestHeaderOpt shouldBe Some(block.header)
 
       val brokenBlock = genInvalidFullBlock(block.header, wusAfterBlock)
@@ -160,9 +158,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
       applyBlock(block) shouldBe 'success
       getBestHeaderOpt shouldBe Some(block.header)
-      if (verifyTransactions) {
-        getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
-      }
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
       getBestHeaderOpt shouldBe Some(block.header)
 
       val brokenBlock = genBlockWithInvalidExtension(block.header, wusAfterBlock)

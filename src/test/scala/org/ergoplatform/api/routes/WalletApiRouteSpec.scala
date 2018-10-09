@@ -8,6 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.{FlatSpec, Matchers}
 import sigmastate.Values

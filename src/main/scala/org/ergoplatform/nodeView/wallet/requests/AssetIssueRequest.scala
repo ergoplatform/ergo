@@ -44,8 +44,8 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
     "address" -> request.address.asJson,
     "assetId" -> request.assetId.asJson,
     "amount" -> request.amount.asJson,
-    "assetName" -> request.assetName.asJson,
-    "assetDescription" -> request.assetName.asJson,
+    "name" -> request.assetName.asJson,
+    "description" -> request.assetName.asJson,
     "decimals" -> request.decimals.asJson
   )
 }
@@ -61,8 +61,8 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       address <- cursor.downField("address").as[ErgoAddress]
       assetId <- cursor.downField("assetId").as[ErgoBox.TokenId]
       amount <- cursor.downField("amount").as[Amount]
-      assetName <- cursor.downField("assetName").as[String]
-      assetDescription <- cursor.downField("assetDescription").as[String]
+      assetName <- cursor.downField("name").as[String]
+      assetDescription <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
     } yield AssetIssueRequest(address, assetId, amount, assetName, assetDescription, decimals)
   }

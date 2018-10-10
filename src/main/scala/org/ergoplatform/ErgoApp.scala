@@ -1,7 +1,6 @@
 package org.ergoplatform
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import akka.http.scaladsl.server.{RejectionHandler, ValidationRejection}
 import org.ergoplatform.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
@@ -13,7 +12,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.{ApiError, ApiRoute, PeersApiRoute, UtilsApiRoute}
+import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
@@ -36,11 +35,6 @@ class ErgoApp(args: Seq[String]) extends Application {
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
-
-  implicit def rejectionHandler: RejectionHandler = RejectionHandler.newBuilder()
-    .handle { case ValidationRejection(msg, _) => ApiError.BadRequest.complete(msg) }
-    .handleNotFound { ApiError.NotExists }
-    .result()
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)

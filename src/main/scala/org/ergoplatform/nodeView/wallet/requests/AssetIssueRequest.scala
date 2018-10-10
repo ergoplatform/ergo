@@ -22,14 +22,14 @@ import sigmastate.Values.{IntConstant, StringConstant}
 case class AssetIssueRequest(address: ErgoAddress,
                              assetId: ErgoBox.TokenId,
                              amount: Amount,
-                             assetName: String,
-                             assetDescription: String,
+                             name: String,
+                             description: String,
                              decimals: Int) extends TransactionRequest {
 
   override def toBoxCandidate: ErgoBoxCandidate = {
     val nonMandatoryRegisters = Map(
-      R4 -> StringConstant(assetName),
-      R5 -> StringConstant(assetDescription),
+      R4 -> StringConstant(name),
+      R5 -> StringConstant(description),
       R6 -> IntConstant(decimals)
     )
     new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
@@ -44,8 +44,8 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
     "address" -> request.address.asJson,
     "assetId" -> request.assetId.asJson,
     "amount" -> request.amount.asJson,
-    "name" -> request.assetName.asJson,
-    "description" -> request.assetName.asJson,
+    "name" -> request.name.asJson,
+    "description" -> request.name.asJson,
     "decimals" -> request.decimals.asJson
   )
 }
@@ -61,9 +61,9 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       address <- cursor.downField("address").as[ErgoAddress]
       assetId <- cursor.downField("assetId").as[ErgoBox.TokenId]
       amount <- cursor.downField("amount").as[Amount]
-      assetName <- cursor.downField("name").as[String]
-      assetDescription <- cursor.downField("description").as[String]
+      name <- cursor.downField("name").as[String]
+      description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
-    } yield AssetIssueRequest(address, assetId, amount, assetName, assetDescription, decimals)
+    } yield AssetIssueRequest(address, assetId, amount, name, description, decimals)
   }
 }

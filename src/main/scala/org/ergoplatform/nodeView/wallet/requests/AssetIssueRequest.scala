@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.ErgoBox.{R4, R5}
+import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.settings.ErgoSettings
@@ -11,20 +11,27 @@ import scorex.core.transaction.box.Box.Amount
 import sigmastate.Values.{IntConstant, StringConstant}
 
 /**
-  * Ergo Token Standard
-  * ETS token data is stored in the following way:
-  * R3 - ID and monetary value
+  * Request for issuing new asset of Ergo Asset Standard 1.
+  *
+  * EAS1 token data is stored in registers in the following way:
+  * R3 - ID and supply amount
   * R4 - verbose name
-  * R5 - number of decimal places
+  * R5 - description
+  * R6 - number of decimal places
   */
 case class AssetIssueRequest(address: ErgoAddress,
                              assetId: ErgoBox.TokenId,
                              amount: Amount,
                              assetName: String,
+                             assetDescription: String,
                              decimals: Int) extends TransactionRequest {
 
   override def toBoxCandidate: ErgoBoxCandidate = {
-    val nonMandatoryRegisters = Map(R4 -> StringConstant(assetName), R5 -> IntConstant(decimals))
+    val nonMandatoryRegisters = Map(
+      R4 -> StringConstant(assetName),
+      R5 -> StringConstant(assetDescription),
+      R6 -> IntConstant(decimals)
+    )
     new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
   }
 }
@@ -38,6 +45,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
     "assetId" -> request.assetId.asJson,
     "amount" -> request.amount.asJson,
     "assetName" -> request.assetName.asJson,
+    "assetDescription" -> request.assetName.asJson,
     "decimals" -> request.decimals.asJson
   )
 }
@@ -54,7 +62,8 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       assetId <- cursor.downField("assetId").as[ErgoBox.TokenId]
       amount <- cursor.downField("amount").as[Amount]
       assetName <- cursor.downField("assetName").as[String]
+      assetDescription <- cursor.downField("assetDescription").as[String]
       decimals <- cursor.downField("decimals").as[Int]
-    } yield AssetIssueRequest(address, assetId, amount, assetName, decimals)
+    } yield AssetIssueRequest(address, assetId, amount, assetName, assetDescription, decimals)
   }
 }

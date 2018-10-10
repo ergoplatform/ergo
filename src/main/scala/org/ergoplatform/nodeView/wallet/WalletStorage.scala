@@ -92,10 +92,12 @@ class WalletStorage extends ScorexLogging {
   def balancesWithUnconfirmed: Long = _confirmedBalance + _unconfirmedDelta
 
   def assetBalancesWithUnconfirmed: scala.collection.Map[ModifierId, Long] = {
-    _unconfirmedAssetDeltas map { case (id, value) =>
+    val unconfirmedSums = _unconfirmedAssetDeltas map { case (id, value) =>
       val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
       id -> newValue
     }
+    val confirmedAddition = _confirmedAssetBalances -- _unconfirmedAssetDeltas.keys
+    unconfirmedSums ++ confirmedAddition
   }
 
   private def undoBalances(trackedBox: TrackedBox): Unit = updateBalances(trackedBox, undo = true)

@@ -16,6 +16,7 @@ import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
+import scorex.core.network.peer.PeerInfo
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
@@ -75,8 +76,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
-      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, None)
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

@@ -4,10 +4,11 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, ModifierTypeId, bytesToId}
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId}
 import scorex.utils.Random
 
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement],

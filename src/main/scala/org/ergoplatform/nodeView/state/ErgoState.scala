@@ -9,9 +9,11 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
+import scorex.core.VersionTag
 import scorex.core.transaction.state.MinimalState
+import scorex.core.bytesToVersion
 import scorex.util.ScorexLogging
-import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
+import scorex.util.{ModifierId, bytesToId}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import sigmastate.Values.{IntConstant, LongConstant}
@@ -20,7 +22,6 @@ import sigmastate.{SLong, _}
 
 import scala.collection.mutable
 import scala.util.Try
-
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure

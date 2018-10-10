@@ -8,7 +8,8 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
+import scorex.core.ModifierTypeId
+import scorex.util._
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}

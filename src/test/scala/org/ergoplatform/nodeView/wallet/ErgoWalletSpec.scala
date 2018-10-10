@@ -55,37 +55,38 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val bs0 = getBalancesWithUnconfirmed
       bs0.balance shouldBe 0
-      bs0.assetBalances.isEmpty shouldBe true
+      bs0.assetBalances shouldBe empty
 
       val balance1 = Random.nextInt(1000) + 1
-      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(new ErgoBoxCandidate(balance1, pubKey))))
+      val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, randomAssets))
+      wallet.scanOffchain(ErgoTransaction(fakeInput, box1))
 
       blocking(Thread.sleep(1000))
 
       val bs1 = getBalancesWithUnconfirmed
       bs1.balance shouldBe balance1
-      bs1.assetBalances.isEmpty shouldBe true
+      bs1.assetBalances shouldBe boxAssets(box1)
 
       val balance2 = Random.nextInt(1000) + 1
-      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(new ErgoBoxCandidate(balance2, pubKey))))
+      val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey))
+      wallet.scanOffchain(ErgoTransaction(fakeInput, box2))
 
       blocking(Thread.sleep(1000))
 
       val bs2 = getBalancesWithUnconfirmed
       bs2.balance shouldBe (balance1 + balance2)
-      bs2.assetBalances.isEmpty shouldBe true
+      bs2.assetBalances shouldBe boxAssets(box1 ++ box2)
 
       wallet.watchFor(Pay2SAddress(Values.TrueLeaf))
       val balance3 = Random.nextInt(1000) + 1
-      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(new ErgoBoxCandidate(balance3, Values.TrueLeaf))))
+      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Values.TrueLeaf))
+      wallet.scanOffchain(ErgoTransaction(fakeInput, box3))
 
       blocking(Thread.sleep(1000))
 
       val bs3 = getBalancesWithUnconfirmed
       bs3.balance shouldBe (balance1 + balance2 + balance3)
-      bs3.assetBalances.isEmpty shouldBe true
-
-      //todo: enhance the test, e.g. add assets
+      bs3.assetBalances shouldBe boxAssets(box1 ++ box2 ++ box3)
     }
   }
 
@@ -101,15 +102,17 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       totalBalance shouldEqual balanceToSpend
 
       val balanceToReturn = randomLong(balanceToSpend)
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, randomAssets)
+      val assets = assetSum(boxesAvailable(spendingTx, address.script))
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx)))
-      val totalAfterSpending = getBalancesWithUnconfirmed.balance
+      val totalAfterSpending = getBalancesWithUnconfirmed
 
       log.info(s"Total balance with unconfirmed: $totalBalance")
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
-      totalAfterSpending shouldEqual balanceToReturn
+      totalAfterSpending.balance shouldEqual balanceToReturn
+      totalAfterSpending.assetBalances shouldEqual assets
     }
   }
 
@@ -124,19 +127,20 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val totalBalance = getBalancesWithUnconfirmed.balance
 
       val balanceToReturn = randomLong(balanceToSpend)
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, randomAssets)
 //      val doubleSpendingTx = makeSpendingTx(boxesToSpend, address, randomLong(balanceToSpend))
+      val assets = assetSum(boxesAvailable(spendingTx, address.script))
       wallet.scanOffchain(Seq(spendingTx, spendingTx))
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx) * 3))
-      val balanceAfterSpending = getBalancesWithUnconfirmed.balance
+      val totalAfterSpending = getBalancesWithUnconfirmed
 
       log.info(s"Total with unconfirmed balance: $totalBalance")
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
       totalBalance shouldEqual balanceToSpend
-
-      balanceAfterSpending shouldEqual balanceToReturn
+      totalAfterSpending.balance shouldEqual balanceToReturn
+      totalAfterSpending.assetBalances shouldEqual assets
     }
   }
 
@@ -153,11 +157,12 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val confirmedBalance = getConfirmedBalances.balance
 
       val balanceToReturn = randomLong(sumBalance)
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, randomAssets)
+      val assets = assetSum(boxesAvailable(spendingTx, address.script))
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(spendingTx)))
       val confirmedAfterSpending = getConfirmedBalances.balance
-      val totalAfterSpending = getBalancesWithUnconfirmed.balance
+      val totalAfterSpending = getBalancesWithUnconfirmed
 
       log.info(s"Sum balance: $sumBalance")
       log.info(s"Balance before spending: $confirmedBalance")
@@ -168,7 +173,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       confirmedBalance shouldBe sumBalance
       totalBalance shouldBe sumBalance
       confirmedAfterSpending shouldBe sumBalance
-      totalAfterSpending shouldBe balanceToReturn
+      totalAfterSpending.balance shouldBe balanceToReturn
+      totalAfterSpending.assetBalances shouldBe assets
     }
   }
 
@@ -189,28 +195,33 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       confirmedBalance shouldBe balanceToSpend
 
       val balanceToReturn = randomLong(balanceToSpend)
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
-
-      val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx)) // throws Exception: Key ... does not exist
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, randomAssets)
+      val assets = assetSum(boxesAvailable(spendingTx, address.script))
+      val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
       applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       blocking(Thread.sleep(scanTime(spendingBlock)))
 
-      val balanceAfterSpending = getConfirmedBalances.balance
+      val balanceAfterSpending = getConfirmedBalances
+      log.info(s"Boxes to spend: $boxesToSpend")
       log.info(s"Total with unconfirmed balance: $confirmedBalance")
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
-      balanceAfterSpending shouldEqual (confirmedBalance - balanceToSpend + balanceToReturn)
+      balanceAfterSpending.balance shouldEqual (confirmedBalance - balanceToSpend + balanceToReturn)
+      balanceAfterSpending.assetBalances shouldBe assets
+      getBalancesWithUnconfirmed shouldEqual balanceAfterSpending
     }
   }
 
   property("off-chain transaction becomes on-chain") {
     withFixture { implicit w =>
       val pubKey = getTrackedAddresses.head.script
-      val tx = makeGenesisTx(pubKey)
+      val tx = makeGenesisTx(pubKey, randomAssets)
       wallet.scanOffchain(tx)
       blocking(Thread.sleep(offchainScanTime(tx)))
-      val sumBalance = sum(boxesAvailable(tx, pubKey))
+      val boxesToSpend = boxesAvailable(tx, pubKey)
+      val sumBalance = sum(boxesToSpend)
+      val sumAssets = assetSum(boxesToSpend)
       val initialBalance = getBalancesWithUnconfirmed.balance
       initialBalance shouldBe sumBalance
 
@@ -218,14 +229,15 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
-      val confirmedBalance = getConfirmedBalances.balance
+
+      val confirmedBalance = getConfirmedBalances
       log.info(s"Confirmed balance $confirmedBalance")
       log.info(s"Sum balance: $sumBalance")
-      confirmedBalance should be > 0L
-      confirmedBalance shouldBe sumBalance
-      confirmedBalance shouldBe initialBalance
-
-      getBalancesWithUnconfirmed.balance shouldBe sumBalance
+      initialBalance shouldBe sumBalance
+      confirmedBalance.balance should be > 0L
+      confirmedBalance.balance shouldBe initialBalance
+      confirmedBalance.assetBalances shouldBe sumAssets
+      getBalancesWithUnconfirmed shouldBe confirmedBalance
     }
   }
 

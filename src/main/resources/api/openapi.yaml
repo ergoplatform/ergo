@@ -1248,7 +1248,7 @@ paths:
 
   /wallet/payment:
     post:
-      summary: Generate and send a transaction from payment
+      summary: Generate and send payment transaction
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
       - wallet
@@ -1316,7 +1316,7 @@ paths:
 
   /wallet/assets/issue:
     post:
-      summary: Generate and send a transaction from payment
+      summary: Generate and send asset issue transaction
       operationId: walletAssetIssueTransactionGenerateAndSend
       tags:
       - wallet

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.AssetUtils
-import scorex.core.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
@@ -20,9 +20,7 @@ import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Random, Success, Try}
 
-
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
-
 
 class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
@@ -42,7 +40,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private implicit val addressEncoder = ErgoAddressEncoder(settings)
+  private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(settings)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer

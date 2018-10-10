@@ -5,8 +5,9 @@ import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import scorex.core.{ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,

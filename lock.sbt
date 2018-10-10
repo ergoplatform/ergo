@@ -15,9 +15,9 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.typesafe" % "config" % "1.3.3",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.4",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.5.16",
-  "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.4",
-  "com.typesafe.akka" % "akka-http_2.12" % "10.1.4",
-  "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.4",
+  "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.5",
+  "com.typesafe.akka" % "akka-http_2.12" % "10.1.5",
+  "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-protobuf_2.12" % "2.5.16",
   "com.typesafe.akka" % "akka-stream_2.12" % "2.5.16",
   "com.typesafe.scala-logging" % "scala-logging_2.12" % "3.9.0",
@@ -48,7 +48,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "41f3db48-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "ba69f81a-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
   "org.scorexfoundation" % "sigma-state_2.12" % "0.10.0",
@@ -61,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH d0d26edc5215ea45bae038055ab40c18f874d261
+// LIBRARY_DEPENDENCIES_HASH 1e47fe60e34c2c4dd91730fc569abc3fce605af7

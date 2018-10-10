@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
-import scorex.core._
+import scorex.util._
 import scorex.crypto.hash.Blake2b256
 
 import scala.annotation.tailrec

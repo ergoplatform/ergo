@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.Header
+import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.Serializer
-import scorex.core._
+import scorex.util._
 
 import scala.util.Try
-
 
 case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
 

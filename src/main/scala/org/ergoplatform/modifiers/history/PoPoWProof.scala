@@ -4,7 +4,8 @@ import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
+import scorex.core.ModifierTypeId
+import scorex.util._
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.core.utils.ScorexEncoding
@@ -17,7 +18,8 @@ case class PoPoWProof(m: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
                       suffix: Seq[Header],
-                      override val sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      override val sizeOpt: Option[Int] = None)
+                     (implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId

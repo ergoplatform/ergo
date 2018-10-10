@@ -18,7 +18,6 @@ import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
 
-
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider,
                                                              emission: EmissionRules)

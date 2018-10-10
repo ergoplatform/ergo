@@ -580,7 +580,7 @@ components:
       - detail
       properties:
         error:
-          type: int32
+          type: integer
           description: Error code
           example: 500
         reason:

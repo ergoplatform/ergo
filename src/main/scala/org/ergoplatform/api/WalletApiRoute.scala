@@ -59,16 +59,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def generatePaymentTransactionR: Route = (path( "payment" / "generate") & post
-    & entity(as[Seq[PaymentRequest]])) { generateTransaction }
+    & entity(as[Seq[PaymentRequest]]))(generateTransaction)
 
   def sendPaymentTransactionR: Route = (path("payment") & post
-    & entity(as[Seq[PaymentRequest]])) { sendTransaction }
+    & entity(as[Seq[PaymentRequest]]))(sendTransaction)
 
   def generateAssetIssueTransactionR: Route = (path("assets" / "issue" / "generate") & post
-    & entity(as[Seq[AssetIssueRequest]])) { generateTransaction }
+    & entity(as[Seq[AssetIssueRequest]]))(generateTransaction)
 
   def sendAssetIssueTransactionR: Route = (path("assets" / "issue") & post
-    & entity(as[Seq[AssetIssueRequest]])) { sendTransaction }
+    & entity(as[Seq[AssetIssueRequest]]))(sendTransaction)
 
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances())

@@ -38,7 +38,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   property("successful spending w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
-      constructTest(from, 0, _ => IndexedSeq(from), true)
+      constructTest(from, 0, _ => IndexedSeq(from), expectedValidity = true)
     }
   }
 
@@ -48,7 +48,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
         val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
-      }, true)
+      }, expectedValidity = true)
     }
   }
 
@@ -58,7 +58,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
         val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
-      }, false)
+      }, expectedValidity = false)
     }
   }
 
@@ -69,7 +69,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
 
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
-      }, true)
+      }, expectedValidity = true)
     }
   }
 
@@ -79,7 +79,14 @@ class ExpirationSpecification extends ErgoPropertyTest {
         val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
-      }, false)
+      }, expectedValidity = false)
+    }
+  }
+
+  property("script changed spending w. same value") {
+    forAll(unspendableErgoBoxGen()) { from =>
+      val out = new ErgoBoxCandidate(from.value, Values.TrueLeaf, from.additionalTokens)
+      constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
     }
   }
 }

@@ -11,9 +11,9 @@ import scorex.core.transaction.box.Box.Amount
 import sigmastate.Values.{IntConstant, StringConstant}
 
 /**
-  * Request for issuing new asset of Ergo Asset Standard 1.
+  * Request for new asset issuing.
   *
-  * EAS1 token data is stored in registers in the following way:
+  * Ergo token data is stored in registers in the following way:
   * R2 - ID and supply amount
   * R4 - verbose name
   * R5 - description

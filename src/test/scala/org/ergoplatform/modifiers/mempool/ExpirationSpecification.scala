@@ -13,18 +13,6 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
-  def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
-    new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)
-
-  def decreaseValue(box: ErgoBoxCandidate, subtrahend: Long): Option[ErgoBoxCandidate] = {
-    if(subtrahend >= box.value){
-      None
-    } else {
-      Some(new ErgoBoxCandidate(box.value - subtrahend, box.proposition, box.additionalTokens,
-                                box.additionalRegisters, box.creationHeight))
-    }
-  }
-
   def falsify(box: ErgoBox): ErgoBox =
     ErgoBox(box.value, Values.FalseLeaf, box.additionalTokens, box.additionalRegisters)
 
@@ -61,7 +49,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
       val feeBoxCondidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
       val tx = ErgoTransaction(inputs = IndexedSeq(in),
-        outputCandidates = IndexedSeq(decreaseValue(updateHeight(candidate, h), fee), Some(feeBoxCondidate)).flatten)
+        outputCandidates = IndexedSeq(changeValue(updateHeight(candidate, h), -fee), Some(feeBoxCondidate)).flatten)
 
       val updContext = context.copy(height = h)
 
@@ -81,9 +69,9 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
       val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length + 1, from.value)
 
-      val feeBoxCondidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
+      val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
       val tx = ErgoTransaction(inputs = IndexedSeq(in),
-        outputCandidates = IndexedSeq(decreaseValue(updateHeight(candidate, h), fee), Some(feeBoxCondidate)).flatten)
+        outputCandidates = IndexedSeq(changeValue(updateHeight(candidate, h), -fee), Some(feeBoxCandidate)).flatten)
 
       val updContext = context.copy(height = h)
 

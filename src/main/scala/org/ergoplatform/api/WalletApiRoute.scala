@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Encoder
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
@@ -19,8 +20,8 @@ import scala.util.{Failure, Success}
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
-  implicit val paymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
-  implicit val addressEncoder = paymentRequestDecoder.addressEncoders.encoder
+  implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
+  implicit val addressEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
@@ -32,7 +33,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  override val route: Route = (pathPrefix("wallet") & withCors) {
+  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesRoute ~
       unconfirmedBalanceRoute ~
       addressesRoute ~

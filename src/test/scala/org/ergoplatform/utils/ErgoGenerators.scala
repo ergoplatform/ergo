@@ -78,9 +78,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     x
   }
 
+  def genSecureBoundedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] =
+    Gen.choose(minSize, maxSize).flatMap { scorex.util.Random.randomBytes }
+
   def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
-    key <- genBytes(keySize)
-    value <- genBytes(valuesSize)
+    key <- genSecureBoundedBytes(keySize, keySize)
+    value <- genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
 
   lazy val extensionGen: Gen[Extension] = for {

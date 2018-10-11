@@ -89,4 +89,13 @@ class ExpirationSpecification extends ErgoPropertyTest {
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
     }
   }
+
+  property("script changed tokens w. same value") {
+    forAll(unspendableErgoBoxGen()) { from =>
+      whenever(from.additionalTokens.nonEmpty) {
+        val out = new ErgoBoxCandidate(from.value, from.proposition, Seq())
+        constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
+      }
+    }
+  }
 }

@@ -61,10 +61,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def generatePaymentTransactionR: Route = (path( "payment" / "generate") & post
     & entity(as[Seq[PaymentRequest]]))(generateTransaction)
 
-  def sendPaymentTransactionR: Route = (path("payment") & post
+  def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]]))(sendTransaction)
 
-  def generateAssetIssueTransactionR: Route = (path("assets" / "issue" / "generate") & post
+  def generateAssetIssueTransactionR: Route = (path("assets" / "generate") & post
     & entity(as[Seq[AssetIssueRequest]]))(generateTransaction)
 
   def sendAssetIssueTransactionR: Route = (path("assets" / "issue") & post

@@ -1246,7 +1246,7 @@ paths:
               schema:
                 type: string
 
-  /wallet/payment:
+  /wallet/payment/send:
     post:
       summary: Generate and send payment transaction
       operationId: walletPaymentTransactionGenerateAndSend
@@ -1280,7 +1280,7 @@ paths:
               schema:
                 type: string
 
-  /wallet/assets/issue/generate:
+  /wallet/assets/generate:
     post:
       summary: Generate asset issue transaction
       operationId: walletAssetIssueTransactionGenerate

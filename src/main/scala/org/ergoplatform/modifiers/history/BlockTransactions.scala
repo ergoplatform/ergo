@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Ints}
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.settings.{Algos, Constants}
@@ -43,19 +44,29 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
   override lazy val transactions: Seq[ErgoTransaction] = txs
 }
 
-object BlockTransactions {
+object BlockTransactions extends ApiCodecs {
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = rootHash(txs.map(_.serializedId))
 
   def rootHash(serializedIds: Seq[Array[Byte]]): Digest32 = Algos.merkleTreeRoot(LeafData @@ serializedIds)
 
-  implicit val jsonEncoder: Encoder[BlockTransactions] = (bt: BlockTransactions) =>
+  implicit val jsonEncoder: Encoder[BlockTransactions] = { bt: BlockTransactions =>
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
       "size" -> bt.size.asJson
     ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      size <- c.downField("size").as[Int]
+    } yield BlockTransactions(headerId, transactions, Some(size))
+  }
 }
 
 object BlockTransactionsSerializer extends Serializer[BlockTransactions] {

@@ -9,10 +9,10 @@ import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
-import scorex.core._
 import scorex.core.validation.ValidationResult
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
+import scorex.util.ModifierId
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.serialization.ValueSerializer
 import sigmastate.{SBoolean, SType}
@@ -56,13 +56,15 @@ trait ApiCodecs {
 
   implicit val modifierIdDecoder: Decoder[ModifierId] = ModifierId @@ _.as[String]
 
-  implicit val tokenIdEncoder: Encoder[TokenId] = _.array.asJson
+  implicit val digest32Encoder: Encoder[Digest32] = _.array.asJson
 
-  implicit val tokenIdDecoder: Decoder[TokenId] = bytesDecoder(Digest32 @@ _)
+  implicit val digest32Decoder: Decoder[Digest32] = bytesDecoder(Digest32 @@ _)
 
   implicit val adKeyEncoder: Encoder[ADKey] = _.array.asJson
 
   implicit val adKeyDecoder: Decoder[ADKey] = bytesDecoder(ADKey @@ _)
+
+  implicit val adDigestDecoder: Decoder[ADDigest] = bytesDecoder(ADDigest @@ _)
 
   def bytesDecoder[T](transform: Array[Byte] => T): Decoder[T] = { implicit cursor =>
     for {

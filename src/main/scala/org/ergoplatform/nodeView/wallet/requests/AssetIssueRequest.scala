@@ -14,7 +14,7 @@ import sigmastate.Values.{IntConstant, StringConstant}
   * Request for issuing new asset of Ergo Asset Standard 1.
   *
   * EAS1 token data is stored in registers in the following way:
-  * R3 - ID and supply amount
+  * R2 - ID and supply amount
   * R4 - verbose name
   * R5 - description
   * R6 - number of decimal places

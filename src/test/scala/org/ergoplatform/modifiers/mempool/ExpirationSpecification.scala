@@ -72,4 +72,14 @@ class ExpirationSpecification extends ErgoPropertyTest {
       }, true)
     }
   }
+
+  property("too early spending") {
+    forAll(unspendableErgoBoxGen()) { from =>
+      constructTest(from, -1, h => {
+        val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length, from.value)
+        val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
+        IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
+      }, false)
+    }
+  }
 }

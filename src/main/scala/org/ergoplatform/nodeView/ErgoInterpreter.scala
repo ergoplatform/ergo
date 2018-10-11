@@ -31,6 +31,7 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
 
   override type CTX = ErgoContext
 
+  //Check that expired box is spent in a proper way
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate): Boolean = {
     val maxStorageFee = Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight)
 
@@ -56,8 +57,7 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
         val idx = context.extension.values(varId).value.asInstanceOf[Short]
         val outputCandidate = context.spendingTransaction.outputCandidates(idx)
 
-        //todo: zero cost to validate the spending condition - is it okay?
-        checkExpiredBox(context.self, outputCandidate) -> 0L
+        checkExpiredBox(context.self, outputCandidate) -> Constants.StorageContractCost
       }.recoverWith{case _ => super.verify(exp, context, proof, message)}
     } else {
       super.verify(exp, context, proof, message)

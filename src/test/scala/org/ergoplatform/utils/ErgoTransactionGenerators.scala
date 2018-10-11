@@ -106,12 +106,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield new ErgoBoxCandidate(value, prop, tokens, ar)
 
 
-  def unspendableErgoBoxCandidateGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBoxCandidate] = for {
+  def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBox] = for {
     prop <- falseLeafGen
     value <- Gen.choose(1, maxValue)
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
-  } yield new ErgoBoxCandidate(value, prop, tokens, ar)
+  } yield new ErgoBoxCandidate(value, prop, tokens, ar).toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
 
 
   lazy val inputGen: Gen[Input] = for {

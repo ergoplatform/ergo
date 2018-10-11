@@ -41,7 +41,7 @@ class WalletApiRouteSpec extends FlatSpec
   it should "generate asset issue transaction" in {
     val assetId = Blake2b256.hash("assetId")
     val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), assetId, 100L, "TEST", "Test", 8)
-    Post(prefix + "/assets/issue/generate", Seq(request).asJson) ~> route ~> check {
+    Post(prefix + "/assets/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].outputs.head.additionalTokens.head._1 sameElements assetId shouldBe true
     }
@@ -49,7 +49,7 @@ class WalletApiRouteSpec extends FlatSpec
 
   it should "generate & send payment transaction" in {
     val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
-    Post(prefix + "/payment", Seq(request).asJson) ~> route ~> check {
+    Post(prefix + "/payment/send", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }

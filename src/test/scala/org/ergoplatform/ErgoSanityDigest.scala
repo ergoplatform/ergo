@@ -13,9 +13,8 @@ import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.ConnectedPeer
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.app.{Version => HandshakeV}
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)

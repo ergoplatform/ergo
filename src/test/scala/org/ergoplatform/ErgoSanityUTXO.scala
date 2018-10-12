@@ -11,9 +11,9 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.ConnectedPeer
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.app.{Version => HandshakeV}
+
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 

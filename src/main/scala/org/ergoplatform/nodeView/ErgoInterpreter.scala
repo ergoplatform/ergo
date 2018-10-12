@@ -31,7 +31,13 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
 
   override type CTX = ErgoContext
 
-  //Check that expired box is spent in a proper way
+  /**
+    * Check that expired box is spent in a proper way
+    *
+    * @param box - box being spent
+    * @param output - newly created box
+    * @return whether the box is spent properly according to the storage fee rule
+    */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate): Boolean = {
     val maxStorageFee = Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight)
 

@@ -99,10 +99,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
-        // workaround to put tx in mempool without too much logs.
-        nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          v.pool.put(tx)
-        }
+        nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       }
       if (toSend > toSpend.size) {
         Thread.sleep(1000)

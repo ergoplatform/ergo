@@ -123,8 +123,8 @@ class WalletStorage extends ScorexLogging {
   private def increaseAssets(balanceMap: mutable.Map[ModifierId, Long], assetDeltas: Seq[(TokenId, Long)]): Unit = {
     assetDeltas.foreach { case (id, amount) =>
       val wid = bytesToId(id)
-      val updBalance = _confirmedAssetBalances.getOrElse(wid, 0L) + amount
-      _confirmedAssetBalances.put(wid, updBalance)
+      val updBalance = balanceMap.getOrElse(wid, 0L) + amount
+      balanceMap.put(wid, updBalance)
     }
   }
 

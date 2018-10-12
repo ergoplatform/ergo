@@ -370,7 +370,7 @@ object Docker extends IntegrationTestConstants {
 
   val ErgoImageLatest: String = "org.ergoplatform/ergo:latest"
   val ApiCheckerImageLatest: String = "andyceo/openapi-checker:latest"
-  val ApiCheckerImageStable: String = "andyceo/openapi-checker:openapi-core-0.5.0"
+  val ApiCheckerImageStable: String = "andyceo/openapi-checker:0.1.0-openapi-core-0.5.0"
 
   val dockerImageLabel = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

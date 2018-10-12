@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
 

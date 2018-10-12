@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Constants.ModifierIdSize
 import scorex.core.serialization.Serializer
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
-import scorex.core.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import sigmastate.utils.{ByteReader, ByteWriter}
 
 import scala.util.{Failure, Try}

@@ -7,11 +7,12 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.core._
 import scorex.core.serialization.Serializer
 import scorex.core.utils.concatBytes
-import scorex.core._
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 

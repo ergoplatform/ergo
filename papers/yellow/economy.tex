@@ -18,10 +18,10 @@ Transaction can only be put in the block of height $h$ if for every created box 
 Once the subsidized period for the box ends (that is,
 $current\_block\_height \ge R3.last\_height + SP$, see $SP$ value below), anyone~(presumably a miner) can
 create a new box $out$ with the exactly the same content (including the guarding
-script) except the monetary value and $R3$ content. The monetary value is
+script) except the monetary value and $R3$ content. The monetary value is to 
 reduced by $K \cdot B \cdot (out.R3.last\_height - self.R3.last\_height)$ maximum, where $B$ is the spent box size and $K$ is the storage cost of one byte.
 Thus, the difference is to be paid to the miner.
-If box value is less that $K \cdot B$, all box content including tokens goes to miner.
+If box value is less that the storage fee, all the box content including tokens goes to the miner.
 $R3.tx\_id$ and $R3.out\_num$ content of created box should contain correct transaction id
 and index, while $R3.last\_height$ should be set to $R3.last\_height$ of spending box
 plus $SP$, to ensure that subsidized period starts over.

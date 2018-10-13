@@ -34,15 +34,17 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
   /**
     * Check that expired box is spent in a proper way
     *
-    * @param box - box being spent
+    * @param box    - box being spent
     * @param output - newly created box
+    * @param currentHeight - current height of the blockchain (at the moment of spending)
     * @return whether the box is spent properly according to the storage fee rule
     */
-  protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate): Boolean = {
+  protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
     val maxStorageFee = Parameters.K * box.bytes.length * (output.creationHeight - box.creationHeight)
 
     (box.value - maxStorageFee <= 0 && box.value == output.value) || {
-      output.value >= box.value - maxStorageFee &&
+      output.creationHeight == currentHeight &&
+        output.value >= box.value - maxStorageFee &&
         ErgoBox.allRegisters.tail.forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
     }
   }
@@ -54,17 +56,17 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
 
     lazy val varId = Constants.StorageIndexVarId
 
-    //no proof provided and enough time since box cretion to spend it
+    //no proof provided and enough time since box creation to spend it
     if (context.currentHeight - context.self.creationHeight >= Constants.StoragePeriod
-        && proof.length == 0
-        && context.extension.values.contains(varId)) {
+      && proof.length == 0
+      && context.extension.values.contains(varId)) {
 
       Try {
         val idx = context.extension.values(varId).value.asInstanceOf[Short]
         val outputCandidate = context.spendingTransaction.outputCandidates(idx)
 
-        checkExpiredBox(context.self, outputCandidate) -> Constants.StorageContractCost
-      }.recoverWith{case _ => super.verify(exp, context, proof, message)}
+        checkExpiredBox(context.self, outputCandidate, context.currentHeight) -> Constants.StorageContractCost
+      }.recoverWith { case _ => super.verify(exp, context, proof, message) }
     } else {
       super.verify(exp, context, proof, message)
     }

@@ -1,9 +1,10 @@
-package org.ergoplatform.nodeView.wallet
+package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate}
 import sigmastate.SType
@@ -15,24 +16,22 @@ import sigmastate.Values.EvaluatedValue
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
                           assets: Option[Seq[(ErgoBox.TokenId, Long)]],
-                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) {
-  def toBoxCandidate: ErgoBoxCandidate = {
+                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest {
+
+  override def toBoxCandidate: ErgoBoxCandidate =
     new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
-  }
 }
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
-  def apply(request: PaymentRequest): Json = {
-    Json.obj(
-      "address" -> request.address.asJson,
-      "value" -> request.value.asJson,
-      "assets" -> request.assets.asJson,
-      "registers" -> request.registers.asJson
-    )
-  }
+  def apply(request: PaymentRequest): Json = Json.obj(
+    "address" -> request.address.asJson,
+    "value" -> request.value.asJson,
+    "assets" -> request.assets.asJson,
+    "registers" -> request.registers.asJson
+  )
 }
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {

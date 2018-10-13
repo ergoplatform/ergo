@@ -3,6 +3,7 @@ package org.ergoplatform.utils
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import sigmastate.Values

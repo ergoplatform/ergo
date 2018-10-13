@@ -11,6 +11,7 @@ import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, PaymentRequestEncoder}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
 import org.scalatest.Inspectors

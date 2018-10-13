@@ -7,6 +7,7 @@ import io.circe.Encoder
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
@@ -20,6 +21,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
+  implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)
   implicit val addressEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -32,41 +34,51 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
-    balancesRoute ~
-      unconfirmedBalanceRoute ~
-      addressesRoute ~
-      generateTransactionRoute ~
-      generateAndSendTransactionRoute
-  }
-
-  def generateTransactionRoute: Route = (path("transaction" / "generate") & post
-    & entity(as[Seq[PaymentRequest]])) { payments =>
-    withWalletOp(_.generateTransaction(payments)) {
-      case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
+  private def generateTransaction(requests: Seq[TransactionRequest]): Route =
+    withWalletOp(_.generateTransaction(requests)) {
+      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => ApiResponse(tx)
     }
-  }
 
-  def generateAndSendTransactionRoute: Route = (path("transaction" / "payment") & post
-    & entity(as[Seq[PaymentRequest]])) { payments =>
-    withWalletOp(_.generateTransaction(payments)) {
-      case Failure(e) => BadRequest(s"Bad payment request $payments. ${Option(e.getMessage).getOrElse(e.toString)}")
+  private def sendTransaction(requests: Seq[TransactionRequest]): Route =
+    withWalletOp(_.generateTransaction(requests)) {
+      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
         ApiResponse(tx.id)
     }
+
+  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
+    balancesR ~
+      unconfirmedBalanceR ~
+      addressesR ~
+      generatePaymentTransactionR ~
+      generateAssetIssueTransactionR ~
+      sendPaymentTransactionR ~
+      sendAssetIssueTransactionR
   }
 
-  def balancesRoute: Route = (path("balances") & get) {
+  def generatePaymentTransactionR: Route = (path( "payment" / "generate") & post
+    & entity(as[Seq[PaymentRequest]]))(generateTransaction)
+
+  def sendPaymentTransactionR: Route = (path("payment" / "send") & post
+    & entity(as[Seq[PaymentRequest]]))(sendTransaction)
+
+  def generateAssetIssueTransactionR: Route = (path("assets" / "generate") & post
+    & entity(as[Seq[AssetIssueRequest]]))(generateTransaction)
+
+  def sendAssetIssueTransactionR: Route = (path("assets" / "issue") & post
+    & entity(as[Seq[AssetIssueRequest]]))(sendTransaction)
+
+  def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances())
   }
 
-  def unconfirmedBalanceRoute: Route = (path("balances" / "unconfirmed") & get) {
+  def unconfirmedBalanceR: Route = (path("balances" / "unconfirmed") & get) {
     withWallet(_.unconfirmedBalances())
   }
 
-  def addressesRoute: Route = (path("addresses") & get) {
+  def addressesR: Route = (path("addresses") & get) {
     withWallet(_.trackedAddresses())
   }
 

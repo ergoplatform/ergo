@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.utils._
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.PropSpec

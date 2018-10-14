@@ -8,8 +8,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
@@ -84,25 +84,41 @@ class TransactionGenerator(viewHolder: ActorRef,
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
     val amountToPay = (Random.nextInt(10) + 1) * 100000000
-    val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
-    wallet.inputsFor(Seq(feeOut, paymentOut)).flatMap { inputs =>
-      val assetIssueOutOpt = inputs.headOption.map { firstInput =>
-        val assetId = Digest32 !@@ firstInput.id
-        val tokenName = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
-        val tokenDescription = s"$tokenName description"
-        val tokenDecimals = 8
-        AssetIssueRequest(
-          propositions(Random.nextInt(propositions.size)),
-          assetId,
-          amountToPay,
-          tokenName,
-          tokenDescription,
-          tokenDecimals
-        )
-      }
-      val requests = assetIssueOutOpt.map(Seq(feeOut, paymentOut, _)).getOrElse(Seq(feeOut, paymentOut))
-      wallet.generateTransaction(requests)
+    val paymentOut = PaymentRequest(randProposition, amountToPay, None, None)
+    val tokenPaymentOut = wallet.confirmedBalances().map { balances =>
+      if (balances.assetBalances.nonEmpty) {
+        val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+        Algos.decode(tokenToSpend._1).map { id =>
+          PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenToSpend._2 / 2)), None)
+        }.toOption
+      } else { None }
     }
+    val assetIssueOut = wallet.inputsFor(Seq(feeOut, paymentOut)).map { inputs =>
+      inputs.headOption.map { firstInput =>
+        val assetId = Digest32 !@@ firstInput.id
+        val assetInfo = genNewAssetInfo
+        AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2,
+          assetInfo._3, assetInfo._4)
+      }
+    }
+    tokenPaymentOut.flatMap { tpOutOpt =>
+      assetIssueOut.flatMap { aiOutOpt =>
+        val requests = Seq(tpOutOpt, aiOutOpt).foldLeft[Seq[TransactionRequest]](Seq(feeOut, paymentOut)) {
+          case (acc, opt) => opt.map(acc :+ _).getOrElse(acc)
+        }
+        wallet.generateTransaction(requests)
+      }
+    }
+  }
+
+  private def randProposition = propositions(Random.nextInt(propositions.size))
+
+  private def genNewAssetInfo = {
+    val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000
+    val tokenName: String = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
+    val tokenDescription: String = s"$tokenName description"
+    val tokenDecimals: Int = Random.nextInt(8) + 4
+    (emissionAmount, tokenName, tokenDescription, tokenDecimals)
   }
 }
 

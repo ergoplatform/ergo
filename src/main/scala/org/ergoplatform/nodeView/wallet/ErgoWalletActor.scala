@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.AssetUtils
-import scorex.core.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
@@ -20,9 +20,7 @@ import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Random, Success, Try}
 
-
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
-
 
 class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
@@ -42,12 +40,14 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   private var height = 0
   private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private implicit val addressEncoder = ErgoAddressEncoder(settings)
+  private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(settings)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
   private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
+
+  private def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(): Unit = {
@@ -144,7 +144,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   protected def generateTransactionWithOutputs(payTo: Seq[ErgoBoxCandidate]): Try[ErgoTransaction] = Try {
     require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
-    require(payTo.forall(_.value > 0), "Non-positive Ergo value")
+    require(payTo.forall(_.value >= 0), "Non-positive Ergo value") // todo
     require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
     val targetBalance = payTo.map(_.value).sum
@@ -155,19 +155,13 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
     }
 
-    //we currently do not use off-chain boxes to create a transaction
-    def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
-
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
       val inputs = r.boxes.toIndexedSeq
 
       val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
 
       val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
-
-        // todo: uncomment when sigma-state dependency will be updated from 0.9.5-SNAPSHOT
         val assets = cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-
         new ErgoBoxCandidate(chb, changeAddress, assets)
       }
 
@@ -180,6 +174,11 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       case Some(tx) => tx
       case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
     }
+  }
+
+  protected def inputsFor(boxes: Seq[ErgoBoxCandidate]): Seq[ErgoBox] = {
+    val targetAmount = boxes.map(_.value).sum
+    boxSelector.select(registry.unspentBoxesIterator, filterFn, targetAmount, Map.empty).toSeq.flatMap(_.boxes)
   }
 
   def readers: Receive = {
@@ -198,6 +197,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
     case ReadTrackedAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
+
+    case ReadInputsFor(outputs) =>
+      sender() ! inputsFor(outputs)
   }
 
   override def receive: Receive = scanLogic orElse readers orElse {
@@ -227,6 +229,8 @@ object ErgoWalletActor {
   case class Rollback(height: Int)
 
   case class GenerateTransaction(payTo: Seq[ErgoBoxCandidate])
+
+  case class ReadInputsFor(candidates: Seq[ErgoBoxCandidate])
 
   case class ReadBalances(confirmed: Boolean)
 

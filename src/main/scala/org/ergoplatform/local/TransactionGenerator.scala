@@ -8,11 +8,13 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -51,24 +53,40 @@ class TransactionGenerator(viewHolder: ActorRef,
         v.vault.publicKeys(0, 100).onComplete(_.foreach(pks => propositions = pks))
       }
 
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if fb.isInstanceOf[ErgoFullBlock] =>
-      val fbh = fb.header.height
-      if (fbh > currentFullHeight) {
-        currentFullHeight = fbh
+    case SemanticallySuccessfulModifier(fullBlock: ErgoFullBlock) if fullBlock.isInstanceOf[ErgoFullBlock] =>
+      val blockHeight = fullBlock.header.height
+      if (blockHeight > currentFullHeight) {
+        currentFullHeight = blockHeight
         transactionsPerBlock = Random.nextInt(MaxTransactionsPerBlock) + 1
-        log.info(s"Going to generate $transactionsPerBlock transactions upon receiving a block at height $fbh")
+        log.info(s"Going to generate $transactionsPerBlock transactions upon receiving a block at height $blockHeight")
         self ! Attempt
       }
 
     case Attempt =>
-      //todo: assets
-      transactionsPerBlock = transactionsPerBlock - 1
+      transactionsPerBlock -= 1
       if (transactionsPerBlock >= 0 && propositions.nonEmpty) {
-        val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-        val amountToPay = (Random.nextInt(10) + 1) * 100000000
-        val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          v.vault.generateTransaction(Seq(feeOut, paymentOut)).onComplete(t => self ! t.flatten)
+          val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+          val amountToPay = (Random.nextInt(10) + 1) * 100000000
+          val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
+          v.vault.inputsFor(Seq(feeOut, paymentOut)).flatMap { inputs =>
+            val assetIssueOutOpt = inputs.headOption.map { firstInput =>
+              val assetId = Digest32 !@@ firstInput.id
+              val tokenName = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
+              val tokenDescription = s"$tokenName description"
+              val tokenDecimals = 8
+              AssetIssueRequest(
+                propositions(Random.nextInt(propositions.size)),
+                assetId,
+                amountToPay,
+                tokenName,
+                tokenDescription,
+                tokenDecimals
+              )
+            }
+            val requests = assetIssueOutOpt.map(Seq(feeOut, paymentOut, _)).getOrElse(Seq(feeOut, paymentOut))
+            v.vault.generateTransaction(requests)
+          }.onComplete(t => self ! t.flatten)
         }
       }
 

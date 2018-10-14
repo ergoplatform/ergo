@@ -5,8 +5,9 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadPublicKeys, ReadRandomPublicKey, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import scorex.core.transaction.wallet.VaultReader
 
@@ -37,6 +38,11 @@ trait ErgoWalletReader extends VaultReader {
 
   def trackedAddresses(): Future[Seq[ErgoAddress]] = {
     (actor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
+  }
+
+  def inputsFor(requests: Seq[TransactionRequest]): Future[Seq[ErgoBox]] = {
+    val boxCandidates = requests.map(_.toBoxCandidate)
+    (actor ? ReadInputsFor(boxCandidates)).mapTo[Seq[ErgoBox]]
   }
 
   def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] = {

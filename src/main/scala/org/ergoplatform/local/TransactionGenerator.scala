@@ -18,7 +18,8 @@ import scorex.util.encode.Base16
 import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Random, Success}
+import scala.concurrent.Future
+import scala.util.{Failure, Random, Success, Try}
 
 
 /**
@@ -66,27 +67,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       transactionsPerBlock -= 1
       if (transactionsPerBlock >= 0 && propositions.nonEmpty) {
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-          val amountToPay = (Random.nextInt(10) + 1) * 100000000
-          val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
-          v.vault.inputsFor(Seq(feeOut, paymentOut)).flatMap { inputs =>
-            val assetIssueOutOpt = inputs.headOption.map { firstInput =>
-              val assetId = Digest32 !@@ firstInput.id
-              val tokenName = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
-              val tokenDescription = s"$tokenName description"
-              val tokenDecimals = 8
-              AssetIssueRequest(
-                propositions(Random.nextInt(propositions.size)),
-                assetId,
-                amountToPay,
-                tokenName,
-                tokenDescription,
-                tokenDecimals
-              )
-            }
-            val requests = assetIssueOutOpt.map(Seq(feeOut, paymentOut, _)).getOrElse(Seq(feeOut, paymentOut))
-            v.vault.generateTransaction(requests)
-          }.onComplete(t => self ! t.flatten)
+          genTransaction(v.vault).onComplete(t => self ! t.flatten)
         }
       }
 
@@ -98,6 +79,30 @@ class TransactionGenerator(viewHolder: ActorRef,
       log.info(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
+  }
+
+  private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+    val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+    val amountToPay = (Random.nextInt(10) + 1) * 100000000
+    val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
+    wallet.inputsFor(Seq(feeOut, paymentOut)).flatMap { inputs =>
+      val assetIssueOutOpt = inputs.headOption.map { firstInput =>
+        val assetId = Digest32 !@@ firstInput.id
+        val tokenName = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
+        val tokenDescription = s"$tokenName description"
+        val tokenDecimals = 8
+        AssetIssueRequest(
+          propositions(Random.nextInt(propositions.size)),
+          assetId,
+          amountToPay,
+          tokenName,
+          tokenDescription,
+          tokenDecimals
+        )
+      }
+      val requests = assetIssueOutOpt.map(Seq(feeOut, paymentOut, _)).getOrElse(Seq(feeOut, paymentOut))
+      wallet.generateTransaction(requests)
+    }
   }
 }
 

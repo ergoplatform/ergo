@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
@@ -84,29 +84,30 @@ class TransactionGenerator(viewHolder: ActorRef,
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
     val amountToPay = (Random.nextInt(10) + 1) * 100000000
-    val paymentReq = PaymentRequest(randProposition, amountToPay, None, None)
     val tokenPaymentReq = wallet.confirmedBalances().map { balances =>
       if (balances.assetBalances.nonEmpty) {
         val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
         val tokenAmountToSpend = tokenToSpend._2 / 4
         Algos.decode(tokenToSpend._1).map { id =>
-          PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
+          PaymentRequest(randProposition, amountToPay, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
         }.toOption
-      } else { None }
-    }
-    val assetIssueReq = wallet.inputsFor(Seq(feeReq, paymentReq)).map { inputs =>
-      inputs.headOption.map { firstInput =>
-        val assetId = Digest32 !@@ firstInput.id
-        val assetInfo = genNewAssetInfo
-        AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2,
-          assetInfo._3, assetInfo._4)
+      } else {
+        None
       }
     }
+    val assetIssueReq = tokenPaymentReq
+      .flatMap(reqOpt => wallet.inputsFor(reqOpt.map(Seq(feeReq) :+ _).getOrElse(Seq(feeReq))))
+      .map { inputs =>
+        inputs.headOption.map { firstInput =>
+          val assetId = Digest32 !@@ firstInput.id
+          val assetInfo = genNewAssetInfo
+          AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2,
+            assetInfo._3, assetInfo._4)
+        }
+      }
     tokenPaymentReq.flatMap { tpOutOpt =>
       assetIssueReq.flatMap { aiOutOpt =>
-        val requests = Seq(tpOutOpt, aiOutOpt).foldLeft[Seq[TransactionRequest]](Seq(feeReq, paymentReq)) {
-          case (acc, opt) => opt.map(acc :+ _).getOrElse(acc)
-        }
+        val requests = Seq(tpOutOpt, aiOutOpt, Some(feeReq)).flatten
         wallet.generateTransaction(requests)
       }
     }

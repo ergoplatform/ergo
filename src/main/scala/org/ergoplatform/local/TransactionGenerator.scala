@@ -43,6 +43,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   // The greater skip bias of particular transaction type the less frequently it is generated.
   private val assetTransferSkipBias = 5
   private val assetIssueSkipBias = 15
+  private val ergoTransferSkipBias = 5
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
@@ -87,16 +88,16 @@ class TransactionGenerator(viewHolder: ActorRef,
 
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-    val amountToPay = (Random.nextInt(10) + 1) * 100000000
     val tokenPaymentReq = wallet.confirmedBalances().map { balances =>
       if (balances.assetBalances.nonEmpty && probabilisticPredicate(assetTransferSkipBias)) {
         val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
         val tokenAmountToSpend = tokenToSpend._2 / 4
+        val amountToPay = if (probabilisticPredicate(ergoTransferSkipBias)) randAmount else 0
         Algos.decode(tokenToSpend._1).map { id =>
           PaymentRequest(randProposition, amountToPay, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
         }.toOption
       } else {
-        Some(PaymentRequest(randProposition, amountToPay, None, None))
+        Some(PaymentRequest(randProposition, randAmount, None, None))
       }
     }
     val assetIssueReq = tokenPaymentReq
@@ -122,8 +123,9 @@ class TransactionGenerator(viewHolder: ActorRef,
 
   private def randProposition = propositions(Random.nextInt(propositions.size))
 
-  // p = 1/i
-  private def probabilisticPredicate(i: Int): Boolean = Random.nextInt(Int.MaxValue) < Int.MaxValue / i
+  private def randAmount = (Random.nextInt(10) + 1) * 100000000
+
+  private def probabilisticPredicate(i: Int): Boolean = Random.nextInt(Int.MaxValue) < Int.MaxValue / i // p = 1/i
 
   private def genNewAssetInfo = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000

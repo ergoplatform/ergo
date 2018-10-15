@@ -82,18 +82,19 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
     val amountToPay = (Random.nextInt(10) + 1) * 100000000
-    val paymentOut = PaymentRequest(randProposition, amountToPay, None, None)
-    val tokenPaymentOut = wallet.confirmedBalances().map { balances =>
+    val paymentReq = PaymentRequest(randProposition, amountToPay, None, None)
+    val tokenPaymentReq = wallet.confirmedBalances().map { balances =>
       if (balances.assetBalances.nonEmpty) {
         val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+        val tokenAmountToSpend = tokenToSpend._2 / 4
         Algos.decode(tokenToSpend._1).map { id =>
-          PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenToSpend._2 / 2)), None)
+          PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
         }.toOption
       } else { None }
     }
-    val assetIssueOut = wallet.inputsFor(Seq(feeOut, paymentOut)).map { inputs =>
+    val assetIssueReq = wallet.inputsFor(Seq(feeReq, paymentReq)).map { inputs =>
       inputs.headOption.map { firstInput =>
         val assetId = Digest32 !@@ firstInput.id
         val assetInfo = genNewAssetInfo
@@ -101,9 +102,9 @@ class TransactionGenerator(viewHolder: ActorRef,
           assetInfo._3, assetInfo._4)
       }
     }
-    tokenPaymentOut.flatMap { tpOutOpt =>
-      assetIssueOut.flatMap { aiOutOpt =>
-        val requests = Seq(tpOutOpt, aiOutOpt).foldLeft[Seq[TransactionRequest]](Seq(feeOut, paymentOut)) {
+    tokenPaymentReq.flatMap { tpOutOpt =>
+      assetIssueReq.flatMap { aiOutOpt =>
+        val requests = Seq(tpOutOpt, aiOutOpt).foldLeft[Seq[TransactionRequest]](Seq(feeReq, paymentReq)) {
           case (acc, opt) => opt.map(acc :+ _).getOrElse(acc)
         }
         wallet.generateTransaction(requests)

@@ -10,8 +10,8 @@ import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -20,7 +20,7 @@ import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.util.ModifierId
 import sigmastate.SBoolean
@@ -99,7 +99,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
-        nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+        nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+          v.pool.put(tx)
+        }
       }
       if (toSend > toSpend.size) {
         Thread.sleep(1000)

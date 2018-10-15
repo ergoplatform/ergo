@@ -26,7 +26,7 @@ import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.{Serializer => SSerializer}
 import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
-import sigmastate.{AvlTreeData, SBoolean, SType}
+import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -99,7 +99,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        blockchainState: ErgoStateContext,
                        metadata: Metadata): Try[Long] = {
-    lazy val lastUtxoDigest = AvlTreeData(blockchainState.stateDigest, ErgoBox.BoxId.size)
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -245,9 +244,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
       }
-    }
-      .result(outputs.map(_._1))
-      .toDecoderResult
+    }.result(outputs.map(_._1)).toDecoderResult
   }
 }
 

@@ -89,7 +89,11 @@ object DefaultBoxSelector extends BoxSelector {
         val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
         val changeBalance = currentBalance - targetBalance
         formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))
-      } else { None }
-    } else { None }
+      } else {
+        None
+      }
+    } else {
+      None
+    }
   }
 }

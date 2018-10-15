@@ -47,6 +47,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
+  //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)

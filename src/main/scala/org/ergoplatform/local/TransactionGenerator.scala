@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import com.google.common.primitives.Longs
 import org.ergoplatform.local.TransactionGenerator.{Attempt, StartGeneration}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -39,6 +40,10 @@ class TransactionGenerator(viewHolder: ActorRef,
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
+
+  // The greater skip bias of particular transaction type the less frequently it is generated.
+  private val assetTransferSkipBias = 4
+  private val assetIssueSkipBias = 5
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
@@ -85,24 +90,27 @@ class TransactionGenerator(viewHolder: ActorRef,
     val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
     val amountToPay = (Random.nextInt(10) + 1) * 100000000
     val tokenPaymentReq = wallet.confirmedBalances().map { balances =>
-      if (balances.assetBalances.nonEmpty) {
+      if (balances.assetBalances.nonEmpty && probabilisticPredicate(assetTransferSkipBias)) {
         val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
         val tokenAmountToSpend = tokenToSpend._2 / 4
         Algos.decode(tokenToSpend._1).map { id =>
           PaymentRequest(randProposition, amountToPay, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
         }.toOption
       } else {
-        None
+        Some(PaymentRequest(randProposition, amountToPay, None, None))
       }
     }
     val assetIssueReq = tokenPaymentReq
       .flatMap(reqOpt => wallet.inputsFor(reqOpt.map(Seq(feeReq) :+ _).getOrElse(Seq(feeReq))))
       .map { inputs =>
-        inputs.headOption.map { firstInput =>
-          val assetId = Digest32 !@@ firstInput.id
-          val assetInfo = genNewAssetInfo
-          AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2,
-            assetInfo._3, assetInfo._4)
+        if (probabilisticPredicate(assetIssueSkipBias)) {
+          inputs.headOption.map { firstInput =>
+            val assetId = Digest32 !@@ firstInput.id
+            val assetInfo = genNewAssetInfo
+            AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4)
+          }
+        } else {
+          None
         }
       }
     tokenPaymentReq.flatMap { tpOutOpt =>
@@ -114,6 +122,8 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def randProposition = propositions(Random.nextInt(propositions.size))
+
+  private def probabilisticPredicate(p: Int): Boolean = (0 until p).map(_ => Random.nextBoolean()).fold(true)(_ && _)
 
   private def genNewAssetInfo = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000

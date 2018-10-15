@@ -3,7 +3,7 @@
 We outline following two properties required for long-term survivability of the chain:
 
 \begin{itemize}
-    \item{} coins with lost keys should be returned into circulation.
+    \item{} coins protected by keys being lost should be returned into circulation.
     Otherwise, after the end of the emission period, amount of the coins
     in the circulation will always decrease and eventually reach zero.
     \item{} nothing should be kept in the state forever and for free.
@@ -13,7 +13,7 @@ We outline following two properties required for long-term survivability of the 
 To achieve this, we propose the following storage fee consensus rules.
 Register $R3$ of a box contains tuple $(last\_height, tx\_id || out\_num)$, where $last\_height$ provided by a user
 is used to determine the block height at the moment of transaction generation.
-Transaction can only be put in the block of height $h$ if for every created box its $last\_height < h$.
+Transaction can only be put in the block of height $h$ if for every created box its $last\_height \le h$.
 
 Once the subsidized period for the box ends (that is,
 $current\_block\_height \ge R3.last\_height + SP$, see $SP$ value below), anyone~(presumably a miner) can

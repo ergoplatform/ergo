@@ -46,14 +46,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def scanTime(boxCount: Int)(implicit ctx: Ctx): Long = boxCount * scanningInterval + 1000
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 
-  def sum(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
-
-  def assetSum(boxes: Seq[ErgoBox]): Map[ModifierId, Long] = {
-    boxes
-      .map(_.additionalTokens)
-      .map { _.map { case (tokenId, value) => bytesToId(tokenId) -> value }.toMap }
-      .reduce(_ ++ _)
-  }
+  def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 
   def boxesAvailable(block: ErgoFullBlock, script: Value[SBoolean.type]): Seq[ErgoBox] = {
     block.transactions.flatMap(boxesAvailable(_, script))
@@ -63,7 +56,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     tx.outputs.filter(_.proposition == script)
   }
 
-  def boxAssets(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
+  def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
     boxes
       .flatMap { _.additionalTokens }
       .groupBy { case (digest, _) => bytesToId(digest) }
@@ -120,4 +113,5 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def randomAssets: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

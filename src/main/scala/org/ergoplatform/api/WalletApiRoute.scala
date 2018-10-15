@@ -74,7 +74,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.confirmedBalances())
   }
 
-  def unconfirmedBalanceRoute: Route = (path("balances" / "with_unconfirmed") & get) {
+  def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
     withWallet(_.balancesWithUnconfirmed())
   }
 

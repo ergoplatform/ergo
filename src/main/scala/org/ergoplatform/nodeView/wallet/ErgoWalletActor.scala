@@ -144,8 +144,8 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
   protected def generateTransactionWithOutputs(payTo: Seq[ErgoBoxCandidate]): Try[ErgoTransaction] = Try {
     require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
-    require(payTo.forall(_.value >= 0), "Non-positive Ergo value") // todo
-    require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
+    require(payTo.forall(_.value >= 0), "Non-positive Ergo value")
+    require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Non-positive asset value")
 
     val targetBalance = payTo.map(_.value).sum
 

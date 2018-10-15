@@ -41,8 +41,8 @@ class TransactionGenerator(viewHolder: ActorRef,
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
 
   // The greater skip bias of particular transaction type the less frequently it is generated.
-  private val assetTransferSkipBias = 4
-  private val assetIssueSkipBias = 5
+  private val assetTransferSkipBias = 5
+  private val assetIssueSkipBias = 15
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
@@ -122,8 +122,8 @@ class TransactionGenerator(viewHolder: ActorRef,
 
   private def randProposition = propositions(Random.nextInt(propositions.size))
 
-  // p = 1 / 2^i
-  private def probabilisticPredicate(i: Int): Boolean = (0 until i).map(_ => Random.nextBoolean()).fold(true)(_ && _)
+  // p = 1/i
+  private def probabilisticPredicate(i: Int): Boolean = Random.nextInt(Int.MaxValue) < Int.MaxValue / i
 
   private def genNewAssetInfo = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000

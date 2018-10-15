@@ -99,20 +99,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        blockchainState: ErgoStateContext,
                        metadata: Metadata): Try[Long] = {
-    lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
+    lazy val lastUtxoDigest = AvlTreeData(blockchainState.stateDigest, ErgoBox.BoxId.size)
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
     failFast
       .payload(0L)
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.height), "box created in future")
+      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
 
-        val ctx = new ErgoContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, metadata, proverExtension)
+        val ctx = new ErgoContext(blockchainState, boxesToSpend, this, box, metadata, proverExtension)
 
         val verifier: ErgoInterpreter = ErgoInterpreter.instance
 

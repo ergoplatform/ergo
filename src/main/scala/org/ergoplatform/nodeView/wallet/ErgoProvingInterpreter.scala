@@ -13,7 +13,6 @@ import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.SigmaProtocolPrivateInput
 import scorex.crypto.hash.Blake2b256
-import sigmastate.AvlTreeData
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
@@ -69,8 +68,7 @@ class ErgoProvingInterpreter(seed: String,
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
             new ErgoContext(
-              stateContext.height + 1,
-              AvlTreeData(stateContext.digest, 32),
+              stateContext,
               boxesToSpend,
               unsignedTx,
               inputBox,

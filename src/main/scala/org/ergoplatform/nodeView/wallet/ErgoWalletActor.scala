@@ -14,7 +14,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.interpreter.ContextExtension
-import sigmastate.{AvlTreeData, Values}
+import sigmastate.Values
 
 import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -54,16 +54,15 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     registry.nextUncertain().foreach { uncertainBox =>
       val box = uncertainBox.box
 
-      val lastUtxoDigest = AvlTreeData(lastBlockUtxoRootHash, 32)
-
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
         IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf))
       )
 
+      val stateContext = ErgoStateContext(height + 1, lastBlockUtxoRootHash)
+
       val context =
-        new ErgoContext(height + 1, lastUtxoDigest, IndexedSeq(box), testingTx,
-                        box, ergoSettings.metadata, ContextExtension.empty)
+        new ErgoContext(stateContext, IndexedSeq(box), testingTx, box, ergoSettings.metadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>

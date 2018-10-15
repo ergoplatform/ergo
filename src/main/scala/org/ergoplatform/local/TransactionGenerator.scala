@@ -122,7 +122,8 @@ class TransactionGenerator(viewHolder: ActorRef,
 
   private def randProposition = propositions(Random.nextInt(propositions.size))
 
-  private def probabilisticPredicate(p: Int): Boolean = (0 until p).map(_ => Random.nextBoolean()).fold(true)(_ && _)
+  // p = 1 / 2^i
+  private def probabilisticPredicate(i: Int): Boolean = (0 until i).map(_ => Random.nextBoolean()).fold(true)(_ && _)
 
   private def genNewAssetInfo = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000

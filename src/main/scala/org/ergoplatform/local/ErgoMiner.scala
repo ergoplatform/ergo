@@ -234,7 +234,7 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.height, feeBoxes, minerProp, emissionRules)
+    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerProp, emissionRules)
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],

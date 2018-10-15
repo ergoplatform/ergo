@@ -1,7 +1,6 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import com.google.common.primitives.Longs
 import org.ergoplatform.local.TransactionGenerator.{Attempt, StartGeneration}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction

@@ -132,7 +132,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   /** Random long from 1 to maximum - 1
     * @param maximum should be positive
     */
-  def randomLong(maximum: Long): Long = {
+  def randomLong(maximum: Long = Long.MaxValue): Long = {
     if (maximum < 3) 1 else Math.abs(Random.nextLong()) % (maximum - 2) + 1
   }
 

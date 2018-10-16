@@ -29,5 +29,4 @@ object Constants {
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
-
 }

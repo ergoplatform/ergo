@@ -10,7 +10,7 @@ import sigmastate.Values
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
 
 
   def trackedBoxGen: Gen[TrackedBox] = {
@@ -79,7 +79,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       value <- Gen.choose(1L, 100000L)
       assets <- Gen.option(additionalTokensGen)
       registers <- Gen.option(additionalRegistersGen)
-    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers)
+    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
   }
 
   private def outIndexGen(tx: ErgoTransaction) =

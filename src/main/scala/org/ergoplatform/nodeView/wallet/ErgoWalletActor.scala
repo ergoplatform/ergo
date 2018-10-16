@@ -147,10 +147,12 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
-    requests.map {
-      case PaymentRequest(address, value, assets, registers) =>
-        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
-      case AssetIssueRequest(address, amount, name, description, decimals) =>
+    requests.flatMap {
+      case PaymentRequest(address, value, assets, registers, fee) =>
+        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
+        val paymentBox = new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
+        feeBoxOpt.map(Seq(_, paymentBox)).getOrElse(Seq(paymentBox))
+      case AssetIssueRequest(address, amount, name, description, decimals, fee) =>
         val firstInput = inputsFor(
           requests
             .foldLeft(Seq[PaymentRequest]()) {
@@ -158,7 +160,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
               case (acc, _) => acc
             }
             .map(_.value)
-            .sum
+            .sum + fee
         ).head
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
@@ -166,7 +168,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
           R5 -> StringConstant(description),
           R6 -> IntConstant(decimals)
         )
-        new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
+        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
+        val assetIssueBox = new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
+        feeBoxOpt.map(Seq(_, assetIssueBox)).getOrElse(Seq(assetIssueBox))
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }
@@ -214,8 +218,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       }
     }
 
-  protected def inputsFor(targetAmount: Long): Seq[ErgoBox] = {
-    boxSelector.select(registry.unspentBoxesIterator, filterFn, targetAmount, Map.empty).toSeq.flatMap(_.boxes)
+  protected def inputsFor(targetAmount: Long,
+                          targetAssets: scala.Predef.Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
+    boxSelector.select(registry.unspentBoxesIterator, filterFn, targetAmount, targetAssets).toSeq.flatMap(_.boxes)
   }
 
   def readers: Receive = {

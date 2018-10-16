@@ -103,6 +103,7 @@ components:
       required:
         - address
         - value
+        - fee
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -118,6 +119,11 @@ components:
             $ref: '#/components/schemas/Asset'
         registers:
           $ref: '#/components/schemas/Registers'
+        fee:
+          description: Transaction fee
+          type: integer
+          format: int64
+          example: 100
 
     AssetIssueRequest:
       description: request for generation of asset issue transaction
@@ -128,6 +134,7 @@ components:
       - name
       - description
       - decimals
+      - fee
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -149,6 +156,11 @@ components:
           type: integer
           format: int32
           example: 8
+        fee:
+          description: Transaction fee
+          type: integer
+          format: int64
+          example: 100
 
     FullBlock:
       description: Block with header and transactions

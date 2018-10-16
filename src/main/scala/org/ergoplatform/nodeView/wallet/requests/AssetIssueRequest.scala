@@ -20,7 +20,8 @@ case class AssetIssueRequest(address: ErgoAddress,
                              amount: Amount,
                              name: String,
                              description: String,
-                             decimals: Int) extends TransactionRequest
+                             decimals: Int,
+                             fee: Long) extends TransactionRequest
 
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
 
@@ -31,7 +32,8 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
     "amount" -> request.amount.asJson,
     "name" -> request.name.asJson,
     "description" -> request.name.asJson,
-    "decimals" -> request.decimals.asJson
+    "decimals" -> request.decimals.asJson,
+    "fee" -> request.fee.asJson
   )
 }
 
@@ -48,6 +50,8 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
-    } yield AssetIssueRequest(address, amount, name, description, decimals)
+      feeOpt <- cursor.downField("fee").as[Option[Long]]
+    } yield AssetIssueRequest(address, amount, name, description, decimals,
+      feeOpt.getOrElse(settings.walletSettings.defaultTransactionFee))
   }
 }

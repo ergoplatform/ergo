@@ -10,7 +10,7 @@ import sigmastate.interpreter.ContextExtension
 
 case class TransactionContext(boxesToSpend: IndexedSeq[ErgoBox],
                               spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput],
-                              selfIndex: Short){
+                              selfIndex: Short) {
   lazy val self = boxesToSpend(selfIndex)
 }
 
@@ -19,12 +19,10 @@ class ErgoContext(val stateContext: ErgoStateContext,
                   override val metadata: Metadata,
                   override val extension: ContextExtension = ContextExtension(Map()))
   extends ErgoLikeContext(stateContext.currentHeight,
-                          ErgoContext.stateTreeFromDigest(stateContext.stateDigest),
-                          transactionContext.boxesToSpend,
-                          transactionContext.spendingTransaction,
-                          transactionContext.self, metadata, extension) {
-
-
+    ErgoContext.stateTreeFromDigest(stateContext.stateDigest),
+    transactionContext.boxesToSpend,
+    transactionContext.spendingTransaction,
+    transactionContext.self, metadata, extension) {
 
   override def withExtension(newExtension: ContextExtension): ErgoContext =
     new ErgoContext(stateContext, transactionContext, metadata, newExtension)

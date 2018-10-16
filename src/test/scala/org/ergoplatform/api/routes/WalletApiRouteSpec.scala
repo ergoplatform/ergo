@@ -32,7 +32,7 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
 
   it should "generate payment transaction" in {
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
     Post(prefix + "/payment/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ErgoTransaction]) shouldBe 'success
@@ -40,7 +40,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate asset issue transaction" in {
-    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
+    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8, 100000L)
     Post(prefix + "/assets/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ErgoTransaction]) shouldBe 'success
@@ -48,7 +48,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate & send payment transaction" in {
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
     Post(prefix + "/payment/send", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
@@ -56,7 +56,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate & send asset issue transaction" in {
-    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
+    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8, 100000L)
     Post(prefix + "/assets/issue", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty

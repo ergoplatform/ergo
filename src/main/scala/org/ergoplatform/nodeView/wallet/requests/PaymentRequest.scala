@@ -16,7 +16,8 @@ import sigmastate.Values.EvaluatedValue
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
                           assets: Option[Seq[(ErgoBox.TokenId, Long)]],
-                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest
+                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]],
+                          fee: Long) extends TransactionRequest
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 
@@ -26,7 +27,8 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
     "address" -> request.address.asJson,
     "value" -> request.value.asJson,
     "assets" -> request.assets.asJson,
-    "registers" -> request.registers.asJson
+    "registers" -> request.registers.asJson,
+    "fee" -> request.fee.asJson
   )
 }
 
@@ -42,6 +44,8 @@ class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentReque
       value <- cursor.downField("value").as[Long]
       assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield PaymentRequest(address, value, assets, registers)
+      feeOpt <- cursor.downField("fee").as[Option[Long]]
+    } yield PaymentRequest(address, value, assets, registers,
+      feeOpt.getOrElse(settings.walletSettings.defaultTransactionFee))
   }
 }

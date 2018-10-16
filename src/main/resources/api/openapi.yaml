@@ -124,7 +124,6 @@ components:
       type: object
       required:
       - address
-      - assetId
       - amount
       - name
       - description
@@ -132,8 +131,6 @@ components:
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
-        assetId:
-          $ref: '#/components/schemas/Digest32'
         amount:
           description: Supply amount
           type: integer

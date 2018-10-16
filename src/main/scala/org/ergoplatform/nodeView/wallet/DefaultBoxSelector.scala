@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.AssetUtils.{mergeAssets, subtractAssets}
 import scorex.util.ModifierId
 
@@ -58,9 +57,7 @@ object DefaultBoxSelector extends BoxSelector {
     }
 
     def balanceMet = currentBalance >= targetBalance
-    def assetsMet = targetAssets
-      .filterNot { case (id, _) => res.headOption.exists(bx => Algos.encode(bx.id) == id) }
-      .forall { case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt }
+    def assetsMet = targetAssets.forall { case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt }
 
     @tailrec
     def pickBoxes(boxesIterator: Iterator[TrackedBox],
@@ -78,14 +75,12 @@ object DefaultBoxSelector extends BoxSelector {
     if (pickBoxes(inputBoxes, externalFilter, balanceMet)) {
       //then we pick boxes until all the target asset amounts are met (we pick only boxes containing needed assets).
       //If this condition is satisfied on the previous step, we will do one extra check (which is not that much).
-      if (pickBoxes(inputBoxes, box => externalFilter(box) && box.assets.exists { case (id, _) =>
+      if (pickBoxes(inputBoxes, bc => externalFilter(bc) && bc.assets.exists { case (id, _) =>
         val targetAmt = targetAssets.getOrElse(id, 0L)
         lazy val currentAmt = currentAssets.getOrElse(id, 0L)
         targetAmt > 0 && targetAmt > currentAmt
       }, assetsMet)) {
-        val notNewTargetedAssets =
-          targetAssets.filterNot { case (id, _) => res.headOption.exists(bx => Algos.encode(bx.id) == id) }
-        subtractAssets(currentAssets, notNewTargetedAssets)
+        subtractAssets(currentAssets, targetAssets)
         val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
         val changeBalance = currentBalance - targetBalance
         formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))

@@ -174,6 +174,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   protected def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
     requestsToBoxCandidates(requests).map { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
+      require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
       require(payTo.forall(_.value >= 0), "Non-positive Ergo value")
       require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Non-positive asset value")
 

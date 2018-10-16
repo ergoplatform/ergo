@@ -6,7 +6,7 @@ import java.util
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter}
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
@@ -61,17 +61,18 @@ class ErgoProvingInterpreter(seed: String,
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
 
-    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
-      case (inputsCostTry, (unsignedInput, inputBox)) =>
+    boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
+      case (inputsCostTry, (inputBox, boxIdx)) =>
+        val unsignedInput = unsignedTx.inputs(boxIdx)
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
+
+        val transactionContext = TransactionContext(boxesToSpend, unsignedTx, boxIdx.toShort)
 
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
             new ErgoContext(
               stateContext,
-              boxesToSpend,
-              unsignedTx,
-              inputBox,
+              transactionContext,
               metadata,
               ContextExtension.empty)
 

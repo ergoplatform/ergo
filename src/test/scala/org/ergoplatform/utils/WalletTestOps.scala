@@ -90,8 +90,7 @@ trait WalletTestOps extends NodeViewBaseOps {
                      addressToSpend: ErgoAddress,
                      balanceToReturn: Long = 0,
                      assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
-    val proof = ProverResult(addressToSpend.contentBytes, ContextExtension.empty)
-    makeTx(boxesToSpend, proof, balanceToReturn, addressToSpend.script, assets)
+    makeTx(boxesToSpend, emptyProverResult, balanceToReturn, addressToSpend.script, assets)
   }
 
   def makeTx(boxesToSpend: Seq[ErgoBox],

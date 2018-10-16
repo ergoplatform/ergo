@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
@@ -39,11 +39,6 @@ class TransactionGenerator(viewHolder: ActorRef,
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
-
-  // The greater skip bias of particular transaction type the less frequently it is generated.
-  private val assetTransferSkipBias = 5
-  private val assetIssueSkipBias = 15
-  private val ergoTransferSkipBias = 5
 
   private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
@@ -86,41 +81,34 @@ class TransactionGenerator(viewHolder: ActorRef,
     case SuccessfulTransaction(_) => self ! Attempt
   }
 
-  private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+  def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeReq: PaymentRequest = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-    val tokenPaymentReq: Future[Option[PaymentRequest]] = wallet.confirmedBalances().map { balances =>
-      if (balances.assetBalances.nonEmpty && probabilisticPredicate(assetTransferSkipBias)) {
-        val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
-        val tokenAmountToSpend = tokenToSpend._2 / 4
-        val amountToPay = if (probabilisticPredicate(ergoTransferSkipBias)) randAmount else 0
-        Algos.decode(tokenToSpend._1).map { id =>
-          PaymentRequest(randProposition, amountToPay, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
-        }.toOption
-      } else {
-        Some(PaymentRequest(randProposition, randAmount, None, None))
+    val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
+      Random.nextInt(100) match {
+        case i if i < 70 =>
+          Some(PaymentRequest(randProposition, randAmount, None, None))
+        case i if i < 95 && balances.assetBalances.nonEmpty =>
+          val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+          val tokenAmountToSpend = tokenToSpend._2 / 4
+          Algos.decode(tokenToSpend._1).map { id =>
+            PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
+          }.toOption
+        case _ =>
+          val assetInfo = genNewAssetInfo
+          Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
       }
     }
-    val assetIssueReqOpt: Option[AssetIssueRequest] = {
-      if (probabilisticPredicate(assetIssueSkipBias)) {
-        val assetInfo = genNewAssetInfo
-        Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
-      } else {
-        None
-      }
-    }
-    tokenPaymentReq.flatMap { tpOutOpt =>
-      val requests = Seq(tpOutOpt, assetIssueReqOpt, Some(feeReq)).flatten
+    payloadReq.flatMap { tpOutOpt =>
+      val requests = Seq(tpOutOpt, Some(feeReq)).flatten
       wallet.generateTransaction(requests)
     }
   }
 
-  private def randProposition = propositions(Random.nextInt(propositions.size))
+  def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
 
-  private def randAmount = (Random.nextInt(10) + 1) * 100000000
+  def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
 
-  private def probabilisticPredicate(i: Int): Boolean = Random.nextInt(Int.MaxValue) < Int.MaxValue / i // p = 1/i
-
-  private def genNewAssetInfo = {
+  def genNewAssetInfo: (Int, String, String, Int) = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000
     val tokenName: String = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
     val tokenDescription: String = s"$tokenName description"

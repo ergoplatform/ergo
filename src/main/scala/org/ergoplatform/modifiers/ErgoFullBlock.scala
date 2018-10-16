@@ -38,8 +38,8 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
-  override lazy val serializer: Serializer[ErgoFullBlock] = throw new Error("Never try to serialize ErgoFullBlock")
-
+  override lazy val serializer: Serializer[ErgoFullBlock] =
+    throw new Error("Serialization for ErgoFullBlock is not implemented")
 }
 
 object ErgoFullBlock extends ApiCodecs {
@@ -71,5 +71,4 @@ object ErgoFullBlock extends ApiCodecs {
       "size" -> b.size.asJson
     )
   }
-
 }

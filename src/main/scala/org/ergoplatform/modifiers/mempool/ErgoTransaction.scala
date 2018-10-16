@@ -11,7 +11,7 @@ import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSe
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter}
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
@@ -111,7 +111,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val proof = input.spendingProof
         val proverExtension = proof.extension
 
-        val ctx = new ErgoContext(blockchainState, boxesToSpend, this, box, metadata, proverExtension)
+        val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
+
+        val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
 
         val verifier: ErgoInterpreter = ErgoInterpreter.instance
 

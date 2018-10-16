@@ -7,7 +7,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.chuusai" % "shapeless_2.12" % "2.3.2",
   "com.google.code.findbugs" % "jsr305" % "3.0.2",
   "com.google.guava" % "guava" % "21.0",
-  "com.iheart" % "ficus_2.12" % "1.4.3",
+  "com.iheart" % "ficus_2.12" % "1.4.4",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
   "com.lihaoyi" % "sourcecode_2.12" % "0.1.4",
@@ -15,9 +15,9 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.typesafe" % "config" % "1.3.3",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.4",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.5.16",
-  "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.4",
-  "com.typesafe.akka" % "akka-http_2.12" % "10.1.4",
-  "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.4",
+  "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.5",
+  "com.typesafe.akka" % "akka-http_2.12" % "10.1.5",
+  "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-protobuf_2.12" % "2.5.16",
   "com.typesafe.akka" % "akka-stream_2.12" % "2.5.16",
   "com.typesafe.scala-logging" % "scala-logging_2.12" % "3.9.0",
@@ -61,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 645a5c709ce1cfebf5d5da152234944ba315b11f
+// LIBRARY_DEPENDENCIES_HASH f6902daf9e8ca25ba5d2a1980551b6da72346c79

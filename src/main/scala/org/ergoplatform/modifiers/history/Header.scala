@@ -1,9 +1,10 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import org.bouncycastle.crypto.digests.SHA256Digest
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.crypto.Equihash
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -21,7 +22,7 @@ import scorex.util._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Try
+import scala.util.{Success, Try}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -93,7 +94,7 @@ case class Header(version: Version,
 
 }
 
-object Header {
+object Header extends ApiCodecs {
 
   val CurrentVersion: Byte = 1
 
@@ -101,7 +102,7 @@ object Header {
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 
-  implicit val jsonEncoder: Encoder[Header] = (h: Header) =>
+  implicit val jsonEncoder: Encoder[Header] = { h: Header =>
     Map(
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
@@ -118,6 +119,24 @@ object Header {
       "version" -> h.version.asJson,
       "size" -> h.size.asJson
     ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[Header] = { c: HCursor =>
+    for {
+      transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
+      interlinks <- c.downField("interlinks").as[List[ModifierId]]
+      adProofsRoot <- c.downField("adProofsRoot").as[Digest32]
+      stateRoot <- c.downField("stateRoot").as[ADDigest]
+      parentId <- c.downField("parentId").as[ModifierId]
+      timestamp <- c.downField("timestamp").as[Long]
+      extensionHash <- c.downField("extensionHash").as[Digest32]
+      nBits <- c.downField("nBits").as[Long]
+      height <- c.downField("height").as[Int]
+      version <- c.downField("version").as[Byte]
+      solutions <- c.downField("equihashSolutions").as[EquihashSolution]
+    } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
+  }
 }
 
 object HeaderSerializer extends Serializer[Header] {

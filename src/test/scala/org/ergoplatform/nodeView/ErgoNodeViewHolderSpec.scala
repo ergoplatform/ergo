@@ -359,7 +359,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHeightOf(block.header.id) shouldBe Some(0)
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, /*t7,*/ t8, t9)
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {

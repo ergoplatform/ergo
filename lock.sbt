@@ -48,7 +48,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "84ed8ae2-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "8adeddba-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
   "org.scorexfoundation" % "sigma-state_2.12" % "0.10.0",

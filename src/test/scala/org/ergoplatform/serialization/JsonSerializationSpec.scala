@@ -2,14 +2,16 @@ package org.ergoplatform.serialization
 
 import io.circe.parser.parse
 import io.circe.syntax._
-import io.circe.{ACursor, Decoder, Encoder}
+import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, PaymentRequestEncoder}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
 import org.scalatest.Inspectors
@@ -25,6 +27,17 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     val data = TransactionIdsForHeader(Seq(modifierId))
     val c = data.asJson.hcursor
     c.downField("ids").downArray.as[String] shouldBe Right(stringId)
+  }
+
+  property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
+
+    val (st, bh) = createUtxoState()
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+
+    val blockJson: Json = block.asJson
+    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.success.value
+
+    blockDecoded shouldEqual block
   }
 
   property("ErgoBox should be converted into json correctly") {

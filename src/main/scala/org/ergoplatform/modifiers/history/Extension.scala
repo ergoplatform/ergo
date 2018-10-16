@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
@@ -49,7 +50,7 @@ case class Extension(headerId: ModifierId,
 case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
                               optionalFields: Seq[(Array[Byte], Array[Byte])])
 
-object Extension {
+object Extension extends ApiCodecs {
 
   val MandatoryFieldKeySize: Int = 4
 
@@ -77,14 +78,22 @@ object Extension {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  implicit val jsonEncoder: Encoder[Extension] = (e: Extension) =>
+  implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
       "digest" -> Algos.encode(e.digest).asJson,
       "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
       "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
     ).asJson
+  }
 
+  implicit val jsonDecoder: Decoder[Extension] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      mandatoryFields <- c.downField("mandatoryFields").as[List[(Array[Byte], Array[Byte])]]
+      optionalFields <- c.downField("optionalFields").as[List[(Array[Byte], Array[Byte])]]
+    } yield Extension(headerId, mandatoryFields, optionalFields)
+  }
 }
 
 object ExtensionSerializer extends Serializer[Extension] {

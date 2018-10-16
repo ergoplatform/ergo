@@ -153,7 +153,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = balanceAmount(boxesToSpend)
       applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val totalBalance = getBalancesWithUnconfirmed.balance
       val confirmedBalance = getConfirmedBalances.balance
@@ -188,7 +187,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val genesisBlock = makeNextBlock(getUtxoState, Seq(genesisTx))
       val boxesToSpend = boxesAvailable(genesisTx, address.script)
       applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances
       val initialTotal = getBalancesWithUnconfirmed
@@ -225,7 +223,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val address = getTrackedAddresses.head
       val genesisBlock = makeGenesisBlock(address.script)
       applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
 
       val confirmedBalance = getConfirmedBalances.balance
@@ -379,7 +376,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
@@ -424,7 +420,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val initialBalance = getConfirmedBalances.balance
 
@@ -511,7 +506,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val pubKey = getTrackedAddresses.head.script
       val genesisBlock = makeGenesisBlock(pubKey)
       applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val confirmedBalance = getConfirmedBalances.balance
 
@@ -541,7 +535,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialState = getCurrentState
       val genesisBlock = makeGenesisBlock(p2s.script)
       applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val confirmedBalance = getConfirmedBalances.balance
       val sumOutputs = balanceAmount(boxesAvailable(genesisBlock, p2s.script))

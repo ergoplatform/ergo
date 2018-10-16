@@ -129,7 +129,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class WalletActorStub extends Actor {
     def seed = "walletstub"
 
-    private implicit val addressEncoder = new ErgoAddressEncoder(settings)
+    private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
     private val prover = new ErgoProvingInterpreter(seed, 2)
     private val trackedAddresses: mutable.Buffer[ErgoAddress] =
       mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
@@ -143,9 +143,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
-      case GenerateTransaction(payTo) =>
+      case GenerateTransaction(_) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
-        val tx = ErgoTransaction(IndexedSeq(input), payTo.toIndexedSeq)
+        val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.get))
         sender ! Success(tx)
     }
   }

@@ -41,7 +41,6 @@ trait ErgoWalletReader extends VaultReader {
   }
 
   def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] = {
-    val boxCandidates = requests.map(_.toBoxCandidate)
-    (actor ? GenerateTransaction(boxCandidates)).mapTo[Try[ErgoTransaction]]
+    (actor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
   }
 }

@@ -98,8 +98,8 @@ class TransactionGenerator(viewHolder: ActorRef,
           Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
       }
     }
-    payloadReq.flatMap { tpOutOpt =>
-      val requests = Seq(tpOutOpt, Some(feeReq)).flatten
+    payloadReq.flatMap { payloadReqOpt =>
+      val requests = Seq(payloadReqOpt, Some(feeReq)).flatten
       wallet.generateTransaction(requests)
     }
   }

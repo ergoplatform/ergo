@@ -2,11 +2,11 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
@@ -16,11 +16,8 @@ import sigmastate.Values.EvaluatedValue
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
                           assets: Option[Seq[(ErgoBox.TokenId, Long)]],
-                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest {
-
-  override def toBoxCandidate: ErgoBoxCandidate =
-    new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
-}
+                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]],
+                          fee: Long) extends TransactionRequest
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 
@@ -30,7 +27,8 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
     "address" -> request.address.asJson,
     "value" -> request.value.asJson,
     "assets" -> request.assets.asJson,
-    "registers" -> request.registers.asJson
+    "registers" -> request.registers.asJson,
+    "fee" -> request.fee.asJson
   )
 }
 
@@ -46,6 +44,8 @@ class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentReque
       value <- cursor.downField("value").as[Long]
       assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield PaymentRequest(address, value, assets, registers)
+      feeOpt <- cursor.downField("fee").as[Option[Long]]
+    } yield PaymentRequest(address, value, assets, registers,
+      feeOpt.getOrElse(settings.walletSettings.defaultTransactionFee))
   }
 }

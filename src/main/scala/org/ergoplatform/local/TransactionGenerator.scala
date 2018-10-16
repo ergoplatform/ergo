@@ -87,8 +87,8 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-    val tokenPaymentReq = wallet.confirmedBalances().map { balances =>
+    val feeReq: PaymentRequest = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+    val tokenPaymentReq: Future[Option[PaymentRequest]] = wallet.confirmedBalances().map { balances =>
       if (balances.assetBalances.nonEmpty && probabilisticPredicate(assetTransferSkipBias)) {
         val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
         val tokenAmountToSpend = tokenToSpend._2 / 4
@@ -100,24 +100,17 @@ class TransactionGenerator(viewHolder: ActorRef,
         Some(PaymentRequest(randProposition, randAmount, None, None))
       }
     }
-    val assetIssueReq = tokenPaymentReq
-      .flatMap(reqOpt => wallet.inputsFor(reqOpt.map(Seq(feeReq) :+ _).getOrElse(Seq(feeReq))))
-      .map { inputs =>
-        if (probabilisticPredicate(assetIssueSkipBias)) {
-          inputs.headOption.map { firstInput =>
-            val assetId = Digest32 !@@ firstInput.id
-            val assetInfo = genNewAssetInfo
-            AssetIssueRequest(randProposition, assetId, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4)
-          }
-        } else {
-          None
-        }
+    val assetIssueReqOpt: Option[AssetIssueRequest] = {
+      if (probabilisticPredicate(assetIssueSkipBias)) {
+        val assetInfo = genNewAssetInfo
+        Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
+      } else {
+        None
       }
+    }
     tokenPaymentReq.flatMap { tpOutOpt =>
-      assetIssueReq.flatMap { aiOutOpt =>
-        val requests = Seq(tpOutOpt, aiOutOpt, Some(feeReq)).flatten
-        wallet.generateTransaction(requests)
-      }
+      val requests = Seq(tpOutOpt, assetIssueReqOpt, Some(feeReq)).flatten
+      wallet.generateTransaction(requests)
     }
   }
 

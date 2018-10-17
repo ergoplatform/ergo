@@ -98,4 +98,15 @@ class ExpirationSpecification extends ErgoPropertyTest {
       }
     }
   }
+
+  //todo: test register change
+
+  property("spending of whole coin when its value no more than storage fee") {
+    forAll(unspendableErgoBoxGen(2, 200 * Parameters.K * Constants.StoragePeriod)) { from =>
+      val outcome = from.value <= from.bytes.length * Parameters.K * Constants.StoragePeriod
+      val out1 = new ErgoBoxCandidate(from.value - 1, Values.TrueLeaf)
+      val out2 = new ErgoBoxCandidate(1, Values.FalseLeaf)
+      constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
+    }
+  }
 }

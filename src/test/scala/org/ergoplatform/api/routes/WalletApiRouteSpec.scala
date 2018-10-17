@@ -11,15 +11,17 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.settings.ErgoSettings
-import org.scalatest.{FlatSpec, Matchers}
-import scorex.crypto.hash.Blake2b256
+import org.scalatest.{FlatSpec, Matchers, TryValues}
 import sigmastate.Values
+
+import scala.util.Try
 
 class WalletApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport {
+  with FailFastCirceSupport
+  with TryValues {
 
   val prefix = "/wallet"
 
@@ -31,25 +33,23 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   it should "generate payment transaction" in {
-    val amount = 100L
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), amount, None, None)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
     Post(prefix + "/payment/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].outputs.head.value shouldEqual amount
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
     }
   }
 
   it should "generate asset issue transaction" in {
-    val assetId = Blake2b256.hash("assetId")
-    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), assetId, 100L, "TEST", "Test", 8)
+    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8, 100000L)
     Post(prefix + "/assets/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].outputs.head.additionalTokens.head._1 sameElements assetId shouldBe true
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
     }
   }
 
   it should "generate & send payment transaction" in {
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
     Post(prefix + "/payment/send", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
@@ -57,8 +57,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate & send asset issue transaction" in {
-    val assetId = Blake2b256.hash("assetId")
-    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), assetId, 100L, "TEST", "Test", 8)
+    val request = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8, 100000L)
     Post(prefix + "/assets/issue", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty

@@ -30,7 +30,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       wallet.scanPersistent(genesisBlock)
       blocking(Thread.sleep(scanTime(genesisBlock)))
       val confirmedBalance = getConfirmedBalances.balance
-      val requests = addresses map (a => PaymentRequest(a, confirmedBalance / (addresses.length + 1), None, None))
+      val requests = addresses map (a => PaymentRequest(a, confirmedBalance / (addresses.length + 1), None, None, 0L))
       val tx = Await.result(wallet.generateTransaction(requests), awaitDuration).get
       val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(_.id sameElements i.boxId).get)
@@ -41,7 +41,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val newBalance = getConfirmedBalances.balance
-      val requests2 = addresses map (a => PaymentRequest(a, newBalance / (addresses.length + 1), None, None))
+      val requests2 = addresses map (a => PaymentRequest(a, newBalance / (addresses.length + 1), None, None, 0L))
       val tx2 = Await.result(wallet.generateTransaction(requests2), awaitDuration).get
       val context2 = ErgoStateContext(block.header.height, block.header.stateRoot)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(_.id sameElements i.boxId).get)
@@ -463,14 +463,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val confirmedBalance = getConfirmedBalances.balance
 
       //pay out all the wallet balance:
-      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, None, None)
+      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, None, None, 0L)
 
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
 
       //change == 1:
-      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None)
+      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None, 0L)
 
       val tx2 = Await.result(wallet.generateTransaction(Seq(req2)), awaitDuration).get
       tx2.outputs.size shouldBe 2

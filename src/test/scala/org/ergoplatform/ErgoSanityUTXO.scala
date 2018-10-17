@@ -11,9 +11,10 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.network.ConnectedPeer
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
-
+import scorex.core.app.{Version => HandshakeV}
+import scorex.core.network.peer.PeerInfo
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
@@ -68,8 +69,20 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+
+    val peerInfo = PeerInfo(
+      0L,
+      None,
+      Some(""),
+      Some(Outgoing),
+      Seq.empty
+    )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, None)
+    val p: ConnectedPeer = ConnectedPeer(
+      inetSocketAddressGen.sample.get,
+      pchProbe.ref,
+      Some(peerInfo)
+    )
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

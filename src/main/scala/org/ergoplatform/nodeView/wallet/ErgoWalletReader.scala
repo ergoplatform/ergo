@@ -6,7 +6,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadPublicKeys, ReadRandomPublicKey, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import scorex.core.transaction.wallet.VaultReader
 
@@ -40,7 +40,6 @@ trait ErgoWalletReader extends VaultReader {
   }
 
   def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] = {
-    val boxCandidates = requests.map(_.toBoxCandidate)
-    (actor ? GenerateTransaction(boxCandidates)).mapTo[Try[ErgoTransaction]]
+    (actor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
   }
 }

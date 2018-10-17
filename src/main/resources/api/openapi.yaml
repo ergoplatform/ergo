@@ -97,12 +97,32 @@ components:
       type: string
       example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
 
-    PaymentRequest:
-      description: request for generation of payment transaction to a given address
+    RequestsHolder:
+      description: Holds many transaction requests and specififed fee
       type: object
       required:
-        - address
-        - value
+      - requests
+      - fee
+      properties:
+        requests:
+          description: Sequence of transaction requests
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PaymentRequest'
+            - $ref: '#/components/schemas/AssetIssueRequest'
+        fee:
+          description: Transaction fee
+          type: integer
+          format: int64
+          example: 100
+
+    PaymentRequest:
+      description: Request for generation of payment transaction to a given address
+      type: object
+      required:
+      - address
+      - value
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -125,7 +145,7 @@ components:
           example: 100
 
     AssetIssueRequest:
-      description: request for generation of asset issue transaction
+      description: Request for generation of asset issue transaction
       type: object
       required:
       - address
@@ -1230,9 +1250,7 @@ paths:
         content:
           application/json:
             schema:
-              anyOf:
-              - $ref: '#/components/schemas/PaymentRequest'
-              - $ref: '#/components/schemas/AssetIssueRequest'
+              $ref: '#/components/schemas/RequestsHolder'
       responses:
         '200':
           description: Generated Ergo transaction
@@ -1264,9 +1282,7 @@ paths:
         content:
           application/json:
             schema:
-              anyOf:
-              - $ref: '#/components/schemas/PaymentRequest'
-              - $ref: '#/components/schemas/AssetIssueRequest'
+              $ref: '#/components/schemas/RequestsHolder'
       responses:
         '200':
           description: Identifier of an Ergo transaction generated

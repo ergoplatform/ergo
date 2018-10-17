@@ -1241,7 +1241,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErgoTransaction'
         '400':
-          description: Bad request
+          description: Bad transaction request
           content:
             text/plain; charset=UTF-8:
               schema:
@@ -1275,7 +1275,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionId'
         '400':
-          description: Bad payment request
+          description: Bad transaction request
           content:
             text/plain; charset=UTF-8:
               schema:

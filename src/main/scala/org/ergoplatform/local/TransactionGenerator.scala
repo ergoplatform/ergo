@@ -8,15 +8,17 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
-import sigmastate.Values
+import scorex.util.encode.Base16
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Random, Success}
-
+import scala.concurrent.Future
+import scala.util.{Failure, Random, Success, Try}
 
 /**
   * Transaction generator, which is generating testing transactions (presumably, for testnets, but this is
@@ -50,24 +52,20 @@ class TransactionGenerator(viewHolder: ActorRef,
         v.vault.publicKeys(0, 100).onComplete(_.foreach(pks => propositions = pks))
       }
 
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if fb.isInstanceOf[ErgoFullBlock] =>
-      val fbh = fb.header.height
-      if (fbh > currentFullHeight) {
-        currentFullHeight = fbh
+    case SemanticallySuccessfulModifier(fullBlock: ErgoFullBlock) if fullBlock.isInstanceOf[ErgoFullBlock] =>
+      val blockHeight = fullBlock.header.height
+      if (blockHeight > currentFullHeight) {
+        currentFullHeight = blockHeight
         transactionsPerBlock = Random.nextInt(MaxTransactionsPerBlock) + 1
-        log.info(s"Going to generate $transactionsPerBlock transactions upon receiving a block at height $fbh")
+        log.info(s"Going to generate $transactionsPerBlock transactions upon receiving a block at height $blockHeight")
         self ! Attempt
       }
 
     case Attempt =>
-      //todo: assets
-      transactionsPerBlock = transactionsPerBlock - 1
+      transactionsPerBlock -= 1
       if (transactionsPerBlock >= 0 && propositions.nonEmpty) {
-        val feeOut = PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
-        val amountToPay = (Random.nextInt(10) + 1) * 100000000
-        val paymentOut = PaymentRequest(propositions(Random.nextInt(propositions.size)), amountToPay, None, None)
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          v.vault.generateTransaction(Seq(feeOut, paymentOut)).onComplete(t => self ! t.flatten)
+          genTransaction(v.vault).onComplete(t => self ! t.flatten)
         }
       }
 
@@ -79,6 +77,39 @@ class TransactionGenerator(viewHolder: ActorRef,
       log.info(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
+  }
+
+  def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+    val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
+      Random.nextInt(100) match {
+        case i if i < 70 =>
+          Some(PaymentRequest(randProposition, randAmount, None, None, fee))
+        case i if i < 95 && balances.assetBalances.nonEmpty =>
+          val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+          val tokenAmountToSpend = tokenToSpend._2 / 4
+          Algos.decode(tokenToSpend._1).map { id =>
+            PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None, fee)
+          }.toOption
+        case _ =>
+          val assetInfo = genNewAssetInfo
+          Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4, fee))
+      }
+    }
+    payloadReq.flatMap { payloadReqOpt =>
+      wallet.generateTransaction(payloadReqOpt.toSeq)
+    }
+  }
+
+  def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
+
+  def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
+
+  def genNewAssetInfo: (Int, String, String, Int) = {
+    val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000
+    val tokenName: String = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
+    val tokenDescription: String = s"$tokenName description"
+    val tokenDecimals: Int = Random.nextInt(8) + 4
+    (emissionAmount, tokenName, tokenDescription, tokenDecimals)
   }
 }
 

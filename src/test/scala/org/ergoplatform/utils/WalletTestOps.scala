@@ -57,9 +57,13 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
+    assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
+  }
+
+  def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
       .flatMap { _.additionalTokens }
-      .groupBy { case (digest, _) => bytesToId(digest) }
+      .groupBy { case (tokenId, _) => tokenId }
       .map { case (id, pairs) => id -> pairs.map(_._2).sum }
   }
 
@@ -69,8 +73,9 @@ trait WalletTestOps extends NodeViewBaseOps {
     getHistory.heightOf(scorex.core.versionToId(state.version))
   }
 
-  def makeGenesisBlock(script: Value[SBoolean.type])(implicit ctx: Ctx): ErgoFullBlock = {
-    makeNextBlock(getUtxoState, Seq(makeGenesisTx(script)))
+  def makeGenesisBlock(script: Value[SBoolean.type], assets: Seq[(TokenId, Long)] = Seq.empty)
+                      (implicit ctx: Ctx): ErgoFullBlock = {
+    makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
   def makeGenesisTx(script: Value[SBoolean.type], assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
@@ -107,10 +112,12 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
-    val (createdAsset, spentAssets) = assets.partition(_._1 sameElements newAssetIdStub)
-    createdAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean =  java.util.Arrays.equals(tokenId, newAssetIdStub)
+    val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
+    newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
-  def randomAssets: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def randomNewAssets: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAssets ++ assetsByTokenId(boxes)
   def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

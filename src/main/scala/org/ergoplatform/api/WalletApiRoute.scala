@@ -22,9 +22,22 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)
+  implicit val requestsHolderDecoder: RequestsHolderDecoder = new RequestsHolderDecoder(ergoSettings)
   implicit val addressEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
+  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
+    balancesR ~
+      unconfirmedBalanceR ~
+      addressesR ~
+      generateTransactionR ~
+      generatePaymentTransactionR ~
+      generateAssetIssueTransactionR ~
+      sendTransactionR ~
+      sendPaymentTransactionR ~
+      sendAssetIssueTransactionR
+  }
 
   private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)
@@ -48,15 +61,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         ApiResponse(tx.id)
     }
 
-  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
-    balancesR ~
-      unconfirmedBalanceR ~
-      addressesR ~
-      generatePaymentTransactionR ~
-      generateAssetIssueTransactionR ~
-      sendPaymentTransactionR ~
-      sendAssetIssueTransactionR
-  }
+  def sendTransactionR: Route = (path("transaction" / "send") & post
+    & entity(as[RequestsHolder]))(holder => sendTransaction(holder.requestsWithFee))
+
+  def generateTransactionR: Route = (path("transaction" / "generate") & post
+    & entity(as[RequestsHolder]))(holder => generateTransaction(holder.requestsWithFee))
 
   def generatePaymentTransactionR: Route = (path( "payment" / "generate") & post
     & entity(as[Seq[PaymentRequest]]))(generateTransaction)

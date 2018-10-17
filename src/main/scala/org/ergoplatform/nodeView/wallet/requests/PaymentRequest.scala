@@ -46,6 +46,6 @@ class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentReque
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
       feeOpt <- cursor.downField("fee").as[Option[Long]]
     } yield PaymentRequest(address, value, assets, registers,
-      feeOpt.getOrElse(settings.walletSettings.defaultTransactionFee))
+      feeOpt.getOrElse(0))
   }
 }

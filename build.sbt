@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "c71339e9-SNAPSHOT"
+val scorexVersion = "8adeddba-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -99,7 +99,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest extend Test)
+configs(IntegrationTest extend (Test))
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,

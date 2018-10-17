@@ -103,7 +103,6 @@ components:
       required:
         - address
         - value
-        - fee
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -134,7 +133,6 @@ components:
       - name
       - description
       - decimals
-      - fee
       properties:
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -1214,6 +1212,74 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/generate:
+    post:
+      summary: Generate arbitrary transaction
+      operationId: walletTransactionGenerate
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/PaymentRequest'
+              - $ref: '#/components/schemas/AssetIssueRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/send:
+    post:
+      summary: Generate and send arbitrary transaction
+      operationId: walletTransactionGenerateAndSend
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/PaymentRequest'
+              - $ref: '#/components/schemas/AssetIssueRequest'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: Bad payment request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
         default:
           description: Error
           content:

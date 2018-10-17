@@ -52,6 +52,6 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       decimals <- cursor.downField("decimals").as[Int]
       feeOpt <- cursor.downField("fee").as[Option[Long]]
     } yield AssetIssueRequest(address, amount, name, description, decimals,
-      feeOpt.getOrElse(settings.walletSettings.defaultTransactionFee))
+      feeOpt.getOrElse(0))
   }
 }

@@ -8,7 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
+import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.{FlatSpec, Matchers, TryValues}
 import sigmastate.Values
@@ -29,7 +29,17 @@ class WalletApiRouteSpec extends FlatSpec
 
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
+  implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+
+  it should "generate arbitrary transaction" in {
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
+    val holder = RequestsHolder((0 to 10).map(_ => request), 10000L)
+    Post(prefix + "/transaction/generate", holder.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
+    }
+  }
 
   it should "generate payment transaction" in {
     val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
@@ -44,6 +54,15 @@ class WalletApiRouteSpec extends FlatSpec
     Post(prefix + "/assets/generate", Seq(request).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ErgoTransaction]) shouldBe 'success
+    }
+  }
+
+  it should "generate & send arbitrary transaction" in {
+    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
+    val holder = RequestsHolder((0 to 10).map(_ => request), 10000L)
+    Post(prefix + "/transaction/send", holder.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] should not be empty
     }
   }
 

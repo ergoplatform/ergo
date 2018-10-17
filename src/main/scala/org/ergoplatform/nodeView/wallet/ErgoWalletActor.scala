@@ -147,32 +147,31 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
-    requests.flatMap {
-      case PaymentRequest(address, value, assets, registers, fee) =>
-        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
-        val paymentBox = new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
-        feeBoxOpt.map(Seq(_, paymentBox)).getOrElse(Seq(paymentBox))
-      case AssetIssueRequest(address, amount, name, description, decimals, fee) =>
+    val fee = requests.map(_.fee).sum
+    val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
+    val payloadRequests = requests.map {
+      case PaymentRequest(address, value, assets, registers, _) =>
+        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
+      case AssetIssueRequest(address, amount, name, description, decimals, _) =>
         val firstInput = inputsFor(
           requests
-            .foldLeft(Seq[PaymentRequest]()) {
+            .foldLeft(Seq.empty[PaymentRequest]) {
               case (acc, pr: PaymentRequest) => acc :+ pr
               case (acc, _) => acc
             }
             .map(_.value)
             .sum + fee
-        ).head
+        ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
           R4 -> StringConstant(name),
           R5 -> StringConstant(description),
           R6 -> IntConstant(decimals)
         )
-        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
-        val assetIssueBox = new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
-        feeBoxOpt.map(Seq(_, assetIssueBox)).getOrElse(Seq(assetIssueBox))
+        new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
+    feeBoxOpt.map(payloadRequests :+ _).getOrElse(payloadRequests)
   }
 
   protected def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =

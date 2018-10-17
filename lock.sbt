@@ -7,7 +7,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.chuusai" % "shapeless_2.12" % "2.3.2",
   "com.google.code.findbugs" % "jsr305" % "3.0.2",
   "com.google.guava" % "guava" % "21.0",
-  "com.iheart" % "ficus_2.12" % "1.4.3",
+  "com.iheart" % "ficus_2.12" % "1.4.4",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
   "com.lihaoyi" % "sourcecode_2.12" % "0.1.4",
@@ -48,7 +48,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "d96c1cc5-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "8adeddba-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
   "org.scorexfoundation" % "sigma-state_2.12" % "R3-update-20013a49-SNAPSHOT",
@@ -61,4 +61,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 89d2e212b928e515bba65fc4fce440869a95f10d
+// LIBRARY_DEPENDENCIES_HASH 7653572ff0a971b70d8ccf967d8f5aefe9b620e6

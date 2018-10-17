@@ -41,7 +41,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, peerManagerRef, ergoSettings, timeProvider)
+  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

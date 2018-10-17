@@ -99,7 +99,55 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  private val t7 = TestCase("apply invalid full block") { fixture =>
+  private val t7 = TestCase("switching for a better chain") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+
+    applyBlock(genesis) shouldBe 'success
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
+
+    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    val expectedBestFullBlockOpt = if (verifyTransactions) Some(chain1block1) else None
+    applyBlock(chain1block1) shouldBe 'success
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
+
+    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+    applyBlock(chain2block1) shouldBe 'success
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
+
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
+    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
+
+    applyBlock(chain2block2) shouldBe 'success
+    if (verifyTransactions) {
+      getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
+    }
+
+    getBestHeaderOpt shouldBe Some(chain2block2.header)
+    getRootHash shouldBe Algos.encode(chain2block2.header.stateRoot)
+  }
+
+  private val t8 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
+    import fixture._
+    if (stateType == StateType.Utxo) {
+      val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.header)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.blockTransactions)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
+
+      getBestFullBlockOpt shouldBe Some(genesis)
+      getModifierById(genesis.adProofs.get.id) shouldBe genesis.adProofs
+    }
+  }
+
+  private val t9 = TestCase("apply invalid full block") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -145,7 +193,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     ErgoFullBlock(brokenHeader, brokenTransactions, extension, Some(brokenProofs))
   }
 
-  private val t8 = TestCase("apply full block with invalid extension") { fixture =>
+  private val t10 = TestCase("apply full block with invalid extension") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -182,54 +230,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       headerId = validBlockIn.id
     )
     validBlockIn.copy(extension = brokenExtension)
-  }
-
-  private val t9 = TestCase("switching for a better chain") { fixture =>
-    import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-
-    applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
-
-    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-    val expectedBestFullBlockOpt = if (verifyTransactions) Some(chain1block1) else None
-    applyBlock(chain1block1) shouldBe 'success
-    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
-    getBestHeaderOpt shouldBe Some(chain1block1.header)
-
-    val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-    applyBlock(chain2block1) shouldBe 'success
-    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
-    getBestHeaderOpt shouldBe Some(chain1block1.header)
-
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
-    val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
-    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
-
-    applyBlock(chain2block2) shouldBe 'success
-    if (verifyTransactions) {
-      getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
-    }
-
-    getBestHeaderOpt shouldBe Some(chain2block2.header)
-    getRootHash shouldBe Algos.encode(chain2block2.header.stateRoot)
-  }
-
-  private val t10 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
-    import fixture._
-    if (stateType == StateType.Utxo) {
-      val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
-      val genesis = validFullBlock(parentOpt = None, us, bh)
-
-      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.header)
-      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.blockTransactions)
-      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
-
-      getBestFullBlockOpt shouldBe Some(genesis)
-      getModifierById(genesis.adProofs.get.id) shouldBe genesis.adProofs
-    }
   }
 
   private val t11 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
@@ -396,7 +396,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHeightOf(block.header.id) shouldBe Some(0)
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10)
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8)
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
@@ -405,7 +405,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val verifyingTxCases = List(t11, t12, t13, t14)
+  val verifyingTxCases = List(t9, t10, t11, t12, t13, t14)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>

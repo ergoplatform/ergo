@@ -1,7 +1,7 @@
-package org.ergoplatform
+package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoSanity._
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -10,6 +10,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}

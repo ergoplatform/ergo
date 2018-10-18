@@ -22,9 +22,11 @@ object Constants {
   // Max cost of coinbase transaction. todo calculate? todo: do we need this constant
   val CoinbaseTxCost: Int = 10000
 
+  val BlocksPerHour = 30
+
   //For how many blocks a box could be put into the state with no paying.
   //4 years
-  val StoragePeriod: Int = 1051200
+  val StoragePeriod: Int = 4 * 365 * 24 * BlocksPerHour
 
   val StorageContractCost: Long = 50
 

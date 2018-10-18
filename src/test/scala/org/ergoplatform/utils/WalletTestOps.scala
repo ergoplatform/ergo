@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.fixtures.WalletFixture
 import sigmastate.{SBoolean, SLong}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}

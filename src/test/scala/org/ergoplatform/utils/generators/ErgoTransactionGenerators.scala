@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
@@ -13,8 +13,8 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
-import sigmastate._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, IntConstant, TrueLeaf, Value}
+import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.JavaConverters._

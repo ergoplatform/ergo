@@ -25,11 +25,12 @@ class TransactionApiRouteSpec extends FlatSpec
   with Stubs
   with FailFastCirceSupport {
 
-  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
+  val prefix = "/transactions"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
-  val prefix = "/transactions"
   val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
+
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val input = Input(
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
@@ -45,17 +46,11 @@ class TransactionApiRouteSpec extends FlatSpec
     }
   }
 
-  //TODO: Not implemented yet
-  ignore should "get tx by id" in {
-    Get(prefix + "/txod") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-    }
-  }
-
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
       memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
+
 }

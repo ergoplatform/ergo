@@ -13,7 +13,8 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHea
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, PaymentRequestEncoder}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalatest.Inspectors
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}

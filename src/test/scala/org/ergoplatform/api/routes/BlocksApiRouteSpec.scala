@@ -19,11 +19,11 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
+  val prefix = "/blocks"
 
-  val prefix: String = "/blocks"
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
@@ -66,10 +66,10 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
+  val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
-  ignore should "get block by header id" in {
+  it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val expected = history.typedModifierById[Header](headerIdBytes)
@@ -94,7 +94,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  ignore should "get transactions by header id" in {
+  it should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val header = history.typedModifierById[Header](headerIdBytes).value
@@ -103,4 +103,5 @@ class BlocksApiRouteSpec extends FlatSpec
       responseAs[String] shouldEqual expected
     }
   }
+
 }

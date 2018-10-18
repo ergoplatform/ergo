@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
@@ -9,8 +9,8 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Matchers

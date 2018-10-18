@@ -3,6 +3,7 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}
 import org.scalatest.{EitherValues, Inspectors, OptionValues, TryValues}

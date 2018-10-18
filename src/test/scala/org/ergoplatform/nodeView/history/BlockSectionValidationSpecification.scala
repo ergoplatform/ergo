@@ -59,7 +59,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     commonChecks(history, extension, header)
   }
 
-
   private def init() = {
     var history = genHistory()
     val chain = genChain(2, history)
@@ -126,4 +125,5 @@ class BlockSectionValidationSpecification extends HistorySpecification {
       history.applicableTry(newSection) shouldBe 'failure
     }
   }
+
 }

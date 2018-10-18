@@ -18,16 +18,16 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-    chain.foreach(fb => history.append(fb.extension).get)
+    chain.foreach(fb => history.append(fb.extension).success.value)
 
-    history = history.append(chain.tail.head.blockTransactions).get._1
+    history = history.append(chain.tail.head.blockTransactions).success.value._1
     history.bestFullBlockOpt shouldBe None
     val pi1 = history.append(chain.head.blockTransactions).get._2
-    history.bestFullBlockOpt.get shouldBe chain.tail.head
+    history.bestFullBlockOpt.value shouldBe chain.tail.head
     pi1.toApply.length shouldBe 2
 
     chain.tail.tail.tail.foreach(c => history.append(c.blockTransactions))
-    history.bestFullBlockOpt.get.header.height shouldBe chain.tail.head.header.height
+    history.bestFullBlockOpt.value.header.height shouldBe chain.tail.head.header.height
 
     val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
     pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2, 3, 4, 5)
@@ -40,7 +40,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val chain = genChain(BlocksToKeep * 2)
 
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-    history.bestHeaderOpt.get shouldBe chain.last.header
+    history.bestHeaderOpt.value shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
     if (!history.pruningProcessor.isHeadersChainSynced) {
@@ -50,8 +50,8 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis
     val fullBlocksToApply = chain
 
-    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
-    history = history.append(fullBlocksToApply.head.extension).get._1
+    history = history.append(fullBlocksToApply.head.blockTransactions).success.value._1
+    history = history.append(fullBlocksToApply.head.extension).success.value._1
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
   }
 
@@ -59,7 +59,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     var history = genHistory()
     val chain = genChain(BlocksToKeep)
     history = applyBlock(history, chain.head)
-    history.bestFullBlockOpt.get shouldBe chain.head
+    history.bestFullBlockOpt.value shouldBe chain.head
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header).tail))
 
     val missedChain = chain.tail.toList
@@ -76,7 +76,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
     val header = genHeaderChain(1, history).head
-    val updHistory = history.append(header).get._1
+    val updHistory = history.append(header).success.value._1
     updHistory.bestHeaderOpt shouldBe Some(header)
     updHistory.modifierById(header.id) shouldBe Some(header)
   }
@@ -100,9 +100,9 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt shouldBe None
     val header = block.header
 
-    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)).get shouldBe header
+    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)).success.value shouldBe header
 
-    val actualHeader = history.append(header).get._1.bestHeaderOpt.get
+    val actualHeader = history.append(header).success.value._1.bestHeaderOpt.value
     actualHeader shouldBe header
   }
 
@@ -112,7 +112,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history = applyChain(history, genChain(BlocksInChain, history))
 
     genChain(BlocksInChain, history).tail.foreach { fullBlock =>
-      val startFullBlock = history.bestFullBlockOpt.get
+      val startFullBlock = history.bestFullBlockOpt.value
 
       val header = fullBlock.header
       val txs = fullBlock.blockTransactions
@@ -124,7 +124,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.applicable(txs) shouldBe false
       history.applicable(extension) shouldBe false
 
-      history = history.append(header).get._1
+      history = history.append(header).success.value._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe false
@@ -132,9 +132,9 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe true
       history.applicable(extension) shouldBe true
-      history.bestHeaderOpt.get shouldBe header
+      history.bestHeaderOpt.value shouldBe header
 
-      history.bestFullBlockOpt.get shouldBe startFullBlock
+      history.bestFullBlockOpt.value shouldBe startFullBlock
 
       history.openSurfaceIds().head shouldBe startFullBlock.header.id
 
@@ -147,8 +147,8 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.applicable(header) shouldBe false
       history.applicable(txs) shouldBe false
       history.applicable(extension) shouldBe false
-      history.bestHeaderOpt.get shouldBe header
-      history.bestFullBlockOpt.get.header shouldBe fullBlock.header
+      history.bestHeaderOpt.value shouldBe header
+      history.bestFullBlockOpt.value.header shouldBe fullBlock.header
     }
   }
 

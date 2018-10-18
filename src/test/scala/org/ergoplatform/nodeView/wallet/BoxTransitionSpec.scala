@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 
 class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {

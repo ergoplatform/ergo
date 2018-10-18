@@ -5,10 +5,10 @@ import akka.testkit.TestProbe
 import org.ergoplatform.ErgoSanity._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}

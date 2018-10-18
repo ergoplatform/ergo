@@ -12,8 +12,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen) { bh =>
-      var us = createUtxoState(bh)
-      var ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash)
+      val us = createUtxoState(bh)
+      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash)
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
@@ -42,8 +42,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block).get
-      us = us.applyModifier(block).get
+      ds = ds.applyModifier(block).success.value
+      us = us.applyModifier(block).success.value
       lastBlockOpt = Some(block.header)
       requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height + 1)
     }
@@ -66,7 +66,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val block = blBh._1
       parentOpt = Some(block.header)
       bh = blBh._2
-      us = us.applyModifier(block).get
+      us = us.applyModifier(block).success.value
 
       val changes1 = ErgoState.boxChanges(block.transactions)
       val changes2 = ErgoState.boxChanges(block.transactions)
@@ -102,7 +102,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
 
   property("ErgoState.stateChanges()") {
-    var (us: UtxoState, bh) = createUtxoState()
+    val (us: UtxoState, bh) = createUtxoState()
     bh.boxes.size shouldBe 1
     val genesisBox = bh.boxes.head._2
 
@@ -136,4 +136,5 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     s1.height shouldBe s2.height
     s1.digest shouldEqual s2.digest
   }
+
 }

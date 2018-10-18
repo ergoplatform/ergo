@@ -1,8 +1,8 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.nodeView.wallet.{BoxCertainty, ErgoAddressEncoder, Pay2SAddress, TrackedBox}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import sigmastate.Values
@@ -11,7 +11,6 @@ trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
-
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -88,4 +87,5 @@ trait WalletGenerators extends ErgoTransactionGenerators {
   private def heightGen(min: Int = 0) = {
     Gen.choose(min + 1, Integer.MAX_VALUE / 2 + min)
   }
+
 }

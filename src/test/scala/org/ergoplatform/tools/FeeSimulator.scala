@@ -1,5 +1,7 @@
 package org.ergoplatform.tools
 
+import org.ergoplatform.settings.{Constants, Parameters}
+
 object FeeSimulator extends App {
   import org.ergoplatform.settings.Parameters._
   import org.ergoplatform.settings.Constants._
@@ -12,4 +14,7 @@ object FeeSimulator extends App {
 
   val bitcoinUtxos = 60000000
   println("Reward per block: " + perOutputFee * (bitcoinUtxos / StoragePeriod))
+
+  val minStdDust = Parameters.MinValuePerByte * StdSize / CoinsInOneErgo.toDouble
+  println(s"Min dust value of standard-size box: $minStdDust")
 }

@@ -1,5 +1,6 @@
 package org.ergoplatform.it
 
+import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
@@ -8,7 +9,7 @@ import scala.concurrent.duration._
 
 class KnownNodesSpec extends FreeSpec with IntegrationSuite {
 
-  val nodeConfigs = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
+  val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
   val nodes: List[Node] = docker.startNodes(nodeConfigs, sequentialTopologyConfig).success.value
 
   s"The third node knows first node" ignore {

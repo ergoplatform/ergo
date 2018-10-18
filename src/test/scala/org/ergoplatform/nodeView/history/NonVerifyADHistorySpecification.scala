@@ -69,7 +69,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain) = ErgoSyncInfo(c.headers.map(_.id))
+    def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfo(c.headers.map(_.id))
 
     val common = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, common)
@@ -236,4 +236,5 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }
+
 }

@@ -8,12 +8,12 @@ import scorex.crypto.hash.Blake2b256
 
 import scala.annotation.tailrec
 
-class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpecification {
+class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistorySpecification {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 
   private def genCachePair(i: Int): (ModifierId, Header) = {
-    val header = invalidHeaderGen.sample.get
+    val header = invalidHeaderGen.sample.value
     val k = genKey(i)
     k -> header
   }
@@ -54,21 +54,21 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
     chain.foreach { fb =>
       modifiersCache.put(fb.header.id, fb.header)
       modifiersCache.put(fb.header.transactionsId, fb.blockTransactions)
-      modifiersCache.put(fb.header.ADProofsId, fb.adProofs.get)
+      modifiersCache.put(fb.header.ADProofsId, fb.adProofs.value)
     }
 
     //The history is empty - we can apply only a header at height == 0 at this moment.
     //Out of 15 elements in the cache, the cache should propose a proper candidate
-    val c1 = modifiersCache.popCandidate(history0).get
+    val c1 = modifiersCache.popCandidate(history0).value
     c1.isInstanceOf[Header] shouldBe true
     val h1 = c1.asInstanceOf[Header]
     h1.height shouldBe 0
 
-    val history1 = history0.append(c1).get._1
+    val history1 = history0.append(c1).success.value._1
 
     //We have only header of height == 0 in the history, so cache should return whether a header of height == 1
     //or a non-header part of the full block at height == 0
-    val c2 = modifiersCache.popCandidate(history1).get
+    val c2 = modifiersCache.popCandidate(history1).value
     val properCandidate = c2 match {
       case h: Header => h.height == 1
       case bt: BlockTransactions => bt.id == h1.transactionsId
@@ -93,10 +93,10 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
 
     chain1.foreach(fb => history = applyBlock(history, fb))
 
-    chain2.foreach(fb => history = history.append(fb.header).get._1)
+    chain2.foreach(fb => history = history.append(fb.header).success.value._1)
 
-    history.bestFullBlockOpt.get shouldBe chain1.last
-    history.bestHeaderOpt.get shouldBe chain2.last.header
+    history.bestFullBlockOpt.value shouldBe chain1.last
+    history.bestHeaderOpt.value shouldBe chain2.last.header
 
     chain2.flatMap(_.blockSections).foreach(s => modifiersCache.put(s.id, s))
 
@@ -108,9 +108,10 @@ class ErgoModifiersCacheSpecification extends ErgoPropertyTest with HistorySpeci
           applyLoop()
         case None =>
           modifiersCache.size shouldBe 0
-          history.bestFullBlockOpt.get shouldBe chain2.last
+          history.bestFullBlockOpt.value shouldBe chain2.last
       }
     }
     applyLoop()
   }
+
 }

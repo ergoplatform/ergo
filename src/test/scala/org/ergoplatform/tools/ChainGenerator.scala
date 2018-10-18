@@ -11,7 +11,8 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
+import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.util.ScorexLogging
 

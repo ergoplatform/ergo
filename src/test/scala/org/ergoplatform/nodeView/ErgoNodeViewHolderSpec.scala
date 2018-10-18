@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import scorex.core.NodeViewHolder.ReceivableMessages._
@@ -61,7 +62,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     if (verifyTransactions) {
       nodeViewHolderRef ! LocallyGeneratedModifier(genesis.blockTransactions)
       expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
-      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.adProofs.get)
+      nodeViewHolderRef ! LocallyGeneratedModifier(genesis.adProofs.value)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
       nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
       expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
@@ -73,7 +74,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).success.value
     applyBlock(genesis) shouldBe 'success
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -103,7 +104,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).success.value
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
@@ -132,17 +133,17 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   }
 
   private def generateInvalidFullBlock(parentHeader: Header, parentState: WrappedUtxoState) = {
-    val extensionIn = extensionGen.sample.get
+    val extensionIn = extensionGen.sample.value
     val brokenBlockIn = validFullBlock(Some(parentHeader), parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head
-    val wrongBoxId: ADKey = ADKey @@ Algos.hash("wrong input")
+    val wrongBoxId: ADKey = ADKey !@@ Algos.hash("wrong input")
     val newInput = headTx.inputs.head.copy(boxId = wrongBoxId)
     val brokenTransactionsIn = brokenBlockIn.blockTransactions
       .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlockIn.blockTransactions.txs.tail)
     val brokenHeader = brokenBlockIn.header
       .copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
     val brokenTransactions = brokenTransactionsIn.copy(headerId = brokenHeader.id)
-    val brokenProofs = brokenBlockIn.adProofs.get.copy(headerId = brokenHeader.id)
+    val brokenProofs = brokenBlockIn.adProofs.value.copy(headerId = brokenHeader.id)
     val extension = extensionIn.copy(headerId = brokenHeader.id)
     ErgoFullBlock(brokenHeader, brokenTransactions, extension, Some(brokenProofs))
   }
@@ -151,7 +152,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).success.value
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
@@ -167,7 +168,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
     getBestHeaderOpt shouldBe Some(chain1block1.header)
 
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).success.value
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
     chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 
@@ -191,7 +192,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       nodeViewHolderRef ! LocallyGeneratedModifier(genesis.extension)
 
       getBestFullBlockOpt shouldBe Some(genesis)
-      getModifierById(genesis.adProofs.get.id) shouldBe genesis.adProofs
+      getModifierById(genesis.adProofs.value.id) shouldBe genesis.adProofs
     }
   }
 
@@ -199,7 +200,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).success.value
     applyBlock(genesis) shouldBe 'success
 
     val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -219,13 +220,13 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).success.value
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
 
     val chain2block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).success.value
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[Header]])
@@ -257,7 +258,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHistoryHeight shouldBe 0
     getHeightOf(block.header.id) shouldBe Some(0)
 
-    val randomId = modifierIdGen.sample.get
+    val randomId = modifierIdGen.sample.value
     val wrongTxs1 = block.blockTransactions.copy(headerId = randomId)
     val wrongTxs2 = {
       val txs = block.blockTransactions.transactions
@@ -307,17 +308,17 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    val randomId = modifierIdGen.sample.get
-    val wrongProofsBytes = SerializedAdProof @@ block.adProofs.get.proofBytes.reverse
+    val randomId = modifierIdGen.sample.value
+    val wrongProofsBytes = SerializedAdProof @@ block.adProofs.value.proofBytes.reverse
     val wrongProofs1 = block.adProofs.map(_.copy(headerId = randomId))
     val wrongProofs2 = block.adProofs.map(_.copy(proofBytes = wrongProofsBytes))
 
-    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs1.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs1.value)
     expectMsgType[SyntacticallyFailedModification[ADProofs]]
-    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs2.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](wrongProofs2.value)
     expectMsgType[SyntacticallyFailedModification[ADProofs]]
 
-    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](block.adProofs.get)
+    nodeViewHolderRef ! LocallyGeneratedModifier[ADProofs](block.adProofs.value)
     expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
   }
 
@@ -388,4 +389,5 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       t.run(NodeViewTestConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = true))
     }
   }
+
 }

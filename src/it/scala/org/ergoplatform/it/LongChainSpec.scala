@@ -1,6 +1,6 @@
 package org.ergoplatform.it
 
-import org.ergoplatform.it.container.{Docker, IntegrationSuite}
+import org.ergoplatform.it.container.IntegrationSuite
 import org.scalatest.FreeSpec
 
 import scala.async.Async.{async, await}

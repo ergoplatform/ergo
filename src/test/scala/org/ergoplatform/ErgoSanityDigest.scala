@@ -9,7 +9,8 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.nodeView.state.wrapped.WrappedDigestState
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes

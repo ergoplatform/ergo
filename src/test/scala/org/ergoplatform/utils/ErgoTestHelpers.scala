@@ -19,7 +19,6 @@ trait ErgoTestHelpers
     with ScorexLogging
     with ScorexEncoding
     with OptionValues
-    with TryValues
     with EitherValues {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider

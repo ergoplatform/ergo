@@ -42,8 +42,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block).success.value
-      us = us.applyModifier(block).success.value
+      ds = ds.applyModifier(block).get
+      us = us.applyModifier(block).get
       lastBlockOpt = Some(block.header)
       requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height + 1)
     }
@@ -66,7 +66,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val block = blBh._1
       parentOpt = Some(block.header)
       bh = blBh._2
-      us = us.applyModifier(block).success.value
+      us = us.applyModifier(block).get
 
       val changes1 = ErgoState.boxChanges(block.transactions)
       val changes2 = ErgoState.boxChanges(block.transactions)

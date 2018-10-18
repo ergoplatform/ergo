@@ -64,7 +64,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistorySpecification 
     val h1 = c1.asInstanceOf[Header]
     h1.height shouldBe 0
 
-    val history1 = history0.append(c1).success.value._1
+    val history1 = history0.append(c1).get._1
 
     //We have only header of height == 0 in the history, so cache should return whether a header of height == 1
     //or a non-header part of the full block at height == 0
@@ -93,7 +93,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistorySpecification 
 
     chain1.foreach(fb => history = applyBlock(history, fb))
 
-    chain2.foreach(fb => history = history.append(fb.header).success.value._1)
+    chain2.foreach(fb => history = history.append(fb.header).get._1)
 
     history.bestFullBlockOpt.value shouldBe chain1.last
     history.bestHeaderOpt.value shouldBe chain2.last.header

@@ -18,9 +18,9 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.pruningProcessor.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
-    chain.foreach(fb => history.append(fb.extension).success.value)
+    chain.foreach(fb => history.append(fb.extension).get)
 
-    history = history.append(chain.tail.head.blockTransactions).success.value._1
+    history = history.append(chain.tail.head.blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
     val pi1 = history.append(chain.head.blockTransactions).get._2
     history.bestFullBlockOpt.value shouldBe chain.tail.head
@@ -50,8 +50,8 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis
     val fullBlocksToApply = chain
 
-    history = history.append(fullBlocksToApply.head.blockTransactions).success.value._1
-    history = history.append(fullBlocksToApply.head.extension).success.value._1
+    history = history.append(fullBlocksToApply.head.blockTransactions).get._1
+    history = history.append(fullBlocksToApply.head.extension).get._1
     history.bestFullBlockOpt.get.header shouldBe fullBlocksToApply.head.header
   }
 
@@ -76,7 +76,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
     val header = genHeaderChain(1, history).head
-    val updHistory = history.append(header).success.value._1
+    val updHistory = history.append(header).get._1
     updHistory.bestHeaderOpt shouldBe Some(header)
     updHistory.modifierById(header.id) shouldBe Some(header)
   }
@@ -100,9 +100,9 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
     history.bestHeaderOpt shouldBe None
     val header = block.header
 
-    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)).success.value shouldBe header
+    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)).get shouldBe header
 
-    val actualHeader = history.append(header).success.value._1.bestHeaderOpt.value
+    val actualHeader = history.append(header).get._1.bestHeaderOpt.value
     actualHeader shouldBe header
   }
 
@@ -124,7 +124,7 @@ class VerifyNonADHistorySpecification extends HistorySpecification {
       history.applicable(txs) shouldBe false
       history.applicable(extension) shouldBe false
 
-      history = history.append(header).success.value._1
+      history = history.append(header).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe false

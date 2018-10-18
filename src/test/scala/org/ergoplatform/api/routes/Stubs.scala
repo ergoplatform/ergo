@@ -51,7 +51,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val txs: Seq[ErgoTransaction] = chain.head.transactions
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).success.value
+  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
 
 

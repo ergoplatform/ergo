@@ -12,11 +12,11 @@ class LongChainSpec extends FreeSpec with IntegrationSuite {
     s"Synchronize long blocks" ignore {
     val minerConfig = noDelayConfig.withFallback(nodeSeedConfigs.head)
     val followerConfig = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
-    val miner = docker.startNode(minerConfig).success.value
+    val miner = docker.startNode(minerConfig).get
     val blocksCount = 300
       val check = async {
         await(miner.waitForHeight(blocksCount))
-        val follower = docker.startNode(followerConfig).success.value
+        val follower = docker.startNode(followerConfig).get
         await(follower.waitForHeight(blocksCount))
       succeed
     }

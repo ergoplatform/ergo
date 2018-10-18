@@ -36,7 +36,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson
-    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.success.value
+    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.get
 
     blockDecoded shouldEqual block
   }

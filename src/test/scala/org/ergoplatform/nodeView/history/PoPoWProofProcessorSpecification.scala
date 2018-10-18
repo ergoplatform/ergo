@@ -109,7 +109,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     h11.interlinks(2) shouldBe h9.id
 
     val history = applyHeaderChain(genHistory(), HeaderChain(Seq(h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11)))
-    val proof = history.constructPoPoWProof(m = 2, k = 1).success.value
+    val proof = history.constructPoPoWProof(m = 2, k = 1).get
 
     proof.suffix.size shouldBe 1
     proof.suffix.head.id shouldBe h11.id

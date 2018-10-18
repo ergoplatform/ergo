@@ -11,7 +11,6 @@ trait IntegrationSuite
   extends  BeforeAndAfterAll
   with IntegrationTestConstants
   with ErgoTestHelpers
-  with TryValues
   with OptionValues
   with ScalaFutures
   with IntegrationPatience

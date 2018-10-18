@@ -361,11 +361,11 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
     history = applyChain(history, fork2.dropRight(1))
     val lastBlock = fork2.last
-    history = history.append(lastBlock.header).success.value._1
-      .append(lastBlock.blockTransactions).success.value._1
-      .append(lastBlock.extension).success.value._1
+    history = history.append(lastBlock.header).get._1
+      .append(lastBlock.blockTransactions).get._1
+      .append(lastBlock.extension).get._1
 
-    val changes = history.append(lastBlock.adProofs.value).success.value
+    val changes = history.append(lastBlock.adProofs.value).get
     history = changes._1
     history.bestHeaderOpt.value shouldBe fork2.last.header
 
@@ -391,11 +391,11 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
 
         history = applyChain(history, fork2.dropRight(1))
         val lastBlock = fork2.last
-        history = history.append(lastBlock.header).success.value._1
-          .append(lastBlock.extension).success.value._1
-          .append(lastBlock.blockTransactions).success.value._1
+        history = history.append(lastBlock.header).get._1
+          .append(lastBlock.extension).get._1
+          .append(lastBlock.blockTransactions).get._1
 
-        val changes = history.append(lastBlock.adProofs.value).success.value
+        val changes = history.append(lastBlock.adProofs.value).get
         history = changes._1
         history.bestHeaderOpt.value shouldBe fork2.last.header
 
@@ -427,7 +427,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       history.applicable(txs) shouldBe false
       history.applicable(extension) shouldBe false
 
-      history = history.append(header).success.value._1
+      history = history.append(header).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe false
@@ -441,7 +441,7 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       history.bestFullBlockOpt.get shouldBe startFullBlock
       history.openSurfaceIds().head shouldEqual startFullBlock.header.id
 
-      history = history.append(txs).success.value._1
+      history = history.append(txs).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe true
@@ -454,8 +454,8 @@ class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe startFullBlock
 
-      history = history.append(proofs).success.value._1
-      history = history.append(extension).success.value._1
+      history = history.append(proofs).get._1
+      history = history.append(extension).get._1
 
       history.contains(header) shouldBe true
       history.contains(txs) shouldBe true

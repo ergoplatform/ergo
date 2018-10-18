@@ -3,7 +3,6 @@ package org.ergoplatform.api.routes
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import org.ergoplatform.ErgoSanity.HT
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -16,6 +15,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}

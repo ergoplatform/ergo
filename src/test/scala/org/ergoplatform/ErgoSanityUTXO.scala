@@ -13,7 +13,6 @@ import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.app.{Version => HandshakeV}
 import scorex.core.network.peer.PeerInfo
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {

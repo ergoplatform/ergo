@@ -16,21 +16,19 @@ import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.serialization.Serializer.{Consumed, Position}
 import sigmastate.serialization.{Serializer => SSerializer}
 import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{AvlTreeData, SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.Try
-
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
@@ -148,6 +146,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
+    import ErgoTransaction._
     val inputsStr = if (inputs.size > 10) {
       inputs.take(10).asJson.noSpaces + s" ... (${inputs.size})"
     } else {

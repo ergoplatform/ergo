@@ -47,8 +47,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     history.lastHeaders(n).headers.map(_.asJson).asJson
   }
 
-  private def getHeaderIds(limit: Int, offset: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAt(limit, offset).toList.asJson
+  private def getHeaderIds(offset: Int, limit: Int): Future[Json] = getHistory.map { history =>
+    history.headerIdsAt(offset, limit).toList.asJson
   }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = getHistory.map { history =>
@@ -59,7 +59,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     .map { _.modifierById(modifierId) }
 
   def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
-    ApiResponse(getHeaderIds(limit, offset))
+    ApiResponse(getHeaderIds(offset, limit))
   }
 
   def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>

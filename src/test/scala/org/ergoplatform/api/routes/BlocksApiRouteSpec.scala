@@ -28,7 +28,7 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAt(0, 50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
 

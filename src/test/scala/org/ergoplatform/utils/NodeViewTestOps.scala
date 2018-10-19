@@ -132,7 +132,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
     getHistory.modifierById(id)
 
   def getAfterGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
-    ctx.settings.chainSettings.monetary.afterGenesisStateDigest
+    ctx.settings.chainSettings.monetary.genesisStateDigest
 }
 
 object NodeViewTestOps extends NodeViewTestOps {

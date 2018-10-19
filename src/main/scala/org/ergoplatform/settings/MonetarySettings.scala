@@ -16,7 +16,7 @@ case class MonetarySettings(fixedRatePeriod: Long = 30 * 2 * 24 * 365,
                             oneEpochReduction: Long = 300000000L,
                             afterGenesisStateDigestHex: String) {
 
-  val afterGenesisStateDigest: ADDigest = Base16.decode(afterGenesisStateDigestHex) match {
+  val genesisStateDigest: ADDigest = Base16.decode(afterGenesisStateDigestHex) match {
     case Success(b) => ADDigest @@ b
     case _ => throw new Error(s"Failed to parse afterGenesisStateDigestHex = $afterGenesisStateDigestHex")
   }

@@ -33,9 +33,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
   override def toString: String = {
     val idStr = Algos.encode(id)
     val headerIdStr = Algos.encode(headerId)
-    /**
-      * Artificial limit to show only first 10 txs.
-      */
+    // Artificial limit to show only first 10 txs.
     val txsStr = txs.take(10).map(_.toString).mkString(",")
     val txsSuffix = if (txs.lengthCompare(10) > 0) ", ..." else ""
 

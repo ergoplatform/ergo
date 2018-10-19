@@ -24,6 +24,7 @@ libraryDependencies ++= Seq(
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
+  "org.scorexfoundation" %% "autoleakus" % "0.1.0-SNAPSHOT",
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   "javax.xml.bind" % "jaxb-api" % "2.+",

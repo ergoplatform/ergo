@@ -110,7 +110,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     prop <- falseLeafGen
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
-    value <- Gen.choose(1, maxValue)
+    value <- Gen.choose(minValue, maxValue)
   } yield new ErgoBoxCandidate(value, prop, tokens, ar).toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
 
 

@@ -7,14 +7,14 @@ object FeeSimulator extends App {
   //standard output size is about 80 bytes
   val StdSize = 80
 
-  println("S: " + K * StoragePeriod / CoinsInOneErgo.toDouble)
+  println("K: " + K )
 
-  lazy val perOutputFee = StdSize * K * StoragePeriod / CoinsInOneErgo.toDouble
+  lazy val perOutputFee = StdSize * K  / CoinsInOneErgo.toDouble
   println("Storage fee for ordinary output: " + perOutputFee)
 
   val bitcoinUtxos = 60000000
   println("Reward per block: " + perOutputFee * (bitcoinUtxos / StoragePeriod))
 
-  val minStdDust = MinValuePerByte * StdSize / CoinsInOneErgo.toDouble
+  val minStdDust = MinValuePerByte * StdSize
   println(s"Min dust value of standard-size box: $minStdDust")
 }

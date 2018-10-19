@@ -4,7 +4,6 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scapi.sigma.ProveDiffieHellmanTuple

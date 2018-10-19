@@ -9,6 +9,7 @@ import scorex.crypto.authds.ADDigest
 import sigmastate.Values
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import scorex.util._
 
 class ExpirationSpecification extends ErgoPropertyTest {
   type Height = Long
@@ -102,10 +103,15 @@ class ExpirationSpecification extends ErgoPropertyTest {
   //todo: test register change
 
   property("spending of whole coin when its value no more than storage fee") {
-    forAll(unspendableErgoBoxGen(2, 200 * Parameters.K * Constants.StoragePeriod)) { from =>
+    val maxValue = 200 * Parameters.K * Constants.StoragePeriod
+    val outSize = new ErgoBoxCandidate(maxValue, Values.TrueLeaf)
+      .toBox(Array.fill[Byte](32)(0.toByte).toModifierId, 0.toShort).bytes.length
+    val minValue = Parameters.MinValuePerByte * outSize
+
+    forAll(unspendableErgoBoxGen(minValue + 1, maxValue)) { from =>
       val outcome = from.value <= from.bytes.length * Parameters.K * Constants.StoragePeriod
-      val out1 = new ErgoBoxCandidate(from.value - 1, Values.TrueLeaf)
-      val out2 = new ErgoBoxCandidate(1, Values.FalseLeaf)
+      val out1 = new ErgoBoxCandidate(from.value - minValue, Values.TrueLeaf)
+      val out2 = new ErgoBoxCandidate(minValue, Values.FalseLeaf)
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }
   }

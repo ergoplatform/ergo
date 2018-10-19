@@ -18,8 +18,6 @@ object Parameters {
   val Kstep = 50000
 
   /** Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs
-    * with default value of 12 nanoErgs, storage cost for an (ordinary) output of 80 bytes would be ~1.01 Ergo per 4 years
-    * max should be about 24 probably
     */
   val K: Long = Kdefault
 

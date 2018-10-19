@@ -60,6 +60,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 2)).toInt, Int.MaxValue)
   }
 
+  lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))
+
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(ids)

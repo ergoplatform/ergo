@@ -9,7 +9,7 @@ import scorex.crypto.authds.ADDigest
 import sigmastate.Values
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import scorex.util._
+
 
 class ExpirationSpecification extends ErgoPropertyTest {
   type Height = Long
@@ -46,7 +46,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("successful spending w. max spending") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, h => {
-        val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length, from.value)
+        val fee = Math.min(Parameters.K * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = true)
@@ -54,30 +54,30 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("unsuccessful spending due too big storage fee charged") {
-    forAll(unspendableErgoBoxGen(Parameters.K * (Constants.StoragePeriod - 0) * 100 + 1, Long.MaxValue)) { from =>
+    forAll(unspendableErgoBoxGen(Parameters.K  * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 0, h => {
-        val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length + 1, from.value)
+        val fee = Math.min(Parameters.K * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
     }
   }
 
-  property("successful spending when more time passed than storage period and charged more than K*storagePeriod") {
-    forAll(unspendableErgoBoxGen(Parameters.K * (Constants.StoragePeriod - 0) * 100 + 1, Long.MaxValue)) { from =>
+  property("unsuccessful spending when more time passed than storage period and charged more than K*storagePeriod") {
+    forAll(unspendableErgoBoxGen(Parameters.K * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 1, h => {
-        val fee = Math.min(Parameters.K * Constants.StoragePeriod * from.bytes.length + 1, from.value)
+        val fee = Math.min(Parameters.K * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
 
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
-      }, expectedValidity = true)
+      }, expectedValidity = false)
     }
   }
 
   property("too early spending") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, -1, h => {
-        val fee = Math.min(Parameters.K * (h - 0) * from.bytes.length, from.value)
+        val fee = Math.min(Parameters.K * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
@@ -103,15 +103,12 @@ class ExpirationSpecification extends ErgoPropertyTest {
   //todo: test register change
 
   property("spending of whole coin when its value no more than storage fee") {
-    val maxValue = 200 * Parameters.K * Constants.StoragePeriod
-    val outSize = new ErgoBoxCandidate(maxValue, Values.TrueLeaf)
-      .toBox(Array.fill[Byte](32)(0.toByte).toModifierId, 0.toShort).bytes.length
-    val minValue = Parameters.MinValuePerByte * outSize
+    val out2 = truePropBoxGen.sample.get
+    val minValue = out2.value + 1
 
-    forAll(unspendableErgoBoxGen(minValue + 1, maxValue)) { from =>
-      val outcome = from.value <= from.bytes.length * Parameters.K * Constants.StoragePeriod
-      val out1 = new ErgoBoxCandidate(from.value - minValue, Values.TrueLeaf)
-      val out2 = new ErgoBoxCandidate(minValue, Values.FalseLeaf)
+    forAll(unspendableErgoBoxGen(minValue, Long.MaxValue)) { from =>
+      val outcome = from.value <= from.bytes.length * Parameters.K
+      val out1 = new ErgoBoxCandidate(from.value - minValue, Values.FalseLeaf)
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }
   }

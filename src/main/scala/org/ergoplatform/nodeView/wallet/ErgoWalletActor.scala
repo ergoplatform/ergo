@@ -188,7 +188,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
       val targetAssets = mutable.Map[ModifierId, Long]()
 
-      payTo.filterNot(_ == assetIssueBox).map(_.additionalTokens).foreach { boxTokens =>
+      payTo.filterNot(bx => assetIssueBox.contains(bx)).map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
       }
 

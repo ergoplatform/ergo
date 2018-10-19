@@ -11,14 +11,16 @@ import scala.util.Random
 
 class FakePowScheme(levelOpt: Option[Int]) extends PowScheme {
 
-  def prove(parentOpt: Option[Header],
-            nBits: Long,
-            stateRoot: ADDigest,
-            adProofsRoot: Digest32,
-            transactionsRoot: Digest32,
-            timestamp: Timestamp,
-            extensionHash: Digest32
-           ): Option[Header] = {
+  override def prove(parentOpt: Option[Header],
+                     nBits: Long,
+                     stateRoot: ADDigest,
+                     adProofsRoot: Digest32,
+                     transactionsRoot: Digest32,
+                     timestamp: Timestamp,
+                     extensionHash: Digest32,
+                     minNonce: Long = Long.MinValue,
+                     maxNonce: Long = Long.MaxValue
+                    ): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
     val solution = EquihashSolution(level +: Seq.fill(EquihashSolution.length - 1)(Random.nextInt))

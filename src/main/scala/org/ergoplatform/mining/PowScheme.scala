@@ -4,10 +4,10 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.util.ModifierId
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.ModifierId
 
 import scala.math.BigInt
 
@@ -19,7 +19,9 @@ trait PowScheme {
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            extensionHash: Digest32
+            extensionHash: Digest32,
+            minNonce: Long = Long.MinValue,
+            maxNonce: Long = Long.MaxValue
            ): Option[Header]
 
   def proveBlock(parentOpt: Option[Header],
@@ -28,7 +30,9 @@ trait PowScheme {
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
-                 extensionCandidate: ExtensionCandidate): Option[ErgoFullBlock] = {
+                 extensionCandidate: ExtensionCandidate,
+                 minNonce: Long = Long.MinValue,
+                 maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
 
     val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
@@ -43,7 +47,9 @@ trait PowScheme {
     }
   }
 
-  def proveBlock(candidateBlock: CandidateBlock): Option[ErgoFullBlock] = {
+  def proveCandidate(candidateBlock: CandidateBlock,
+                     minNonce: Long = Long.MinValue,
+                     maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
     proveBlock(candidateBlock.parentOpt,
       candidateBlock.nBits,
       candidateBlock.stateRoot,

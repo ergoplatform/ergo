@@ -26,7 +26,9 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
-                     extensionHash: Digest32
+                     extensionHash: Digest32,
+                     minNonce: Long = Long.MinValue,
+                     maxNonce: Long = Long.MaxValue
                     ): Option[Header] = {
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)

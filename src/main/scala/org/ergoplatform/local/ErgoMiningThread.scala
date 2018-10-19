@@ -45,7 +45,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       candidate = candidate.copy(timestamp = newTimestamp)
       log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp $newTimestamp " +
         s"containing ${candidate.transactions.size} transactions")
-      powScheme.proveBlock(candidate) match {
+      powScheme.proveCandidate(candidate) match {
         case Some(newBlock) =>
           log.info(s"New block ${newBlock.id} with ${newBlock.transactions.size} transactions found")
 

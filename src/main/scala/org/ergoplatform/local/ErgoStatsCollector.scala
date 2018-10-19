@@ -47,9 +47,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     settings.nodeSettings.mining,
     None,
-    Some(BigInt(0)),
     None,
-    Some(BigInt(0)),
+    None,
+    None,
     timeProvider.time(),
     None
   )
@@ -57,10 +57,10 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
-  // Null: stateVersion, bestFullHeaderId, genesisBlockId, bestHeaderId
   private def init: Receive = {
     case Readers(h, s, _, _) =>
-      nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
+      nodeInfo = nodeInfo.copy(
+        bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),

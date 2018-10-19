@@ -57,8 +57,8 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       val wrongTx = tx.copy(outputCandidates =
         modifyValue(tx.outputCandidates.head, delta) +: tx.outputCandidates.tail)
 
-      wrongTx.statelessValidity.isSuccess shouldBe true
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statelessValidity.isSuccess &&
+        wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
     }
   }
 

@@ -1,5 +1,9 @@
 package org.ergoplatform.settings
 
+
+/**
+  * System parameters which could be readjusted via collective miners decision.
+  */
 object Parameters {
 
   // Max total computation cost of a block.

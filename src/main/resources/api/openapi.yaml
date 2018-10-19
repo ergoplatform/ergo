@@ -170,6 +170,7 @@ components:
         - blockTransactions
         - adProofs
         - extension
+        - size
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
@@ -200,6 +201,7 @@ components:
         - height
         - difficulty
         - parentId
+        - size
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -253,6 +255,7 @@ components:
       required:
         - headerId
         - transactions
+        - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -269,6 +272,7 @@ components:
         - headerId
         - proofBytes
         - digest
+        - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'

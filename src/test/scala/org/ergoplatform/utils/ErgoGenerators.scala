@@ -57,7 +57,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                     creationHeight: Long = 0): Gen[Int] = {
     val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
                         transactionId, boxId, creationHeight)
-    Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 2)).toInt, Int.MaxValue)
+    Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
   }
 
   lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))

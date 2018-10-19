@@ -7,6 +7,8 @@ object FeeSimulator extends App {
   //standard output size is about 80 bytes
   val StdSize = 80
 
+  println("S: " + K * StoragePeriod / CoinsInOneErgo.toDouble)
+
   lazy val perOutputFee = StdSize * K * StoragePeriod / CoinsInOneErgo.toDouble
   println("Storage fee for ordinary output: " + perOutputFee)
 

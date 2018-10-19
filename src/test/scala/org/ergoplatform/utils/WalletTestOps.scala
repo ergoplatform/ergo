@@ -42,8 +42,17 @@ trait WalletTestOps extends NodeViewBaseOps {
     Await.result(w.wallet.balancesWithUnconfirmed(), awaitDuration)
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
-  def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = scanTime(block.transactions.flatMap(_.outputs).size)
-  def scanTime(boxCount: Int)(implicit ctx: Ctx): Long = boxCount * scanningInterval + 1000
+
+  def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
+    val boxes = block.transactions.flatMap(_.outputs)
+    val tokens = boxes.flatMap(_.additionalTokens)
+    scanTime(boxes.size, tokens.size)
+  }
+
+  def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
+    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 1000
+  }
+
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
@@ -117,7 +126,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
-  def randomNewAssets: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
-  def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAssets ++ assetsByTokenId(boxes)
+  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
   def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

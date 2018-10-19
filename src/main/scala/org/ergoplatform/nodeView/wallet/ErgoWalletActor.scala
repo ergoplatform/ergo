@@ -196,7 +196,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       payTo.filterNot(_ == assetIssueBox).map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
       }
-
       boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
@@ -211,7 +210,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
           inputs.map(_.id).map(id => new UnsignedInput(id)),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
-
         prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
       } match {
         case Some(tx) => tx

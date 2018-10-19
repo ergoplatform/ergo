@@ -52,10 +52,6 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "generate transaction" in {
-    val amount = 100L
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), amount, None, None)
-    Post(prefix + "/transaction/generate", Seq(request).asJson) ~> route ~> check {
   it should "generate payment transaction" in {
     val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
     Post(prefix + "/payment/generate", Seq(request).asJson) ~> route ~> check {

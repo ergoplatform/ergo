@@ -15,6 +15,7 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{Semantically
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
+import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -80,23 +81,24 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+    val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
-          Some(PaymentRequest(randProposition, randAmount, None, None, fee))
+          Some(PaymentRequest(randProposition, randAmount, None, None))
         case i if i < 95 && balances.assetBalances.nonEmpty =>
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           Algos.decode(tokenToSpend._1).map { id =>
-            PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None, fee)
+            PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
           }.toOption
         case _ =>
           val assetInfo = genNewAssetInfo
-          Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4, fee))
+          Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
       }
     }
     payloadReq.flatMap { payloadReqOpt =>
-      wallet.generateTransaction(payloadReqOpt.toSeq)
+      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq)
     }
   }
 

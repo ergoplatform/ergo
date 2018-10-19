@@ -12,7 +12,7 @@ case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
 
   // Add separate payment request with fee.
   def requestsWithFee: Seq[TransactionRequest] =
-    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None, 0)
+    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
 }
 
 class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {

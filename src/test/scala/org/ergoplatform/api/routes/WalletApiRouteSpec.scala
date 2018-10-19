@@ -32,8 +32,8 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8, 100000L)
+  val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
 
   it should "generate arbitrary transaction" in {

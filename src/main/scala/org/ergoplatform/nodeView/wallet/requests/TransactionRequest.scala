@@ -5,9 +5,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.settings.ErgoSettings
 
-trait TransactionRequest {
-  val fee: Long
-}
+trait TransactionRequest
 
 class TransactionRequestEncoder(settings: ErgoSettings) extends Encoder[TransactionRequest] with ApiCodecs {
 

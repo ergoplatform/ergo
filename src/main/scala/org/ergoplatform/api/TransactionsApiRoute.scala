@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
@@ -23,18 +24,21 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
-  private def getUnconfirmedTransactions(limit: Int): Future[Json] = getMemPool.map { p =>
-    p.take(limit).toSeq.map(_.asJson).asJson
+  private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
+    p.unconfirmed.values.toSeq.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
   def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
-    // todo validation?
-    nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-    ApiResponse(tx.id)
+    tx.statelessValidity.fold(
+      e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+      _ => {
+        nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+        ApiResponse(tx.id)
+      }
+    )
   }
 
-  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (_, limit) =>
-    // todo offset
-    ApiResponse(getUnconfirmedTransactions(limit))
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
+    ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 }

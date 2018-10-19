@@ -6,6 +6,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import scorex.core.transaction.wallet.VaultReader

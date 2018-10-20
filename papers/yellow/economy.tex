@@ -23,8 +23,9 @@ reduced by $K \cdot B \cdot (out.creation\_height - self.creation\_height)$ maxi
 size and $K$ is the storage cost of one byte. Thus, the difference is to be paid to the miner.
 If box value is less that the storage fee, all the box content including tokens could be spent by the miner.
 
-For efficient lookup, we require a spending proof for an expired box to contain nothing but an index of an
-output which is trying to spend the box. The variable identifier for the index is $127$.
+For efficient lookup~(to find a proper output regarding an expired input without an iteration over transaction outputs),
+we require a spending proof for an expired box to be just a context extension which contains only an index of an
+output which is trying to spend the box. The variable identifier for the index in the extension is $127$.
 
 
 We propose the following concrete parameters:

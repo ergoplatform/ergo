@@ -147,7 +147,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override def toString: String = {
     import ErgoTransaction._
-    val displayMaxObjects = 5
+    val displayMaxObjects = 3
     val inputsStr = if (inputs.size > displayMaxObjects) {
       inputs.take(displayMaxObjects).asJson.noSpaces + s" ... (${inputs.size})"
     } else {

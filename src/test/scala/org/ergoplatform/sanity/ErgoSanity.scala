@@ -70,11 +70,10 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   private val hf = Blake2b256
 
   def makeSyntacticallyInvalid(mod: PM): PM = mod match {
-    case fb: ErgoFullBlock => {
+    case fb: ErgoFullBlock =>
       val parentId = fb.header.parentId
       val header = fb.header.copy(parentId = bytesToId(hf(parentId)))
       fb.copy(header = header)
-    }
     case h: Header => h.copy(parentId = bytesToId(hf(h.parentId)))
     case v => v
   }

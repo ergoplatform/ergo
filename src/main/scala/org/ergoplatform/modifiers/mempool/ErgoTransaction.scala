@@ -136,9 +136,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         fillAssetsMap(boxesToSpend, inAssets)
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
         validation.validateSeq(outAssets) {
-          case (vld, (outAssetId, outAmount)) =>
+          case (validation, (outAssetId, outAmount)) =>
             val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
-            vld.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+            validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
               fatal(s"Assets preservation rule is broken in $this. " +
                 s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
             }

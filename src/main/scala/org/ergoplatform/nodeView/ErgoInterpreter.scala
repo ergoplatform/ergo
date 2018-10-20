@@ -9,6 +9,12 @@ import sigmastate.interpreter.Interpreter.VerificationResult
 import scala.util.Try
 
 
+/**
+  * ErgoTree language interpreter, Ergo version. In addition to ErgoLikeInterpreter, it contains
+  * rules for expired boxes spending validation.
+  *
+  * @param maxCost - maximum cost of a script
+  */
 class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
   extends ErgoLikeInterpreter(maxCost) {
 

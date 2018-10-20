@@ -100,7 +100,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
-      case _ => println("hey")
+      case _ =>
     }
   }
 
@@ -110,7 +110,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NetworkControllerStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
-      case _ => println("hey")
+      case _ =>
     }
   }
 
@@ -120,7 +120,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class PeerManagerStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
-      case _ => println("hey")
+      case _ =>
     }
   }
 
@@ -160,8 +160,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class ReadersStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
-      case GetReaders =>
-        sender() ! readers
+      case GetReaders => sender() ! readers
       case GetDataFromHistory(f) => sender() ! f(history)
     }
   }

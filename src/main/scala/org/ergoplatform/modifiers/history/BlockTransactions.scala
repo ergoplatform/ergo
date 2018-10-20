@@ -33,11 +33,12 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
   override def toString: String = {
     val idStr = Algos.encode(id)
     val headerIdStr = Algos.encode(headerId)
-    // Artificial limit to show only first 10 txs.
-    val txsStr = txs.take(10).map(_.toString).mkString(",")
-    val txsSuffix = if (txs.lengthCompare(10) > 0) ", ..." else ""
+    val displayMaxObjects = 5
+    // Artificial limit to show only first `displayMaxObjects` txs.
+    val txsStr = txs.take(displayMaxObjects).map(_.toString).mkString(",")
+    val txsSuffix = if (txs.lengthCompare(displayMaxObjects) > 0) ", ..." else ""
 
-    s"BlockTransactions(Id:$idStr,HeaderId:$headerIdStr,Txs:$txsStr$txsSuffix)"
+    s"BlockTransactions(id: $idStr, headerId: $headerIdStr, txs: $txsStr$txsSuffix)"
   }
 
   override lazy val transactions: Seq[ErgoTransaction] = txs

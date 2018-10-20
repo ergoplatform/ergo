@@ -156,13 +156,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
-    val inputsStr = if (inputs.size > 10) {
-      inputs.take(10).asJson.noSpaces + s" ... (${inputs.size})"
+    import ErgoTransaction._
+    val displayMaxObjects = 3
+    val inputsStr = if (inputs.size > displayMaxObjects) {
+      inputs.take(displayMaxObjects).asJson.noSpaces + s" ... (${inputs.size})"
     } else {
       inputs.asJson.noSpaces
     }
-    val outputsStr = if (outputs.size > 10) {
-      outputs.take(10).asJson.noSpaces + s" ... (${outputs.size})"
+    val outputsStr = if (outputs.size > displayMaxObjects) {
+      outputs.take(displayMaxObjects).asJson.noSpaces + s" ... (${outputs.size})"
     } else {
       outputs.asJson.noSpaces
     }

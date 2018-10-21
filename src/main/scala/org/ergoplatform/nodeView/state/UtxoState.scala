@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.utils.LoggingUtils
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation

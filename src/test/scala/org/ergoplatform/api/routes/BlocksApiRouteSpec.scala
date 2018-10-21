@@ -9,6 +9,7 @@ import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 

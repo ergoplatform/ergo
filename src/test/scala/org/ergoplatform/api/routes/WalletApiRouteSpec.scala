@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers, TryValues}
 import sigmastate.Values
 

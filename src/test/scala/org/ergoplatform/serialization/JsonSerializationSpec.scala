@@ -55,7 +55,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Payment Request should be serialized to json") {
+  property("PaymentRequest should be serialized to json") {
     val ergoSettings = ErgoSettings.read(None)
     implicit val requestEncoder: Encoder[PaymentRequest] = new PaymentRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
@@ -75,7 +75,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Asset Issue Request should be serialized to json") {
+  property("AssetIssueRequest should be serialized to json") {
     val ergoSettings = ErgoSettings.read(None)
     implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[AssetIssueRequest] = new AssetIssueRequestDecoder(ergoSettings)

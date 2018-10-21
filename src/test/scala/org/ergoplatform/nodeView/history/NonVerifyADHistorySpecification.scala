@@ -4,11 +4,11 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
-class NonVerifyADHistorySpecification extends HistorySpecification {
+class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)

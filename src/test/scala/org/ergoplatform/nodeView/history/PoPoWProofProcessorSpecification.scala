@@ -4,13 +4,13 @@ import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen
 import scorex.crypto.authds._
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.NoShrink
 
-class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrink {
+class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink {
 
   val MaxM = 11
   val MaxK = 11

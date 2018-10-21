@@ -41,12 +41,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     bytes <- Gen.listOfN(length, arbByte.arbitrary)
   } yield ByteArrayConstant(bytes.toArray)
 
-  def additionalRegistersGen: Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
-    for {
-      cnt <- Gen.choose(0: Byte, ErgoBox.nonMandatoryRegistersCount)
-      registers <- additionalRegistersGen(cnt)
-    } yield registers
-  }
+  def additionalRegistersGen: Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = for {
+    cnt <- Gen.choose(0: Byte, ErgoBox.nonMandatoryRegistersCount)
+    registers <- additionalRegistersGen(cnt)
+  } yield registers
 
   def additionalRegistersGen(cnt: Byte): Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
     Gen.listOfN(cnt, evaluatedValueGen) map { values =>
@@ -54,28 +52,22 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
   }
 
-  def evaluatedValueGen: Gen[EvaluatedValue[SType]] = {
-    for {
-      arr <- byteArrayConstGen
-      v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
-    } yield v.asInstanceOf[EvaluatedValue[SType]]
-  }
+  def evaluatedValueGen: Gen[EvaluatedValue[SType]] = for {
+    arr <- byteArrayConstGen
+    v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
+  } yield v.asInstanceOf[EvaluatedValue[SType]]
 
-  def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = {
-    for {
-      cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-      assets <- additionalTokensGen(cnt)
-    } yield assets
-  }
+  def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
+    cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    assets <- additionalTokensGen(cnt)
+  } yield assets
 
   def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
-  def assetGen: Gen[(TokenId, Long)] = {
-    for {
-      id <- boxIdGen
-      amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-    } yield Digest32 @@ id -> amt
-  }
+  def assetGen: Gen[(TokenId, Long)] = for {
+    id <- boxIdGen
+    amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
+  } yield Digest32 @@ id -> amt
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
@@ -158,7 +150,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
         }
 
         if (amt == in._2) assetsMap.remove(in._1) else assetsMap.update(in._1, in._2 - amt)
-        val updOut = if (contains) {
+        if (contains) {
           val outAmt = out(in._1)
           out.update(in._1, outAmt + amt)
         } else {
@@ -180,14 +172,14 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
-    val tokenDistrib = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
+    val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
       val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)
-      val idx = i % tokenDistrib.size
-      val s = tokenDistrib(idx)
-      tokenDistrib(idx) = s :+ (id, amt)
+      val idx = i % tokensDistribution.size
+      val s = tokensDistribution(idx)
+      tokensDistribution(idx) = s :+ (id, amt)
     }
-    tokenDistrib.ensuring(_.forall(_.forall(_._2 > 0)))
+    tokensDistribution.ensuring(_.forall(_.forall(_._2 > 0)))
   }
 
   def validErgoTransactionGenTemplate(minAssets: Int,
@@ -205,8 +197,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tx <- validTransactionGen(from.asScala.toIndexedSeq)
   } yield from.asScala.toIndexedSeq -> tx
 
-  lazy val validErgoTransactionGen = validErgoTransactionGenTemplate(0)
-  lazy val validErgoTransactionWithAssetsGen = validErgoTransactionGenTemplate(1)
+  lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)
+  lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
+    validErgoTransactionGenTemplate(1)
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenNoProp).map(l => BoxHolder(l))
 

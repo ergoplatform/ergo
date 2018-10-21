@@ -188,6 +188,7 @@ components:
         - blockTransactions
         - adProofs
         - extension
+        - size
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
@@ -218,6 +219,7 @@ components:
         - height
         - difficulty
         - parentId
+        - size
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -271,6 +273,7 @@ components:
       required:
         - headerId
         - transactions
+        - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -287,6 +290,7 @@ components:
         - headerId
         - proofBytes
         - digest
+        - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -491,8 +495,12 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
+          description: Can be 'null' if no headers is applied since node launch
+          nullable: true
         fullBlocksScore:
           type: integer
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
         genesisBlockId:
           type: string
           description: Can be 'null' if genesis blocks is not produced yet

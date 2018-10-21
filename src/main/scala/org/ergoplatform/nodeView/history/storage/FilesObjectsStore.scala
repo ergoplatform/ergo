@@ -4,6 +4,7 @@ import java.nio.file.{Files, Paths, StandardOpenOption}
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import org.ergoplatform.utils.LoggingUtils
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.Try
@@ -24,8 +25,7 @@ class FilesObjectsStore(dir: String) extends ObjectsStore with ScorexLogging {
   override def delete(id: ModifierId): Try[Unit] = Try {
     Files.delete(path(id))
   }.recover { case t: Throwable =>
-    val reason = Option(t.getMessage).map(m => s"${t.getClass.getName}: $m").getOrElse(t.getClass.getName)
-    log.debug(s"Unable to delete file: ${path(id)}, reason: $reason")
+    log.debug(s"Unable to delete file: ${path(id)}, reason: ${LoggingUtils.getReasonMsg(t)}")
   }
 
   override def contains(id: ModifierId): Boolean = Files.exists(path(id))

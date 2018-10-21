@@ -18,26 +18,6 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   private val powTask = new HKSumPowTask(k: Int, N: Int)
   private val autoleakus = new Autoleakus(powTask)
 
-  def prove(parentOpt: Option[Header],
-            nBits: Long,
-            stateRoot:
-            ADDigest,
-            adProofsRoot: Digest32,
-            transactionsRoot: Digest32,
-            timestamp: Timestamp,
-            extensionHash: Digest32,
-            minNonce: Long = Long.MinValue,
-            maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val sk: BigInt = ???
-    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
-
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
-
-    val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null)
-    val msg = HeaderSerializer.bytesWithoutPow(h)
-    powTask.checkNonces(msg, sk, difficulty, minNonce, maxNonce).map(s => h.copy(powSolution = AutoleakusSolution(s)))
-  }
 
   def verify(header: Header): Boolean = {
     val difficulty = RequiredDifficulty.decodeCompactBits(header.nBits)
@@ -48,6 +28,27 @@ class AutoleakusPowScheme(k: Int, N: Int) {
     org.ergoplatform.autoleakus.q / header.powSolution.d
   }
 
+  def prove(parentOpt: Option[Header],
+            nBits: Long,
+            stateRoot:
+            ADDigest,
+            adProofsRoot: Digest32,
+            transactionsRoot: Digest32,
+            timestamp: Timestamp,
+            extensionHash: Digest32,
+            sk: BigInt,
+            minNonce: Long = Long.MinValue,
+            maxNonce: Long = Long.MaxValue): Option[Header] = {
+    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+
+    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
+
+    val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, null)
+    val msg = HeaderSerializer.bytesWithoutPow(h)
+    powTask.checkNonces(msg, sk, difficulty, minNonce, maxNonce).map(s => h.copy(powSolution = AutoleakusSolution(s)))
+  }
+
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
                  stateRoot: ADDigest,
@@ -55,6 +56,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate,
+                 sk: BigInt,
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
 
@@ -63,7 +65,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot, minNonce, maxNonce).map { h =>
+      timestamp, extensionRoot, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
       val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
@@ -72,6 +74,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   }
 
   def proveCandidate(candidateBlock: CandidateBlock,
+                     sk: BigInt,
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
     proveBlock(candidateBlock.parentOpt,
@@ -80,7 +83,11 @@ class AutoleakusPowScheme(k: Int, N: Int) {
       candidateBlock.adProofBytes,
       candidateBlock.transactions,
       candidateBlock.timestamp,
-      candidateBlock.extension)
+      candidateBlock.extension,
+      sk: BigInt,
+      minNonce,
+      maxNonce
+    )
   }
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {

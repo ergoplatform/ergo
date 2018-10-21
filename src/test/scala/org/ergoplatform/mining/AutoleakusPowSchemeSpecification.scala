@@ -28,7 +28,8 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
         SerializedAdProof @@ Array.emptyByteArray,
         Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, TrueLeaf)))),
         ts,
-        ExtensionCandidate(Seq(), Seq())
+        ExtensionCandidate(Seq(), Seq()),
+        defaultMinerSecret
       ).getOrElse(loop(ts + 1))
     }
 

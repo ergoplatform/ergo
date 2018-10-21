@@ -21,6 +21,7 @@ import scala.util.Random
 trait ChainGenerator {
 
   val timeProvider: NetworkTimeProvider
+  val defaultMinerSecret: BigInt = BigInt("ergo secret".getBytes("UTF-8"))
 
   val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
@@ -70,7 +71,8 @@ trait ChainGenerator {
       EmptyDigest32,
       EmptyDigest32,
       prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
-      extensionHash
+      extensionHash,
+      defaultMinerSecret
     ).get
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
@@ -113,7 +115,8 @@ trait ChainGenerator {
       emptyProofs,
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      extension
+      extension,
+      defaultMinerSecret
     ).get
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

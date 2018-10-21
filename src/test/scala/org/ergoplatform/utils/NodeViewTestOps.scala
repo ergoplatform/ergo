@@ -95,7 +95,8 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       case Success((adProofs, stateDigest)) =>
         val time = timeProvider.time()
         val parent = getHistory.bestHeaderOpt
-        DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext).get
+        DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext,
+          defaultMinerSecret).get
     }
   }
 

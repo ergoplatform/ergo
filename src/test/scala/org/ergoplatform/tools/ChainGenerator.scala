@@ -81,7 +81,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   private def generate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
-    pow.proveCandidate(candidate) match {
+    pow.proveCandidate(candidate, defaultMinerSecret) match {
       case Some(fb) => fb
       case _ =>
         val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)

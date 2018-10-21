@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
+import org.ergoplatform.mining.{DefaultFakePowScheme, AutoleakusPowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -22,7 +22,7 @@ trait ChainGenerator {
 
   val timeProvider: NetworkTimeProvider
 
-  val powScheme: PowScheme = DefaultFakePowScheme
+  val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   private val EmptyDigest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)

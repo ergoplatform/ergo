@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.PowScheme
+import org.ergoplatform.mining.AutoleakusPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
@@ -11,12 +11,11 @@ import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.util.{ScorexLogging, _}
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -32,7 +31,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val config: NodeConfigurationSettings
 
-  val powScheme: PowScheme
+  val powScheme: AutoleakusPowScheme
 
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis

@@ -1,7 +1,7 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.{BoxCertainty, ErgoAddressEncoder, Pay2SAddress, TrackedBox}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
@@ -73,13 +73,18 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), Some(spendingHeight), ergoBox, certainty)
   }
 
-  def paymentRequestGen: Gen[PaymentRequest] = {
-    for {
-      value <- Gen.choose(1L, 100000L)
-      assets <- Gen.option(additionalTokensGen)
-      registers <- Gen.option(additionalRegistersGen)
-    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
-  }
+  def paymentRequestGen: Gen[PaymentRequest] = for {
+    value <- Gen.choose(1L, 100000L)
+    assets <- Gen.option(additionalTokensGen)
+    registers <- Gen.option(additionalRegistersGen)
+  } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
+
+  def assetIssueRequestGen: Gen[AssetIssueRequest] = for {
+    amount <- Gen.choose(1L, 100000L)
+    name <- Gen.alphaUpperStr
+    description <- Gen.alphaLowerStr
+    decimals <- Gen.choose(4, 16)
+  } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals, 0L)
 
   private def outIndexGen(tx: ErgoTransaction) =
     Gen.choose(0: Short, tx.outputCandidates.length.toShort)

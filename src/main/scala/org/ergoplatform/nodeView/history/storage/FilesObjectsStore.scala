@@ -24,7 +24,8 @@ class FilesObjectsStore(dir: String) extends ObjectsStore with ScorexLogging {
   override def delete(id: ModifierId): Try[Unit] = Try {
     Files.delete(path(id))
   }.recover { case t: Throwable =>
-    log.debug(s"Unable to delete file: ${path(id)}, reason: ${t.getClass.getName}: ${t.getMessage}")
+    val reason = Option(t.getMessage).map(m => s"${t.getClass.getName}: $m").getOrElse(t.getClass.getName)
+    log.debug(s"Unable to delete file: ${path(id)}, reason: $reason")
   }
 
   override def contains(id: ModifierId): Boolean = Files.exists(path(id))

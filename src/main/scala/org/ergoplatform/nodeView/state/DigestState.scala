@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings._
+import org.ergoplatform.utils.LoggingUtil
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
@@ -94,7 +95,7 @@ class DigestState protected(override val version: VersionTag,
         update(fb.header)
       }.recoverWith {
         case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason: ", e)
+          log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
           Failure(e)
       }
 

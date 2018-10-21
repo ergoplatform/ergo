@@ -48,10 +48,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  private val defaultFee: Long = ergoSettings.walletSettings.defaultTransactionFee
-
-  private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]) =
-    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf), feeOpt.getOrElse(defaultFee), None, None)
+  private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
+    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf),
+      feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), None, None)
+  }
 
   private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)

@@ -169,10 +169,7 @@ trait ValidBlocksGenerators
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
-                     n: Char = 48,
-                     k: Char = 5,
-                     timeOpt: Option[Long] = None
-                    ): ErgoFullBlock = {
+                     timeOpt: Option[Long] = None): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
     ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>

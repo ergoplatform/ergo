@@ -94,7 +94,7 @@ class DigestState protected(override val version: VersionTag,
         update(fb.header)
       }.recoverWith {
         case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason: ${e.getClass.getName}: ${e.getMessage.split("at")(0)}")
+          log.warn(s"Invalid block ${fb.encodedId}, reason: ${e.getClass.getName}: ${e.getMessage}")
           Failure(e)
       }
 

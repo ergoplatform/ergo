@@ -1,4 +1,4 @@
-package org.ergoplatform.api.routes
+package org.ergoplatform.utils
 
 import java.net.InetSocketAddress
 
@@ -19,7 +19,6 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.hashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.peer.PeerInfo

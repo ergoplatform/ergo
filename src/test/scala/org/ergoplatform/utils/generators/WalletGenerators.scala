@@ -18,7 +18,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       unspentOnchainBoxGen,
       spentOffchainBoxGen,
       spentPartiallyOffchainBoxGen,
-      spentOnchainBoxGen)
+      spentOnchainBoxGen
+    )
   }
 
   def unspentOffchainBoxGen: Gen[TrackedBox] = {
@@ -73,24 +74,25 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), Some(spendingHeight), ergoBox, certainty)
   }
 
-  def paymentRequestGen: Gen[PaymentRequest] = for {
-    value <- Gen.choose(1L, 100000L)
-    assets <- Gen.option(additionalTokensGen)
-    registers <- Gen.option(additionalRegistersGen)
-  } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
-
-  def assetIssueRequestGen: Gen[AssetIssueRequest] = for {
-    amount <- Gen.choose(1L, 100000L)
-    name <- Gen.alphaUpperStr
-    description <- Gen.alphaLowerStr
-    decimals <- Gen.choose(4, 16)
-  } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals, 0L)
-
-  private def outIndexGen(tx: ErgoTransaction) =
-    Gen.choose(0: Short, tx.outputCandidates.length.toShort)
-
-  private def heightGen(min: Int = 0) = {
-    Gen.choose(min + 1, Integer.MAX_VALUE / 2 + min)
+  def paymentRequestGen: Gen[PaymentRequest] = {
+    for {
+      value <- Gen.choose(1L, 100000L)
+      assets <- Gen.option(additionalTokensGen)
+      registers <- Gen.option(additionalRegistersGen)
+    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
   }
+
+  def assetIssueRequestGen: Gen[AssetIssueRequest] = {
+    for {
+      amount <- Gen.choose(1L, 100000L)
+      name <- Gen.alphaUpperStr
+      description <- Gen.alphaLowerStr
+      decimals <- Gen.choose(4, 16)
+    } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals, 0L)
+  }
+
+  private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
+
+  private def heightGen(min: Int = 0) = Gen.choose(min + 1, Integer.MAX_VALUE / 2 + min)
 
 }

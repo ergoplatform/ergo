@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
 import scorex.testkit.utils.NoShrink
@@ -12,7 +12,7 @@ import scorex.testkit.utils.NoShrink
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-class VerifyADHistorySpecification extends HistorySpecification with NoShrink {
+class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
   type PM = ErgoPersistentModifier
 

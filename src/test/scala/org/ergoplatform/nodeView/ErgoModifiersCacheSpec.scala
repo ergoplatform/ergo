@@ -2,13 +2,13 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.{ErgoPropertyTest, HistorySpecification}
+import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers}
 import scorex.core._
 import scorex.crypto.hash.Blake2b256
 
 import scala.annotation.tailrec
 
-class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistorySpecification {
+class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
 
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 

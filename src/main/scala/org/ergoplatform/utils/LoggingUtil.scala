@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-object LoggingUtils {
+object LoggingUtil {
 
   def getReasonMsg(t: Throwable): String = Option(t.getMessage)
     .map(m => s"${t.getClass.getName}: $m")

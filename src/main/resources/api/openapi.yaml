@@ -98,7 +98,7 @@ components:
       example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
 
     RequestsHolder:
-      description: Holds many transaction requests and specififed fee
+      description: Holds many transaction requests and transaction fee
       type: object
       required:
       - requests

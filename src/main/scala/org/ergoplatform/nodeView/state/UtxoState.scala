@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Parameters}
-import org.ergoplatform.utils.LoggingUtils
+import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
@@ -132,7 +132,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtils.getReasonMsg(e)} ")
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
           persistentProver.rollback(inRoot)
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)

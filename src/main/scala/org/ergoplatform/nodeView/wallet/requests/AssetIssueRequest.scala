@@ -31,7 +31,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
     "address" -> request.address.asJson,
     "amount" -> request.amount.asJson,
     "name" -> request.name.asJson,
-    "description" -> request.name.asJson,
+    "description" -> request.description.asJson,
     "decimals" -> request.decimals.asJson,
     "fee" -> request.fee.asJson
   )

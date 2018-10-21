@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.mining.EquihashSolution
+import org.ergoplatform.mining.AutoleakusSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
@@ -79,7 +79,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   }
 
   def genSecureBoundedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] =
-    Gen.choose(minSize, maxSize).flatMap { scorex.util.Random.randomBytes }
+    Gen.choose(minSize, maxSize).flatMap {
+      scorex.util.Random.randomBytes
+    }
 
   def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
@@ -94,6 +96,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
     optionalElementsElements.take(Extension.MaxOptionalFields))
 
+  lazy val powSolutionGen: Gen[AutoleakusSolution] = ???
+
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
@@ -102,7 +106,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     transactionsRoot <- digest32Gen
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
-    equihashSolutions <- Gen.listOfN(EquihashSolution.length, Arbitrary.arbitrary[Int])
+    powSolution <- powSolutionGen
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
@@ -117,7 +121,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     RequiredDifficulty.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
-    EquihashSolution(equihashSolutions),
+    powSolution,
     None
   )
 
@@ -130,6 +134,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
 
   /** Random long from 1 to maximum - 1
+    *
     * @param maximum should be positive
     */
   def randomLong(maximum: Long): Long = {

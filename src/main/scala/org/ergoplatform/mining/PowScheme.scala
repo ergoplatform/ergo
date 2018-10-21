@@ -3,7 +3,6 @@ package org.ergoplatform.mining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -12,6 +11,10 @@ import scorex.util.ModifierId
 import scala.math.BigInt
 
 trait PowScheme {
+
+  def verify(header: Header): Boolean
+
+  def realDifficulty(header: Header): BigInt
 
   def prove(parentOpt: Option[Header],
             nBits: Long,
@@ -59,10 +62,6 @@ trait PowScheme {
       candidateBlock.extension)
   }
 
-  def verify(header: Header): Boolean
-
-  def realDifficulty(header: Header): BigInt
-
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
@@ -76,9 +75,6 @@ trait PowScheme {
     (parentId, version, interlinks, height)
   }
 
-  def correctWorkDone(realDifficulty: Difficulty, difficulty: BigInt): Boolean = {
-    realDifficulty >= difficulty
-  }
 }
 
 

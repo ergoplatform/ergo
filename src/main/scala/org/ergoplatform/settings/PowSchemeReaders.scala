@@ -9,7 +9,7 @@ import org.ergoplatform.mining._
 trait PowSchemeReaders {
 
   val readers: Seq[PowSchemeReader[_ <: PowScheme]] = Seq(
-    EquihashPowSchemeReader,
+    AutoleakusPowSchemeReader,
     FakePowSchemeReader
   )
 
@@ -27,16 +27,16 @@ sealed trait PowSchemeReader[T <: PowScheme] {
   def read(config: Config, path: String): T
 }
 
-object EquihashPowSchemeReader extends PowSchemeReader[EquihashPowScheme] {
-  val schemeName = "equihash"
-  def read(config: Config, path: String): EquihashPowScheme = {
-    val n = config.as[Int](s"$path.n").toChar
+object AutoleakusPowSchemeReader extends PowSchemeReader[AutoleakusPowScheme] {
+  val schemeName = "autoleakus"
+  def read(config: Config, path: String): AutoleakusPowScheme = {
+    val N = config.as[Int](s"$path.N").toChar
     val k = config.as[Int](s"$path.k").toChar
-    new EquihashPowScheme(n, k)
+    new AutoleakusPowScheme(k, N)
   }
 }
 
-object FakePowSchemeReader extends PowSchemeReader[FakePowScheme] {
+object FakePowSchemeReader extends PowSchemeReader[AutoleakusPowScheme] {
   val schemeName = "fake"
-  def read(config: Config, path: String): FakePowScheme = DefaultFakePowScheme
+  def read(config: Config, path: String): AutoleakusPowScheme = DefaultFakePowScheme
 }

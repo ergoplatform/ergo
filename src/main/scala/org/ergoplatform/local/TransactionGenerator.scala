@@ -9,13 +9,12 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
-import sigmastate.Values
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -34,7 +33,6 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private val fee: Long = 100000
   private var transactionsPerBlock = 0
   private var currentFullHeight = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
@@ -81,7 +79,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), 100000L, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>

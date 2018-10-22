@@ -7,6 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
+import sigmastate.SBoolean
+import sigmastate.Values.Constant
 
 
 object Constants {
@@ -21,6 +23,8 @@ object Constants {
   val CoinbaseTxCost: Int = 10000
   // Max size of transactions section of a block. todo: move to config
   val MaxBlockSize: Int = 512 * 1024
+
+  val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,

@@ -4,15 +4,14 @@ import io.circe.{Decoder, Encoder, HCursor, Json}
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
-import org.ergoplatform.settings.ErgoSettings
-import sigmastate.Values
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 
 case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
   def requestsWithFee: Seq[TransactionRequest] =
-    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf), fee, None, None)
+    requests :+ PaymentRequest(Pay2SAddress(Constants.TrueLeaf), fee, None, None)
 }
 
 class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {

@@ -9,15 +9,14 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.AssetUtils
-import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import sigmastate.AvlTreeData
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
-import sigmastate.{AvlTreeData, Values}
 
 import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -62,7 +61,7 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf))
       )
 
       val context =

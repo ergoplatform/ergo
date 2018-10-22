@@ -98,6 +98,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }
 
 }

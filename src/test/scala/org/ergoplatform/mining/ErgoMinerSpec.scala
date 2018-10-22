@@ -53,16 +53,17 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
+  val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
+  val secret:DLogProverInput = prover.secrets.head
+  val prop: Value[SBoolean.type] = secret.publicImage
+
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
     val desiredSize: Int = ((Constants.MaxBlockCost / Cost.Dlog) * 2).toInt
-    val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
-    val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -81,7 +82,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       readersHolderRef,
       timeProvider,
       emission,
-      Some(prop)
+      Some(secret.w)
     )
     minerRef ! StartMining
 
@@ -95,7 +96,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       toSpend.take(toSend) foreach { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-        val outputs = (0 until outputsPerTx).map(_ => new ErgoBoxCandidate(boxToSend.value / outputsPerTx, prop))
+        val outputs = (0 until desiredSize).map(_ => new ErgoBoxCandidate(boxToSend.value / desiredSize, prop))
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
@@ -164,7 +165,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         readersHolderRef,
         timeProvider,
         emission,
-        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage))
+        Some(BigIntegers.fromUnsignedByteArray("test".getBytes())))
       expectNoMessage(1 second)
       val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
@@ -202,7 +203,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       readersHolderRef,
       timeProvider,
       emission,
-      Some(TrueLeaf)
+      Some(secret.w)
     )
     expectNoMessage(1 second)
     val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)

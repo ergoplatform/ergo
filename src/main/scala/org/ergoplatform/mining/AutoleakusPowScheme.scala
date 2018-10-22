@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import org.ergoplatform.autoleakus.Autoleakus
+import org.ergoplatform.autoleakus.{Autoleakus, PrivateKey}
 import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumPowTask
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -37,7 +37,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
             transactionsRoot: Digest32,
             timestamp: Timestamp,
             extensionHash: Digest32,
-            sk: BigInt,
+            sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
@@ -57,7 +57,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate,
-                 sk: BigInt,
+                 sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
 
@@ -75,7 +75,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   }
 
   def proveCandidate(candidateBlock: CandidateBlock,
-                     sk: BigInt,
+                     sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
     proveBlock(candidateBlock.parentOpt,
@@ -85,7 +85,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
       candidateBlock.transactions,
       candidateBlock.timestamp,
       candidateBlock.extension,
-      sk: BigInt,
+      sk,
       minNonce,
       maxNonce
     )

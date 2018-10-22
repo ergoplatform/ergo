@@ -5,9 +5,11 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.autoleakus.PrivateKey
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
+import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.concurrent.Future
@@ -29,6 +31,10 @@ trait ErgoWalletReader extends VaultReader {
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
     (actor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
+  }
+
+  def firstSecret(): Future[DLogProverInput] = {
+    (actor ? GetFirstSecret).mapTo[DLogProverInput]
   }
 
   def randomPublicKey(): Future[P2PKAddress] = {

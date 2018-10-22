@@ -11,10 +11,9 @@ import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.AssetUtils
-import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.{AvlTreeData, Values}
@@ -234,6 +233,9 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)
 
+    case GetFirstSecret =>
+      prover.secrets.headOption.foreach(s => sender() ! s)
+
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
@@ -274,6 +276,8 @@ object ErgoWalletActor {
   case class ReadPublicKeys(from: Int, until: Int)
 
   case object ReadRandomPublicKey
+
+  case object GetFirstSecret
 
   case object ReadTrackedAddresses
 

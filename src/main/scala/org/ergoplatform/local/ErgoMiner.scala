@@ -4,8 +4,9 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
+import org.ergoplatform.autoleakus.PrivateKey
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
@@ -16,12 +17,12 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.{ErgoWallet, P2PKAddress}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
@@ -40,7 +41,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
                 emission: EmissionRules,
-                extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
+                inSkOpt: Option[PrivateKey]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -53,16 +54,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
 
-  private var publicKeyOpt: Option[P2PKAddress] = None
+  private var skOpt: Option[PrivateKey] = inSkOpt
 
-  private def minerPropOpt: Option[Value[SBoolean.type]] = extPropOpt.orElse {
-    publicKeyOpt.map(_.pubkey)
-  }
+  // TODO check that it corresponds to secret or remove from here.
+  private def minerPropOpt: Option[Value[SBoolean.type]] = skOpt.map(sk => DLogProverInput(sk.bigInteger).publicImage)
 
   override def preStart(): Unit = {
     viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-      v.vault.randomPublicKey().onComplete { keyTry =>
-        publicKeyOpt = keyTry.toOption
+      v.vault.firstSecret().onComplete { skTry =>
+        skOpt = skTry.toOption.map(_.w)
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -87,10 +87,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
-        log.info("Starting Mining")
-        isMining = true
-        miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, timeProvider)(context)
-        miningThreads.foreach(_ ! candidate)
+        skOpt.foreach { sk =>
+          log.info("Starting Mining")
+          isMining = true
+          miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk, timeProvider)(context)
+          miningThreads.foreach(_ ! candidate)
+        }
       }
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate()
@@ -304,25 +306,16 @@ object ErgoMinerRef {
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
             emission: EmissionRules,
-            minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+            skOpt: Option[PrivateKey] = None): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
             emission: EmissionRules,
-            minerPropOpt: Option[Value[SBoolean.type]] = None)
+            skOpt: Option[PrivateKey] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, minerPropOpt))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
 
-
-  def apply(ergoSettings: ErgoSettings,
-            viewHolderRef: ActorRef,
-            readersHolderRef: ActorRef,
-            timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
-            name: String)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission), name)
 }

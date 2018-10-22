@@ -58,7 +58,7 @@ object DefaultBoxSelector extends BoxSelector {
 
     def notUseless(box: TrackedBox): Boolean = {
       val notUselessForErgo = if (targetBalance > 0) box.value > 0 else true
-      val notUselessForTokens = targetAssets
+      val notUselessForTokens = targetAssets.isEmpty || targetAssets
         .map { case (id, _) => box.assets.getOrElse(id, 0L) > 0 }
         .exists(b => b)
       notUselessForErgo && notUselessForTokens

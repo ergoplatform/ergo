@@ -8,12 +8,11 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.Values
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -49,7 +48,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(Values.TrueLeaf),
+    requests :+ PaymentRequest(Pay2SAddress(Constants.TrueLeaf),
       feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), None, None)
   }
 

@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges}
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.core.{ModifierId, bytesToId}
@@ -10,7 +11,6 @@ import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.Values.TrueLeaf
 
 class AdProofSpec extends ErgoPropertyTest {
   val KL = 32
@@ -27,12 +27,12 @@ class AdProofSpec extends ErgoPropertyTest {
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = ErgoBox(0, TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId, 0)
+    val zeroBox = ErgoBox(0, Constants.TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId, 0)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 
     val prevDigest = prover.digest
-    val boxes = (1 to howMany) map { i => ErgoBox(1, TrueLeaf, boxId = i.toShort) }
+    val boxes = (1 to howMany) map { i => ErgoBox(1, Constants.TrueLeaf, boxId = i.toShort) }
     boxes.foreach(box => prover.performOneOperation(Insert(box.id, ADValue @@ box.bytes)))
     val pf = prover.generateProof()
 
@@ -67,7 +67,7 @@ class AdProofSpec extends ErgoPropertyTest {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
     val moreInsertions = operations :+
-      Insertion(ErgoBox(10, TrueLeaf))
+      Insertion(ErgoBox(10, Constants.TrueLeaf))
     proof.verify(StateChanges(Seq(), moreInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
@@ -75,7 +75,7 @@ class AdProofSpec extends ErgoPropertyTest {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
     val differentInsertions = operations.init :+
-      Insertion(ErgoBox(10, TrueLeaf))
+      Insertion(ErgoBox(10, Constants.TrueLeaf))
     proof.verify(StateChanges(Seq(), differentInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 

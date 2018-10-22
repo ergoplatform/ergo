@@ -12,7 +12,6 @@ import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds._
 import scorex.crypto.hash._
-import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -92,7 +91,7 @@ trait ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val outputs = IndexedSeq(ErgoBox(1, TrueLeaf))
+    val outputs = IndexedSeq(ErgoBox(1, Constants.TrueLeaf))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

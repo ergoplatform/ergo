@@ -10,11 +10,11 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -35,7 +35,7 @@ class TransactionApiRouteSpec extends FlatSpec
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
     ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  val output = new ErgoBoxCandidate(0, TrueLeaf)
+  val output = new ErgoBoxCandidate(0, Constants.TrueLeaf)
   val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
 
   it should "post transaction" in {

@@ -56,6 +56,14 @@ object DefaultBoxSelector extends BoxSelector {
       res += unspentBox.box
     }
 
+    def notUseless(box: TrackedBox): Boolean = {
+      val notUselessForErgo = if (targetBalance > 0) box.value > 0 else true
+      val notUselessForTokens = targetAssets.foldLeft(true) {
+        case (bool, (id, _)) => bool || box.assets.getOrElse(id, 0L) > 0
+      }
+      notUselessForErgo && notUselessForTokens
+    }
+
     def balanceMet = currentBalance >= targetBalance
     def assetsMet = targetAssets.forall { case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt }
 
@@ -67,7 +75,7 @@ object DefaultBoxSelector extends BoxSelector {
       else if (!boxesIterator.hasNext) { false }
       else {
         val box = boxesIterator.next()
-        if (filterFn(box)) pickUp(box)
+        if (filterFn(box) && notUseless(box)) pickUp(box)
         pickBoxes(boxesIterator, filterFn, successFn)
       }
 

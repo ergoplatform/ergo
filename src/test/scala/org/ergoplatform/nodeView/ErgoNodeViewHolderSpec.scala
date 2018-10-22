@@ -99,55 +99,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  private val t7 = TestCase("apply invalid full block") { fixture =>
-    import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
-    if (verifyTransactions) {
-      applyBlock(genesis) shouldBe 'success
-
-      val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
-      val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
-
-      applyBlock(block) shouldBe 'success
-      getBestHeaderOpt shouldBe Some(block.header)
-      if (verifyTransactions) {
-        getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
-      }
-      getBestHeaderOpt shouldBe Some(block.header)
-
-      val brokenBlock = generateInvalidFullBlock(block.header, wusAfterBlock)
-      applyBlock(brokenBlock) shouldBe 'success
-
-      val brokenBlock2 = generateInvalidFullBlock(block.header, wusAfterBlock)
-      brokenBlock2.header should not be brokenBlock.header
-      applyBlock(brokenBlock2) shouldBe 'success
-
-      getBestFullBlockOpt shouldBe Some(block)
-      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
-      getBestHeaderOpt shouldBe Some(block.header)
-    }
-  }
-
-  private def generateInvalidFullBlock(parentHeader: Header, parentState: WrappedUtxoState) = {
-    val extensionIn = extensionGen.sample.get
-    val brokenBlockIn = validFullBlock(Some(parentHeader), parentState)
-    val headTx = brokenBlockIn.blockTransactions.txs.head
-    val wrongBoxId: ADKey = ADKey @@ Algos.hash("wrong input")
-    val newInput = headTx.inputs.head.copy(boxId = wrongBoxId)
-    val brokenTransactionsIn = brokenBlockIn.blockTransactions
-      .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlockIn.blockTransactions.txs.tail)
-    val brokenHeader = brokenBlockIn.header
-      .copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
-    val brokenTransactions = brokenTransactionsIn.copy(headerId = brokenHeader.id)
-    val brokenProofs = brokenBlockIn.adProofs.get.copy(headerId = brokenHeader.id)
-    val extension = extensionIn.copy(headerId = brokenHeader.id)
-    ErgoFullBlock(brokenHeader, brokenTransactions, extension, Some(brokenProofs))
-  }
-
-  private val t8 = TestCase("switching for a better chain") { fixture =>
+  private val t7 = TestCase("switching for a better chain") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -180,7 +132,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getRootHash shouldBe Algos.encode(chain2block2.header.stateRoot)
   }
 
-  private val t9 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
+  private val t8 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
     import fixture._
     if (stateType == StateType.Utxo) {
       val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -195,7 +147,92 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
+  private val t9 = TestCase("apply invalid full block") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
+    if (verifyTransactions) {
+      applyBlock(genesis) shouldBe 'success
+
+      val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
+      val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
+
+      applyBlock(block) shouldBe 'success
+      getBestHeaderOpt shouldBe Some(block.header)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getBestHeaderOpt shouldBe Some(block.header)
+
+      val brokenBlock = genInvalidFullBlock(block.header, wusAfterBlock)
+      applyBlock(brokenBlock) shouldBe 'success
+
+      val brokenBlock2 = genInvalidFullBlock(block.header, wusAfterBlock)
+      brokenBlock2.header should not be brokenBlock.header
+      applyBlock(brokenBlock2) shouldBe 'success
+
+      getBestFullBlockOpt shouldBe Some(block)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getBestHeaderOpt shouldBe Some(block.header)
+    }
+  }
+
+  private def genInvalidFullBlock(parentHeader: Header, parentState: WrappedUtxoState) = {
+    val extensionIn = extensionGen.sample.get
+    val brokenBlockIn = validFullBlock(Some(parentHeader), parentState)
+    val headTx = brokenBlockIn.blockTransactions.txs.head
+    val wrongBoxId: ADKey = ADKey !@@ Algos.hash("wrong input")
+    val newInput = headTx.inputs.head.copy(boxId = wrongBoxId)
+    val brokenTransactionsIn = brokenBlockIn.blockTransactions
+      .copy(txs = headTx.copy(inputs = newInput +: headTx.inputs.tail) +: brokenBlockIn.blockTransactions.txs.tail)
+    val brokenHeader = brokenBlockIn.header
+      .copy(transactionsRoot = brokenTransactionsIn.digest, extensionRoot = extensionIn.digest)
+    val brokenTransactions = brokenTransactionsIn.copy(headerId = brokenHeader.id)
+    val brokenProofs = brokenBlockIn.adProofs.get.copy(headerId = brokenHeader.id)
+    val extension = extensionIn.copy(headerId = brokenHeader.id)
+    ErgoFullBlock(brokenHeader, brokenTransactions, extension, Some(brokenProofs))
+  }
+
+  private val t10 = TestCase("apply full block with invalid extension") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    if (verifyTransactions) {
+      applyBlock(genesis) shouldBe 'success
+
+      val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
+      val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
+
+      applyBlock(block) shouldBe 'success
+      getBestHeaderOpt shouldBe Some(block.header)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getBestHeaderOpt shouldBe Some(block.header)
+
+      val brokenBlock = genBlockWithInvalidExtension(block.header, wusAfterBlock)
+      applyBlock(brokenBlock) shouldBe 'success
+
+      val brokenBlock2 = genBlockWithInvalidExtension(block.header, wusAfterBlock)
+      brokenBlock2.header should not be brokenBlock.header
+      applyBlock(brokenBlock2) shouldBe 'success
+
+      getBestFullBlockOpt shouldBe Some(block)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getBestHeaderOpt shouldBe Some(block.header)
+    }
+  }
+
+  private def genBlockWithInvalidExtension(parentHeader: Header, parentState: WrappedUtxoState) = {
+    val extensionIn = extensionGen.sample.get
+    val validBlockIn = validFullBlock(Some(parentHeader), parentState)
+    val brokenExtension = extensionIn.copy(
+      mandatoryFields = extensionIn.mandatoryFields :+ extensionIn.mandatoryFields.head,
+      headerId = validBlockIn.id
+    )
+    validBlockIn.copy(extension = brokenExtension)
+  }
+
+  private val t11 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -215,7 +252,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getRootHash shouldBe Algos.encode(block1.header.stateRoot)
   }
 
-  private val t11 = TestCase("apply payload in incorrect order") { fixture =>
+  private val t12 = TestCase("apply payload in incorrect order") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
@@ -240,7 +277,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
   }
 
-  private val t12 = TestCase("Do not apply txs with wrong header id") { fixture =>
+  private val t13 = TestCase("Do not apply txs with wrong header id") { fixture =>
     import fixture._
 
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -291,7 +328,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     expectMsgType[SyntacticallySuccessfulModifier[BlockTransactions]]
   }
 
-  private val t13 = TestCase("Do not apply wrong adProofs") { fixture =>
+  private val t14 = TestCase("Do not apply wrong adProofs") { fixture =>
     import fixture._
 
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -321,7 +358,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     expectMsgType[SyntacticallySuccessfulModifier[ADProofs]]
   }
 
-  private val t14 = TestCase("do not apply genesis block header if " +
+  private val t15 = TestCase("do not apply genesis block header if " +
                              "it's not equal to genesisId from config") { fixture =>
     import fixture._
     updateConfig(genesisIdConfig(modifierIdGen.sample))
@@ -341,7 +378,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHistoryHeight shouldBe -1
   }
 
-  private val t15 = TestCase("apply genesis block header if it's equal to genesisId from config") { fixture =>
+  private val t16 = TestCase("apply genesis block header if it's equal to genesisId from config") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
@@ -359,7 +396,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHeightOf(block.header.id) shouldBe Some(0)
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8)
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
@@ -368,7 +405,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val verifyingTxCases = List(t10, t11, t12, t13)
+  val verifyingTxCases = List(t9, t10, t11, t12, t13, t14)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>
@@ -378,7 +415,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val genesisIdTestCases = List(t14, t15)
+  val genesisIdTestCases = List(t15, t16)
   def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
     protoSettings.copy(chainSettings = protoSettings.chainSettings.copy(genesisId = expectedGenesisIdOpt))
   }

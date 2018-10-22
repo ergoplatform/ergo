@@ -35,8 +35,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val assetsToSpend = Some(assetsByTokenId(initialBoxes).toSeq)
       val sumToSpend = snap.balance / (addresses.length + 1)
       val req =
-        PaymentRequest(addresses.head, sumToSpend, assetsToSpend, None, 0L) +:
-        addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None, 0L))
+        PaymentRequest(addresses.head, sumToSpend, assetsToSpend, None) +:
+        addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = Await.result(wallet.generateTransaction(req), awaitDuration).get
@@ -51,9 +51,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       blocking(Thread.sleep(scanTime(block)))
       val newSnap = getConfirmedBalances
       val newSumToSpend = newSnap.balance / (addresses.length + 1)
-      val req2 =
-        PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, None, 0L) +:
-        addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None, 0L))
+      val req2 = PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, None) +:
+        addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = Await.result(wallet.generateTransaction(req2), awaitDuration).get
@@ -524,7 +523,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       //pay out all the wallet balance:
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
-      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Some(assetToSpend), None, 0L)
+      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Some(assetToSpend), None)
 
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1

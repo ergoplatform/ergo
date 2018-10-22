@@ -5,6 +5,7 @@ import scorex.util.ModifierId
 import scala.collection.mutable
 
 object AssetUtils {
+
   @inline
   def mergeAssetsMut(into: mutable.Map[ModifierId, Long], from: Map[ModifierId, Long]): Unit = {
     from.foreach { case (id, amount) =>
@@ -12,6 +13,7 @@ object AssetUtils {
     }
   }
 
+  @inline
   def mergeAssets(from: Map[ModifierId, Long], to: Map[ModifierId, Long] = Map.empty): Map[ModifierId, Long] = {
     from.foldLeft(to) { case (acc, (id, amount)) =>
       acc.updated(id, acc.getOrElse(id, 0L) + amount)
@@ -29,4 +31,5 @@ object AssetUtils {
       }
     }
   }
+
 }

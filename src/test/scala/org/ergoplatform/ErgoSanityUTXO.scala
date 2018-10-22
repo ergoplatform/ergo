@@ -11,16 +11,17 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.app.{Version => HandshakeV}
 import scorex.core.network.peer.PeerInfo
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
+  override val historyGen: Gen[HT] =
+    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
 
-  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None))
+  override val stateGen: Gen[WrappedUtxoState] =
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
 

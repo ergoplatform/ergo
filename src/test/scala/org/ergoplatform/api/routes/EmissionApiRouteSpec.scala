@@ -21,10 +21,10 @@ class EmissionApiRouteSpec extends FlatSpec
   implicit val timeout = RouteTestTimeout(15.seconds.dilated)
 
   val ergoSettings = ErgoSettings.read(None)
-  val coinEmission = new EmissionRules(ergoSettings.chainSettings.monetary)
+  val coinEmission = ergoSettings.emission
 
   val prefix = "/emission/at"
-  val route = EmissionApiRoute(coinEmission, ergoSettings).route
+  val route = EmissionApiRoute(ergoSettings).route
 
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {

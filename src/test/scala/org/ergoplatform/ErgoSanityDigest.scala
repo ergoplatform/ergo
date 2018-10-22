@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.app.{Version => HandshakeV}
 import scorex.core.network.peer.PeerInfo
@@ -22,7 +22,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
       new WrappedDigestState(digestState, wus, settings)
     }

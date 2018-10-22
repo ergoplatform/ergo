@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
@@ -92,7 +92,8 @@ trait ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val outputs = IndexedSeq(ErgoBox(1, TrueLeaf))
+    val b = ErgoBox(Int.MaxValue, TrueLeaf)
+    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, TrueLeaf))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

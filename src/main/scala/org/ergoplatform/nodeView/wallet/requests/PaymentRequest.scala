@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoAddress, ErgoBox}
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
-import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
@@ -21,7 +21,7 @@ case class PaymentRequest(address: ErgoAddress,
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = new ErgoAddressEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
   def apply(request: PaymentRequest): Json = Json.obj(
     "address" -> request.address.asJson,
@@ -34,7 +34,7 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {
 
-  val addressEncoders: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(settings)
 
   implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
 

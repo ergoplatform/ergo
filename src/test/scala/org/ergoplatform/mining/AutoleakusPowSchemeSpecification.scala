@@ -14,7 +14,7 @@ import sigmastate.Values.TrueLeaf
 
 class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
 
-  private val nDefault = 10000
+  private val nDefault = 129
   private val kDefault = 128
 
   override val powScheme = new AutoleakusPowScheme(kDefault, nDefault)

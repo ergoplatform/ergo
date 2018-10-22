@@ -20,9 +20,9 @@ class AutoleakusPowScheme(k: Int, N: Int) {
 
 
   def verify(header: Header): Boolean = {
-    val difficulty = RequiredDifficulty.decodeCompactBits(header.nBits)
+    val b = getB(header.nBits)
     val msg = HeaderSerializer.bytesWithoutPow(header)
-    autoleakus.verify(header.powSolution.solution(msg), difficulty).isSuccess
+    autoleakus.verify(header.powSolution.solution(msg), b).isSuccess
   }
 
   def realDifficulty(header: Header): BigInt = {
@@ -40,14 +40,12 @@ class AutoleakusPowScheme(k: Int, N: Int) {
             sk: BigInt,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
-
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null)
     val msg = HeaderSerializer.bytesWithoutPow(h)
-    val b = org.ergoplatform.autoleakus.q / difficulty
+    val b = getB(nBits)
     powTask.initialize(msg, sk)
     powTask.checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = AutoleakusSolution(s)))
   }
@@ -91,6 +89,10 @@ class AutoleakusPowScheme(k: Int, N: Int) {
       minNonce,
       maxNonce
     )
+  }
+
+  protected def getB(nBits: Long): BigInt = {
+    org.ergoplatform.autoleakus.q /RequiredDifficulty.decodeCompactBits(nBits)
   }
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {

@@ -1,7 +1,8 @@
 package org.ergoplatform.utils
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
@@ -9,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -17,10 +18,11 @@ import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import sigmastate.Values.{FalseLeaf, TrueLeaf, Value}
+import scorex.util.ModifierId
+import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-
+import scorex.util._
 import scala.util.Random
 
 
@@ -46,6 +48,19 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   } yield ErgoStateContext(height, digest)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
+
+  def validValueGen(proposition: Value[SBoolean.type],
+                    additionalTokens: Seq[(TokenId, Long)] = Seq(),
+                    additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
+                    transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
+                    boxId: Short = 0,
+                    creationHeight: Long = 0): Gen[Int] = {
+    val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
+                        transactionId, boxId, creationHeight)
+    Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
+  }
+
+  lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))

@@ -3,38 +3,36 @@
 We outline following two properties required for long-term survivability of the chain:
 
 \begin{itemize}
-    \item{} Coins with lost keys should be returned into circulation.
-    Otherwise, after the end of the initial coins emission period, amount of the coins
-    in the circulation always decrease and eventually reach zero.
-    \item{} Nothing should be kept in the state forever and for free.
-    Otherwise, the size of the state is always increasing, thus reducing clients performance.
+    \item{} coins protected by keys being lost should be returned into circulation.
+    Otherwise, after the end of the emission period, amount of the coins
+    in the circulation will always decrease and eventually reach zero.
+    \item{} nothing should be kept in the state forever and for free.
+    Otherwise, the size of the state is always increasing with time, thus reducing clients performance.
 \end{itemize}
 
-To achieve this, we propose the following modifications to the consensus rules.
-Register $R2$ of the box will contain tuple $(tx\_id, out\_num,
-last\_height)$. $last\_height$ field is used to determine the block height
-at the moment of transaction generation. Transaction can only be put in the
-block of height $h$ if for every created box $R2.last\_height < h$.
+To achieve this, we propose the following storage fee consensus rules.
+Register $R3$ of a box contains tuple $(creation\_height, tx\_id || out\_num)$, where $creation\_height$ provided by a user
+is used to determine the block height at the moment of transaction generation.
+Transaction can only be put in the block of height $h$ if for every created box its $creation\_height \le h$.
 
 Once the subsidized period for the box ends (that is,
-$current\_block\_height \ge R2.last\_height + SP$), anyone (presumably a miner) can
-create the new box with the exactly the same content (including the guarding
-script) except the monetary value and $R2$ content. The monetary value is
-reduced by $K \cdot B$, where $B$ is the box size and $K$ is the storage cost of one byte.
-Thus, $K \cdot B$ coins are to be paid to the miner.
-If box value is less that $K \cdot B$, all box content including tokens goes to miner.
-$R2.tx\_id$ and $R2.out\_num$ content of created box should contain correct transaction id
-and index, while $R2.last\_height$ should be set to $R2.last\_height$ of spending box
-plus $SP$, to ensure that subsidized period starts over.
+$current\_block\_height \ge box.creation\_height + SP$, see $SP$ value below), anyone~(presumably, a miner) can
+create a new box $out$ with the exactly the same content (including the guarding
+script) except the monetary value and $R3$ contents. The monetary value is to
+reduced by $K \cdot B$ maximum, where $B$ is the spent box~($self$)
+size and $K$ is the storage cost for the period $SP$. Thus, the difference is to be paid to the miner.
+If box value is less that the storage fee, all the box content including tokens could be spent by the miner.
+
+For efficient lookup~(to find a proper output regarding an expired input without an iteration over transaction outputs),
+we require a spending proof for an expired box to be just a context extension which contains only an index of an
+output which is trying to spend the box. The variable identifier for the index in the extension is $127$.
 
 We propose the following concrete parameters:
 \begin{itemize}
-    \item{} $K$ - cost of storage of 1 byte of data in a State for 1 block.
-    Should be determined by miner votes, $10^{-6} (Ergo/byte)$ by default.
-    \item{} $SP$ - number of blocks, box can be stored in a State for free untouched.
-    Since Ergo have tokens as a first-class citizens, it might be possible that tokens value
-    sufficiently exceed Ergo value in a box, thus $SP$ should be big enough to protect users
-    that only keep tokens in their boxes.
-    However, $SP$ should not exceed emission length to reward miners.
-    It is predefined $SP = 1051200 = 4$ years.
+    \item{} $SP$ - length of a period for which box can be stored in a State for free untouched.
+    It is a constant, namely, $SP = 1051200 \approx 4$ years.
+    \item{} $K$ - cost of storage of 1 byte of data in a State for the period of $SP$ blocks.
+    Should be determined by miner votes, $1250000 (nanoErg/SP)$ by default, max value is $2500000$.
 \end{itemize}
+
+\knote{Provide a script}

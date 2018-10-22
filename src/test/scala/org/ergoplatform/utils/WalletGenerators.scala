@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
@@ -10,7 +11,7 @@ import sigmastate.Values
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+  private implicit val ergoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
 
   def trackedBoxGen: Gen[TrackedBox] = {

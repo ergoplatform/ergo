@@ -70,6 +70,12 @@ trait WalletTestOps extends NodeViewBaseOps {
     assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
   }
 
+  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): Map[ModifierId, Long] = {
+    assetSeq
+      .map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
+      .toMap
+  }
+
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
       .flatMap { _.additionalTokens }

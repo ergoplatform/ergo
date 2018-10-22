@@ -529,15 +529,19 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
-      tx1.outputs.head.additionalTokens shouldBe assetToSpend
+      toAssetMap(tx1.outputs.head.additionalTokens) shouldBe toAssetMap(assetToSpend)
 
       //change == 1:
-      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None)
+      val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+      val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
+      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, Some(assetToSpend2), None, 0L)
 
       val tx2 = Await.result(wallet.generateTransaction(Seq(req2)), awaitDuration).get
       tx2.outputs.size shouldBe 2
       tx2.outputs.head.value shouldBe confirmedBalance - 1
+      toAssetMap(tx2.outputs.head.additionalTokens) shouldBe toAssetMap(assetToSpend2)
       tx2.outputs(1).value shouldBe 1
+      toAssetMap(tx2.outputs(1).additionalTokens) shouldBe toAssetMap(assetToReturn)
     }
   }
 

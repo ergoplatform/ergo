@@ -78,38 +78,39 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
     }
   }
 
-  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Unit = {
-    tx.inputs.foreach { inp =>
+  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    scanInputs(tx, heightOpt)
+    tx.outputCandidates
+      .zipWithIndex
+      .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
+  }
+
+  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    tx.inputs.forall { inp =>
       val boxId = bytesToId(inp.boxId)
       registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
   }
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    scanInputs(tx, heightOpt)
+  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
+                         tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
+      registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
+  }
 
-    tx.outputCandidates.zipWithIndex.count { case (outCandidate, outIndex) =>
-      trackedBytes.find(t => outCandidate.propositionBytes.containsSlice(t)) match {
-        case Some(_) =>
-          val idxShort = outIndex.toShort
-          val box = outCandidate.toBox(tx.id, idxShort)
-          val boxId = bytesToId(box.id)
-          if (registry.contains(boxId)) {
-            heightOpt match {
-              case Some(h) =>
-                registry.makeTransition(boxId, CreationConfirmation(h))
-              case None =>
-                log.warn(s"Double registration of the offchain box: $boxId")
-                false
-            }
-          } else {
-            registry.register(TrackedBox(tx, idxShort, heightOpt, box, Uncertain))
-            true
-          }
+  private def registerBox(trackedBox: TrackedBox): Boolean = {
+    if (registry.contains(trackedBox.boxId)) {
+      trackedBox.creationHeight match {
+        case Some(h) =>
+          registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
         case None =>
+          log.warn(s"Double registration of the off-chain box: ${trackedBox.boxId}")
           false
       }
-    } > 0
+    } else {
+      registry.register(trackedBox)
+      true
+    }
   }
 
   private def extractFromBlock(fb: ErgoFullBlock): Int = {
@@ -195,7 +196,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
       payTo.filterNot(_ == assetIssueBox).map(_.additionalTokens).foreach { boxTokens =>
         AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
       }
-
       boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
@@ -210,7 +210,6 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
           inputs.map(_.id).map(id => new UnsignedInput(id)),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
-
         prover.sign(unsignedTx, inputs, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
       } match {
         case Some(tx) => tx
@@ -224,11 +223,11 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
   }
 
   def readers: Receive = {
-    case ReadBalances(confirmed) =>
-      if (confirmed) {
+    case ReadBalances(chainStatus) =>
+      if (chainStatus.onchain) {
         sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
       } else {
-        sender() ! BalancesSnapshot(height, registry.unconfirmedBalance, registry.unconfirmedAssetBalances)
+        sender() ! BalancesSnapshot(height, registry.balancesWithUnconfirmed, registry.assetBalancesWithUnconfirmed)
       }
 
     case ReadPublicKeys(from, until) =>
@@ -269,7 +268,7 @@ object ErgoWalletActor {
 
   case class GenerateTransaction(requests: Seq[TransactionRequest])
 
-  case class ReadBalances(confirmed: Boolean)
+  case class ReadBalances(chainStatus: ChainStatus)
 
   case class ReadPublicKeys(from: Int, until: Int)
 

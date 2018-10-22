@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadBalances, ReadTrackedAddresses}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.hashLength
@@ -138,6 +138,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     def receive: Receive = {
 
+      case ReadBalances(chainStatus) =>
+        sender ! BalancesSnapshot(0, WalletActorStub.balance(chainStatus), Map.empty)
+
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
@@ -150,6 +153,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object WalletActorStub {
     def props(): Props = Props(new WalletActorStub)
+    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onchain) confirmedBalance else unconfirmedBalance
+    def confirmedBalance: Long = 1L
+    def unconfirmedBalance: Long = 2L
   }
 
   class WalletStub extends ErgoWalletReader {

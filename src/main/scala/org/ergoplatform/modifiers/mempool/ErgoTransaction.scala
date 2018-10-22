@@ -17,7 +17,7 @@ import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -95,50 +95,55 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .result
   }
 
-  /**
-    * @return total computation cost
+  /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext): Try[Long] = {
-    lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
-
     failFast
       .payload(0L)
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
-      .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-        val input = inputs(idx)
-        val proof = input.spendingProof
-        val proverExtension = proof.extension
-
-        def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
-
-        lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
-        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
-        validation
-          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
-          .demandSuccess(costTry, s"Invalid transaction $this")
-          .demand(isCostValid, s"Validation failed for input #$idx of tx $this")
-          .map(_ + scriptCost)
-      }
+      .validateSeq(boxesToSpend.zipWithIndex)(validateBox(boxesToSpend, blockchainState))
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demandTry(outAssetsOpt, s"Assets preservation rule is broken in $this") { (validation, outAssets) =>
-        val inAssets = mutable.Map[ByteArrayWrapper, Long]()
-        fillAssetsMap(boxesToSpend, inAssets)
-        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-        validation.validateSeq(outAssets) {
-          case (validation, (outAssetId, outAmount)) =>
-            val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
-            validation
-              .validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-                fatal(s"Assets preservation rule is broken in $this. " +
-                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
-              }
-        }
-      }
+      .demandTry(outAssetsOpt, s"Assets preservation rule is broken in $this")(validateAssets(boxesToSpend))
       .toTry
+  }
+
+  private def validateBox(boxesToSpend: IndexedSeq[ErgoBox], blockchainState: ErgoStateContext)
+                         (validation: ValidationState[Long], boxWithIndex: (ErgoBox, Int)): ValidationResult[Long] = {
+    val (box, idx) = boxWithIndex
+    val input = inputs(idx)
+    val proof = input.spendingProof
+    val proverExtension = proof.extension
+    lazy val lastUtxoDigest = AvlTreeData(blockchainState.digest, ErgoBox.BoxId.size)
+    def ctx = ErgoLikeContext(blockchainState.height, lastUtxoDigest, boxesToSpend, this, box, proverExtension)
+
+    lazy val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
+    lazy val (isValidBox, scriptCost) = costTry.getOrElse((false, 0L))
+    validation
+      .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
+      .demandSuccess(costTry, s"Invalid transaction $this")
+      .demand(isValidBox, s"Input proposition proof failed for input #$idx of tx $this")
+      .payloadMap(_ + scriptCost)
+  }
+
+  private def validateAssets(boxesToSpend: IndexedSeq[ErgoBox])
+                            (validation: ValidationState[Long],
+                             assets: Map[ByteArrayWrapper, Long]): ValidationResult[Long] = {
+    val inAssets = mutable.Map[ByteArrayWrapper, Long]()
+    fillAssetsMap(boxesToSpend, inAssets)
+    lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+    validation.validateSeq(assets) {
+      case (validation, (outAssetId, outAmount)) =>
+        val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
+        validation
+          .validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+            fatal(s"Assets preservation rule is broken in $this. " +
+              s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+          }
+    }
   }
 
   override type M = ErgoTransaction

@@ -191,7 +191,7 @@ object HeaderSerializer extends Serializer[Header] {
     val interlinksSize = Chars.fromByteArray(bytes.slice(178, 180))
     val interlinks = parseInterlinks(180, 180 + interlinksSize, Seq.empty)
 
-    val powSolutionsBytes = bytes.slice(182 + interlinksSize, bytes.length)
+    val powSolutionsBytes = bytes.slice(180 + interlinksSize, bytes.length)
 
     AutoleakusSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,

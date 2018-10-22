@@ -21,7 +21,8 @@ class AutoleakusPowScheme(k: Int, N: Int) {
 
   def verify(header: Header): Boolean = {
     val difficulty = RequiredDifficulty.decodeCompactBits(header.nBits)
-    autoleakus.verify(header.powSolution.solution, difficulty).isSuccess
+    val msg = HeaderSerializer.bytesWithoutPow(header)
+    autoleakus.verify(header.powSolution.solution(msg), difficulty).isSuccess
   }
 
   def realDifficulty(header: Header): BigInt = {

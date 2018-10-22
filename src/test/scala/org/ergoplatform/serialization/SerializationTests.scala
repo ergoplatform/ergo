@@ -1,5 +1,6 @@
 package org.ergoplatform.serialization
 
+import org.ergoplatform.mining.AutoleakusSolutionSerializer
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
@@ -48,6 +49,10 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
       recovered.get shouldBe b
       recovered.get.size shouldBe b.bytes.length
     }
+  }
+
+  property("AutoleakusSolutionSerializer serialization") {
+    checkSerializationRoundtrip(powSolutionGen, AutoleakusSolutionSerializer)
   }
 
   property("ErgoStateContext serialization") {

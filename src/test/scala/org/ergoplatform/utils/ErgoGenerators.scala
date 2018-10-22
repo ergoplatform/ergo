@@ -1,7 +1,9 @@
 package org.ergoplatform.utils
 
+import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumNonce
 import org.ergoplatform.mining.AutoleakusSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
@@ -13,6 +15,7 @@ import org.ergoplatform.settings.Constants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
+import org.ergoplatform.autoleakus._
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -96,7 +99,14 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
     optionalElementsElements.take(Extension.MaxOptionalFields))
 
-  lazy val powSolutionGen: Gen[AutoleakusSolution] = ???
+  lazy val genECPoint: Gen[ECPoint] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
+
+  lazy val powSolutionGen: Gen[AutoleakusSolution] = for {
+    pk <- genECPoint
+    w <- genECPoint
+    n <- genBytes(8).map(b => HKSumNonce(b))
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
+  } yield AutoleakusSolution(pk: ECPoint, w: ECPoint, n: HKSumNonce, d: BigInt)
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]

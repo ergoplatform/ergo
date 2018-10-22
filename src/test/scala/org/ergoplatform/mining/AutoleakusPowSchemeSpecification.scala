@@ -1,11 +1,12 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.autoleakus._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash._
@@ -19,7 +20,7 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
   override val powScheme = new AutoleakusPowScheme(kDefault, nDefault)
 
   @SuppressWarnings(Array("TryGet"))
-  private def createValidBlock(n: Int = nDefault, k: Int = kDefault): ErgoFullBlock = {
+  private def createValidBlock(): ErgoFullBlock = {
     def loop(ts: Long): ErgoFullBlock = {
       powScheme.proveBlock(
         None,
@@ -41,10 +42,11 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
     powScheme.verify(h) shouldBe true
   }
 
-  ignore("Valid block should be invalid by pow after solution modification") {
-//    val h = createValidBlock().header
-//    val invB = EquihashSolution(h.powSolution.ints.updated(0, 1))
-//    powScheme.verify(h.copy(powSolution = invB)) shouldBe false
+  property("Valid block should be invalid by pow after solution modification") {
+    val h = createValidBlock().header
+    val randPk = genPk(randomSecret())
+    val invB = h.powSolution.copy(pk = randPk)
+    powScheme.verify(h.copy(powSolution = invB)) shouldBe false
   }
 
   property("Valid block should be invalid by pow after height modification") {

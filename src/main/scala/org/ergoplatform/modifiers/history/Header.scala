@@ -4,8 +4,8 @@ import com.google.common.primitives._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.mining.AutoleakusSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{AutoleakusSolution, AutoleakusSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -152,7 +152,7 @@ object HeaderSerializer extends Serializer[Header] {
   }
 
   def solutionBytes(h: Header): Array[Byte] = {
-    PowSolutionsSerializer.toBytes(h.powSolution)
+    AutoleakusSolutionSerializer.toBytes(h.powSolution)
   }
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
@@ -193,7 +193,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     val powSolutionsBytes = bytes.slice(182 + interlinksSize, bytes.length)
 
-    PowSolutionsSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
+    AutoleakusSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
         nBits, height, extensionHash, powSolution, Some(bytes.length))
     }

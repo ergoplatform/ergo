@@ -46,7 +46,9 @@ class AutoleakusPowScheme(k: Int, N: Int) {
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null)
     val msg = HeaderSerializer.bytesWithoutPow(h)
-    powTask.checkNonces(msg, sk, difficulty, minNonce, maxNonce).map(s => h.copy(powSolution = AutoleakusSolution(s)))
+    val b = org.ergoplatform.autoleakus.q / difficulty
+    powTask.initialize(msg, sk)
+    powTask.checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = AutoleakusSolution(s)))
   }
 
   def proveBlock(parentOpt: Option[Header],

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.utils.AssetUtils.{mergeAssets, subtractAssets}
+import org.ergoplatform.utils.AssetUtils.{mergeAssetsMut, subtractAssetsMut}
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
@@ -52,7 +52,7 @@ object DefaultBoxSelector extends BoxSelector {
 
     def pickUp(unspentBox: TrackedBox) = {
       currentBalance = currentBalance + unspentBox.value
-      mergeAssets(currentAssets, unspentBox.assets)
+      mergeAssetsMut(currentAssets, unspentBox.assets)
       res += unspentBox.box
     }
 
@@ -80,7 +80,7 @@ object DefaultBoxSelector extends BoxSelector {
         lazy val currentAmt = currentAssets.getOrElse(id, 0L)
         targetAmt > 0 && targetAmt > currentAmt
       }, assetsMet)) {
-        subtractAssets(currentAssets, targetAssets)
+        subtractAssetsMut(currentAssets, targetAssets)
         val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = currentAssets.grouped(ErgoBox.MaxTokens).toSeq
         val changeBalance = currentBalance - targetBalance
         formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(res, changeBoxes))

@@ -186,13 +186,14 @@ class ErgoWalletActor(settings: ErgoSettings) extends Actor with ScorexLogging {
 
       val targetBalance = payTo.map(_.value).sum
 
-      val targetAssets = mutable.Map[ModifierId, Long]()
+      val targetAssets = payTo
+        .filterNot(bx => assetIssueBox.contains(bx))
+        .foldLeft(Predef.Map.empty[ModifierId, Long]) { case (acc, bx) =>
+          val boxTokens = bx.additionalTokens.map(t => bytesToId(t._1) -> t._2).toMap
+          AssetUtils.mergeAssets(boxTokens, acc)
+        }
 
-      payTo.filterNot(bx => assetIssueBox.contains(bx)).map(_.additionalTokens).foreach { boxTokens =>
-        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
-      }
-
-      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
+      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))

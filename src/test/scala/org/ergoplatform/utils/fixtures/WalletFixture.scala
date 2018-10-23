@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.fixtures
 
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.ErgoSettings

@@ -10,7 +10,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.io.Source
 
-class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
+class OpenApiSpec extends FreeSpec with IntegrationSuite {
 
   val expectedHeight: Int = 2
   val paramsFilePath: String = "/tmp/parameters.yaml"
@@ -18,7 +18,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
 
   val offlineGeneratingPeer: Config = offlineGeneratingPeerConfig.withFallback(nodeSeedConfigs.head)
 
-  val node: Node = docker.startNode(offlineGeneratingPeer).success.value
+  val node: Node = docker.startNode(offlineGeneratingPeer).get
 
   def renderTemplate(template: String, varMapping: Map[String, String]): String = varMapping
     .foldLeft(template) { case (s, (k, v)) => s.replaceAll(s"@$k", v) }
@@ -44,7 +44,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite with TryValues {
         val specFilePath: String = new File("src/main/resources/api/openapi.yaml").getAbsolutePath
         val checker: ApiChecker = docker.startOpenApiChecker(
           ApiCheckerConfig(apiAddressToCheck, specFilePath, paramsFilePath)
-        ).success.value
+        ).get
 
         docker.waitContainer(checker.containerId).statusCode shouldBe 0
       }

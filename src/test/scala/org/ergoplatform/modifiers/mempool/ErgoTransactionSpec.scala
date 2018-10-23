@@ -146,7 +146,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
-  property("stateful validation should catch false proposition") {
+  ignore("stateful validation should catch false proposition") {
     val propositionGen = Gen.const(Values.FalseLeaf)
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>

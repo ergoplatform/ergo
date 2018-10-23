@@ -2,15 +2,11 @@ package org.ergoplatform.utils.generators
 
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
-<<<<<<< HEAD:src/test/scala/org/ergoplatform/utils/ErgoGenerators.scala
-import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumNonce
-import org.ergoplatform.mining.AutoleakusSolution
-=======
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.EquihashSolution
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b:src/test/scala/org/ergoplatform/utils/generators/ErgoGenerators.scala
+import org.ergoplatform.autoleakus._
+import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumNonce
+import org.ergoplatform.mining.AutoleakusSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
@@ -21,15 +17,14 @@ import org.ergoplatform.settings.{Constants, Parameters}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import org.ergoplatform.autoleakus._
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
 import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
-import sigmastate.{SBoolean, _}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.{SBoolean, _}
 
 import scala.util.Random
 

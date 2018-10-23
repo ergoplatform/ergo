@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
@@ -68,17 +68,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-<<<<<<< HEAD
-    val desiredSize: Int = ((Constants.MaxBlockCost / Cost.Dlog) * 2).toInt
-    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-=======
     val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
-    val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1",
-      settings.walletSettings.dlogSecretsNumber)
-    val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -96,12 +87,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-<<<<<<< HEAD
-      emission,
       Some(secret)
-=======
-      Some(prop)
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b
     )
     minerRef ! StartMining
 
@@ -185,12 +171,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         nodeViewHolderRef,
         readersHolderRef,
         timeProvider,
-<<<<<<< HEAD
-        emission,
         Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes()))))
-=======
-        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage))
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b
       expectNoMessage(1 second)
       val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
@@ -227,12 +208,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-<<<<<<< HEAD
-      emission,
       Some(secret)
-=======
-      Some(TrueLeaf)
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b
     )
     expectNoMessage(1 second)
     val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
@@ -247,7 +223,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
-<<<<<<< HEAD
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToDoubleSpend.proposition shouldBe secret.publicImage
 
@@ -255,20 +230,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
-    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
+    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
-    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
-=======
-    val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
-
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
-    val tx1 = ErgoTransaction(IndexedSeq(input), outputs1)
-
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
-    val tx2 = ErgoTransaction(IndexedSeq(input), outputs2)
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b
+    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

@@ -155,8 +155,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object WalletActorStub {
     def props(): Props = Props(new WalletActorStub)
+
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onchain) confirmedBalance else unconfirmedBalance
+
     def confirmedBalance: Long = 1L
+
     def unconfirmedBalance: Long = 2L
   }
 
@@ -220,13 +223,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-<<<<<<< HEAD:src/test/scala/org/ergoplatform/api/routes/Stubs.scala
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       defaultMinerSecret
     ).get
-=======
-      Digest32 @@ Array.fill(HashLength)(0.toByte)
-    ).value
->>>>>>> 0740a17e293da4b3b23713e468e6522bc874de5b:src/test/scala/org/ergoplatform/utils/Stubs.scala
   }
 }

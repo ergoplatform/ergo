@@ -41,7 +41,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
                 emission: EmissionRules,
-                inSkOpt: Option[PrivateKey]) extends Actor with ScorexLogging {
+                inSkOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -54,10 +54,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
 
-  private var skOpt: Option[PrivateKey] = inSkOpt
+  private var skOpt: Option[PrivateKey] = inSkOpt.map(_.w)
 
   // TODO check that it corresponds to secret or remove from here.
-  private def minerPropOpt: Option[Value[SBoolean.type]] = skOpt.map(sk => DLogProverInput(sk.bigInteger).publicImage)
+  private def minerPropOpt: Option[Value[SBoolean.type]] = inSkOpt.map(_.publicImage)
 
   override def preStart(): Unit = {
     viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
@@ -306,7 +306,7 @@ object ErgoMinerRef {
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
             emission: EmissionRules,
-            skOpt: Option[PrivateKey] = None): Props =
+            skOpt: Option[DLogProverInput] = None): Props =
     Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
 
   def apply(ergoSettings: ErgoSettings,
@@ -314,7 +314,7 @@ object ErgoMinerRef {
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
             emission: EmissionRules,
-            skOpt: Option[PrivateKey] = None)
+            skOpt: Option[DLogProverInput] = None)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
 

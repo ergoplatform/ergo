@@ -24,7 +24,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, Lo
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.util.ModifierId
 import sigmastate.SBoolean
-import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.Values.Value
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
@@ -54,7 +54,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   }
 
   val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
-  val secret:DLogProverInput = prover.secrets.head
+  val secret: DLogProverInput = prover.secrets.head
   val prop: Value[SBoolean.type] = secret.publicImage
 
 
@@ -82,7 +82,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       readersHolderRef,
       timeProvider,
       emission,
-      Some(secret.w)
+      Some(secret)
     )
     minerRef ! StartMining
 
@@ -97,7 +97,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
         val outputs = (0 until desiredSize).map(_ => new ErgoBoxCandidate(boxToSend.value / desiredSize, prop))
-
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(unsignedTx, IndexedSeq(boxToSend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
         // Putting transactions straight to the mempool allows to avoid too long logs from NVH.
@@ -165,7 +164,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         readersHolderRef,
         timeProvider,
         emission,
-        Some(BigIntegers.fromUnsignedByteArray("test".getBytes())))
+        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes()))))
       expectNoMessage(1 second)
       val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
 
@@ -203,7 +202,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       readersHolderRef,
       timeProvider,
       emission,
-      Some(secret.w)
+      Some(secret)
     )
     expectNoMessage(1 second)
     val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
@@ -219,13 +218,16 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop2 = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    boxToDoubleSpend.proposition shouldBe secret.publicImage
+
     val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
-    val tx1 = new ErgoTransaction(IndexedSeq(input), outputs1)
-
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
+    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
-    val tx2 = new ErgoTransaction(IndexedSeq(input), outputs2)
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
+    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

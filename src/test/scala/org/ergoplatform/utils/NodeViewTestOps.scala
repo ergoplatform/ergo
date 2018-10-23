@@ -87,15 +87,9 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
                     txs: Seq[ErgoTransaction],
                     ext: ExtensionCandidate = ExtensionCandidate(Seq(), Seq()))
                    (implicit ctx: Ctx): ErgoFullBlock = {
-    utxoState.proofsForTransactions(txs) match {
-      case Failure(e) =>
-        log.error(s"Failed to prove transactions while creating new block: $txs", e)
-        throw new AssertionError(s"Transaction prove failure: $e", e)
-      case Success((adProofs, stateDigest)) =>
-        val time = timeProvider.time()
-        val parent = getHistory.bestHeaderOpt
-        DefaultFakePowScheme.proveBlock(parent, Constants.InitialNBits, stateDigest, adProofs, txs, time, ext).get
-    }
+    val time = timeProvider.time()
+    val parent = getHistory.bestHeaderOpt
+    validFullBlock(parent, utxoState, txs, Some(time))
   }
 
   @inline private def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef

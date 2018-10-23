@@ -94,4 +94,5 @@ class DigestStateSpecification extends ErgoPropertyTest {
       ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash
     }
   }
+
 }

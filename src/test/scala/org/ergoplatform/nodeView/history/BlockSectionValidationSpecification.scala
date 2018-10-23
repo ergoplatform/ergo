@@ -5,11 +5,11 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.util.ModifierId
 
-class BlockSectionValidationSpecification extends HistorySpecification {
+class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
   property("BlockTransactions validation") {
     val (history, block) = init()
@@ -58,7 +58,6 @@ class BlockSectionValidationSpecification extends HistorySpecification {
     // common checks
     commonChecks(history, extension, header)
   }
-
 
   private def init() = {
     var history = genHistory()
@@ -126,4 +125,5 @@ class BlockSectionValidationSpecification extends HistorySpecification {
       history.applicableTry(newSection) shouldBe 'failure
     }
   }
+
 }

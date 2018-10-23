@@ -6,8 +6,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Constants
-import org.ergoplatform.settings.Constants.hashLength
+import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -22,8 +22,8 @@ trait ChainGenerator {
   val timeProvider: NetworkTimeProvider
 
   val powScheme: PowScheme = DefaultFakePowScheme
-  private val EmptyStateRoot = ADDigest @@ Array.fill(hashLength + 1)(0.toByte)
-  private val EmptyDigest32 = Digest32 @@ Array.fill(hashLength)(0.toByte)
+  private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
+  private val EmptyDigest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
@@ -91,7 +91,8 @@ trait ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val outputs = IndexedSeq(ErgoBox(1, Constants.TrueLeaf))
+    val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
+    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, TrueLeaf))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

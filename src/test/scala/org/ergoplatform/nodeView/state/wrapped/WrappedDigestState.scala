@@ -8,7 +8,7 @@ import scorex.core.VersionTag
 import scala.util.Try
 
 class WrappedDigestState(val digestState: DigestState, val wrappedUtxoState: WrappedUtxoState, val settings: ErgoSettings)
-  extends DigestState(digestState.version, digestState.rootHash, digestState.store, settings.nodeSettings) {
+  extends DigestState(digestState.version, digestState.rootHash, digestState.store, settings) {
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedDigestState] = {
     wrapped(super.applyModifier(mod), wrappedUtxoState.applyModifier(mod))

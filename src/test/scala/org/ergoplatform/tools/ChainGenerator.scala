@@ -46,7 +46,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
-  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, emission, 1))
+  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
   log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, boxHolder, None, Seq())
@@ -100,6 +100,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }
 
 }

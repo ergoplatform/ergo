@@ -17,7 +17,6 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
       log.warn("Unable to parse state context, situation is only valid on empty state")
       ErgoStateContext(0, rootHash)
     }
-
 }
 
 object ErgoStateReader {

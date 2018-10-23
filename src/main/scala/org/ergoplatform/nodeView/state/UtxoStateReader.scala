@@ -19,13 +19,17 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected implicit val hf = Algos.hash
 
   val constants: StateConstants
+
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedIODBAVLStorage(store, np)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
-  override def validate(tx: ErgoTransaction): Try[Unit] = tx.statelessValidity
-    .flatMap(_ => tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext).map(_ => Unit))
+  override def validate(tx: ErgoTransaction): Try[Unit] =
+    tx.statelessValidity
+      .flatMap(_ =>
+        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext, constants.settings.metadata)
+          .map(_ => Unit))
 
   /**
     *

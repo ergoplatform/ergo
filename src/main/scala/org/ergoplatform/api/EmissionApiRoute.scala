@@ -8,12 +8,14 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
-final case class EmissionApiRoute(emission: EmissionRules, ergoSettings: ErgoSettings)
+final case class EmissionApiRoute(ergoSettings: ErgoSettings)
                                  (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   import EmissionApiRoute._
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
+  private lazy val emission = ergoSettings.emission
 
   override def route: Route = (pathPrefix("emission") & withCors) {
     emissionAt

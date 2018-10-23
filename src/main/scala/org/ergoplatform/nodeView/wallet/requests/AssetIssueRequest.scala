@@ -3,8 +3,9 @@ package org.ergoplatform.nodeView.wallet.requests
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate}
 import scorex.core.transaction.box.Box.Amount
 
 /**
@@ -24,7 +25,7 @@ case class AssetIssueRequest(address: ErgoAddress,
 
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = new ErgoAddressEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
   def apply(request: AssetIssueRequest): Json = {
     Json.obj(
@@ -39,7 +40,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
 
 class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssueRequest] with ApiCodecs {
 
-  val addressEncoders: ErgoAddressEncoder = new ErgoAddressEncoder(settings)
+  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(settings)
 
   implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
 

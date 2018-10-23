@@ -8,11 +8,12 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
@@ -56,7 +57,8 @@ case class ADProofs(headerId: ModifierId,
           if (java.util.Arrays.equals(digest, expectedHash)) {
             Success(oldValues)
           } else {
-            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))
+            val msg = s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"
+            Failure(new IllegalArgumentException(msg))
           }
         case None =>
           Failure(new IllegalStateException("Digest is undefined"))

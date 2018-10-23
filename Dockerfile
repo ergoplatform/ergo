@@ -18,7 +18,7 @@ CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 FROM openjdk:10-jre-slim
 LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
 COPY --from=builder /ergo.jar /ergo.jar
-EXPOSE 9006 9052
+EXPOSE 9007 9052
 WORKDIR /root
 VOLUME ["/root/ergo/data"]
 ENTRYPOINT ["/usr/bin/java", "-jar", "/ergo.jar"]

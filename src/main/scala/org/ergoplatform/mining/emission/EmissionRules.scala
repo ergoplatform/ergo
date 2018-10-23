@@ -8,7 +8,7 @@ import scala.annotation.tailrec
   * Ergo coin emission curve.
   *
   * Mainnet properties:
-  * 100000000 parts of one coin
+  * 1000000000 parts of one coin
   * block every 2 minutes
   * fixed rate 75 coins during first 2 years
   * reward reduction for 3 coins every 3 month after that
@@ -18,8 +18,6 @@ import scala.annotation.tailrec
   * @param settings - network settings
   */
 class EmissionRules(val settings: MonetarySettings) {
-
-  val coinsInOneErgo: Long = 100000000
 
   lazy val (coinsTotal, blocksTotal) = {
     @tailrec

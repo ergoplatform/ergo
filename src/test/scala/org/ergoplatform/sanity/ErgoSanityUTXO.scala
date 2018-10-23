@@ -11,15 +11,17 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.app.{Version => HandshakeV}
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.peer.PeerInfo
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
+  override val historyGen: Gen[HT] =
+    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
 
-  override val stateGen: Gen[WrappedUtxoState] = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None))
+  override val stateGen: Gen[WrappedUtxoState] =
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
 
@@ -66,9 +68,20 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+
+    val peerInfo = PeerInfo(
+      0L,
+      None,
+      Some(""),
+      Some(Outgoing),
+      Seq.empty
+    )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
-      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    val p: ConnectedPeer = ConnectedPeer(
+      inetSocketAddressGen.sample.get,
+      pchProbe.ref,
+      Some(peerInfo)
+    )
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

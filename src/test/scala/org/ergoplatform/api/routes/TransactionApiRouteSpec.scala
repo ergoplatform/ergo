@@ -10,7 +10,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
@@ -37,8 +37,8 @@ class TransactionApiRouteSpec extends FlatSpec
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
     ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  val b = ErgoBox(Int.MaxValue, Parameters.TrueLeaf)
-  val output = new ErgoBoxCandidate(b.bytes.length * Parameters.MinValuePerByte, TrueLeaf)
+  val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
+  val output = new ErgoBoxCandidate(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf)
   val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
 
   it should "post transaction" in {

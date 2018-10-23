@@ -126,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         validation
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
-          .demand(isCostValid, s"Validation failed for input #$idx of tx $this: $costTry")
+          .demand(isCostValid, s"Proposition proof failed for input #$idx of tx $this: $costTry")
           .map(_ + scriptCost)
       }
       .demandSuccess(inputSum, s"Overflow in inputs in $this")

@@ -15,7 +15,7 @@ import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
 
-class ErgoTransactionSpecification extends ErgoPropertyTest {
+class ErgoTransactionSpec extends ErgoPropertyTest {
 
   private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
@@ -237,4 +237,5 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
     }
   }
+
 }

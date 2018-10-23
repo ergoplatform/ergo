@@ -11,6 +11,7 @@ import io.circe.syntax._
 import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Parameters
+import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
@@ -26,11 +27,12 @@ class TransactionApiRouteSpec extends FlatSpec
   with Stubs
   with FailFastCirceSupport {
 
-  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
+  val prefix = "/transactions"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
-  val prefix = "/transactions"
   val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
+
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val input = Input(
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
@@ -44,13 +46,6 @@ class TransactionApiRouteSpec extends FlatSpec
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual tx.id
-    }
-  }
-
-  //TODO: Not implemented yet
-  ignore should "get tx by id" in {
-    Get(prefix + "/txod") ~> route ~> check {
-      status shouldBe StatusCodes.OK
     }
   }
 

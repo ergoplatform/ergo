@@ -30,5 +30,4 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       PoPoWBootstrap = false, 10, mining = false, 1.second, offlineGeneration = false, 200)
   }
 
-
 }

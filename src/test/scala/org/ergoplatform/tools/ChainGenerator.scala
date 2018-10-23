@@ -9,7 +9,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ErgoTestHelpers, ValidBlocksGenerators}
+import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -55,7 +56,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   log.info("History was generated successfully")
   System.exit(0)
 
-  def loop(state: UtxoState, boxHolder: BoxHolder, last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+  private def loop(state: UtxoState, boxHolder: BoxHolder,
+                   last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < timeProvider.time) {
       val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder, new Random, txsSize)

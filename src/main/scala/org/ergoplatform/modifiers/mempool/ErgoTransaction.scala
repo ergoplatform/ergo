@@ -11,14 +11,14 @@ import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSe
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Algos, Parameters}
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -30,7 +30,6 @@ import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.Try
-
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],

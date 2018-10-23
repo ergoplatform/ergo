@@ -12,6 +12,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers, TryValues}
 import sigmastate.Values
 
@@ -32,6 +33,26 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+
+  it should "get balances" in {
+    Get(prefix + "/balances") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.confirmedBalance)
+    }
+  }
+
+  it should "get unconfirmed balances" in {
+    Get(prefix + "/balances/with_unconfirmed") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received total confirmed with unconfirmed balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.unconfirmedBalance)
+    }
+  }
 
   it should "get balances" in {
     Get(prefix + "/balances") ~> route ~> check {

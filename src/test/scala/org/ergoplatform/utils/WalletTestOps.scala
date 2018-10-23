@@ -1,13 +1,13 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}

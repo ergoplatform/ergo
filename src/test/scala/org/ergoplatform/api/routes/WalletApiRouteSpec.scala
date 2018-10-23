@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.api.WalletApiRoute
@@ -31,6 +32,26 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+
+  it should "get balances" in {
+    Get(prefix + "/balances") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.confirmedBalance)
+    }
+  }
+
+  it should "get unconfirmed balances" in {
+    Get(prefix + "/balances/with_unconfirmed") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received total confirmed with unconfirmed balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.unconfirmedBalance)
+    }
+  }
 
   it should "generate payment transaction" in {
     val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None, 100000L)

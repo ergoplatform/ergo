@@ -153,7 +153,7 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       tx.statelessValidity.isSuccess shouldBe true
       val validity = tx.statefulValidity(from, context, settings.metadata)
       validity.isSuccess shouldBe false
-      validity.failed.get.getMessage should startWith("Validation failed for input #0")
+      validity.failed.get.getMessage should startWith("Input proposition proof failed for input #0 of tx")
     }
   }
 

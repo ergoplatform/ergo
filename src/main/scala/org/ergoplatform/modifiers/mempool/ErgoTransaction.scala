@@ -13,7 +13,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Parameters}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding

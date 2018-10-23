@@ -60,4 +60,14 @@ class TransactionApiRouteSpec extends FlatSpec
       memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
+
+  it should "get unconfirmed from mempool using limit and offset" in {
+    val limit = 10
+    val offset = 20
+    Get(prefix + s"/unconfirmed?limit=$limit&offset=$offset") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      memPool.unconfirmed.toSeq.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
+    }
+  }
+
 }

@@ -17,11 +17,11 @@ import org.ergoplatform.settings.{Algos, Parameters}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.{Serializer => SSerializer}
@@ -98,15 +98,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .result
   }
 
-  /**
-    * @return total computation cost
+  /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        blockchainState: ErgoStateContext,
                        metadata: Metadata): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
-
     failFast
       .payload(0L)
       .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")

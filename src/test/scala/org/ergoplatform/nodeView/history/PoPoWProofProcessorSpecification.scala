@@ -4,13 +4,13 @@ import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen
 import scorex.crypto.authds._
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.NoShrink
 
-class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrink {
+class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink {
 
   val MaxM = 11
   val MaxK = 11
@@ -19,11 +19,9 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  val history = genHistory()
-  val chain = genHeaderChain(headers =>
-    headers
-      .drop(MaxK)
-      .count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM,
+  val history: ErgoHistory = genHistory()
+  val chain: HeaderChain = genHeaderChain(headers =>
+    headers.drop(MaxK).count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM,
     history.bestHeaderOpt,
     defaultDifficultyControl
   ).ensuring(_.headers.count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM)
@@ -37,7 +35,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
 
     //genesis
     val h1 = powScheme.prove(None, Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      1L, emptyDigest32).get
+      1L, emptyDigest32).value
 
     h1.interlinks.length shouldBe 0
 
@@ -45,55 +43,55 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
 
     //first after genesis
     val h2 = zeroLevelPowScheme.prove(Some(h1), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      2L, emptyDigest32).get
+      2L, emptyDigest32).value
 
     h2.interlinks.length shouldBe 1
 
     val h3 = zeroLevelPowScheme.prove(Some(h2), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      3L, emptyDigest32).get
+      3L, emptyDigest32).value
 
     h3.interlinks.length shouldBe 1
 
     val oneLevelPowScheme = new FakePowScheme(Some(1))
 
     val h4 = oneLevelPowScheme.prove(Some(h3), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      4L, emptyDigest32).get
+      4L, emptyDigest32).value
 
     h4.interlinks.length shouldBe 1
 
     val h5 = zeroLevelPowScheme.prove(Some(h4), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      5L, emptyDigest32).get
+      5L, emptyDigest32).value
 
     h5.interlinks.length shouldBe 2
 
     val h6 = zeroLevelPowScheme.prove(Some(h5), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      6L, emptyDigest32).get
+      6L, emptyDigest32).value
 
     h6.interlinks.length shouldBe 2
 
     val twoLevelPowScheme = new FakePowScheme(Some(2))
 
     val h7 = twoLevelPowScheme.prove(Some(h6), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      7L, emptyDigest32).get
+      7L, emptyDigest32).value
 
     DefaultFakePowScheme.realDifficulty(h7) shouldBe h7.requiredDifficulty * 4
 
     h7.interlinks.length shouldBe 2
 
     val h8 = zeroLevelPowScheme.prove(Some(h7), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      8L, emptyDigest32).get
+      8L, emptyDigest32).value
 
     h8.interlinks.length shouldBe 3
 
     val h9 = twoLevelPowScheme.prove(Some(h8), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      9L, emptyDigest32).get
+      9L, emptyDigest32).value
 
     DefaultFakePowScheme.realDifficulty(h9) shouldBe h9.requiredDifficulty * 4
 
     h9.interlinks.length shouldBe 3
 
     val h10 = oneLevelPowScheme.prove(Some(h9), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      10L, emptyDigest32).get
+      10L, emptyDigest32).value
 
     h10.interlinks.length shouldBe 3
 
@@ -102,7 +100,7 @@ class PoPoWProofProcessorSpecification extends HistorySpecification with NoShrin
     h10.interlinks(2) shouldBe h9.id
 
     val h11 = zeroLevelPowScheme.prove(Some(h10), Constants.InitialNBits, emptyADDigest, emptyDigest32, emptyDigest32,
-      11L, emptyDigest32).get
+      11L, emptyDigest32).value
 
     h11.interlinks.length shouldBe 3
 

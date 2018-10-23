@@ -1,8 +1,7 @@
-package org.ergoplatform
+package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.utils.{ErgoGenerators, ErgoTransactionGenerators}
+import org.ergoplatform.utils.generators.{ErgoGenerators, ErgoTransactionGenerators}
 import org.scalacheck.Gen
 import org.scalatest.PropSpec
 import scorex.testkit.properties.mempool.MempoolFilterPerformanceTest

@@ -18,5 +18,4 @@ class ObjectsStoreSpecification extends ErgoPropertyTest {
     }
   }
 
-
 }

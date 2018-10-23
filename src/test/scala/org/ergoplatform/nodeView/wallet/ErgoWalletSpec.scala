@@ -4,13 +4,14 @@ import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils._
 import org.ergoplatform._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.idToBytes
-import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
+import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
 import scala.concurrent.{Await, blocking}
@@ -35,8 +36,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val assetsToSpend = Some(assetsByTokenId(initialBoxes).toSeq)
       val sumToSpend = snap.balance / (addresses.length + 1)
       val req =
-        PaymentRequest(addresses.head, sumToSpend, assetsToSpend, None, 0L) +:
-        addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None, 0L))
+        PaymentRequest(addresses.head, sumToSpend, assetsToSpend, None) +:
+        addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = Await.result(wallet.generateTransaction(req), awaitDuration).get
@@ -51,9 +52,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       blocking(Thread.sleep(scanTime(block)))
       val newSnap = getConfirmedBalances
       val newSumToSpend = newSnap.balance / (addresses.length + 1)
-      val req2 =
-        PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, None, 0L) +:
-        addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None, 0L))
+      val req2 = PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, None) +:
+        addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = Await.result(wallet.generateTransaction(req2), awaitDuration).get
@@ -92,9 +92,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       bs2.balance shouldBe (balance1 + balance2)
       bs2.assetBalances shouldBe assetAmount(box1 ++ box2)
 
-      wallet.watchFor(Pay2SAddress(Values.TrueLeaf))
+      wallet.watchFor(Pay2SAddress(Constants.TrueLeaf))
       val balance3 = Random.nextInt(1000) + 1
-      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Values.TrueLeaf, randomNewAsset))
+      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, randomNewAsset))
       wallet.scanOffchain(ErgoTransaction(fakeInput, box3))
 
       blocking(Thread.sleep(1000))
@@ -296,8 +296,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("off-chain spending rollback") {
     withFixture { implicit w =>
       val address = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(TrueLeaf)
-      val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
+      val genesisBlock = makeGenesisBlock(Constants.TrueLeaf)
+      val boxesToSpend = boxesAvailable(genesisBlock, Constants.TrueLeaf)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
 
@@ -342,8 +342,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("on-chain rollback") {
     withFixture { implicit w =>
       val pubKey = getTrackedAddresses.head.script
-      val genesisBlock = makeGenesisBlock(TrueLeaf)
-      val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
+      val genesisBlock = makeGenesisBlock(Constants.TrueLeaf)
+      val boxesToSpend = boxesAvailable(genesisBlock, Constants.TrueLeaf)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
       val initialBalance = getConfirmedBalances.balance
@@ -474,8 +474,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("on-chain spending to off-chain rollback") {
     withFixture { implicit w =>
       val address = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(TrueLeaf)
-      val boxesToSpend = boxesAvailable(genesisBlock, TrueLeaf)
+      val genesisBlock = makeGenesisBlock(Constants.TrueLeaf)
+      val boxesToSpend = boxesAvailable(genesisBlock, Constants.TrueLeaf)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
 
@@ -524,7 +524,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       //pay out all the wallet balance:
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
-      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Some(assetToSpend), None, 0L)
+      val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Some(assetToSpend), None)
 
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1
@@ -532,7 +532,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       tx1.outputs.head.additionalTokens shouldBe assetToSpend
 
       //change == 1:
-      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None, 0L)
+      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None)
 
       val tx2 = Await.result(wallet.generateTransaction(Seq(req2)), awaitDuration).get
       tx2.outputs.size shouldBe 2

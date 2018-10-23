@@ -1,10 +1,10 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.fixtures
 
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
-import org.scalatest.fixture
+import org.scalatest.{Outcome, fixture}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -21,7 +21,8 @@ trait SequentialAkkaFixture extends fixture.PropSpec {
   class AkkaFixture extends TestKit(ActorSystem("WithIsoFix-%d".format(sysId.incrementAndGet()))) with ImplicitSender
 
   def createAkkaFixture(): Fixture
-  override def withFixture(test: OneArgTest) = {
+
+  override def withFixture(test: OneArgTest): Outcome = {
     val sys = createAkkaFixture()
     try {
       test(sys)

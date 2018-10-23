@@ -1,7 +1,7 @@
-package org.ergoplatform
+package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoSanity._
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -10,9 +10,10 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.utils.{ErgoTestHelpers, HistorySpecification}
+import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.state.MinimalState
@@ -37,7 +38,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
   with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]
   with ErgoTestHelpers
-  with HistorySpecification {
+  with HistoryTestHelpers {
 
   //Node view components
   //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo,
@@ -69,11 +70,10 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   private val hf = Blake2b256
 
   def makeSyntacticallyInvalid(mod: PM): PM = mod match {
-    case fb: ErgoFullBlock => {
+    case fb: ErgoFullBlock =>
       val parentId = fb.header.parentId
       val header = fb.header.copy(parentId = bytesToId(hf(parentId)))
       fb.copy(header = header)
-    }
     case h: Header => h.copy(parentId = bytesToId(hf(h.parentId)))
     case v => v
   }

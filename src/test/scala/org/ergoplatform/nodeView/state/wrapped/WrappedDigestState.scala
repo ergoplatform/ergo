@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView
+package org.ergoplatform.nodeView.state.wrapped
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.state.DigestState

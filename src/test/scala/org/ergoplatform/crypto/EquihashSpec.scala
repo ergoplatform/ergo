@@ -6,7 +6,7 @@ import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.LittleEndianBytes.leIntToByteArray
 
-class EquihashSpecification extends ErgoPropertyTest {
+class EquihashSpec extends ErgoPropertyTest {
 
   val expendCompressVectors = Table(
     ("scope", "bit_len", "byte_pad", "compact", "expanded"),

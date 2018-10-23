@@ -11,7 +11,7 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash._
 import sigmastate.Values.TrueLeaf
 
-class EquihashPowSchemeSpecification extends ErgoPropertyTest {
+class EquihashPowSchemeSpec extends ErgoPropertyTest {
 
   private val nDefault = 48: Char
   private val kDefault = 5: Char

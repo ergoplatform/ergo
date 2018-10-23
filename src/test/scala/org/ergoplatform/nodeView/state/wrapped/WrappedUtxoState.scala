@@ -1,5 +1,4 @@
-package org.ergoplatform.nodeView
-
+package org.ergoplatform.nodeView.state.wrapped
 
 import java.io.File
 
@@ -17,7 +16,6 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
-
 
 class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
                        override val version: VersionTag,

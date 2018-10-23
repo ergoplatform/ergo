@@ -88,7 +88,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       name <- Gen.alphaUpperStr
       description <- Gen.alphaLowerStr
       decimals <- Gen.choose(4, 16)
-    } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals, 0L)
+    } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals)
   }
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)

@@ -26,13 +26,15 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
 
   implicit val addressEncoder: Encoder[ErgoAddress] = new ErgoAddressEncoder(settings).encoder
 
-  def apply(request: AssetIssueRequest): Json = Json.obj(
-    "address" -> request.address.asJson,
-    "amount" -> request.amount.asJson,
-    "name" -> request.name.asJson,
-    "description" -> request.name.asJson,
-    "decimals" -> request.decimals.asJson
-  )
+  def apply(request: AssetIssueRequest): Json = {
+    Json.obj(
+      "address" -> request.address.asJson,
+      "amount" -> request.amount.asJson,
+      "name" -> request.name.asJson,
+      "description" -> request.description.asJson,
+      "decimals" -> request.decimals.asJson
+    )
+  }
 }
 
 class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssueRequest] with ApiCodecs {

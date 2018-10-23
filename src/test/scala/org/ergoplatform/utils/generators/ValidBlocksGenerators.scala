@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
@@ -9,8 +9,8 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Matchers
@@ -168,10 +168,7 @@ trait ValidBlocksGenerators
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
-                     n: Char = 48,
-                     k: Char = 5,
-                     timeOpt: Option[Long] = None
-                    ): ErgoFullBlock = {
+                     timeOpt: Option[Long] = None): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
     ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>

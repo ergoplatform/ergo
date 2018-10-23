@@ -6,7 +6,6 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scorex.core.{ModifierId, bytesToId}
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32

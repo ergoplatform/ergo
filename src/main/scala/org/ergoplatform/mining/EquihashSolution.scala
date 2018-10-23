@@ -16,7 +16,7 @@ case class EquihashSolution(ints: Seq[Int]) extends BytesSerializable {
 
 object EquihashSolution extends ApiCodecs {
 
-  val length: Int = Constants.hashLength
+  val length: Int = Constants.HashLength
   def empty: EquihashSolution = EquihashSolution(Seq.fill(length)(0))
 
   /** This is for json representation of [[EquihashSolution]] instances */

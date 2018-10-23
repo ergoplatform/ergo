@@ -24,7 +24,7 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext {
   @volatile var settings: ErgoSettings = protoSettings.copy(directory = nodeViewDir.getAbsolutePath)
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
-  @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings, timeProvider, emission)
+  @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings, timeProvider)
   val testProbe = new TestProbe(actorSystem)
 
   /** This sender should be imported to make TestProbe work! */
@@ -33,7 +33,7 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext {
   def apply[T](test: self.type => T): T = try test(self) finally stop()
 
   def startNodeViewHolder(): Unit = {
-    nodeViewHolderRef = ErgoNodeViewRef(settings, timeProvider, emission)
+    nodeViewHolderRef = ErgoNodeViewRef(settings, timeProvider)
   }
 
   def stopNodeViewHolder(): Unit = {

@@ -9,6 +9,7 @@ import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
+import scorex.util.ModifierId
 import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
@@ -52,9 +53,9 @@ trait ApiCodecs {
     Algos.encode(in.toArray).asJson
   }
 
-  implicit val modifierIdEncoder: Encoder[ModifierId] = _.toString.asJson
+  implicit val modifierIdEncoder: Encoder[ModifierId] = Algos.encode(_).asJson
 
-  implicit val modifierIdDecoder: Decoder[ModifierId] = ModifierId @@ _.as[String]
+  implicit val modifierIdDecoder: Decoder[ModifierId] = _.as[String].map(ModifierId @@ _)
 
   implicit val digest32Encoder: Encoder[Digest32] = _.array.asJson
 

@@ -218,8 +218,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     //Different state
     val (us2, bh2) = {
-      lazy val initialBoxes: Seq[ErgoBox] =
-        (1 to 1).map(_ => ErgoBox(value = 10000, Constants.TrueLeaf))
+      lazy val initialBoxes: Seq[ErgoBox] = (1 to 1).map(_ => truePropBoxGen.sample.get)
 
       val bh = BoxHolder(initialBoxes)
 

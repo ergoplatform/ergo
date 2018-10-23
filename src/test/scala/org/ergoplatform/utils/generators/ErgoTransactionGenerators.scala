@@ -71,31 +71,40 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
-    value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- boxIndexGen
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
     ar <- additionalRegistersGen(regNum)
     tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
     tokens <- additionalTokensGen(tokensCount)
+    value <- validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId)
   } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
     prop <- propositionGen
-    value <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- boxIndexGen
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
     ar <- additionalRegistersGen(regNum)
+    value <- validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId)
   } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
-    value <- positiveIntGen
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
+    value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, tokens, ar)
+
+
+  def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBox] = for {
+    prop <- falseLeafGen
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+    value <- Gen.choose(minValue, maxValue)
+  } yield new ErgoBoxCandidate(value, prop, tokens, ar).toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
+
 
   lazy val inputGen: Gen[Input] = for {
     boxId <- boxIdGen

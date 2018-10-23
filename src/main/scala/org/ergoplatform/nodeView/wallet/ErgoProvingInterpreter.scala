@@ -4,15 +4,16 @@ import java.math.BigInteger
 import java.util
 
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Constants
-import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
+import org.ergoplatform.settings.Parameters
+import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scapi.sigma.SigmaProtocolPrivateInput
 import scorex.crypto.hash.Blake2b256
-import sigmastate.AvlTreeData
-import sigmastate.interpreter.{ContextExtension, CostedProverResult, ProverInterpreter}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
 
@@ -35,8 +36,8 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Constants.MaxBlockCost)
-  extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
+                             override val maxCost: Long = Parameters.MaxBlockCost)
+  extends ErgoInterpreter(maxCost) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
 
@@ -55,22 +56,24 @@ class ErgoProvingInterpreter(seed: String,
 
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
+           metadata: Metadata,
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
 
-    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
-      case (inputsCostTry, (unsignedInput, inputBox)) =>
+    boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
+      case (inputsCostTry, (inputBox, boxIdx)) =>
+        val unsignedInput = unsignedTx.inputs(boxIdx)
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
+
+        val transactionContext = TransactionContext(boxesToSpend, unsignedTx, boxIdx.toShort)
 
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
-            ErgoLikeContext(
-              stateContext.height + 1,
-              AvlTreeData(stateContext.digest, 32),
-              boxesToSpend,
-              unsignedTx,
-              inputBox,
+            new ErgoContext(
+              stateContext,
+              transactionContext,
+              metadata,
               ContextExtension.empty)
 
           prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>

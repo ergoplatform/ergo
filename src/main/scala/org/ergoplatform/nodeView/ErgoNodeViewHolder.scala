@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -20,8 +19,7 @@ import scala.util.Try
 
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
-                                                             timeProvider: NetworkTimeProvider,
-                                                             emission: EmissionRules)
+                                                             timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
@@ -76,7 +74,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
     val memPool = ErgoMemPool.empty
-    val constants = StateConstants(Some(self), emission, settings.nodeSettings.keepVersions)
+    val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
     Some((history, state, wallet, memPool))
   }
@@ -92,7 +90,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case (Some(_), Some(_), StateType.Digest) =>
           DigestState.create(version, digest, dir, settings)
         case _ =>
-          ErgoState.readOrGenerate(settings, StateConstants(Some(self), emission, settings.nodeSettings.keepVersions))
+          ErgoState.readOrGenerate(settings, StateConstants(Some(self), settings))
       }
     }.asInstanceOf[State]
       .ensuring(t => java.util.Arrays.equals(t.rootHash, digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest)),
@@ -143,14 +141,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 }
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
-                                             timeProvider: NetworkTimeProvider,
-                                             emission: EmissionRules)
-  extends ErgoNodeViewHolder[DigestState](settings, timeProvider, emission)
+                                             timeProvider: NetworkTimeProvider)
+  extends ErgoNodeViewHolder[DigestState](settings, timeProvider)
 
 private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
-                                           timeProvider: NetworkTimeProvider,
-                                           emission: EmissionRules)
-  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, emission)
+                                           timeProvider: NetworkTimeProvider)
+  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 
 /** This class guarantees to its inheritors the creation of correct instance of `ErgoNodeViewHolder`
@@ -158,37 +154,33 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
-  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST, emission: EmissionRules): Props
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST): Props
 }
 
 object DigestNodeViewProps extends ErgoNodeViewProps[StateType.DigestType, DigestState, DigestNodeViewHolder] {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            digestType: StateType.DigestType,
-            emission: EmissionRules): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, emission)
+            digestType: StateType.DigestType): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
 }
 
 object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState, UtxoNodeViewHolder] {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            digestType: StateType.UtxoType,
-            emission: EmissionRules): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, emission)
+            digestType: StateType.UtxoType): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
 }
 
 object ErgoNodeViewRef {
 
   def props(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            emission: EmissionRules): Props =
+            timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match {
-      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType, emission)
-      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType, emission)
+      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType)
+      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType)
     }
 
   def apply(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            emission: EmissionRules)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(settings, timeProvider, emission))
+            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings, timeProvider))
 }

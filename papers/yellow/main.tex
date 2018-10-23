@@ -550,13 +550,14 @@ From these registers, four are filled with mandatory values: $R_0$ contains mone
 serialized guard script, $R_2$ contains assets, $R_3$ contains unique identifier of transaction which created the
 coin and also an index of the coin in the transaction.
 
-Each register is an expression in \sigm language. Thus the registers are typed: every register contains a value of
-some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. be a constant value).
+Each register is an expression in \sigm{} language. Thus the registers are typed: every register contains a value of
+some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. it should be a concrete constant value,
+not a function of a known output type).
 
 We introduce \extract{} function, which is reading contents of a register, for example, \extract{c, R_0} extracts monetary value
 from the \coin{} $c$.
 
-\Coin{} bytes to be used to get the \coin{} identifier, build authenticated tree for the state, and build a transaction,
+\Coin{} bytes used to obtain the \coin{} identifier, build authenticated tree for the state, and build a transaction,
 are to be formed as follows:
 
 \begin{itemize}
@@ -570,7 +571,7 @@ are to be formed as follows:
     \item{\em assets}. A box can carry multiple assets. A single record in this field is represented as a tuple
     $asset\_identifier -> amount$, where identifier is of 32 bytes and amount is of 8 bytes. The tuple is serialized as
     a fixed-sized sequence of bytes.
-    \item{\em number of additional registers. } Extra registers should come in order (R3, R4, ..., etc), so this number,
+    \item{\em number of additional registers. } Extra registers should come in order (R4, ..., etc), so this number,
     represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.
     \item{\em additional registers. } Extra registers are serialized without any delimiters. Each register is
@@ -578,7 +579,7 @@ are to be formed as follows:
     \item{\em transaction identifier and index of a transaction output. } Identifier of a transaction which created
     the \coin{}, 32-bytes long, as well as index of the \coin in the transaction outputs, 2-bytes long. These values
     are to be concatenated into a single array of 34 bytes and wrapped into \sigm language constant stored in the
-    register $R2$.
+    register $R3$.
 \end{itemize}
 
 
@@ -593,14 +594,16 @@ from \coin{} contents, thus we can not use {\em (transaction\_id, output\_id)} p
 doing.
 
 To solve the issue we split concepts of a \coin{} and a \coin{} candidate. A \coin{} candidate is defining semantics of
-the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_2$ which is set to
-$null$.
+the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_3$ which is set to
+be $(creation\_height, transaction\_id || output\_index)$ for a box (where $transaction\_id$ is of 32 bytes and
+$output\_index$ is about 2 bytes), and $(creation\_height, 0^{34*8})$~(so instead of real transaction id and output index,
+a zero-bit string of 34 bytes is used).
 
 
 \subsection{Transaction Format}
 \label{tx-format}
 
-A transaction simply refers to a set of \coin{}s, by providing their identifiers and also spending proofs for
+A transaction simply refers to a set of \coin{}es, by providing their identifiers and also spending proofs for
 them; the transaction also providing set of new \coin{} candidates. A \coin{} candidate becomes a \coin{} in result of
 transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
 coin is also known before the application).

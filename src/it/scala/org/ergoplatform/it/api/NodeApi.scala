@@ -114,7 +114,7 @@ trait NodeApi {
       client.executeRequest(r, new AsyncCompletionHandler[Response] {
         override def onCompleted(response: Response): Response = {
           if (response.getStatusCode == statusCode) {
-            log.debug(s"Request: ${r.getUrl} \n Response: ${response.getResponseBody}")
+            log.trace(s"Request: ${r.getUrl} \n Response: ${response.getResponseBody}")
             response
           } else {
             log.debug(s"Request:  ${r.getUrl} \n Unexpected status code(${response.getStatusCode}): ${response.getResponseBody}")

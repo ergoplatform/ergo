@@ -3,11 +3,12 @@ package org.ergoplatform.modifiers.state
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.core._
 import scorex.core.utils.concatBytes
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 

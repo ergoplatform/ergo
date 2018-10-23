@@ -12,16 +12,16 @@ import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.app.{Version => HandshakeV}
 import scorex.core.idToBytes
-import scorex.core.network.{ConnectedPeer, Handshake, Outgoing}
+import scorex.core.network.peer.PeerInfo
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, emission, None)).map { wus =>
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
       new WrappedDigestState(digestState, wus, settings)
     }
@@ -74,9 +74,20 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+
+    val peerInfo = PeerInfo(
+      0L,
+      None,
+      Some(""),
+      Some(Outgoing),
+      Seq.empty
+    )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val p: ConnectedPeer = ConnectedPeer(inetSocketAddressGen.sample.get, pchProbe.ref, Outgoing,
-      Handshake("", HandshakeV(0, 1, 2), "", None, Seq(), 0L))
+    val p: ConnectedPeer = ConnectedPeer(
+      inetSocketAddressGen.sample.get,
+      pchProbe.ref,
+      Some(peerInfo)
+    )
     (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
   }
 

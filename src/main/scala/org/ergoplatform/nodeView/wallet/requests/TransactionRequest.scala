@@ -1,15 +1,16 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe._
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.nodeView.wallet.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 
 trait TransactionRequest
 
 class TransactionRequestEncoder(settings: ErgoSettings) extends Encoder[TransactionRequest] with ApiCodecs {
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = new ErgoAddressEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
   def apply(request: TransactionRequest): Json = request match {
     case pr: PaymentRequest => new PaymentRequestEncoder(settings)(pr)

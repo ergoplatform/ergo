@@ -92,7 +92,7 @@ trait ChainGenerator {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
-    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, TrueLeaf))
+    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

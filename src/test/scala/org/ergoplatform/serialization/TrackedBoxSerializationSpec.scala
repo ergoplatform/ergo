@@ -2,7 +2,8 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.nodeView.wallet.TrackedBoxSerializer.TransactionLookup
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 
 import scala.util.Success
 

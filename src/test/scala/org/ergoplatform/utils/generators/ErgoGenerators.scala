@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox
@@ -18,13 +18,12 @@ import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, _}
 import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
-import sigmastate._
+import sigmastate.{SBoolean, _}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import scorex.util._
-import scala.util.Random
 
+import scala.util.Random
 
 trait ErgoGenerators extends CoreGenerators with Matchers {
 
@@ -147,7 +146,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   /** Random long from 1 to maximum - 1
     * @param maximum should be positive
     */
-  def randomLong(maximum: Long): Long = {
+  def randomLong(maximum: Long = Long.MaxValue): Long = {
     if (maximum < 3) 1 else Math.abs(Random.nextLong()) % (maximum - 2) + 1
   }
 

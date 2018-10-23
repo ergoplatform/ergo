@@ -1,16 +1,15 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Matchers
@@ -27,15 +26,16 @@ import scala.util.{Random, Try}
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  lazy val settings: ErgoSettings = initSettings
-  lazy val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
-  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
-  lazy val stateConstants: StateConstants = StateConstants(None, emission, 200)
-
   def initSettings: ErgoSettings = ErgoSettings.read(None)
 
+  lazy val settings: ErgoSettings = initSettings
+  lazy val stateConstants: StateConstants = StateConstants(None, settings)
+
+  lazy val genesisEmissionBox = ErgoState.genesisEmissionBox(settings.emission)
+
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(nodeViewHolderRef, emission, 200))
+    val constants = StateConstants(nodeViewHolderRef, settings)
+    ErgoState.generateGenesisUtxoState(createTempDir, constants)
   }
 
   def createUtxoState(bh: BoxHolder): UtxoState =
@@ -83,7 +83,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val height: Int = (emissionBox.additionalRegisters(R4).value.asInstanceOf[Long] + 1).toInt
-          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, TrueLeaf, emission)
+          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, TrueLeaf, settings.emission)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))
           val newSelfBoxes = selfBoxes ++ tx.outputs.filter(b => !isEmissionBox(b))
@@ -169,10 +169,7 @@ trait ValidBlocksGenerators
   def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
-                     n: Char = 48,
-                     k: Char = 5,
-                     timeOpt: Option[Long] = None
-                    ): ErgoFullBlock = {
+                     timeOpt: Option[Long] = None): ErgoFullBlock = {
     transactions.foreach(_.statelessValidity shouldBe 'success)
     transactions.nonEmpty shouldBe true
     ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>

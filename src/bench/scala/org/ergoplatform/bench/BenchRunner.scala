@@ -57,7 +57,7 @@ object BenchRunner extends ScorexLogging {
     val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
     val timeProvider = new NetworkTimeProvider(ntpSettings)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, ce)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
     /**
       * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause

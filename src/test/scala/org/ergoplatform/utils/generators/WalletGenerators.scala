@@ -1,17 +1,17 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.{BoxCertainty, TrackedBox}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.scalacheck.Gen
 import sigmastate.Values
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
-
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -19,7 +19,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       unspentOnchainBoxGen,
       spentOffchainBoxGen,
       spentPartiallyOffchainBoxGen,
-      spentOnchainBoxGen)
+      spentOnchainBoxGen
+    )
   }
 
   def unspentOffchainBoxGen: Gen[TrackedBox] = {
@@ -82,10 +83,17 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers, 0L)
   }
 
-  private def outIndexGen(tx: ErgoTransaction) =
-    Gen.choose(0: Short, tx.outputCandidates.length.toShort)
-
-  private def heightGen(min: Int = 0) = {
-    Gen.choose(min + 1, Integer.MAX_VALUE / 2 + min)
+  def assetIssueRequestGen: Gen[AssetIssueRequest] = {
+    for {
+      amount <- Gen.choose(1L, 100000L)
+      name <- Gen.alphaUpperStr
+      description <- Gen.alphaLowerStr
+      decimals <- Gen.choose(4, 16)
+    } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals, 0L)
   }
+
+  private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
+
+  private def heightGen(min: Int = 0) = Gen.choose(min + 1, Integer.MAX_VALUE / 2 + min)
+
 }

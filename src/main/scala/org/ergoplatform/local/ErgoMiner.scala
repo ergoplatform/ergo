@@ -20,6 +20,7 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scapi.sigma.DLogProtocol.DLogProverInput
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -35,15 +36,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                emission: EmissionRules,
                 inSkOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
-
   import ErgoMiner._
+
 
   //shared mutable state
   private var isMining = false
@@ -175,7 +174,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
         }.flatMap { _ =>
           // check validity and calculate transaction cost
-          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
+          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext, ergoSettings.metadata)
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
             // valid transaction with small enough computations
@@ -201,12 +200,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val txsNoConflict = collectTxs(state,
       state.emissionBoxOpt.map(_.id).toSeq,
       pool.unconfirmed.values,
-      Constants.MaxBlockCost - Constants.CoinbaseTxCost,
-      Constants.MaxBlockSize,
+      Parameters.MaxBlockCost - Constants.CoinbaseTxCost,
+      Parameters.MaxBlockSize,
       Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, emission)
+    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, ergoSettings.emission)
     val txs = txsNoConflict :+ coinbase
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
@@ -237,7 +236,7 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.height, feeBoxes, minerProp, emissionRules)
+    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerProp, emissionRules)
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],
@@ -305,17 +304,15 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
             skOpt: Option[DLogProverInput] = None): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, skOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            emission: EmissionRules,
             skOpt: Option[DLogProverInput] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, emission, skOpt))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, skOpt))
 
 }

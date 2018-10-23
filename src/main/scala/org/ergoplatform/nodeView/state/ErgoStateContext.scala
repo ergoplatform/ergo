@@ -10,10 +10,10 @@ import scala.util.Try
 /**
   * Additional data required for transactions validation
   *
-  * @param height - height of the next block
-  * @param digest - An AVL tree root hash of the UTXO state BEFORE current block application
+  * @param currentHeight - height of the next block
+  * @param stateDigest - An AVL tree root hash of the UTXO state BEFORE current block application
   */
-case class ErgoStateContext(height: Int, digest: ADDigest) extends BytesSerializable {
+case class ErgoStateContext(currentHeight: Int, stateDigest: ADDigest) extends BytesSerializable {
 
   override type M = ErgoStateContext
 
@@ -27,7 +27,7 @@ case class ErgoStateContext(height: Int, digest: ADDigest) extends BytesSerializ
 object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
   override def toBytes(obj: ErgoStateContext): Array[Byte] = {
-    Bytes.concat(obj.digest, Ints.toByteArray(obj.height))
+    Bytes.concat(obj.stateDigest, Ints.toByteArray(obj.currentHeight))
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {

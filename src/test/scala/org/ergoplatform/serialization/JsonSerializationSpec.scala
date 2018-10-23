@@ -11,9 +11,10 @@ import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, PaymentRequestEncoder}
+import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalatest.Inspectors
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}
@@ -35,7 +36,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson
-    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.success.value
+    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.get
 
     blockDecoded shouldEqual block
   }
@@ -54,7 +55,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Payment Request should be serialized to json") {
+  property("PaymentRequest should be serialized to json") {
     val ergoSettings = ErgoSettings.read(None)
     implicit val requestEncoder: Encoder[PaymentRequest] = new PaymentRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
@@ -71,6 +72,23 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
           restoredToken shouldEqual requestToken
           restoredValue shouldEqual requestValue
       }
+    }
+  }
+
+  property("AssetIssueRequest should be serialized to json") {
+    val ergoSettings = ErgoSettings.read(None)
+    implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
+    implicit val requestDecoder: Decoder[AssetIssueRequest] = new AssetIssueRequestDecoder(ergoSettings)
+    forAll(assetIssueRequestGen) { request =>
+      val json = request.asJson
+      val parsingResult = json.as[AssetIssueRequest]
+      parsingResult.isRight shouldBe true
+      val restored = parsingResult.right.value
+      restored.address shouldEqual request.address
+      restored.amount shouldEqual request.amount
+      restored.name shouldEqual request.name
+      restored.description shouldEqual request.description
+      restored.decimals shouldEqual request.decimals
     }
   }
 

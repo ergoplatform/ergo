@@ -14,7 +14,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   val Epoch = 123
 
   val UseLastEpochs = 4
-  val DesiredInterval = 1.minute
+  val DesiredInterval: FiniteDuration = 1.minute
   val control = new LinearDifficultyControl(DesiredInterval, UseLastEpochs, Epoch)
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
@@ -24,7 +24,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   }
 
   property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
-    forAll(Gen.choose(2, 1000)) { useLastEpochs1 =>
+    forAll(Gen.choose(2, 1000)) { _ =>
       val useLastEpochs = 3
       val control = new LinearDifficultyControl(1.minute, useLastEpochs, 1)
       val height = useLastEpochs + 1

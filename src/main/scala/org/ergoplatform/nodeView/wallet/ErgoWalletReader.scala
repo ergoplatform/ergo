@@ -6,7 +6,9 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.autoleakus.PrivateKey
+import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import scapi.sigma.DLogProtocol.DLogProverInput
@@ -21,13 +23,13 @@ trait ErgoWalletReader extends VaultReader {
 
   private implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
 
-  def balances(confirmed: Boolean): Future[BalancesSnapshot] = {
-    (actor ? ErgoWalletActor.ReadBalances(confirmed)).mapTo[BalancesSnapshot]
+  def balances(chainStatus: ChainStatus): Future[BalancesSnapshot] = {
+    (actor ? ErgoWalletActor.ReadBalances(chainStatus)).mapTo[BalancesSnapshot]
   }
 
-  def confirmedBalances(): Future[BalancesSnapshot] = balances(confirmed = true)
+  def confirmedBalances(): Future[BalancesSnapshot] = balances(Onchain)
 
-  def unconfirmedBalances(): Future[BalancesSnapshot] = balances(confirmed = false)
+  def balancesWithUnconfirmed(): Future[BalancesSnapshot] = balances(Offchain)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
     (actor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]

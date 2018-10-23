@@ -2,7 +2,9 @@ package org.ergoplatform.utils
 
 import java.util.concurrent.Executors
 
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}
 import org.scalatest.{EitherValues, Inspectors, OptionValues, TryValues}
@@ -18,8 +20,20 @@ trait ErgoTestHelpers
     with ScorexLogging
     with ScorexEncoding
     with OptionValues
-    with TryValues
     with EitherValues {
+
+
+  def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
+    new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)
+
+  def changeValue(box: ErgoBoxCandidate, delta: Long): Option[ErgoBoxCandidate] = {
+    if (-delta >= box.value) {
+      None
+    } else {
+      Some(new ErgoBoxCandidate(box.value + delta, box.proposition, box.additionalTokens,
+        box.additionalRegisters, box.creationHeight))
+    }
+  }
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 

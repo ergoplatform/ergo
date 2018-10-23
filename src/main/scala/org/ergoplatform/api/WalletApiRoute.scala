@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Encoder
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
@@ -74,8 +75,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.confirmedBalances())
   }
 
-  def unconfirmedBalanceR: Route = (path("balances" / "unconfirmed") & get) {
-    withWallet(_.unconfirmedBalances())
+  def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
+    withWallet(_.balancesWithUnconfirmed())
   }
 
   def addressesR: Route = (path("addresses") & get) {

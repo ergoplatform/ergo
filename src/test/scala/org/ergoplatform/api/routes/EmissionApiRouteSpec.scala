@@ -26,7 +26,7 @@ class EmissionApiRouteSpec extends FlatSpec
   val ergoSettings: ErgoSettings = ErgoSettings.read(None)
   val coinEmission: EmissionRules = new EmissionRules(ergoSettings.chainSettings.monetary)
 
-  val route: Route = EmissionApiRoute(coinEmission, ergoSettings).route
+  val route: Route = EmissionApiRoute(ergoSettings).route
 
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {

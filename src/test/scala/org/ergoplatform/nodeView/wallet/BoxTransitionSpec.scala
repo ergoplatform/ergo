@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 
 class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
@@ -319,7 +320,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
-      transited.spendingStatus shouldBe Unspent
+      transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
       transited.creationHeight shouldBe None
       transited.spendingHeight shouldBe None
@@ -335,8 +336,8 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.makeTransition(box.boxId, ProcessRollback(box.creationHeight.value))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
-      transited.spendingStatus shouldBe Unspent
-      transited.chainStatus shouldBe Onchain
+      transited.spendingStatus shouldBe Spent
+      transited.chainStatus shouldBe Offchain
       transited.creationHeight shouldBe box.creationHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -352,8 +353,8 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
-      transited.spendingStatus shouldBe Unspent
-      transited.chainStatus shouldBe Onchain
+      transited.spendingStatus shouldBe Spent
+      transited.chainStatus shouldBe Offchain
       transited.creationHeight shouldBe box.creationHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty

@@ -1,22 +1,22 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.authds._
-import scorex.crypto.hash._
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
-import scala.concurrent.duration._
 import scala.util.Random
+import scala.concurrent.duration._
 
 trait ChainGenerator {
 

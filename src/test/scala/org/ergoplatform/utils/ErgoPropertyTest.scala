@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.utils.generators.{ErgoGenerators, ValidBlocksGenerators}
 import org.scalatest.PropSpec
 import org.scalatest.prop.{PropertyChecks, TableDrivenPropertyChecks}
 import scorex.testkit.utils.NoShrink

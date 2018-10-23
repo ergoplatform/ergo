@@ -1,17 +1,17 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.{BoxCertainty, ErgoAddressEncoder, Pay2SAddress, TrackedBox}
+import org.ergoplatform.nodeView.wallet.{BoxCertainty, TrackedBox}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.scalacheck.Gen
 import sigmastate.Values
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
-  private implicit val ergoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(

@@ -4,11 +4,11 @@ import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
-class NonVerifyADHistorySpecification extends HistorySpecification {
+class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
@@ -69,7 +69,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain) = ErgoSyncInfo(c.headers.map(_.id))
+    def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfo(c.headers.map(_.id))
 
     val common = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, common)
@@ -236,4 +236,5 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }
+
 }

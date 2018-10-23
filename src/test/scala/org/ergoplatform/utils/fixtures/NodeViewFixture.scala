@@ -1,10 +1,11 @@
-package org.ergoplatform.utils
+package org.ergoplatform.utils.fixtures
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestContext}
 import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContext

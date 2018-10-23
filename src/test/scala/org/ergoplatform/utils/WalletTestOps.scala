@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}

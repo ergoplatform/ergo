@@ -66,16 +66,14 @@ class AdProofSpec extends ErgoPropertyTest {
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val moreInsertions = operations :+
-      Insertion(ErgoBox(10, Constants.TrueLeaf))
+    val moreInsertions = operations :+ Insertion(ErgoBox(10, Constants.TrueLeaf))
     proof.verify(StateChanges(Seq(), moreInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val differentInsertions = operations.init :+
-      Insertion(ErgoBox(10, Constants.TrueLeaf))
+    val differentInsertions = operations.init :+ Insertion(ErgoBox(10, Constants.TrueLeaf))
     proof.verify(StateChanges(Seq(), differentInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
@@ -107,9 +105,9 @@ class AdProofSpec extends ErgoPropertyTest {
   }
 
   property("proof is deterministic") {
-    val (operations1, prevDigest1, newDigest1, pf1) = createEnv()
-    val (operations2, prevDigest2, newDigest2, pf2) = createEnv()
-
+    val pf1 = createEnv()._4
+    val pf2 = createEnv()._4
     ADProofs.proofDigest(pf1) shouldBe ADProofs.proofDigest(pf2)
   }
+
 }

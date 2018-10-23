@@ -5,9 +5,9 @@ import java.util.concurrent.Executors
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -80,7 +80,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     var height: Int = 0
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = invalidHeaderGen.sample.get
+      val header = invalidHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
       bh = t._2

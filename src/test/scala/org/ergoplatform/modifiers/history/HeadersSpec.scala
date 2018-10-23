@@ -3,11 +3,12 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.hash.Blake2b256
+import scorex.util.ModifierId
 
 class HeadersSpec extends ErgoPropertyTest {
 
-  val chain = genHeaderChain(50)
-  val genesisId = chain.head.id
+  val chain: HeaderChain = genHeaderChain(50)
+  val genesisId: ModifierId = chain.head.id
 
   property("Any field change should lead to different id") {
     forAll(invalidHeaderGen) { header =>
@@ -44,4 +45,5 @@ class HeadersSpec extends ErgoPropertyTest {
       block2.interlinks.length should be >= block1.interlinks.length
     }
   }
+
 }

@@ -30,12 +30,15 @@ import sigmastate.{AvlTreeData, SBoolean, SType}
 import scala.collection.mutable
 import scala.util.Try
 
-
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
-  extends Transaction with ErgoLikeTransactionTemplate[Input] with MempoolModifier with ErgoNodeViewModifier
-    with ModifierValidator with ScorexLogging {
+  extends Transaction
+    with ErgoLikeTransactionTemplate[Input]
+    with MempoolModifier
+    with ErgoNodeViewModifier
+    with ModifierValidator
+    with ScorexLogging {
 
   override val serializedId: Array[Byte] = Blake2b256.hash(messageToSign)
 
@@ -147,7 +150,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override def serializer: Serializer[ErgoTransaction] = ErgoTransactionSerializer
 
-  override def toString: String = this.asJson.noSpaces
+  override def toString: String = {
+    import ErgoTransaction._
+    val displayMaxObjects = 3
+    val inputsStr = if (inputs.size > displayMaxObjects) {
+      inputs.take(displayMaxObjects).asJson.noSpaces + s" ... (${inputs.size})"
+    } else {
+      inputs.asJson.noSpaces
+    }
+    val outputsStr = if (outputs.size > displayMaxObjects) {
+      outputs.take(displayMaxObjects).asJson.noSpaces + s" ... (${outputs.size})"
+    } else {
+      outputs.asJson.noSpaces
+    }
+    s"ErgoTransaction(id: $encodedId, inputs: $inputsStr, outputs: $outputsStr, size: $size)"
+  }
 }
 
 object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {

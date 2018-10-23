@@ -23,12 +23,14 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
 
   implicit val addressEncoder: Encoder[ErgoAddress] = new ErgoAddressEncoder(settings).encoder
 
-  def apply(request: PaymentRequest): Json = Json.obj(
-    "address" -> request.address.asJson,
-    "value" -> request.value.asJson,
-    "assets" -> request.assets.asJson,
-    "registers" -> request.registers.asJson
-  )
+  def apply(request: PaymentRequest): Json = {
+    Json.obj(
+      "address" -> request.address.asJson,
+      "value" -> request.value.asJson,
+      "assets" -> request.assets.asJson,
+      "registers" -> request.registers.asJson
+    )
+  }
 }
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {

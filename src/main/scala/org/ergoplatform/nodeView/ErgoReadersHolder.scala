@@ -47,7 +47,6 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 
     case _ =>
     //Do nothing for now. Implement when needed
-
   }
 }
 
@@ -62,6 +61,7 @@ object ErgoReadersHolder {
 }
 
 object ErgoReadersHolderRef {
+
   def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
 
   def apply(viewHolderRef: ActorRef)
@@ -72,5 +72,4 @@ object ErgoReadersHolderRef {
             name: String)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolderRef), name)
-
 }

@@ -1,26 +1,30 @@
 package org.ergoplatform.it
 
-import org.ergoplatform.it.container.IntegrationSuite
+import com.typesafe.config.Config
+import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
-import scala.async.Async.{async, await}
-import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 class LongChainSpec extends FreeSpec with IntegrationSuite {
 
-    s"Synchronize long blocks" ignore {
-    val minerConfig = noDelayConfig.withFallback(nodeSeedConfigs.head)
-    val followerConfig = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
-    val miner = docker.startNode(minerConfig).get
-    val blocksCount = 300
-      val check = async {
-        await(miner.waitForHeight(blocksCount))
-        val follower = docker.startNode(followerConfig).get
-        await(follower.waitForHeight(blocksCount))
-      succeed
-    }
-      Await.result(check, 15.minutes)
+  val chainLength = 50
+
+  val minerConfig: Config = nodeSeedConfigs.head
+  val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
+
+  val miner: Node = docker.startNode(minerConfig).get
+
+  s"Long chain ($chainLength blocks) synchronization" in {
+
+    val result: Future[Int] = miner.waitForHeight(chainLength)
+      .flatMap { _ =>
+        val follower = docker.startNode(nonGeneratingConfig).get
+        follower.waitForHeight(chainLength)
+      }
+
+    Await.result(result, 10.minutes)
   }
 }
 

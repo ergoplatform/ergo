@@ -146,14 +146,16 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
-  ignore("stateful validation should catch false proposition") {
+  property("stateful validation should catch false proposition") {
     val propositionGen = Gen.const(Values.FalseLeaf)
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
       val validity = tx.statefulValidity(from, context, settings.metadata)
       validity.isSuccess shouldBe false
-      validity.failed.get.getMessage should startWith("Input proposition proof failed for input #0 of tx")
+      val e = validity.failed.get
+      log.info(s"Validation message: ${e.getMessage}", e)
+      e.getMessage should startWith("Input script verification failed for input #0 of tx")
     }
   }
 

@@ -98,7 +98,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
     checker
   }
 
-  def startNode(nodeSpecificConfig: Config, extraConfig: ExtraConfig = noExtraConfig): Try[Node] = {
+  def startNode(nodeSpecificConfig: Config,
+                extraConfig: ExtraConfig = noExtraConfig,
+                specialVolumeOpt: Option[(String, String)] = None): Try[Node] = {
     val initialSettings = buildErgoSettings(nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
     val nodeNumber = configuredNodeName.replace("node", "").toInt
@@ -175,7 +177,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       .build()
   }
 
-  private def buildPeerContainerConfig(nodeConfig: Config, settings: ErgoSettings, ip: String): ContainerConfig = {
+  private def buildPeerContainerConfig(nodeConfig: Config,
+                                       settings: ErgoSettings,
+                                       ip: String,
+                                       specialVolumeOpt: Option[(String, String)] = None): ContainerConfig = {
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
     val portBindings = new ImmutableMap.Builder[String, JList[PortBinding]]()
@@ -183,7 +188,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       .put(networkPort.toString, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .build()
 
-    val hostConfig = HostConfig.builder()
+    val hostConfig = specialVolumeOpt
+      .map { case (lv, rv) =>
+        HostConfig.builder()
+          .appendBinds(s"$lv:$rv")
+      }
+      .getOrElse(HostConfig.builder())
       .portBindings(portBindings)
       .memory(1L << 30) //limit memory to 1G
       .build()
@@ -265,7 +275,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   }
 
   def stopNode(containerId: String): Unit = {
+    nodeRepository = nodeRepository.filter(_.containerId == containerId)
     client.stopContainer(containerId, 10)
+  }
+
+  def forceStopNode(containerId: String): Unit = {
+    nodeRepository = nodeRepository.filter(_.containerId == containerId)
+    client.removeContainer(containerId, RemoveContainerParam.forceKill())
   }
 
   override def close(): Unit = {

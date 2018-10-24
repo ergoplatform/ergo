@@ -11,8 +11,9 @@ case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
-  def requestsWithFee: Seq[TransactionRequest] =
+  def requestsWithFee: Seq[TransactionRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(Constants.TrueLeaf), fee, None, None)
+  }
 }
 
 class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {
@@ -20,10 +21,13 @@ class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHold
   implicit val transactionRequestEncoder: TransactionRequestEncoder = new TransactionRequestEncoder(settings)
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
 
-  def apply(holder: RequestsHolder): Json = Json.obj(
-    "requests" -> holder.requests.asJson,
-    "fee" -> holder.fee.asJson
-  )
+  def apply(holder: RequestsHolder): Json = {
+    Json.obj(
+      "requests" -> holder.requests.asJson,
+      "fee" -> holder.fee.asJson
+    )
+  }
+
 }
 
 class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHolder] {
@@ -37,4 +41,5 @@ class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHold
       fee <- cursor.downField("fee").as[Long]
     } yield RequestsHolder(requests, fee)
   }
+
 }

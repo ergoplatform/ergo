@@ -9,9 +9,9 @@ import scala.concurrent.{Await, Future}
 
 class LongChainSpec extends FreeSpec with IntegrationSuite {
 
-  val chainLength = 50
+  val chainLength = 300
 
-  val minerConfig: Config = nodeSeedConfigs.head
+  val minerConfig: Config = noDelayConfig.withFallback(nodeSeedConfigs.head)
   val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
 
   val miner: Node = docker.startNode(minerConfig).get

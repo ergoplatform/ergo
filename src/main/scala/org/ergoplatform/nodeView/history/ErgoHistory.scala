@@ -212,7 +212,6 @@ object ErgoHistory extends ScorexLogging {
         }
 
       case (true, false) =>
-
         new ErgoHistory with FullBlockSectionProcessor
           with EmptyPoPoWProofsProcessor {
           override protected val chainSettings: ChainSettings = settings.chainSettings

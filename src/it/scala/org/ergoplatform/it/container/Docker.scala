@@ -67,7 +67,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
   def startNodes(nodeConfigs: List[Config], configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-    val nodes: Try[List[Node]] = nodeConfigs.map( cfg => startNode(cfg, configEnrich)).sequence
+    val nodes: Try[List[Node]] = nodeConfigs.map(cfg => startNode(cfg, configEnrich)).sequence
     blocking(Thread.sleep(nodeConfigs.size * 5000))
     nodes
   }

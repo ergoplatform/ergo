@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 /**
   * Storage class for wallet entities:
@@ -87,12 +87,12 @@ class WalletStorage extends ScorexLogging {
 
   def confirmedBalance: Long = _confirmedBalance
 
-  def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
+  def confirmedAssetBalances: immutable.Map[ModifierId, Long] = _confirmedAssetBalances.toMap
 
   def balancesWithUnconfirmed: Long = _confirmedBalance + _unconfirmedDelta
 
-  def assetBalancesWithUnconfirmed: scala.collection.Map[ModifierId, Long] = {
-    val unconfirmedSums = _unconfirmedAssetDeltas map { case (id, value) =>
+  def assetBalancesWithUnconfirmed: immutable.Map[ModifierId, Long] = {
+    val unconfirmedSums = _unconfirmedAssetDeltas.toMap map { case (id, value) =>
       val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
       id -> newValue
     }
@@ -180,7 +180,7 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-      log.info(s"New ${trackedBox.chainStatus} box arrived: " + trackedBox)
+      log.info(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
     }
     trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))

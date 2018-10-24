@@ -211,6 +211,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val (asset1Token, asset1InitialValue) = initialAssets.head
       asset1InitialValue shouldBe asset1Sum
       initialTotal.assetBalances shouldBe initialAssets
+
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
       val assets2Seq = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
@@ -351,34 +352,38 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialBalance = getConfirmedBalances.balance
 
       val balance = randomLong(balanceAmount(boxesToSpend))
-      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, pubKey)
+      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, pubKey, randomNewAsset)
+      val initialAssets = assetAmount(boxesAvailable(creationTx, pubKey))
       val block = makeNextBlock(getUtxoState, Seq(creationTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
 
-      val balanceBeforeRollback = getConfirmedBalances.balance
-      val totalBeforeRollback = getBalancesWithUnconfirmed.balance
-
+      val confirmedBeforeRollback: BalancesSnapshot = getConfirmedBalances
+      val totalBeforeRollback = getBalancesWithUnconfirmed
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))
-      val balanceAfterRollback = getConfirmedBalances.balance
-      val totalAfterRollback = getBalancesWithUnconfirmed.balance
+      val confirmedAfterRollback = getConfirmedBalances
+      val totalAfterRollback = getBalancesWithUnconfirmed
 
       log.info(s"Initial balance: $initialBalance")
+      log.info(s"Initial assets: $initialAssets")
       log.info(s"History height: $historyHeight")
-      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Confirmed balance: $confirmedBeforeRollback")
       log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
-      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Balance after rollback: $confirmedAfterRollback")
       log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
       initialBalance shouldBe 0L
 
-      balanceBeforeRollback shouldBe balance
-      totalBeforeRollback shouldBe balance
+      confirmedBeforeRollback.balance shouldBe balance
+      confirmedBeforeRollback.assetBalances shouldBe initialAssets
+      totalBeforeRollback shouldBe confirmedBeforeRollback
 
-      balanceAfterRollback shouldBe 0L
-      totalAfterRollback shouldBe balance
+      confirmedAfterRollback.balance shouldBe 0L
+      confirmedAfterRollback.assetBalances shouldBe empty
+      totalAfterRollback.balance shouldBe balance
+      totalAfterRollback.assetBalances shouldBe initialAssets
     }
   }
 

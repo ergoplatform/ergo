@@ -15,15 +15,14 @@ import org.ergoplatform.utils.AssetUtils
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.AvlTreeData
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 
-import scala.collection.{Map, mutable}
+import scala.collection.{immutable, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Random, Success, Try}
 
-case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
+case class BalancesSnapshot(height: Height, balance: Long, assetBalances: immutable.Map[ModifierId, Long])
 
 class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging {
 

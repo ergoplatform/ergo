@@ -7,7 +7,7 @@ import org.scalatest.FreeSpec
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class LongChainSpec extends FreeSpec with IntegrationSuite {
+class LongChainSyncSpec extends FreeSpec with IntegrationSuite {
 
   val chainLength = 300
 

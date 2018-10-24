@@ -85,14 +85,17 @@ object RequiredDifficulty extends Serializer[NBits] {
     } else {
       buf = mpi
     }
-    if (buf.length == 0) { return BigInteger.ZERO }
-    val isNegative: Boolean = (buf(0) & 0x80) == 0x80
-    if (isNegative) buf(0) = (buf(0) & 0x7f).toByte
-    val result: BigInteger = new BigInteger(buf)
-    if (isNegative) {
-      result.negate
+    if (buf.length == 0) {
+      BigInteger.ZERO
     } else {
-      result
+      val isNegative: Boolean = (buf(0) & 0x80) == 0x80
+      if (isNegative) buf(0) = (buf(0) & 0x7f).toByte
+      val result: BigInteger = new BigInteger(buf)
+      if (isNegative) {
+        result.negate
+      } else {
+        result
+      }
     }
   }
 }

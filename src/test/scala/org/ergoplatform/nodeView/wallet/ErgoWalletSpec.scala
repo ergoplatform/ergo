@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils._
 import org.ergoplatform._
 import org.scalatest.PropSpec
@@ -19,7 +19,8 @@ import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder =
+    new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   property("Generate transaction with multiple inputs") {
     withFixture { implicit w =>
@@ -192,7 +193,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  ignore("assets application") {
+  property("assets application") {
     withFixture { implicit w =>
       val address = getTrackedAddresses.head
       val asset1Sum = randomLong()
@@ -212,8 +213,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       initialTotal.assetBalances shouldBe initialAssets
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
-      val assets2 = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
-      val spendingTx = makeSpendingTx(boxesToSpend, address,1L, assets2)
+      val assets2Seq = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
+      val balanceToReturn = 1000 * Parameters.MinValuePerByte
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
 //      applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
@@ -225,9 +227,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val assets = balanceAfterSpending.assetBalances
       totalAfterSpending.assetBalances shouldBe assets
       assets(asset1Token) shouldBe asset1ToReturn
-      val asset2Seq = assets.filter(_._1 != asset1Token)
-      asset2Seq should not be empty
-      asset2Seq.head._2 shouldBe asset2Sum
+      val asset2 = assets.filter(_._1 != asset1Token)
+      asset2 should not be empty
+      asset2.head._2 shouldBe asset2Sum
     }
   }
 
@@ -529,15 +531,19 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx1 = Await.result(wallet.generateTransaction(Seq(req1)), awaitDuration).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
-      tx1.outputs.head.additionalTokens shouldBe assetToSpend
+      toAssetMap(tx1.outputs.head.additionalTokens) shouldBe toAssetMap(assetToSpend)
 
       //change == 1:
-      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, None, None)
+      val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+      val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
+      val req2 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance - 1, Some(assetToSpend2), None)
 
       val tx2 = Await.result(wallet.generateTransaction(Seq(req2)), awaitDuration).get
       tx2.outputs.size shouldBe 2
       tx2.outputs.head.value shouldBe confirmedBalance - 1
+      toAssetMap(tx2.outputs.head.additionalTokens) shouldBe toAssetMap(assetToSpend2)
       tx2.outputs(1).value shouldBe 1
+      toAssetMap(tx2.outputs(1).additionalTokens) shouldBe toAssetMap(assetToReturn)
     }
   }
 

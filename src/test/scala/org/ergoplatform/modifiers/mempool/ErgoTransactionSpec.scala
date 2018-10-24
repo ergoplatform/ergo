@@ -155,7 +155,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       validity.isSuccess shouldBe false
       val e = validity.failed.get
       log.info(s"Validation message: ${e.getMessage}", e)
-      e.getMessage should startWith("Proposition proof failed for input #0 of tx")
+      e.getMessage should startWith("Input script verification failed for input #0 of tx")
     }
   }
 

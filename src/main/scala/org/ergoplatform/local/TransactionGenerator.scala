@@ -94,7 +94,7 @@ class TransactionGenerator(viewHolder: ActorRef,
           }.toOption
         case _ =>
           val assetInfo = genNewAssetInfo
-          Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
+          Some(AssetIssueRequest(Some(randProposition), assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
       }
     }
     payloadReq.flatMap { payloadReqOpt =>

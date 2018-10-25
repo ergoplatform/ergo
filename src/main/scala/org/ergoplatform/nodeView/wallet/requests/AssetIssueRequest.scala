@@ -17,7 +17,7 @@ import scorex.core.transaction.box.Box.Amount
   * R5 - description
   * R6 - number of decimal places
   */
-case class AssetIssueRequest(address: ErgoAddress,
+case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              amount: Amount,
                              name: String,
                              description: String,
@@ -29,7 +29,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
 
   def apply(request: AssetIssueRequest): Json = {
     Json.obj(
-      "address" -> request.address.asJson,
+      "address" -> request.addressOpt.asJson,
       "amount" -> request.amount.asJson,
       "name" -> request.name.asJson,
       "description" -> request.description.asJson,
@@ -47,7 +47,7 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
 
   def apply(cursor: HCursor): Decoder.Result[AssetIssueRequest] = {
     for {
-      address <- cursor.downField("address").as[ErgoAddress]
+      address <- cursor.downField("address").as[Option[ErgoAddress]]
       amount <- cursor.downField("amount").as[Amount]
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]

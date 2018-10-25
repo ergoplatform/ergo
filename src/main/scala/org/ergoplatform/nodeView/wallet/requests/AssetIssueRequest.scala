@@ -23,6 +23,16 @@ case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              description: String,
                              decimals: Int) extends TransactionRequest
 
+object AssetIssueRequest {
+
+  def apply(address: ErgoAddress,
+            amount: Amount,
+            name: String,
+            description: String,
+            decimals: Int): AssetIssueRequest =
+    new AssetIssueRequest(Some(address), amount, name, description, decimals)
+}
+
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
 
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder

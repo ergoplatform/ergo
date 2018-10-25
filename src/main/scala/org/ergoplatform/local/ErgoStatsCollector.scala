@@ -34,7 +34,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.second, 10.second)(networkController ! GetConnectedPeers)(context.system.dispatcher)
+    context.system.scheduler.schedule(10.seconds, 10.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
   }
 
   var nodeInfo = NodeInfo(

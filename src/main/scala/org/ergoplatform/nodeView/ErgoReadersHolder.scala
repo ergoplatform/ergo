@@ -61,8 +61,6 @@ object ErgoReadersHolder {
 
   case object GetReaders
 
-  case object CheckReaders
-
   case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader, w: ErgoWalletReader)
 
 }

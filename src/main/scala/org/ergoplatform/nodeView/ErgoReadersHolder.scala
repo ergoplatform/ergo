@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.ErgoReadersHolder._
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -9,6 +9,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.util.ScorexLogging
+
+import scala.concurrent.duration._
 
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
 
@@ -21,6 +23,8 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   var stateReaderOpt: Option[ErgoStateReader] = None
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
   var walletReaderOpt: Option[ErgoWalletReader] = None
+
+  var readersAwaiters: Seq[ActorRef] = Seq.empty
 
   @SuppressWarnings(Array("IsInstanceOf"))
   override def receive: Receive = {
@@ -39,11 +43,23 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case GetReaders =>
       (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
         case (Some(h), Some(s), Some(m), Some(w)) => sender ! Readers(h, s, m, w)
-        case m => log.warn(s"Got GetReaders request in state $m")
+        case m =>
+          readersAwaiters = readersAwaiters :+ sender
+          context.system.scheduler.scheduleOnce(2.seconds)(self ! CheckReaders)(context.system.dispatcher)
+          log.warn(s"Got GetReaders request in state $m")
+      }
+
+    case CheckReaders =>
+      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
+        case (Some(h), Some(s), Some(m), Some(w)) =>
+          readersAwaiters.foreach(_ ! Readers(h, s, m, w))
+          readersAwaiters = Seq.empty
+        case _ =>
+          context.system.scheduler.scheduleOnce(2.seconds)(self ! CheckReaders)(context.system.dispatcher)
       }
 
     case GetDataFromHistory(f) =>
-      historyReaderOpt.map(sender ! f(_)).getOrElse(log.warn("Trying to get data from undefined history reader"))
+      historyReaderOpt.fold(log.warn("Trying to get data from undefined history reader"))(sender ! f(_))
 
     case _ =>
     //Do nothing for now. Implement when needed
@@ -55,6 +71,8 @@ object ErgoReadersHolder {
   case class GetDataFromHistory[A](f: ErgoHistoryReader => A)
 
   case object GetReaders
+
+  case object CheckReaders
 
   case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader, w: ErgoWalletReader)
 

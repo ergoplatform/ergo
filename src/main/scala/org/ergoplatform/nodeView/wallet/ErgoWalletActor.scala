@@ -5,22 +5,22 @@ import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.AssetUtils
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.AvlTreeData
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Random, Success, Try}
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: Map[ModifierId, Long])
@@ -29,32 +29,33 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
-  private lazy val seed = ergoSettings.walletSettings.seed
+  lazy val seed: String = ergoSettings.walletSettings.seed
 
-  private lazy val scanningInterval = ergoSettings.walletSettings.scanningInterval
+  lazy val scanningInterval: FiniteDuration = ergoSettings.walletSettings.scanningInterval
 
-  private val registry = new WalletStorage
+  val registry = new WalletStorage
 
   //todo: pass as a class argument, add to config
   val boxSelector: BoxSelector = DefaultBoxSelector
 
-  private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
+  val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
 
-  private var height = 0
-  private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
+  var height = 0
+  var lastBlockUtxoRootHash: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
-  private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
-  private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+  implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
-  private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
+  val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
+  val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
+
+  val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //we currently do not use off-chain boxes to create a transaction
-  private def filterFn(trackedBox: TrackedBox) = trackedBox.chainStatus.onchain
+  def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)
-  private def resolveUncertainty(): Unit = {
+  def resolveUncertainty(): Unit = {
     registry.nextUncertain().foreach { uncertainBox =>
       val box = uncertainBox.box
 
@@ -87,20 +88,20 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
   }
 
-  protected def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+  def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.forall { inp =>
       val boxId = bytesToId(inp.boxId)
       registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
   }
 
-  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
+  def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
                          tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
       registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
   }
 
-  private def registerBox(trackedBox: TrackedBox): Boolean = {
+  def registerBox(trackedBox: TrackedBox): Boolean = {
     if (registry.contains(trackedBox.boxId)) {
       trackedBox.creationHeight match {
         case Some(h) =>
@@ -115,7 +116,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  private def extractFromBlock(fb: ErgoFullBlock): Int = {
+  def extractFromBlock(fb: ErgoFullBlock): Int = {
     height = fb.header.height
     lastBlockUtxoRootHash = fb.header.stateRoot
     fb.transactions.count(tx => scan(tx, Some(height)))
@@ -149,7 +150,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       height = heightTo
   }
 
-  private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
+  def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
         val candidate =
@@ -181,7 +182,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  protected def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
+  def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
     requestsToBoxCandidates(requests).map { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")

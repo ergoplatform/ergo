@@ -24,8 +24,6 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
   var walletReaderOpt: Option[ErgoWalletReader] = None
 
-  var readersAwaiters: Seq[ActorRef] = Seq.empty
-
   @SuppressWarnings(Array("IsInstanceOf"))
   override def receive: Receive = {
     case ChangedHistory(reader: ErgoHistoryReader@unchecked) if reader.isInstanceOf[ErgoHistoryReader] =>
@@ -44,18 +42,9 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
       (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
         case (Some(h), Some(s), Some(m), Some(w)) => sender ! Readers(h, s, m, w)
         case m =>
-          readersAwaiters +:= sender
-          context.system.scheduler.scheduleOnce(2.seconds)(self ! CheckReaders)(context.system.dispatcher)
+          val msgSender = sender()
+          context.system.scheduler.scheduleOnce(2.seconds)(self.tell(GetReaders, msgSender))(context.system.dispatcher)
           log.warn(s"Got GetReaders request in state $m")
-      }
-
-    case CheckReaders =>
-      (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
-        case (Some(h), Some(s), Some(m), Some(w)) =>
-          readersAwaiters.foreach(_ ! Readers(h, s, m, w))
-          readersAwaiters = Seq.empty
-        case _ =>
-          context.system.scheduler.scheduleOnce(2.seconds)(self ! CheckReaders)(context.system.dispatcher)
       }
 
     case GetDataFromHistory(f) =>

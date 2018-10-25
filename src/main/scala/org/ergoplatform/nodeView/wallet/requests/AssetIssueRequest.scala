@@ -36,6 +36,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
       "decimals" -> request.decimals.asJson
     )
   }
+
 }
 
 class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssueRequest] with ApiCodecs {
@@ -53,4 +54,5 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       decimals <- cursor.downField("decimals").as[Int]
     } yield AssetIssueRequest(address, amount, name, description, decimals)
   }
+
 }

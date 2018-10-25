@@ -17,6 +17,7 @@ class TransactionRequestEncoder(settings: ErgoSettings) extends Encoder[Transact
     case ar: AssetIssueRequest => new AssetIssueRequestEncoder(settings)(ar)
     case other => throw new Exception(s"Unknown TransactionRequest type: $other")
   }
+
 }
 
 class TransactionRequestDecoder(settings: ErgoSettings) extends Decoder[TransactionRequest] {
@@ -30,4 +31,5 @@ class TransactionRequestDecoder(settings: ErgoSettings) extends Decoder[Transact
       .find(_.isRight)
       .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
   }
+
 }

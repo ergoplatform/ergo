@@ -438,47 +438,55 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("on-chain spending with return rollback") {
     withFixture { implicit w =>
       val address = getTrackedAddresses.head
-      val genesisBlock = makeGenesisBlock(address.script)
+      val genesisBlock = makeGenesisBlock(address.script, randomNewAsset)
       val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = balanceAmount(boxesToSpend)
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
       blocking(Thread.sleep(scanTime(genesisBlock)))
-      val initialBalance = getConfirmedBalances.balance
+      val initialSnapshot = getConfirmedBalances
 
       val balanceToReturn = randomLong(sumBalance)
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
+      val sumAsset1 = assetsByTokenId(boxesToSpend).toSeq
+      val asset1Map = toAssetMap(sumAsset1)
+      val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
+      val assetsForSpending = randomNewAsset ++ assetToReturn
+      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
 
-      val balanceBeforeRollback = getConfirmedBalances.balance
-      val totalBeforeRollback = getBalancesWithUnconfirmed.balance
+      val confirmedBeforeRollback = getConfirmedBalances
+      val totalBeforeRollback = getBalancesWithUnconfirmed
 
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))
-      val balanceAfterRollback = getConfirmedBalances.balance
-      val totalAfterRollback = getBalancesWithUnconfirmed.balance
+      val confirmedAfterRollback = getConfirmedBalances
+      val totalAfterRollback = getBalancesWithUnconfirmed
 
-      log.info(s"Initial balance: $initialBalance")
+      log.info(s"Initial balance: $initialSnapshot")
       log.info(s"Balance to spend: $sumBalance")
       log.info(s"Balance to return $balanceToReturn")
       log.info(s"History height: $historyHeight")
-      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Confirmed balance: $confirmedBeforeRollback")
       log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
-      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Balance after rollback: $confirmedAfterRollback")
       log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
-      initialBalance shouldBe sumBalance
+      initialSnapshot.balance shouldBe sumBalance
+      initialSnapshot.assetBalances shouldBe asset1Map
+      confirmedBeforeRollback.balance should be > 0L
+      confirmedBeforeRollback.balance shouldBe balanceToReturn
+      confirmedBeforeRollback.assetBalances should have size 2
+      totalBeforeRollback.balance shouldBe balanceToReturn
+      totalBeforeRollback.assetBalances shouldBe confirmedBeforeRollback.assetBalances
 
-      balanceBeforeRollback should be > 0L
-      balanceBeforeRollback shouldBe balanceToReturn
-      totalBeforeRollback shouldBe balanceToReturn
-
-      balanceAfterRollback shouldBe initialBalance
-      totalAfterRollback shouldBe balanceToReturn
+      confirmedAfterRollback shouldBe initialSnapshot
+      confirmedAfterRollback.assetBalances shouldBe asset1Map
+      totalAfterRollback.balance shouldBe balanceToReturn
+      totalAfterRollback.assetBalances shouldBe totalBeforeRollback.assetBalances
     }
   }
 
@@ -491,37 +499,43 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialState = getCurrentState
 
       val balance = randomLong(balanceAmount(boxesToSpend))
-      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, address.script)
+      val creationTx = makeTx(boxesToSpend, emptyProverResult, balance, address.script, randomNewAsset)
       val boxesCreated = boxesAvailable(creationTx, address.script)
       val balanceCreated = balanceAmount(boxesCreated)
+
       val balanceToReturn = randomLong(balanceCreated)
-      val spendingTx = makeSpendingTx(boxesCreated, address, balanceToReturn)
+      val sumAsset1 = assetsByTokenId(boxesCreated).toSeq
+      val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
+      val assetsForSpending = randomNewAsset ++ assetToReturn
+      val spendingTx = makeSpendingTx(boxesCreated, address, balanceToReturn, assetsForSpending)
       val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
       wallet.scanPersistent(block)
       blocking(Thread.sleep(scanTime(block)))
       val historyHeight = getHistory.headersHeight
 
-      val balanceBeforeRollback = getConfirmedBalances.balance
-      val totalBeforeRollback = getBalancesWithUnconfirmed.balance
+      val confirmedBeforeRollback = getConfirmedBalances
+      val totalBeforeRollback = getBalancesWithUnconfirmed
 
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))
-      val balanceAfterRollback = getConfirmedBalances.balance
-      val totalAfterRollback = getBalancesWithUnconfirmed.balance
+      val confirmedAfterRollback = getConfirmedBalances
+      val totalAfterRollback = getBalancesWithUnconfirmed
 
       log.info(s"Balance created: $balanceCreated")
       log.info(s"History height: $historyHeight")
-      log.info(s"Confirmed balance: $balanceBeforeRollback")
+      log.info(s"Confirmed balance: $confirmedBeforeRollback")
       log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
-      log.info(s"Balance after rollback: $balanceAfterRollback")
+      log.info(s"Balance after rollback: $confirmedAfterRollback")
       log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
       balanceCreated shouldBe balance
-      balanceBeforeRollback shouldBe balanceToReturn
-      totalBeforeRollback shouldBe balanceToReturn
+      confirmedBeforeRollback.balance shouldBe balanceToReturn
+      confirmedBeforeRollback.assetBalances should have size 2
+      totalBeforeRollback shouldBe confirmedBeforeRollback
 
-      balanceAfterRollback shouldBe 0L
-      totalAfterRollback shouldBe balanceToReturn
+      confirmedAfterRollback.balance shouldBe 0L
+      totalAfterRollback.balance shouldBe balanceToReturn
+      totalAfterRollback.assetBalances shouldBe totalBeforeRollback.assetBalances
     }
   }
 

@@ -110,7 +110,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
 
     val nodeConfig: Config = enrichNodeConfig(nodeSpecificConfig, extraConfig, ip, networkPort)
     val settings: ErgoSettings = buildErgoSettings(nodeConfig)
-    val containerConfig: ContainerConfig = buildPeerContainerConfig(nodeConfig, settings, ip)
+    val containerConfig: ContainerConfig = buildPeerContainerConfig(nodeConfig, settings, ip, specialVolumeOpt)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
@@ -275,12 +275,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
   }
 
   def stopNode(containerId: String): Unit = {
-    nodeRepository = nodeRepository.filter(_.containerId == containerId)
+    nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.stopContainer(containerId, 10)
   }
 
   def forceStopNode(containerId: String): Unit = {
-    nodeRepository = nodeRepository.filter(_.containerId == containerId)
+    nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.removeContainer(containerId, RemoveContainerParam.forceKill())
   }
 

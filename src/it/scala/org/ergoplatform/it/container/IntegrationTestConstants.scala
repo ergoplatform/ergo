@@ -28,6 +28,12 @@ trait IntegrationTestConstants {
     nodeConfig.as[Option[String]]("scorex.network.nodeName").getOrElse("")
   }
 
+  def specialDataDirConfig(dir: String): Config = ConfigFactory.parseString(
+    s"""
+      |ergo.directory=$dir
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false

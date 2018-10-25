@@ -30,16 +30,14 @@ class NodeRecoverySpec extends FreeSpec with IntegrationSuite with OptionValues 
   "Node recovery after unexpected shutdown" in {
 
     val result = node.waitForHeight(shutdownAtHeight)
-      .flatMap { _ => node.headerIdsByHeight(shutdownAtHeight) }
+      .flatMap(_ => node.headerIdsByHeight(shutdownAtHeight))
       .flatMap { ids =>
         docker.forceStopNode(node.containerId)
         val restartedNode = docker
           .startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
         restartedNode.waitForHeight(shutdownAtHeight)
-          .flatMap { _ => restartedNode.headerIdsByHeight(shutdownAtHeight) }
-          .map {
-            _.headOption.value shouldEqual ids.headOption.value
-          }
+          .flatMap(_ => restartedNode.headerIdsByHeight(shutdownAtHeight))
+          .map(_.headOption.value shouldEqual ids.headOption.value)
       }
 
     Await.result(result, 4.minutes)

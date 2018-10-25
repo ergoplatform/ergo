@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.ErgoReadersHolder._
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -9,6 +9,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.util.ScorexLogging
+
+import scala.concurrent.duration._
 
 class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
 
@@ -39,11 +41,14 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case GetReaders =>
       (historyReaderOpt, stateReaderOpt, mempoolReaderOpt, walletReaderOpt) match {
         case (Some(h), Some(s), Some(m), Some(w)) => sender ! Readers(h, s, m, w)
-        case m => log.warn(s"Got GetReaders request in state $m")
+        case m =>
+          val msgSender = sender()
+          context.system.scheduler.scheduleOnce(2.seconds)(self.tell(GetReaders, msgSender))(context.system.dispatcher)
+          log.warn(s"Got GetReaders request in state $m")
       }
 
     case GetDataFromHistory(f) =>
-      historyReaderOpt.map(sender ! f(_)).getOrElse(log.warn("Trying to get data from undefined history reader"))
+      historyReaderOpt.fold(log.warn("Trying to get data from undefined history reader"))(sender ! f(_))
 
     case _ =>
     //Do nothing for now. Implement when needed

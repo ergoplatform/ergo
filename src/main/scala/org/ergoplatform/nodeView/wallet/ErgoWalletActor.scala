@@ -96,7 +96,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   }
 
   def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
-                         tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+                 tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
       registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
   }

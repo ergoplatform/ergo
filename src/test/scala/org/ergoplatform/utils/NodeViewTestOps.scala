@@ -93,7 +93,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     validFullBlock(parent, utxoState, txs, Some(time))
   }
 
-  @inline def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef
+  @inline private def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef
   @inline def send(msg: Any)(implicit ctx: Ctx): Unit = ctx.testProbe.send(nodeViewHolderRef, msg)
   @inline def defaultTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
   @inline def expectMsg[T](obj: T)(implicit ctx: Ctx): T = ctx.testProbe.expectMsg(obj)

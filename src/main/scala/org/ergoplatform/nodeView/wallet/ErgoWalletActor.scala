@@ -10,8 +10,8 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
-import org.ergoplatform.utils.AssetUtils
+import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -170,13 +170,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           R5 -> StringConstant(description),
           R6 -> IntConstant(decimals)
         )
-        val lockWithAddress = (addressOpt orElse trackedAddresses.headOption)
+        val lockWithAddress = (addressOpt orElse publicKeys.headOption)
           .getOrElse(throw new Exception("No address available for box locking"))
-        val candidateMock =
-          new ErgoBoxCandidate(100000L, lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters)
-        val minimalErgoAmount = minimalValueOf(candidateMock)
-        new ErgoBoxCandidate(minimalErgoAmount, candidateMock.proposition,
-          candidateMock.additionalTokens, candidateMock.additionalRegisters)
+        val minimalErgoAmount =
+          BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters)
+        new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }
@@ -185,7 +183,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     requestsToBoxCandidates(requests).map { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
-      require(payTo.forall(c => c.value >= minimalValueOf(c)), "Minimal ERG value not met")
+      require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c)), "Minimal ERG value not met")
       require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Negative asset value")
 
       val assetIssueBox = payTo
@@ -232,11 +230,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
-  }
-
-  def minimalValueOf(candidate: ErgoBoxCandidate): Long = {
-    val mockId = ModifierId @@ Algos.encode(scorex.util.Random.randomBytes(32))
-    candidate.toBox(mockId, 1).bytes.length * Parameters.MinValuePerByte
   }
 
   def readers: Receive = {

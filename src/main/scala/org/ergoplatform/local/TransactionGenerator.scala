@@ -71,11 +71,11 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
 
     case Success(tx: ErgoTransaction@unchecked) =>
-      log.info("Locally generated tx: " + tx)
+      log.debug("Locally generated tx: " + tx)
       viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
 
     case Failure(e) =>
-      log.info(s"Failed to generate tx: ${e.getMessage}")
+      log.debug(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
   }

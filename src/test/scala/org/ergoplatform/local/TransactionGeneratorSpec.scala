@@ -78,6 +78,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     }
 
     txs.nonEmpty shouldBe true
+    txs.exists(tx => tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx)) shouldBe true
     txs.exists(tx => tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx)) shouldBe true
     txs.exists(containsAssetIssuingBox) shouldBe true
   }

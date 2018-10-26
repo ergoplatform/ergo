@@ -45,9 +45,15 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
-    height <- positiveIntGen
-    digest <- stateRootGen
-  } yield ErgoStateContext(height, digest)
+    size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
+    stateRoot <- stateRootGen
+    headers <- Gen.listOfN(size, invalidHeaderGen)
+  } yield {
+    headers match {
+      case s :: tail => tail.foldLeft(ErgoStateContext(s))((c, h) => c.appendHeader(h))
+      case _ => ErgoStateContext.empty(stateRoot)
+    }
+  }
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
@@ -58,7 +64,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                     boxId: Short = 0,
                     creationHeight: Long = 0): Gen[Int] = {
     val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
-                        transactionId, boxId, creationHeight)
+      transactionId, boxId, creationHeight)
     Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
   }
 

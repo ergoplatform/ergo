@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Metadata
@@ -32,6 +33,8 @@ class DigestState protected(override val version: VersionTag,
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
+
+  override def constants: StateConstants = StateConstants(None, ergoSettings)
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
@@ -71,7 +74,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
+              tx.statefulValidity(boxesToSpend, stateContext.appendHeader(fb.header), ergoSettings.metadata).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 

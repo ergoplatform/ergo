@@ -11,6 +11,9 @@ import scorex.core.serialization.Serializer
 import scala.util.Try
 
 case class AutoleakusSolution(pk: ECPoint, w: ECPoint, n: HKSumNonce, d: BigInt) {
+
+  val encodedPk: Array[Byte] = pk.getEncoded(true)
+
   def solution(m: Array[Byte]): HKSumSolution = HKSumSolution(m, pk, w, n, d)
 }
 

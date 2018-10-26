@@ -107,8 +107,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.fullBlockHeight,
-          r.s.rootHash)).get
+          r.s.stateContext).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }
@@ -230,10 +229,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
-    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
+    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
-    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash)).get
+    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

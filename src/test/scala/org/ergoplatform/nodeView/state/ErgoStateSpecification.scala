@@ -45,7 +45,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
       lastBlockOpt = Some(block.header)
-      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height + 1)
+      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height)
     }
   }
 

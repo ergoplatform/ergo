@@ -36,7 +36,6 @@ case class Header(version: Version,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
-
   override def serializedId: Array[Version] = Blake2b256(bytes)
 
   override type M = Header

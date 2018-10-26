@@ -41,7 +41,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
 
   private var height = 0
-  private var lastBlockUtxoRootHash = ADDigest @@ Array.fill(32)(0: Byte)
+  // TODO looks like incorrect to initialize in such a way
+  private var stateContext: ErgoStateContext = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte), Seq())
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
@@ -63,12 +64,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf))
       )
 
-      val stateContext = ErgoStateContext(height + 1, lastBlockUtxoRootHash)
-
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
 
       val context =
-        new ErgoContext(stateContext, transactionContext, ergoSettings.metadata, ContextExtension.empty)
+        new ErgoContext(stateContext.copy(currentHeight = (stateContext.currentHeight + 1)),
+          transactionContext, ergoSettings.metadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
@@ -115,12 +115,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  private def extractFromBlock(fb: ErgoFullBlock): Int = {
-    height = fb.header.height
-    lastBlockUtxoRootHash = fb.header.stateRoot
-    fb.transactions.count(tx => scan(tx, Some(height)))
-  }
-
   def scanLogic: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
@@ -135,7 +129,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
-      val txsFound = extractFromBlock(fullBlock)
+      val txsFound = {
+        height = fullBlock.header.height
+        stateContext = stateContext.appendHeader(fullBlock.header)
+        fullBlock.transactions.count(tx => scan(tx, Some(height)))
+      }
       (1 to txsFound).foreach(_ => self ! Resolve)
 
     //todo: update utxo root hash
@@ -213,7 +211,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-      prover.sign(unsignedTx, inputs, ergoSettings.metadata, ErgoStateContext(height, lastBlockUtxoRootHash)).toOption
+      prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
     } match {
       case Some(tx) => tx
       case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")

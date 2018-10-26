@@ -132,8 +132,6 @@ object ErgoState extends ScorexLogging {
       stateDir, settings)
   }
 
-  val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
-
   lazy val genesisStateVersion: VersionTag = bytesToVersion(Array.fill(32)(1: Byte))
 
   def readOrGenerate(settings: ErgoSettings,

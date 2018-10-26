@@ -26,9 +26,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
   val newTransaction: Class[MsgType] = classOf[MsgType]
 
   val defaultAwaitDuration: FiniteDuration = 10.seconds
-  val paymentTransactionAwaitDuration: FiniteDuration = 30.seconds
-  val assetTransferTransactionAwaitDuration: FiniteDuration = 1.minute
-  val assetIssueTransactionAwaitDuration: FiniteDuration = 2.minutes
+  val transactionAwaitDuration: FiniteDuration = 30.seconds
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read(None)
@@ -50,7 +48,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     assetIds.exists(x => java.util.Arrays.equals(x, firstInputId))
   }
 
-  it should "Generate valid transactions of all types" in new TestKit(ActorSystem()) {
+  it should "generate valid transactions of all types" in new TestKit(ActorSystem()) {
 
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
@@ -75,17 +73,13 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val paymentTxs: immutable.Seq[ErgoTransaction] = receiveWhile(paymentTransactionAwaitDuration) {
+    val txs: immutable.Seq[ErgoTransaction] = receiveWhile(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction) => tx
     }
 
-    val assetTxs: immutable.Seq[ErgoTransaction] = receiveWhile(assetTransferTransactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) if tx.outAssetsOpt.get.nonEmpty => tx
-    }
-
-    val assetIssueTxs: immutable.Seq[ErgoTransaction] = receiveWhile(assetIssueTransactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => tx
-    }
+    txs.nonEmpty shouldBe true
+    txs.exists(tx => tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx)) shouldBe true
+    txs.exists(containsAssetIssuingBox) shouldBe true
   }
 
 }

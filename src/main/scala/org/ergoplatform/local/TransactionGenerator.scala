@@ -34,12 +34,12 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private var transactionsPerBlock = 0
-  private var currentFullHeight = 0
-  @volatile private var propositions: Seq[P2PKAddress] = Seq()
+  var transactionsPerBlock: Int = 0
+  var currentFullHeight: Int = 0
+  @volatile var propositions: Seq[P2PKAddress] = Seq()
 
-  private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder =
+  val MaxTransactionsPerBlock: Int = settings.testingSettings.maxTransactionsPerBlock
+  implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   override def receive: Receive = {

@@ -93,38 +93,46 @@ trait NodeApi {
     )
   }
 
-  def waitForHeight(expectedHeight: Int): Future[Int] = waitFor[Int](_.height, h => h >= expectedHeight, 1.second)
+  def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
+    waitFor[Int](_.height, h => h >= expectedHeight, retryingInterval)
+  }
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 
+  def historyInfo: Future[HistoryInfo] = get("/info").map(r => ergoJsonAnswerAs[HistoryInfo](r.getResponseBody))
+
   def headerIdsByHeight(h: Int): Future[Seq[String]] = get(s"/blocks/at/$h").map(j => ergoJsonAnswerAs[Seq[String]](j.getResponseBody))
 
-  def waitFor[A](f: this.type => Future[A], cond: A => Boolean, retryInterval: FiniteDuration): Future[A] =
+  def waitFor[A](f: this.type => Future[A], cond: A => Boolean, retryInterval: FiniteDuration): Future[A] = {
     timer.retryUntil(f(this), cond, retryInterval)
+  }
 
   def close(): Unit = {
     timer.stop()
   }
 
-  def retrying(r: Request, interval: FiniteDuration = 1.second, statusCode: Int = HttpConstants.ResponseStatusCodes.OK_200): Future[Response] = {
+  def retrying(request: Request,
+               interval: FiniteDuration = 1.second,
+               statusCode: Int = HttpConstants.ResponseStatusCodes.OK_200): Future[Response] = {
     def executeRequest: Future[Response] = {
-      log.trace(s"Executing request '$r'")
-      client.executeRequest(r, new AsyncCompletionHandler[Response] {
+      log.trace(s"Executing request '$request'")
+      client.executeRequest(request, new AsyncCompletionHandler[Response] {
         override def onCompleted(response: Response): Response = {
           if (response.getStatusCode == statusCode) {
-            log.debug(s"Request: ${r.getUrl} \n Response: ${response.getResponseBody}")
+            log.debug(s"Request: ${request.getUrl} \n Response: ${response.getResponseBody}")
             response
           } else {
-            log.debug(s"Request:  ${r.getUrl} \n Unexpected status code(${response.getStatusCode}): ${response.getResponseBody}")
-            throw UnexpectedStatusCodeException(r, response)
+            log.debug(s"Request:  ${request.getUrl} \n Unexpected status code(${response.getStatusCode}): " +
+              s"${response.getResponseBody}")
+            throw UnexpectedStatusCodeException(request, response)
           }
         }
       }).toCompletableFuture.toScala
         .recoverWith {
           case e@(_: IOException | _: TimeoutException) =>
-            log.debug(s"Failed to execute request '$r' with error: ${e.getMessage}")
+            log.debug(s"Failed to execute request '$request' with error: ${e.getMessage}")
             timer.schedule(executeRequest, interval)
         }
     }
@@ -150,4 +158,14 @@ object NodeApi extends ScorexLogging {
 
   case class Status(status: String)
 
+  case class HistoryInfo(bestHeaderId: String, bestBlockId: String, bestHeaderHeight: Int, bestBlockHeight: Int)
+
+  private implicit val historyInfoDecoder: Decoder[HistoryInfo] = { c =>
+    for {
+      bestHeaderId <- c.downField("bestHeaderId").as[String]
+      bestBlockId <- c.downField("bestFullHeaderId").as[String]
+      bestHeaderHeight <- c.downField("headersHeight").as[Int]
+      bestBlockHeight <- c.downField("fullHeight").as[Int]
+    } yield HistoryInfo(bestHeaderId, bestBlockId, bestHeaderHeight, bestBlockHeight)
+  }
 }

@@ -2,7 +2,7 @@ package org.ergoplatform.it.container
 
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import org.scalatest.{BeforeAndAfterAll, OptionValues, Suite, TryValues}
+import org.scalatest.{BeforeAndAfterAll, Suite}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
@@ -11,7 +11,6 @@ trait IntegrationSuite
   extends  BeforeAndAfterAll
   with IntegrationTestConstants
   with ErgoTestHelpers
-  with OptionValues
   with ScalaFutures
   with IntegrationPatience
   with ScorexLogging { this: Suite =>

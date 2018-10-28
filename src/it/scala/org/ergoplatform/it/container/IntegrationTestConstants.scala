@@ -54,7 +54,7 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
-  val noDelayConfig: Config = ConfigFactory.parseString(
+  val shortDelayConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.miningDelay=500ms
     """.stripMargin

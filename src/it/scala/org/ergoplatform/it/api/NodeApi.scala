@@ -104,10 +104,12 @@ trait NodeApi {
 
   def historyIsInconsistent: Future[Boolean] = for {
     hiInit <- historyInfo
-    fullBlockPersisted <- if (hiInit.bestHeaderHeight > hiInit.bestBlockHeight) {
-      singleGet(s"/blocks/${hiInit.bestHeaderId}").map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
-    } else {
-      Future.successful(false)
+    fullBlockPersisted <- {
+      if (hiInit.bestHeaderHeight > hiInit.bestBlockHeight) {
+        singleGet(s"/blocks/${hiInit.bestHeaderId}").map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
+      } else {
+        Future.successful(false)
+      }
     }
     hi <- historyInfo
   } yield fullBlockPersisted && hi.bestBlockId != hi.bestHeaderId && hiInit.bestHeaderId == hi.bestHeaderId

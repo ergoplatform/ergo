@@ -2,7 +2,6 @@ package org.ergoplatform.it
 
 import java.io.File
 
-import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.{FreeSpec, OptionValues}
@@ -17,11 +16,10 @@ class HistoryConsistencySpec
 
   val shutdownAtHeight: Int = 5
 
-  val localVolume = "/tmp/ergo/history-consistency-spec/data"
+  val localVolume = s"$localDataDir/history-consistency-spec/data"
   val remoteVolume = "/app"
 
   val dir = new File(localVolume)
-
   dir.mkdirs()
 
   val nodeConfig: Config = specialDataDirConfig(remoteVolume)

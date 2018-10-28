@@ -17,7 +17,9 @@ trait IntegrationSuite
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  protected val docker: Docker = new Docker(tag = getClass.getSimpleName)
+  protected val localDataDir: String = "/tmp/ergo"
+
+  protected val docker: Docker = new Docker(tag = getClass.getSimpleName, localDataVolumeOpt = Some(localDataDir))
 
   override protected def beforeAll(): Unit = {
     log.debug("Starting tests")

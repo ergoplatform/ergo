@@ -30,7 +30,9 @@ import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
-class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_integration_test")
+class Docker(suiteConfig: Config = ConfigFactory.empty,
+             tag: String = "ergo_integration_test",
+             localDataVolumeOpt: Option[String] = None)
             (implicit ec: ExecutionContext) extends AutoCloseable with ScorexLogging {
 
   import Docker._
@@ -307,8 +309,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       client.removeNetwork(innerNetwork.id())
       client.close()
 
-      val dataVolume = new File("/tmp/ergo")
-      FileUtils.deleteDirectory(dataVolume)
+      localDataVolumeOpt.foreach { path =>
+        val dataVolume = new File(path)
+        FileUtils.deleteDirectory(dataVolume)
+      }
     }
   }
 

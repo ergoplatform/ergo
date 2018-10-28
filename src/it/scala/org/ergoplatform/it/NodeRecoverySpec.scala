@@ -17,11 +17,10 @@ class NodeRecoverySpec
 
   val shutdownAtHeight: Int = 5
 
-  val localVolume = "/tmp/ergo/node-recovery-spec/data"
+  val localVolume = s"$localDataDir/node-recovery-spec/data"
   val remoteVolume = "/app"
 
   val dir = new File(localVolume)
-
   dir.mkdirs()
 
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)

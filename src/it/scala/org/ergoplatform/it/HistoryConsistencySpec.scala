@@ -6,15 +6,12 @@ import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.ergoplatform.it.api.NodeApi.HistoryInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.{FreeSpec, OptionValues}
+import org.scalatest.FreeSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class HistoryConsistencySpec
-  extends FreeSpec
-    with IntegrationSuite
-    with OptionValues {
+class HistoryConsistencySpec extends FreeSpec with IntegrationSuite {
 
   val shutdownAtHeight: Int = 5
 
@@ -35,7 +32,7 @@ class HistoryConsistencySpec
 
   "History consistency after unexpected shutdown" in {
 
-    val result = node.waitForHeight(shutdownAtHeight)
+    val result = node.waitForHeight(shutdownAtHeight, 100.millis)
       .flatMap { _ =>
         node.waitFor[HistoryInfo](_.historyInfo, hi => hi.bestHeaderHeight > hi.bestBlockHeight, 100.millis)
       }
@@ -43,7 +40,7 @@ class HistoryConsistencySpec
         docker.forceStopNode(node.containerId)
         val restartedNode = docker
           .startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
-        restartedNode.waitForHeight(shutdownAtHeight)
+        restartedNode.waitForHeight(shutdownAtHeight, 100.millis)
           .flatMap(_ => restartedNode.historyInfo)
           .map(hi => hi.bestHeaderId shouldEqual hi.bestBlockId)
       }

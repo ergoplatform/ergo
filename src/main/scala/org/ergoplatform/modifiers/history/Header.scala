@@ -91,7 +91,7 @@ object Header extends ApiCodecs {
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "extensionHash" -> Algos.encode(h.extensionRoot).asJson,
-      "powSolutions" -> "???".asJson,
+      "powSolutions" -> h.powSolution.asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,

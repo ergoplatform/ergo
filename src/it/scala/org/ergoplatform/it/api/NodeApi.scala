@@ -41,6 +41,12 @@ trait NodeApi {
   def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(_get(s"http://$restAddress:$nodeRestPort$path")).build())
 
+  def singleGet(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = {
+    client.executeRequest(f(_get(s"http://$restAddress:$nodeRestPort$path")).build())
+      .toCompletableFuture
+      .toScala
+  }
+
   def getWihApiKey(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = retrying {
     _get(s"http://$restAddress:$nodeRestPort$path")
       .setHeader("api_key", "integration-test-rest-api")
@@ -84,6 +90,28 @@ trait NodeApi {
     waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
   }
 
+  def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
+    waitFor[Int](_.height, h => h >= expectedHeight, retryingInterval)
+  }
+
+  def waitForStartup: Future[this.type] = get("/info").map(_ => this)
+
+  /** Tries to catch the moment when full block is already persisted in history,
+    * but indexes aren't updated yet. */
+  def waitForInconsistentHistory: Future[Unit] = {
+    waitFor[Boolean](_.historyIsInconsistent, bool => bool, 25.millis).map(_ => ())
+  }
+
+  def historyIsInconsistent: Future[Boolean] = for {
+    hiInit <- historyInfo
+    fullBlockPersisted <- if (hiInit.bestHeaderHeight > hiInit.bestBlockHeight) {
+      singleGet(s"/blocks/${hiInit.bestHeaderId}").map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
+    } else {
+      Future.successful(false)
+    }
+    hi <- historyInfo
+  } yield fullBlockPersisted && hi.bestBlockId != hi.bestHeaderId && hiInit.bestHeaderId == hi.bestHeaderId
+
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
     val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
@@ -92,12 +120,6 @@ trait NodeApi {
       maybeHeight => Future.successful(maybeHeight.getOrElse(0))
     )
   }
-
-  def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
-    waitFor[Int](_.height, h => h >= expectedHeight, retryingInterval)
-  }
-
-  def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 

@@ -23,7 +23,6 @@ class NodeRecoverySpec
   val dir = new File(localVolume)
 
   dir.mkdirs()
-  dir.deleteOnExit()
 
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
     .withFallback(offlineGeneratingPeerConfig)

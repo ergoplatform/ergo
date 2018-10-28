@@ -18,6 +18,7 @@ import com.spotify.docker.client.messages._
 import com.spotify.docker.client.{DefaultDockerClient, DockerClient}
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
+import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
@@ -305,6 +306,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty, tag: String = "ergo_inte
       }
       client.removeNetwork(innerNetwork.id())
       client.close()
+
+      val dataVolume = new File("/tmp/ergo")
+      FileUtils.deleteDirectory(dataVolume)
     }
   }
 

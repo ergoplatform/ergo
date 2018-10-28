@@ -20,8 +20,8 @@ case class ErgoStateContext(currentHeight: Int, stateDigest: ADDigest, lastHeade
   extends BytesSerializable with ScorexEncoding {
 
   // todo remove currentHeight: Int, stateDigest: ADDigest,
-
-  lazy val lastHeader: Header = lastHeaders.head
+  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
 
   override type M = ErgoStateContext
 

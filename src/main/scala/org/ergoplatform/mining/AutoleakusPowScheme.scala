@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
-import org.ergoplatform.autoleakus.{Autoleakus, PrivateKey}
 import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumPowTask
+import org.ergoplatform.autoleakus.{Autoleakus, PrivateKey}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -15,9 +15,8 @@ import scala.math.BigInt
 
 class AutoleakusPowScheme(k: Int, N: Int) {
 
-  private val powTask = new HKSumPowTask(k: Int, N: Int)
-  private val autoleakus = new Autoleakus(powTask)
-
+  protected val powTask = new HKSumPowTask(k: Int, N: Int)
+  protected val autoleakus = new Autoleakus(powTask)
 
   def verify(header: Header): Boolean = {
     val b = getB(header.nBits)
@@ -92,7 +91,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   }
 
   protected def getB(nBits: Long): BigInt = {
-    org.ergoplatform.autoleakus.q /RequiredDifficulty.decodeCompactBits(nBits)
+    org.ergoplatform.autoleakus.q / RequiredDifficulty.decodeCompactBits(nBits)
   }
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {

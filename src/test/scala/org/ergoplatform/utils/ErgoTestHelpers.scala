@@ -25,10 +25,6 @@ trait ErgoTestHelpers
     with OptionValues
     with EitherValues {
 
-  val afterGenesisDigest: ADDigest = ADDigest @@ Base16.decode("04c3b15906e39b9d9659ded8fc24e9cea7ca96468516136ec6738256730d400901").get
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
-
-  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
     new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)

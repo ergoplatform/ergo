@@ -6,13 +6,17 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -20,8 +24,11 @@ import scala.util.Random
 
 trait ChainGenerator {
 
-  val timeProvider: NetworkTimeProvider
-  val defaultMinerSecret: BigInt = BigInt("ergo secret".getBytes("UTF-8"))
+  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
+  val afterGenesisDigest: ADDigest = ADDigest @@ Base16.decode("04c3b15906e39b9d9659ded8fc24e9cea7ca96468516136ec6738256730d400901").get
+  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
+  val defaultProver = new ErgoProvingInterpreter("test seed", 1)
+  val defaultMinerSecret: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = DLogProverInput(defaultMinerSecret.bigInteger).publicImage
 
   val powScheme: AutoleakusPowScheme = DefaultFakePowScheme

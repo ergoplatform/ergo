@@ -7,7 +7,7 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
@@ -17,6 +17,7 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
+import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
@@ -43,8 +44,31 @@ trait ValidBlocksGenerators
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
 
-  def noProofInput(id: ErgoBox.BoxId): Input =
-    Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+  /**
+    * generate t
+    */
+  def genTx(inputBoxes: IndexedSeq[ErgoBox], rnd: Random): ErgoTransaction = {
+    require(inputBoxes.nonEmpty)
+    inputBoxes.foreach(b => require(b.proposition == defaultMinerPk || b.proposition == Values.TrueLeaf))
+
+    @tailrec
+    def genOuts(remainingAmount: Long,
+                acc: IndexedSeq[ErgoBoxCandidate],
+                limit: Int): IndexedSeq[ErgoBoxCandidate] = {
+      val newAmount = remainingAmount / limit
+      if (newAmount >= remainingAmount || limit <= 1) {
+        acc :+ outputForAnyone(remainingAmount)
+      } else {
+        genOuts(remainingAmount - newAmount, acc :+ outputForAnyone(newAmount), limit - 1)
+      }
+    }
+
+    val totalAmount = inputBoxes.map(_.value).sum
+    val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(5) + 1)
+    val inputs = inputBoxes.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+    val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
+    defaultProver.sign(unsignedTx, inputBoxes, settings.metadata, emptyStateContext).get
+  }
 
   def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, Constants.TrueLeaf)
 
@@ -64,17 +88,6 @@ trait ValidBlocksGenerators
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
-      def genOuts(remainingAmount: Long,
-                  acc: IndexedSeq[ErgoBoxCandidate],
-                  limit: Int): IndexedSeq[ErgoBoxCandidate] = {
-        val newAmount = remainingAmount / limit
-        if (newAmount >= remainingAmount || limit <= 1) {
-          acc :+ outputForAnyone(remainingAmount)
-        } else {
-          genOuts(remainingAmount - newAmount, acc :+ outputForAnyone(newAmount), limit - 1)
-        }
-      }
-
       val currentSize = acc.map(_.bytes.length).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
 
@@ -92,20 +105,12 @@ trait ValidBlocksGenerators
           if (currentSize < sizeLimit - 2 * averageSize) {
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
-            val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
-            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-            val totalAmount = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).sum
-            val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(outBoxesLength) + 1)
-            val tx = new ErgoTransaction(inputs, outputs)
+            val tx = genTx((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd)
             loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-            val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
-            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-            val totalAmount = (consumedSelfBoxes ++ stateBoxes).map(_.value).sum
-            val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(outBoxesLength) + 1)
-            val tx = new ErgoTransaction(inputs, outputs)
+            val tx = genTx((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd)
             ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
           }
       }

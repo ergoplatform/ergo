@@ -38,12 +38,13 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       us.extractEmissionBox(block) should not be None
       lastBlockOpt = Some(block.header)
       bh = blBh._2
+      val emissionBox0 = us.emissionBoxOpt.get
       us = us.applyModifier(block).get
 
-      us.emissionBoxOpt should not be None
-      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == Constants.TrueLeaf).toSeq,
-        defaultMinerPk, us.constants.emission)
-      us.validate(tx) shouldBe 'success
+      val emissionBox = us.emissionBoxOpt.get
+      emissionBox should not be emissionBox0
+      emissionBox.proposition shouldBe us.constants.genesisEmissionBox.proposition
+      emissionBox.value shouldBe (emissionBox0.value - us.constants.emission.emissionAtHeight(block.header.height))
     }
   }
 

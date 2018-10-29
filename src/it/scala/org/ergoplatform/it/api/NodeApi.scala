@@ -102,17 +102,24 @@ trait NodeApi {
     waitFor[Boolean](_.historyIsInconsistent, bool => bool, 25.millis).map(_ => ())
   }
 
-  def historyIsInconsistent: Future[Boolean] = for {
-    hiInit <- historyInfo
-    fullBlockPersisted <- {
-      if (hiInit.bestHeaderHeight > hiInit.bestBlockHeight) {
-        singleGet(s"/blocks/${hiInit.bestHeaderId}").map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
-      } else {
-        Future.successful(false)
-      }
+  /** To find out whether history is inconsistent at this moment we should:
+    * 1. Fetch current `HistoryInfo`;
+    * 2. Check whether `FullBlock` with `bestHeaderId` from `HistoryInfo` is already available;
+    * 3. Check that `bestFullBlockId` isn't updated yet in `HistoryInfo`;
+    * */
+  def historyIsInconsistent: Future[Boolean] = {
+    for {
+      hiInit <- historyInfo
+      fullBlockPersisted <- singleGet(s"/blocks/${hiInit.bestHeaderId}")
+        .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
+      hi <- historyInfo
+    } yield {
+      fullBlockPersisted &&
+        hi.bestHeaderHeight > hi.bestBlockHeight &&
+        hi.bestBlockId != hi.bestHeaderId &&
+        hiInit == hi
     }
-    hi <- historyInfo
-  } yield fullBlockPersisted && hi.bestBlockId != hi.bestHeaderId && hiInit.bestHeaderId == hi.bestHeaderId
+  }
 
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)

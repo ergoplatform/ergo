@@ -5,19 +5,18 @@ import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.AssetUtils
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
-import sigmastate.Values
 
 import scala.collection.{Map, mutable}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -61,7 +60,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf))
       )
 
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
@@ -148,35 +147,31 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
-    requests.flatMap {
-      case PaymentRequest(address, value, assets, registers, fee) =>
-        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
-        val paymentBox = new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
-        feeBoxOpt.map(Seq(_, paymentBox)).getOrElse(Seq(paymentBox))
-      case AssetIssueRequest(address, amount, name, description, decimals, fee) =>
+    requests.map {
+      case PaymentRequest(address, value, assets, registers) =>
+        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
+      case AssetIssueRequest(address, amount, name, description, decimals) =>
         val firstInput = inputsFor(
           requests
-            .foldLeft(Seq[PaymentRequest]()) {
+            .foldLeft(Seq.empty[PaymentRequest]) {
               case (acc, pr: PaymentRequest) => acc :+ pr
               case (acc, _) => acc
             }
             .map(_.value)
-            .sum + fee
-        ).head
+            .sum
+        ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
           R4 -> StringConstant(name),
           R5 -> StringConstant(description),
           R6 -> IntConstant(decimals)
         )
-        val feeBoxOpt = if (fee > 0) Some(new ErgoBoxCandidate(fee, Pay2SAddress(Values.TrueLeaf).script)) else None
-        val assetIssueBox = new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
-        feeBoxOpt.map(Seq(_, assetIssueBox)).getOrElse(Seq(assetIssueBox))
+        new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }
 
-  protected def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
+  protected def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] = {
     requestsToBoxCandidates(requests).map { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
@@ -191,12 +186,14 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val targetBalance = payTo.map(_.value).sum
 
-      val targetAssets = mutable.Map[ModifierId, Long]()
+      val targetAssets = payTo
+        .filterNot(bx => assetIssueBox.contains(bx))
+        .foldLeft(Predef.Map.empty[ModifierId, Long]) { case (acc, bx) =>
+          val boxTokens = bx.additionalTokens.map(t => bytesToId(t._1) -> t._2).toMap
+          AssetUtils.mergeAssets(boxTokens, acc)
+        }
 
-      payTo.filterNot(bx => assetIssueBox.contains(bx)).map(_.additionalTokens).foreach { boxTokens =>
-        AssetUtils.mergeAssets(targetAssets, boxTokens.map(t => bytesToId(t._1) -> t._2).toMap)
-      }
-      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets.toMap).flatMap { r =>
+      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets).flatMap { r =>
         val inputs = r.boxes.toIndexedSeq
 
         val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
@@ -211,10 +208,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-      prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
-    } match {
-      case Some(tx) => tx
-      case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
+        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
+      } match {
+        case Some(tx) => tx
+        case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
+      }
     }
   }
 

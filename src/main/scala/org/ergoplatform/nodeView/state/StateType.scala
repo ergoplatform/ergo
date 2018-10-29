@@ -23,7 +23,7 @@ object StateType {
   }
 
   case object Digest extends StateType {
-    
+
     def stateTypeName: String = "digest"
 
     val requireProofs: Boolean = true

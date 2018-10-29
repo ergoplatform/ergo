@@ -7,6 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
+import sigmastate.SBoolean
+import sigmastate.Values.Constant
 
 
 object Constants {
@@ -34,6 +36,8 @@ object Constants {
   val StorageContractCost: Long = 50
 
   val StorageIndexVarId: Byte = Byte.MaxValue
+
+  val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,

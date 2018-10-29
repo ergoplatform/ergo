@@ -10,7 +10,6 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash._
-import sigmastate.Values.TrueLeaf
 
 class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
 
@@ -27,7 +26,7 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
         RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
         ADDigest @@ Array.fill(33)(0: Byte),
         SerializedAdProof @@ Array.emptyByteArray,
-        Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, TrueLeaf)))),
+        Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, Constants.TrueLeaf)))),
         ts,
         ExtensionCandidate(Seq(), Seq()),
         defaultMinerSecret

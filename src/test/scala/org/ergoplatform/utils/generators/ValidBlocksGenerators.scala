@@ -17,7 +17,6 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
-import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
@@ -31,7 +30,7 @@ trait ValidBlocksGenerators
   lazy val settings: ErgoSettings = initSettings
   lazy val stateConstants: StateConstants = StateConstants(None, settings)
 
-  lazy val genesisEmissionBox = ErgoState.genesisEmissionBox(settings.emission)
+  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
@@ -47,7 +46,7 @@ trait ValidBlocksGenerators
   def noProofInput(id: ErgoBox.BoxId): Input =
     Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-  def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, TrueLeaf)
+  def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, Constants.TrueLeaf)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
@@ -83,7 +82,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val height: Int = (emissionBox.additionalRegisters(R4).value.asInstanceOf[Long] + 1).toInt
-          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, TrueLeaf, settings.emission)
+          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, Constants.TrueLeaf, settings.emission)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))
           val newSelfBoxes = selfBoxes ++ tx.outputs.filter(b => !isEmissionBox(b))
@@ -139,7 +138,7 @@ trait ValidBlocksGenerators
     val num = 1 + rnd.nextInt(10)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
-    val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == TrueLeaf)
+    val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == Constants.TrueLeaf)
     val boxes = if (anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
 
     validTransactionsFromBoxes(num, boxes, rnd)._1

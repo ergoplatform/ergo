@@ -139,8 +139,9 @@ object HeaderSerializer extends Serializer[Header] {
         acc
       } else {
         val headLink: ModifierId = links.head
-        val repeating: Byte = links.count(_ == headLink).toByte
-        buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
+        val repeatingInt = links.count(_ == headLink)
+        val repeating: Byte = repeatingInt.toByte
+        buildInterlinkBytes(links.drop(repeatingInt), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
       }
     }
 
@@ -178,7 +179,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
-      val repeatN: Int = bytes.slice(index, index + 1).head
+      val repeatN: Int = 0xff & bytes(index)
       require(repeatN > 0)
       val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
       val links: Seq[ModifierId] = Array.fill(repeatN)(link)

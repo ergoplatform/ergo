@@ -42,7 +42,7 @@ class HistoryConsistencySpec
           .flatMap(_ => restartedNode.historyInfo)
           .flatMap { hi =>
             restartedNode.headerIdsByHeight(hi.bestBlockHeight)
-              .map(_.headOption.value == hi.bestBlockId)
+              .map(_.headOption.value shouldEqual hi.bestBlockId)
           }
       }
 

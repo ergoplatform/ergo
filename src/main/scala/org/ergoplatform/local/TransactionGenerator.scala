@@ -81,7 +81,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), 100000L, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(Constants.FeeProposition), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>

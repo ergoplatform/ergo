@@ -18,9 +18,8 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import scapi.sigma.DLogProtocol.DLogProverInput
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -41,6 +40,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
                 inSkOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
+
   import ErgoMiner._
 
 
@@ -56,7 +56,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var skOpt: Option[PrivateKey] = inSkOpt.map(_.w)
 
   // TODO check that it corresponds to secret or remove from here.
-  private def minerPropOpt: Option[Value[SBoolean.type]] = inSkOpt.map(_.publicImage)
+  private def minerPropOpt: Option[ProveDlog] = inSkOpt.map(_.publicImage)
 
   override def preStart(): Unit = {
     viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
@@ -190,7 +190,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }
 
-  private def createCandidate(minerProp: Value[SBoolean.type],
+  private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
@@ -204,8 +204,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       Parameters.MaxBlockSize,
       Seq())
 
-    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, ergoSettings.emission)
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2
+      .filter(_.proposition == Constants.FeeProposition)
+    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerPk, ergoSettings.emission)
     val txs = txsNoConflict :+ coinbase
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
@@ -230,21 +231,22 @@ object ErgoMiner extends ScorexLogging {
 
   def createCoinbase(state: UtxoStateReader,
                      feeBoxes: Seq[ErgoBox],
-                     minerProp: Value[SBoolean.type],
+                     minerPk: ProveDlog,
                      emissionRules: EmissionRules): ErgoTransaction = {
     val emissionBoxOpt = state.emissionBoxOpt
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerProp, emissionRules)
+    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],
                      height: Int,
                      feeBoxes: Seq[ErgoBox],
-                     minerProp: Value[SBoolean.type],
+                     minerPk: ProveDlog,
                      emission: EmissionRules): ErgoTransaction = {
-    feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
+    feeBoxes.foreach(b =>
+      assert(b.proposition == Constants.FeeProposition, s"Trying to create coinbase from protected fee box $b"))
 
     val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
       case Some(emissionBox) =>
@@ -265,7 +267,7 @@ object ErgoMiner extends ScorexLogging {
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
 
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, feeAssets, Map())
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerPk, feeAssets, Map())
 
     ErgoTransaction(
       inputs,

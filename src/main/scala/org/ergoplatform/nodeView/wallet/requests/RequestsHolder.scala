@@ -12,7 +12,7 @@ case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
 
   // Add separate payment request with fee.
   def requestsWithFee: Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(Constants.TrueLeaf), fee, None, None)
+    requests :+ PaymentRequest(Pay2SAddress(Constants.FeeProposition), fee, None, None)
   }
 }
 

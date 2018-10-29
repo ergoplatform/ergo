@@ -1,7 +1,7 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{DefaultFakePowScheme, AutoleakusPowScheme}
+import org.ergoplatform.mining.{AutoleakusPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -21,6 +22,7 @@ trait ChainGenerator {
 
   val timeProvider: NetworkTimeProvider
   val defaultMinerSecret: BigInt = BigInt("ergo secret".getBytes("UTF-8"))
+  val defaultMinerPk: ProveDlog = DLogProverInput(defaultMinerSecret.bigInteger).publicImage
 
   val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)

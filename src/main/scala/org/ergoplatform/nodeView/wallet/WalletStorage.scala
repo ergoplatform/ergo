@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 /**
   * Storage class for wallet entities:
@@ -87,17 +87,17 @@ class WalletStorage extends ScorexLogging {
 
   def confirmedBalance: Long = _confirmedBalance
 
-  def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
+  def confirmedAssetBalances: immutable.Map[ModifierId, Long] = _confirmedAssetBalances.toMap
 
   def balancesWithUnconfirmed: Long = _confirmedBalance + _unconfirmedDelta
 
-  def assetBalancesWithUnconfirmed: scala.collection.Map[ModifierId, Long] = {
-    val unconfirmedSums = _unconfirmedAssetDeltas map { case (id, value) =>
+  def assetBalancesWithUnconfirmed: immutable.Map[ModifierId, Long] = {
+    val unconfirmedSums = _unconfirmedAssetDeltas.toMap map { case (id, value) =>
       val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
       id -> newValue
     }
     val confirmedAddition = _confirmedAssetBalances -- _unconfirmedAssetDeltas.keys
-    unconfirmedSums ++ confirmedAddition
+    unconfirmedSums.filterNot(_._2 == 0L) ++ confirmedAddition
   }
 
   private def undoBalances(trackedBox: TrackedBox): Unit = updateBalances(trackedBox, undo = true)
@@ -107,14 +107,15 @@ class WalletStorage extends ScorexLogging {
       if (trackedBox.spendingStatus == Unspent) {
         increaseBalances(trackedBox.creationChainStatus, trackedBox.box, undo)
         log.debug(s"${if (undo) "Undo" else "Update"} balance with UNSPENT ${trackedBox.chainStatus} " +
-                  s"${trackedBox.boxId} $trackedBox balance: $confirmedBalance, total: $balancesWithUnconfirmed")
+                  s"${trackedBox.boxId} $trackedBox balance: $confirmedBalance $confirmedAssetBalances, " +
+                  s"total: $balancesWithUnconfirmed $assetBalancesWithUnconfirmed")
       } else if (trackedBox.creationChainStatus == Onchain && trackedBox.spendingChainStatus == Offchain) {
         increaseBalances(Onchain, trackedBox.box, undo)
         decreaseBalances(Offchain, trackedBox.box, undo)
         log.debug(s"${if (undo) "Undo" else "Update"} balance with OFF-CHAIN SPENT ${trackedBox.boxId} " +
                   s"balance: $confirmedBalance, total: $balancesWithUnconfirmed")
       } else {
-        log.debug(s"${if (undo) "Undo ignore" else "Ignore"} balances for SPENT ${trackedBox.boxId} $trackedBox")
+        log.debug(s"${if (undo) "Ignore undo" else "Ignore"} balances for SPENT ${trackedBox.boxId} $trackedBox")
       }
     }
   }
@@ -126,10 +127,14 @@ class WalletStorage extends ScorexLogging {
   private def increaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
     if (balanceStatus == Onchain) _confirmedBalance += box.value else _unconfirmedDelta += box.value
     val balanceMap = if (balanceStatus == Onchain) _confirmedAssetBalances else _unconfirmedAssetDeltas
-    box.additionalTokens foreach { case (id, amount) =>
-      val wid = bytesToId(id)
-      val updBalance = balanceMap.getOrElse(wid, 0L) + amount
-      balanceMap.put(wid, updBalance)
+    box.additionalTokens foreach { case (tokenId, amount) =>
+      val assetId = bytesToId(tokenId)
+      val updBalance = balanceMap.getOrElse(assetId, 0L) + amount
+      if (updBalance == 0L) {
+        balanceMap.remove(assetId)
+      } else {
+        balanceMap.put(assetId, updBalance)
+      }
     }
   }
 
@@ -140,14 +145,14 @@ class WalletStorage extends ScorexLogging {
   private def decreaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
     if (balanceStatus == Onchain) _confirmedBalance -= box.value else _unconfirmedDelta -= box.value
     val balanceMap = if (balanceStatus == Onchain) _confirmedAssetBalances else _unconfirmedAssetDeltas
-    box.additionalTokens foreach { case (id, amount) =>
-      val wid = bytesToId(id)
-      val currentBalance = balanceMap.getOrElse(wid, 0L)
+    box.additionalTokens foreach { case (tokenId, amount) =>
+      val assetId = bytesToId(tokenId)
+      val currentBalance = balanceMap.getOrElse(assetId, 0L)
       if (currentBalance == amount) {
-        balanceMap.remove(wid)
+        balanceMap.remove(assetId)
       } else {
         val updBalance = currentBalance - amount
-        balanceMap.put(wid, updBalance)
+        balanceMap.put(assetId, updBalance)
       }
     }
   }
@@ -180,7 +185,7 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-      log.debug(s"New ${trackedBox.chainStatus} box arrived: " + trackedBox)
+      log.debug(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
     }
     trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))

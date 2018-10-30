@@ -47,6 +47,12 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     nodes
   }
 
+  // Testing scenario:
+  // 1. Start up {nodesQty} nodes and let them mine common chain of length {initialCommonChainLength};
+  // 2. Kill all nodes when they are done, make them offline generating, clear `knownPeers` and restart them;
+  // 3. Let them mine another {forkLength} blocks offline in order to create {nodesQty} forks;
+  // 4. Kill all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
+  // 5. Check that nodes reached consensus on created forks;
   "Fork resolution after isolated mining" in {
 
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get

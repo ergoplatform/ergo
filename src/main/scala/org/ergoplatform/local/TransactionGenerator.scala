@@ -34,12 +34,12 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  var transactionsPerBlock: Int = 0
-  var currentFullHeight: Int = 0
-  @volatile var propositions: Seq[P2PKAddress] = Seq()
+  private var transactionsPerBlock: Int = 0
+  private var currentFullHeight: Int = 0
+  @volatile private var propositions: Seq[P2PKAddress] = Seq()
 
-  val MaxTransactionsPerBlock: Int = settings.testingSettings.maxTransactionsPerBlock
-  implicit val ergoAddressEncoder: ErgoAddressEncoder =
+  private val MaxTransactionsPerBlock: Int = settings.testingSettings.maxTransactionsPerBlock
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   override def receive: Receive = {
@@ -80,7 +80,7 @@ class TransactionGenerator(viewHolder: ActorRef,
     case SuccessfulTransaction(_) => self ! Attempt
   }
 
-  def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+  private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
@@ -104,11 +104,11 @@ class TransactionGenerator(viewHolder: ActorRef,
     }
   }
 
-  def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
+  private def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
 
-  def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
+  private def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
 
-  def genNewAssetInfo: (Int, String, String, Int) = {
+  private def genNewAssetInfo: (Int, String, String, Int) = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000
     val tokenName: String = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
     val tokenDescription: String = s"$tokenName description"

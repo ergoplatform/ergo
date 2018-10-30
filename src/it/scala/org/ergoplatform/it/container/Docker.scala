@@ -69,15 +69,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   }
 
   def startNodes(nodeConfigs: List[Config],
-                 configEnrich: ExtraConfig = noExtraConfig,
-                 specialVolumes: Seq[(String, String)] = Seq.empty): Try[List[Node]] = {
-    assert(specialVolumes.size <= nodeConfigs.size,
-      s"Too many volumes (${specialVolumes.size}) for configs (${nodeConfigs.size})")
+                 configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-    val nodes: Try[List[Node]] = nodeConfigs
-      .zipAll(specialVolumes.map(Some.apply), nodeConfigs.head, None)
-      .map { case (cfg, volOpt) => startNode(cfg, configEnrich, volOpt) }
-      .sequence
+    val nodes: Try[List[Node]] = nodeConfigs.map(cfg => startNode(cfg, configEnrich)).sequence
     blocking(Thread.sleep(nodeConfigs.size * 5000))
     nodes
   }

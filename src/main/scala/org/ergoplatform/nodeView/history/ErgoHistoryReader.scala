@@ -200,7 +200,7 @@ trait ErgoHistoryReader
   /**
     * @return ids of count headers starting from offset
     */
-  def headerIdsAt(count: Int, offset: Int = 0): Seq[ModifierId] = (offset until (count + offset))
+  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = (offset until (limit + offset))
     .flatMap(h => headerIdsAtHeight(h).headOption)
 
   override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {

@@ -10,12 +10,12 @@ import scorex.core.settings.ScorexSettings
 
 import scala.concurrent.duration._
 
-trait HistorySpecification extends ErgoPropertyTest {
+trait HistoryTestHelpers extends ErgoPropertyTest {
 
   override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
 
   val BlocksInChain = 10
-  val BlocksToKeep = BlocksInChain + 1
+  val BlocksToKeep: Int = BlocksInChain + 1
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.headersHeight

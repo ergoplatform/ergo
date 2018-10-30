@@ -9,6 +9,7 @@ import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 
@@ -19,16 +20,16 @@ class BlocksApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with Stubs {
 
-  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
+  val prefix = "/blocks"
 
-  val prefix: String = "/blocks"
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
 
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history.headerIdsAt(0, 50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
 
@@ -66,10 +67,10 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  val headerIdBytes: ModifierId = history.lastHeaders(1,0).headers.head.id
+  val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
-  ignore should "get block by header id" in {
+  it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val expected = history.typedModifierById[Header](headerIdBytes)
@@ -94,7 +95,7 @@ class BlocksApiRouteSpec extends FlatSpec
     }
   }
 
-  ignore should "get transactions by header id" in {
+  it should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val header = history.typedModifierById[Header](headerIdBytes).value
@@ -103,4 +104,5 @@ class BlocksApiRouteSpec extends FlatSpec
       responseAs[String] shouldEqual expected
     }
   }
+
 }

@@ -11,17 +11,17 @@ import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSe
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.{Algos, Parameters}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.{Serializer => SSerializer}
@@ -30,7 +30,6 @@ import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.Try
-
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
@@ -98,15 +97,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .result
   }
 
-  /**
-    * @return total computation cost
+  /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        blockchainState: ErgoStateContext,
                        metadata: Metadata): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
-
     failFast
       .payload(0L)
       .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
@@ -129,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         validation
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
-          .demand(isCostValid, s"Validation failed for input #$idx of tx $this: $costTry")
+          .demand(isCostValid, s"Input script verification failed for input #$idx of tx $this: $costTry")
           .map(_ + scriptCost)
       }
       .demandSuccess(inputSum, s"Overflow in inputs in $this")

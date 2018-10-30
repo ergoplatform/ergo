@@ -97,8 +97,28 @@ components:
       type: string
       example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
 
+    RequestsHolder:
+      description: Holds many transaction requests and transaction fee
+      type: object
+      required:
+      - requests
+      - fee
+      properties:
+        requests:
+          description: Sequence of transaction requests
+          type: array
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/PaymentRequest'
+            - $ref: '#/components/schemas/AssetIssueRequest'
+        fee:
+          description: Transaction fee
+          type: integer
+          format: int64
+          example: 100
+
     PaymentRequest:
-      description: request for generation of payment transaction to a given address
+      description: Request for generation of payment transaction to a given address
       type: object
       required:
       - address
@@ -125,7 +145,7 @@ components:
           example: 100
 
     AssetIssueRequest:
-      description: request for generation of asset issue transaction
+      description: Request for generation of asset issue transaction
       type: object
       required:
       - address
@@ -168,6 +188,7 @@ components:
       - blockTransactions
       - adProofs
       - extension
+      - size
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
@@ -198,6 +219,7 @@ components:
       - height
       - difficulty
       - parentId
+      - size
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -251,6 +273,7 @@ components:
       required:
       - headerId
       - transactions
+      - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -267,6 +290,7 @@ components:
       - headerId
       - proofBytes
       - digest
+      - size
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -471,8 +495,12 @@ components:
           - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
+          description: Can be 'null' if no headers is applied since node launch
+          nullable: true
         fullBlocksScore:
           type: integer
+          description: Can be 'null' if no full block is applied since node launch
+          nullable: true
         genesisBlockId:
           type: string
           description: Can be 'null' if genesis blocks is not produced yet
@@ -1197,15 +1225,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/balances/unconfirmed:
+  /wallet/balances/with_unconfirmed:
     get:
-      summary: Get amount of unconfirmed Ergo tokens and assets
+      summary: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
       operationId: walletBalancesUnconfirmed
       tags:
       - wallet
       responses:
         '200':
-          description: Get amount of unconfirmed Ergo tokens and assets
+          description: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
           content:
             application/json:
               schema:
@@ -1238,6 +1266,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /wallet/transaction/generate:
+    post:
+      summary: Generate arbitrary transaction
+      operationId: walletTransactionGenerate
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestsHolder'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+
+  /wallet/transaction/send:
+    post:
+      summary: Generate and send arbitrary transaction
+      operationId: walletTransactionGenerateAndSend
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestsHolder'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: Bad transaction request
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain; charset=UTF-8:
+              schema:
+                type: string
 
   /wallet/payment/generate:
     post:

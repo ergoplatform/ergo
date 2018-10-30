@@ -5,4 +5,4 @@ import scala.concurrent.duration.FiniteDuration
 case class WalletSettings(seed: String,
                           dlogSecretsNumber: Int,
                           scanningInterval: FiniteDuration,
-                          defaultTransactionFee: Long = 100000)
+                          defaultTransactionFee: Long = 100000L)

@@ -1,42 +1,46 @@
-package org.ergoplatform
+package org.ergoplatform.sanity
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.ErgoSanity._
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.nodeView.WrappedUtxoState
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
+import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
+import scorex.core.idToBytes
+import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.network.peer.PeerInfo
 
-class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
+class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
+  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
-  override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
-
-  override val stateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
-
-  override def semanticallyValidModifier(state: UTXO_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
-
-  override def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get
-
-  override def totallyValidModifier(history: HT, state: UTXO_ST): PM = {
-    val parentOpt = history.bestHeaderOpt
-    validFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState]).header
+  override val stateGen: Gen[WrappedDigestState] = {
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
+      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
+      new WrappedDigestState(digestState, wus, settings)
+    }
   }
 
-  override def totallyValidModifiers(history: HT, state: UTXO_ST, count: Int): Seq[PM] = {
+  override def semanticallyValidModifier(state: DIGEST_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
+
+  override def semanticallyInvalidModifier(state: DIGEST_ST): PM = invalidErgoFullBlockGen.sample.get
+
+  override def totallyValidModifier(history: HT, state: DIGEST_ST): PM = {
+    val parentOpt = history.bestHeaderOpt
+    validFullBlock(parentOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState).header
+  }
+
+  override def totallyValidModifiers(history: HT, state: DIGEST_ST, count: Int): Seq[PM] = {
     require(count >= 1)
     val headerOpt = history.bestHeaderOpt
     (0 until count).foldLeft((headerOpt, Seq.empty[PM])) { case (acc, _) =>
-      val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedUtxoState])
+      val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
       (Some(pm.header), acc._2 :+ pm)
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
@@ -48,6 +52,8 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
     val pool = ErgoMemPool.empty
+    val v = h.openSurfaceIds().last
+    s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)

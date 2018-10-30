@@ -15,7 +15,7 @@ import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
 
-class ErgoTransactionSpecification extends ErgoPropertyTest {
+class ErgoTransactionSpec extends ErgoPropertyTest {
 
   private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
@@ -153,7 +153,9 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       tx.statelessValidity.isSuccess shouldBe true
       val validity = tx.statefulValidity(from, context, settings.metadata)
       validity.isSuccess shouldBe false
-      validity.failed.get.getMessage should startWith("Validation failed for input #0")
+      val e = validity.failed.get
+      log.info(s"Validation message: ${e.getMessage}", e)
+      e.getMessage should startWith("Input script verification failed for input #0 of tx")
     }
   }
 
@@ -237,4 +239,5 @@ class ErgoTransactionSpecification extends ErgoPropertyTest {
       wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
     }
   }
+
 }

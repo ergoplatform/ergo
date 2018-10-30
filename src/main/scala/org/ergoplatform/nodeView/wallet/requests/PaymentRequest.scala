@@ -31,6 +31,7 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
       "registers" -> request.registers.asJson
     )
   }
+
 }
 
 class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {
@@ -47,4 +48,5 @@ class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentReque
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
     } yield PaymentRequest(address, value, assets, registers)
   }
+
 }

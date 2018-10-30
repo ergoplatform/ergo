@@ -41,7 +41,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private var height = 0
   // TODO looks like incorrect to initialize in such a way
-  private var stateContext: ErgoStateContext = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte), Seq())
+  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte))
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
@@ -65,9 +65,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
 
-      val context =
-        new ErgoContext(stateContext.copy(currentHeight = (stateContext.currentHeight + 1)),
-          transactionContext, ergoSettings.metadata, ContextExtension.empty)
+      val context = new ErgoContext(stateContext, transactionContext, ergoSettings.metadata, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
@@ -235,6 +233,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     case GetFirstSecret =>
       prover.secrets.headOption.foreach(s => sender() ! s)
 
+    case GetBoxes =>
+      sender() ! registry.unspentBoxesIterator.map(_.box)
+
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
@@ -277,6 +278,8 @@ object ErgoWalletActor {
   case object ReadRandomPublicKey
 
   case object GetFirstSecret
+
+  case object GetBoxes
 
   case object ReadTrackedAddresses
 

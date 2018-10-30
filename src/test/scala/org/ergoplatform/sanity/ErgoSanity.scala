@@ -61,7 +61,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
-      defaultMinerSecret
+      defaultMinerSecretNumber
     ).get
   }
 

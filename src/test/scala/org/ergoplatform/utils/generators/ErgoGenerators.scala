@@ -4,9 +4,8 @@ import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.autoleakus._
 import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumNonce
-import org.ergoplatform.mining.AutoleakusSolution
+import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader

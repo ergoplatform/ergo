@@ -27,7 +27,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
     val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
 
-    val updContext = emptyStateContext.copy(currentHeight = h)
+    val updContext = emptyStateContext.appendHeader(invalidHeaderGen.sample.get.copy(height = h))
 
     tx.statelessValidity.isSuccess shouldBe true
     tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity

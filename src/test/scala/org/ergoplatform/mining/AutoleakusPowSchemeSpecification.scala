@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.autoleakus._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ExtensionCandidate
@@ -29,7 +28,7 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
         Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, Constants.TrueLeaf)))),
         ts,
         ExtensionCandidate(Seq(), Seq()),
-        defaultMinerSecret
+        defaultMinerSecretNumber
       ).getOrElse(loop(ts + 1))
     }
 

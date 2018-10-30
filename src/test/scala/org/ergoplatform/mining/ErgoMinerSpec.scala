@@ -1,7 +1,5 @@
 package org.ergoplatform.mining
 
-import java.io.File
-
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
@@ -22,15 +20,12 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
-import scorex.util.ModifierId
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
@@ -59,11 +54,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber)
-  val secret: DLogProverInput = prover.secrets.head
-  val prop: Value[SBoolean.type] = secret.publicImage
-
-
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
@@ -80,14 +70,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
-    val address: P2PKAddress = await(wallet.randomPublicKey())
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(secret)
+      Some(defaultMinerSecret)
     )
     minerRef ! StartMining
 
@@ -96,14 +85,14 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == prop)
+      val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == defaultMinerPk)
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
       toSpend.take(toSend) foreach { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-        val outputs = (0 until desiredSize).map(_ => new ErgoBoxCandidate(boxToSend.value / desiredSize, prop))
+        val outputs = (0 until desiredSize).map(_ => new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk))
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
-        val tx = prover.sign(
+        val tx = defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
@@ -145,55 +134,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in
-    new TestKit(ActorSystem()) {
-      val tmpDir: File = createTempDir
-
-      val testProbe = new TestProbe(system)
-      system.eventStream.subscribe(testProbe.ref, classOf[SemanticallySuccessfulModifier[_]])
-      system.eventStream.subscribe(testProbe.ref, classOf[SuccessfulTransaction[_]])
-
-      val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
-
-      val nodeSettings: NodeConfigurationSettings = defaultSettings.nodeSettings.copy(mining = true,
-        stateType = StateType.Utxo,
-        miningDelay = defaultAwaitDuration,
-        offlineGeneration = true,
-        verifyTransactions = true)
-      val chainSettings: ChainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
-      val ergoSettings: ErgoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
-      val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
-      val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-
-      val minerRef: ActorRef = ErgoMinerRef(
-        ergoSettings,
-        nodeViewHolderRef,
-        readersHolderRef,
-        timeProvider,
-        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes()))))
-      expectNoMessage(1 second)
-      val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
-
-      val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-
-      val tx: ErgoTransaction = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, ergoSettings.emission)
-      r.s.asInstanceOf[UtxoStateReader].validate(tx) shouldBe 'success
-
-      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      testProbe.expectMsgType[SuccessfulTransaction[ErgoTransaction]]
-      r.m.size shouldBe 1
-
-      minerRef ! StartMining
-
-      testProbe.expectMsgClass(newBlockDuration, classOf[SemanticallySuccessfulModifier[_]])
-
-      val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(None, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
-      val txIds: Seq[ModifierId] = blocks.flatMap(_.blockTransactions.txs.map(_.id))
-      //Make sure that this tx wasn't mined
-      txIds.contains(tx.id) shouldBe false
-      system.terminate()
-    }
-
   it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -207,10 +147,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(secret)
+      Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
-    val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
+    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     val history: ErgoHistoryReader = r.h
     val startBlock: Option[Header] = history.bestHeaderOpt
@@ -223,16 +163,16 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.proposition shouldBe secret.publicImage
+    boxToDoubleSpend.proposition shouldBe defaultMinerSecret.publicImage
 
     val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
-    val tx1 = prover.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
+    val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
-    val tx2 = prover.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
+    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

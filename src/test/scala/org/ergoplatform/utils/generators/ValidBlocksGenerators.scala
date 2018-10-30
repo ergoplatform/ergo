@@ -186,6 +186,6 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = defaultExtension
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, defaultMinerSecret).get
+      transactions, time, extension, defaultMinerSecretNumber).get
   }
 }

@@ -6,7 +6,6 @@ import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
-import org.ergoplatform.autoleakus.PrivateKey
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
@@ -24,14 +23,13 @@ import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import sigmastate.SBoolean
-import sigmastate.Values.{LongConstant, TrueLeaf, Value}
+import sigmastate.Values.LongConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -53,15 +51,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
 
-  private var skOpt: Option[PrivateKey] = inSkOpt.map(_.w)
-
-  // TODO check that it corresponds to secret or remove from here.
-  private def minerPropOpt: Option[ProveDlog] = inSkOpt.map(_.publicImage)
+  private var skOpt: Option[DLogProverInput] = inSkOpt
 
   override def preStart(): Unit = {
-    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-      v.vault.firstSecret().onComplete { skTry =>
-        skOpt = skTry.toOption.map(_.w)
+    if (skOpt.isEmpty) {
+      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, UpdateSecret] { v =>
+        UpdateSecret(Await.result(v.vault.firstSecret(), 10.seconds))
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -78,6 +73,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
+  private def onUpdateSecret: Receive = {
+    case UpdateSecret(s) =>
+      skOpt = Some(s)
+
+  }
+
   private def miningStatus: Receive = {
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, candidateOpt)
@@ -89,7 +90,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         skOpt.foreach { sk =>
           log.info("Starting Mining")
           isMining = true
-          miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk, timeProvider)(context)
+          miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
           miningThreads.foreach(_ ! candidate)
         }
       }
@@ -135,11 +136,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningStatus orElse
     startMining orElse
     onReaders orElse
+    onUpdateSecret orElse
     unknownMessage
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      minerPropOpt.foreach { minerProp =>
+      skOpt.map(_.publicImage).foreach { minerProp =>
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) => procCandidateBlock(candidate)
           case Failure(e) => log.warn("Failed to produce candidate block.", e)
@@ -237,7 +239,7 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
+    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight + 1, feeBoxes, minerPk, emissionRules)
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],
@@ -289,6 +291,8 @@ object ErgoMiner extends ScorexLogging {
   case object StartMining
 
   case object MiningStatusRequest
+
+  case class UpdateSecret(s: DLogProverInput)
 
   case class MiningStatusResponse(isMining: Boolean, candidateBlock: Option[CandidateBlock])
 

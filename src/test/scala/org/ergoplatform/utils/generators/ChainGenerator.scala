@@ -28,8 +28,9 @@ trait ChainGenerator {
   val afterGenesisDigest: ADDigest = ADDigest @@ Base16.decode("04c3b15906e39b9d9659ded8fc24e9cea7ca96468516136ec6738256730d400901").get
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
   val defaultProver = new ErgoProvingInterpreter("test seed", 1)
-  val defaultMinerSecret: BigInt = defaultProver.secrets.head.w
-  val defaultMinerPk: ProveDlog = DLogProverInput(defaultMinerSecret.bigInteger).publicImage
+  val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
+  val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
+  val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
 
   val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
@@ -80,7 +81,7 @@ trait ChainGenerator {
       EmptyDigest32,
       prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
       extensionHash,
-      defaultMinerSecret
+      defaultMinerSecretNumber
     ).get
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
@@ -125,7 +126,7 @@ trait ChainGenerator {
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
       extension,
-      defaultMinerSecret
+      defaultMinerSecretNumber
     ).get
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

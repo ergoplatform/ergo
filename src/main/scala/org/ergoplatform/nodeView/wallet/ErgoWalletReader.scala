@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
-import org.ergoplatform.{ErgoAddress, P2PKAddress}
+import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.transaction.wallet.VaultReader
 
@@ -36,6 +36,10 @@ trait ErgoWalletReader extends VaultReader {
 
   def firstSecret(): Future[DLogProverInput] = {
     (actor ? GetFirstSecret).mapTo[DLogProverInput]
+  }
+
+  def unspendBoxes(): Future[Iterator[ErgoBox]] = {
+    (actor ? GetBoxes).mapTo[Iterator[ErgoBox]]
   }
 
   def randomPublicKey(): Future[P2PKAddress] = {

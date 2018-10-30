@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.autoleakus.Autoleakus
 import org.ergoplatform.autoleakus.pow.ksum.hashBinding.HKSumPowTask
-import org.ergoplatform.autoleakus.{Autoleakus, PrivateKey}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -25,7 +25,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   }
 
   def realDifficulty(header: Header): BigInt = {
-    org.ergoplatform.autoleakus.q / header.powSolution.d
+    q / header.powSolution.d
   }
 
   def prove(parentOpt: Option[Header],
@@ -91,7 +91,7 @@ class AutoleakusPowScheme(k: Int, N: Int) {
   }
 
   protected def getB(nBits: Long): BigInt = {
-    org.ergoplatform.autoleakus.q / RequiredDifficulty.decodeCompactBits(nBits)
+    q / RequiredDifficulty.decodeCompactBits(nBits)
   }
 
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {

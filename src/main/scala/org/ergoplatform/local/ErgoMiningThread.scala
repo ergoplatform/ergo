@@ -1,9 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.autoleakus.PrivateKey
 import org.ergoplatform.local.ErgoMiningThread.MineBlock
-import org.ergoplatform.mining.CandidateBlock
+import org.ergoplatform.mining.{CandidateBlock, PrivateKey}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier

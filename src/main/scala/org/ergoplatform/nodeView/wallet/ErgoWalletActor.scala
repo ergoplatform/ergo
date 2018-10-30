@@ -29,33 +29,33 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
-  lazy val seed: String = ergoSettings.walletSettings.seed
+  private lazy val seed: String = ergoSettings.walletSettings.seed
 
-  lazy val scanningInterval: FiniteDuration = ergoSettings.walletSettings.scanningInterval
+  private lazy val scanningInterval: FiniteDuration = ergoSettings.walletSettings.scanningInterval
 
-  val registry = new WalletStorage
+  private val registry = new WalletStorage
 
   //todo: pass as a class argument, add to config
-  val boxSelector: BoxSelector = DefaultBoxSelector
+  private val boxSelector: BoxSelector = DefaultBoxSelector
 
-  val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
+  private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
 
-  var height = 0
-  var lastBlockUtxoRootHash: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
+  private var height = 0
+  private var lastBlockUtxoRootHash: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
-  implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
-  val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
+  private val publicKeys: Seq[P2PKAddress] = Seq(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
 
-  val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
+  private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
-  val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //we currently do not use off-chain boxes to create a transaction
-  def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
+  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)
-  def resolveUncertainty(): Unit = {
+  private def resolveUncertainty(): Unit = {
     registry.nextUncertain().foreach { uncertainBox =>
       val box = uncertainBox.box
 
@@ -81,27 +81,27 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+  private def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     scanInputs(tx, heightOpt)
     tx.outputCandidates
       .zipWithIndex
       .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
   }
 
-  def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+  private def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.forall { inp =>
       val boxId = bytesToId(inp.boxId)
       registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
   }
 
-  def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
+  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
                  tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
       registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
   }
 
-  def registerBox(trackedBox: TrackedBox): Boolean = {
+  private def registerBox(trackedBox: TrackedBox): Boolean = {
     if (registry.contains(trackedBox.boxId)) {
       trackedBox.creationHeight match {
         case Some(h) =>
@@ -116,13 +116,13 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  def extractFromBlock(fb: ErgoFullBlock): Int = {
+  private def extractFromBlock(fb: ErgoFullBlock): Int = {
     height = fb.header.height
     lastBlockUtxoRootHash = fb.header.stateRoot
     fb.transactions.count(tx => scan(tx, Some(height)))
   }
 
-  def scanLogic: Receive = {
+  private def scanLogic: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
         self ! Resolve
@@ -150,7 +150,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       height = heightTo
   }
 
-  def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
+  private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
         new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
@@ -179,7 +179,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
+  private def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
     requestsToBoxCandidates(requests).map { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
@@ -225,14 +225,14 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
     }
 
-  def inputsFor(targetAmount: Long,
+  private def inputsFor(targetAmount: Long,
                 targetAssets: scala.Predef.Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
     boxSelector.select(registry.unspentBoxesIterator, filterFn, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
   }
 
-  def readers: Receive = {
+  private def readers: Receive = {
     case ReadBalances(chainStatus) =>
       if (chainStatus.onchain) {
         sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)

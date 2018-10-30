@@ -84,7 +84,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val parsingResult = json.as[AssetIssueRequest]
       parsingResult.isRight shouldBe true
       val restored = parsingResult.right.value
-      restored.address shouldEqual request.address
+      restored.addressOpt shouldEqual request.addressOpt
       restored.amount shouldEqual request.amount
       restored.name shouldEqual request.name
       restored.description shouldEqual request.description

@@ -185,7 +185,7 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-      log.info(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
+      log.debug(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
     }
     trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))

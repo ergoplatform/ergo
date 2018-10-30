@@ -13,7 +13,8 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.{Algos, Parameters}
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.BoxUtils
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -91,7 +92,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
-      .demand(outputs.forall(o => o.value >= o.bytes.length * Parameters.MinValuePerByte), s"Transaction is trying to create dust: $this")
+      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o)), s"Transaction is trying to create dust: $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
       .demandSuccess(outAssetsOpt, s"Asset rules violated in $this")
       .result

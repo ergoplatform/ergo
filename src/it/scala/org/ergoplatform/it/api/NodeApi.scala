@@ -96,31 +96,6 @@ trait NodeApi {
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
-  /** Tries to catch the moment when full block is already persisted in history,
-    * but indexes aren't updated yet. */
-  def waitForInconsistentHistory: Future[Unit] = {
-    waitFor[Boolean](_.historyIsInconsistent, bool => bool, 25.millis).map(_ => ())
-  }
-
-  /** To find out whether history is inconsistent at this moment we should:
-    * 1. Fetch current `HistoryInfo`;
-    * 2. Check whether `FullBlock` with `bestHeaderId` from `HistoryInfo` is already available;
-    * 3. Check that `bestFullBlockId` isn't updated yet in `HistoryInfo`;
-    * */
-  def historyIsInconsistent: Future[Boolean] = {
-    for {
-      hiInit <- historyInfo
-      fullBlockPersisted <- singleGet(s"/blocks/${hiInit.bestHeaderId}")
-        .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
-      hi <- historyInfo
-    } yield {
-      fullBlockPersisted &&
-        hi.bestHeaderHeight > hi.bestBlockHeight &&
-        hi.bestBlockId != hi.bestHeaderId &&
-        hiInit == hi
-    }
-  }
-
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
     val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
@@ -175,8 +150,9 @@ trait NodeApi {
 
 object NodeApi extends ScorexLogging {
 
-  case class UnexpectedStatusCodeException(request: Request, response: Response) extends Exception(s"Request: ${request.getUrl}\n" +
-    s"Unexpected status code (${response.getStatusCode}): ${response.getResponseBody}")
+  case class UnexpectedStatusCodeException(request: Request, response: Response)
+    extends Exception(s"Request: ${request.getUrl}\n Unexpected status code (${response.getStatusCode}): " +
+      s"${response.getResponseBody}")
 
   case class Peer(address: String, name: String)
 
@@ -191,7 +167,7 @@ object NodeApi extends ScorexLogging {
 
   case class HistoryInfo(bestHeaderId: String, bestBlockId: String, bestHeaderHeight: Int, bestBlockHeight: Int)
 
-  private implicit val historyInfoDecoder: Decoder[HistoryInfo] = { c =>
+  implicit val historyInfoDecoder: Decoder[HistoryInfo] = { c =>
     for {
       bestHeaderId <- c.downField("bestHeaderId").as[String]
       bestBlockId <- c.downField("bestFullHeaderId").as[String]

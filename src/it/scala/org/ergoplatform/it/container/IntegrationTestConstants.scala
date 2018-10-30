@@ -28,6 +28,12 @@ trait IntegrationTestConstants {
     nodeConfig.as[Option[String]]("scorex.network.nodeName").getOrElse("")
   }
 
+  def specialDataDirConfig(dir: String): Config = ConfigFactory.parseString(
+    s"""
+      |ergo.directory=$dir
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false
@@ -50,7 +56,7 @@ trait IntegrationTestConstants {
 
   val noDelayConfig: Config = ConfigFactory.parseString(
     """
-      |ergo.node.miningDelay=50ms
+      |ergo.node.miningDelay=500ms
     """.stripMargin
   )
 

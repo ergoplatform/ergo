@@ -7,11 +7,11 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.WrappedUtxoState
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
-import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -23,7 +23,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   property("valid coinbase transaction generation when emission box is present") {
     val (us, _) = createUtxoState()
     us.emissionBoxOpt should not be None
-    val tx = ErgoMiner.createCoinbase(us, Seq(), TrueLeaf, us.constants.emission)
+    val tx = ErgoMiner.createCoinbase(us, Seq(), Constants.TrueLeaf, us.constants.emission)
     us.validate(tx) shouldBe 'success
   }
 
@@ -40,7 +40,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       us = us.applyModifier(block).get
 
       us.emissionBoxOpt should not be None
-      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == TrueLeaf).toSeq, TrueLeaf, us.constants.emission)
+      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == Constants.TrueLeaf).toSeq,
+        Constants.TrueLeaf, us.constants.emission)
       us.validate(tx) shouldBe 'success
     }
   }
@@ -79,7 +80,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     var height: Int = 0
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = invalidHeaderGen.sample.get
+      val header = invalidHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
       bh = t._2
@@ -149,7 +150,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -168,7 +169,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
 
       val txs = spendingTx +: txsFromHolder
 
@@ -217,8 +218,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     //Different state
     val (us2, bh2) = {
-      lazy val initialBoxes: Seq[ErgoBox] =
-        (1 to 1).map(_ => truePropBoxGen.sample.get)
+      lazy val initialBoxes: Seq[ErgoBox] = (1 to 1).map(_ => truePropBoxGen.sample.get)
 
       val bh = BoxHolder(initialBoxes)
 

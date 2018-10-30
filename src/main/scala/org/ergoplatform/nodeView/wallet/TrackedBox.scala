@@ -40,10 +40,29 @@ case class TrackedBox(creationTx: ErgoTransaction,
     if (spendingTx.isEmpty) Unspent else Spent
   }
 
-  /** Whether the box is confirmed or not
+  /** Whether box creation is confirmed or not.
+    * Can be derived from `spendingStatus` and `chainStatus` combination
+    */
+  def creationChainStatus: ChainStatus = {
+    if (creationHeight.isEmpty) Offchain else Onchain
+  }
+
+  /** Whether box spending is confirmed or not, `Offchain` for unspent boxes.
+    * Can be derived from `spendingStatus` and `chainStatus` combination
+    */
+  def spendingChainStatus: ChainStatus = {
+    if (spendingStatus == Unspent || spendingHeight.isEmpty) Offchain else Onchain
+  }
+
+  /** Same as `creationChainStatus` for unspent boxes,
+    * same as `spendingChainStatus` for spent boxes
     */
   def chainStatus: ChainStatus = {
-    if (creationHeight.isEmpty || spendingTx.nonEmpty && spendingHeight.isEmpty) Offchain else Onchain
+    if (creationChainStatus == Offchain || spendingStatus == Spent && spendingChainStatus == Offchain) {
+      Offchain
+    } else {
+      Onchain
+    }
   }
 
   lazy val boxId: ModifierId = bytesToId(box.id)

@@ -1,16 +1,15 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
-import scorex.util.{ModifierId, bytesToId}
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 /**
   * Storage class for wallet entities:
@@ -83,70 +82,79 @@ class WalletStorage extends ScorexLogging {
   private var _confirmedBalance: Long = 0
   private val _confirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
 
-  private var _unconfirmedBalance: Long = 0
-  private val _unconfirmedAssetBalances: mutable.Map[ModifierId, Long] = mutable.Map()
+  private var _unconfirmedDelta: Long = 0
+  private val _unconfirmedAssetDeltas: mutable.Map[ModifierId, Long] = mutable.Map()
 
   def confirmedBalance: Long = _confirmedBalance
 
-  def confirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _confirmedAssetBalances
+  def confirmedAssetBalances: immutable.Map[ModifierId, Long] = _confirmedAssetBalances.toMap
 
-  def unconfirmedBalance: Long = _unconfirmedBalance
+  def balancesWithUnconfirmed: Long = _confirmedBalance + _unconfirmedDelta
 
-  def unconfirmedAssetBalances: scala.collection.Map[ModifierId, Long] = _unconfirmedAssetBalances
+  def assetBalancesWithUnconfirmed: immutable.Map[ModifierId, Long] = {
+    val unconfirmedSums = _unconfirmedAssetDeltas.toMap map { case (id, value) =>
+      val newValue = confirmedAssetBalances.getOrElse(id, 0L) + value
+      id -> newValue
+    }
+    val confirmedAddition = _confirmedAssetBalances -- _unconfirmedAssetDeltas.keys
+    unconfirmedSums.filterNot(_._2 == 0L) ++ confirmedAddition
+  }
 
-  private def increaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
-      val box = unspentBox.box
-      if (unspentBox.chainStatus == Onchain) {
-        _confirmedBalance += box.value
-        increaseAssets(_confirmedAssetBalances, box.additionalTokens)
+  private def undoBalances(trackedBox: TrackedBox): Unit = updateBalances(trackedBox, undo = true)
+
+  private def updateBalances(trackedBox: TrackedBox, undo: Boolean = false): Unit = {
+    if (trackedBox.certainty == Certain) {
+      if (trackedBox.spendingStatus == Unspent) {
+        increaseBalances(trackedBox.creationChainStatus, trackedBox.box, undo)
+        log.debug(s"${if (undo) "Undo" else "Update"} balance with UNSPENT ${trackedBox.chainStatus} " +
+                  s"${trackedBox.boxId} $trackedBox balance: $confirmedBalance $confirmedAssetBalances, " +
+                  s"total: $balancesWithUnconfirmed $assetBalancesWithUnconfirmed")
+      } else if (trackedBox.creationChainStatus == Onchain && trackedBox.spendingChainStatus == Offchain) {
+        increaseBalances(Onchain, trackedBox.box, undo)
+        decreaseBalances(Offchain, trackedBox.box, undo)
+        log.debug(s"${if (undo) "Undo" else "Update"} balance with OFF-CHAIN SPENT ${trackedBox.boxId} " +
+                  s"balance: $confirmedBalance, total: $balancesWithUnconfirmed")
       } else {
-        _unconfirmedBalance += box.value
-        increaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
+        log.debug(s"${if (undo) "Ignore undo" else "Ignore"} balances for SPENT ${trackedBox.boxId} $trackedBox")
       }
     }
   }
 
-  private def decreaseBalances(unspentBox: TrackedBox): Unit = {
-    if (checkUnspent(unspentBox)) {
-      val box = unspentBox.box
-      if (unspentBox.chainStatus == Onchain) {
-        _confirmedBalance -= box.value
-        decreaseAssets(_confirmedAssetBalances, box.additionalTokens)
+  private def increaseBalances(balanceStatus: ChainStatus, box: ErgoBox, undo: Boolean): Unit = {
+    if (undo) decreaseBalances(balanceStatus, box) else increaseBalances(balanceStatus, box)
+  }
+
+  private def increaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
+    if (balanceStatus == Onchain) _confirmedBalance += box.value else _unconfirmedDelta += box.value
+    val balanceMap = if (balanceStatus == Onchain) _confirmedAssetBalances else _unconfirmedAssetDeltas
+    box.additionalTokens foreach { case (tokenId, amount) =>
+      val assetId = bytesToId(tokenId)
+      val updBalance = balanceMap.getOrElse(assetId, 0L) + amount
+      if (updBalance == 0L) {
+        balanceMap.remove(assetId)
       } else {
-        _unconfirmedBalance -= box.value
-        decreaseAssets(_unconfirmedAssetBalances, box.additionalTokens)
+        balanceMap.put(assetId, updBalance)
       }
     }
   }
 
-  private def increaseAssets(balanceMap: mutable.Map[ModifierId, Long], assetDeltas: Seq[(TokenId, Long)]): Unit = {
-    assetDeltas.foreach { case (id, amount) =>
-      val wid = bytesToId(id)
-      val updBalance = balanceMap.getOrElse(wid, 0L) + amount
-      balanceMap.put(wid, updBalance)
-    }
+  private def decreaseBalances(balanceStatus: ChainStatus, box: ErgoBox, undo: Boolean): Unit = {
+    if (undo) increaseBalances(balanceStatus, box) else decreaseBalances(balanceStatus, box)
   }
 
-  private def decreaseAssets(balanceMap: mutable.Map[ModifierId, Long], assetDeltas: Seq[(TokenId, Long)]): Unit = {
-    assetDeltas.foreach { case (id, amount) =>
-      val wid = bytesToId(id)
-      val currentBalance = balanceMap.getOrElse(wid, 0L)
+  private def decreaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
+    if (balanceStatus == Onchain) _confirmedBalance -= box.value else _unconfirmedDelta -= box.value
+    val balanceMap = if (balanceStatus == Onchain) _confirmedAssetBalances else _unconfirmedAssetDeltas
+    box.additionalTokens foreach { case (tokenId, amount) =>
+      val assetId = bytesToId(tokenId)
+      val currentBalance = balanceMap.getOrElse(assetId, 0L)
       if (currentBalance == amount) {
-        balanceMap.remove(wid)
+        balanceMap.remove(assetId)
       } else {
         val updBalance = currentBalance - amount
-        balanceMap.put(wid, updBalance)
+        balanceMap.put(assetId, updBalance)
       }
     }
-  }
-
-  private def checkUnspent(trackedBox: TrackedBox): Boolean = {
-    if (trackedBox.spendingStatus == Spent) {
-      val msg = s"Cannot update balances with spent box $trackedBox"
-      log.warn(msg, new IllegalArgumentException(msg))
-    }
-    trackedBox.spendingStatus == Unspent
   }
 
   def makeTransition(boxId: ModifierId, transition: Transition): Boolean = {
@@ -177,26 +185,20 @@ class WalletStorage extends ScorexLogging {
     deregister(trackedBox.boxId) // we need to decrease balances if somebody registers box that already known
     put(trackedBox)
     if (trackedBox.spendingStatus == Unspent) {
-      log.info(s"New ${trackedBox.chainStatus} box arrived: " + trackedBox)
+      log.info(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
     }
     trackedBox.creationHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
-
-    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) {
-      increaseBalances(trackedBox)
-    }
+    updateBalances(trackedBox)
   }
 
   /**
     * Remove tracked box from a wallet storage
     */
   def deregister(boxId: ModifierId): Option[TrackedBox] = {
-    remove(boxId) map { removedBox =>
-      if (removedBox.spendingStatus == Unspent && removedBox.certainty == Certain) {
-        decreaseBalances(removedBox)
-      }
-      removedBox
-    }
+    val removedBox = remove(boxId)
+    removedBox.foreach(undoBalances)
+    removedBox
   }
 
   /**
@@ -252,11 +254,11 @@ class WalletStorage extends ScorexLogging {
     val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
 
     if (dropCreation && dropSpending) {
-      Some(trackedBox.copy(creationHeight = None, spendingTx = None, spendingHeight = None))
+      Some(trackedBox.copy(creationHeight = None, spendingHeight = None))
     } else if (dropCreation) {
       Some(trackedBox.copy(creationHeight = None))
     } else if (dropSpending) {
-      Some(trackedBox.copy(spendingTx = None, spendingHeight = None))
+      Some(trackedBox.copy(spendingHeight = None))
     } else {
       None
     }

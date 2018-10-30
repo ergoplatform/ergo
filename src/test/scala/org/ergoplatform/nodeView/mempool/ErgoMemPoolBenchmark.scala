@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._
 import scorex.util.ModifierId
 import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
+import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -75,4 +75,5 @@ object ErgoMemPoolBenchmark
       }
     }
   }
+
 }

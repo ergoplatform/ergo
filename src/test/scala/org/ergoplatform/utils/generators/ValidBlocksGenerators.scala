@@ -96,11 +96,12 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val height: Int = emissionBox.additionalRegisters(R4).value.asInstanceOf[Long].toInt
-          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, defaultMinerPk, settings.emission)
+          val rewards = ErgoMiner.collectRewards(Some(emissionBox), height, Seq.empty, defaultMinerPk, settings.emission)
+          val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
-          createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))
-          val newSelfBoxes = selfBoxes ++ tx.outputs.filter(b => !isEmissionBox(b))
-          loop(remainedBoxes, newSelfBoxes, tx +: acc, rnd)
+          createdEmissionBox = outs.filter(b => isEmissionBox(b))
+          val newSelfBoxes = selfBoxes ++ outs.filter(b => !isEmissionBox(b))
+          loop(remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
 
         case _ =>
           if (currentSize < sizeLimit - 2 * averageSize) {

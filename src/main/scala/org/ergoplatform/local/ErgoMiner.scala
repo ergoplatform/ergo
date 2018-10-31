@@ -208,8 +208,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2
       .filter(_.proposition == Constants.FeeProposition)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerPk, ergoSettings.emission)
-    val txs = txsNoConflict :+ coinbase
+    val rewards = ErgoMiner.collectRewards(state, feeBoxes, minerPk, ergoSettings.emission)
+    val txs = txsNoConflict ++ rewards
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       val timestamp = timeProvider.time()
@@ -231,22 +231,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
-  def createCoinbase(state: UtxoStateReader,
+  def collectRewards(state: UtxoStateReader,
                      feeBoxes: Seq[ErgoBox],
                      minerPk: ProveDlog,
-                     emissionRules: EmissionRules): ErgoTransaction = {
+                     emissionRules: EmissionRules): Seq[ErgoTransaction] = {
     val emissionBoxOpt = state.emissionBoxOpt
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
+    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
   }
 
-  def createCoinbase(emissionBoxOpt: Option[ErgoBox],
+  def collectRewards(emissionBoxOpt: Option[ErgoBox],
                      currentHeight: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerPk: ProveDlog,
-                     emission: EmissionRules): ErgoTransaction = {
+                     emission: EmissionRules): Seq[ErgoTransaction] = {
     feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
     val nextHeight = currentHeight + 1
 
@@ -271,10 +271,10 @@ object ErgoMiner extends ScorexLogging {
 
     val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerPk, currentHeight, feeAssets, Map())
 
-    ErgoTransaction(
+    Seq(ErgoTransaction(
       inputs,
       IndexedSeq(newEmissionBoxOpt, Some(minerBox)).flatten
-    )
+    ))
   }
 
   def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs

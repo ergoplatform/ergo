@@ -248,33 +248,30 @@ object ErgoMiner extends ScorexLogging {
                      minerPk: ProveDlog,
                      emission: EmissionRules): Seq[ErgoTransaction] = {
     feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
-    val nextHeight = currentHeight + 1
 
-    val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
-      case Some(emissionBox) =>
-        val prop = emissionBox.proposition
-        val emissionAmount = emission.emissionAtHeight(nextHeight)
-        val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
-          currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
-
-        ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
-      case None => (feeBoxes, 0L, None)
+    val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
+      val nextHeight = currentHeight + 1
+      val prop = emissionBox.proposition
+      val emissionAmount = emission.emissionAtHeight(nextHeight)
+      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
+        currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
+      val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerPk, currentHeight, Seq.empty, Map())
+      ErgoTransaction(
+        inputs,
+        IndexedSeq(newEmissionBox, minerBox)
+      )
     }
-
-    val inputs = inputBoxes
-      .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      .toIndexedSeq
-
-    val feeAmount = feeBoxes.map(_.value).sum
-
-    val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
-
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerPk, currentHeight, feeAssets, Map())
-
-    Seq(ErgoTransaction(
-      inputs,
-      IndexedSeq(newEmissionBoxOpt, Some(minerBox)).flatten
-    ))
+    val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
+      val feeAmount = feeBoxes.map(_.value).sum
+      val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+      val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      val minerBox = new ErgoBoxCandidate(feeAmount, minerPk, currentHeight, feeAssets, Map())
+      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
+    } else {
+      None
+    }
+    Seq(emissionTxOpt, feeTxOpt).flatten
   }
 
   def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs

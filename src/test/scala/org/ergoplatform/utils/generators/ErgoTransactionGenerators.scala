@@ -96,13 +96,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId)
   } yield ErgoBox(value, prop, creationHeight, tokens, ar, transactionId.toModifierId, boxId)
 
-  lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
-    prop <- trueLeafGen
-    ar <- additionalRegistersGen
-    creationHeight <- Gen.choose(-1, Int.MaxValue)
-    tokens <- additionalTokensGen
-    value <- validValueGen(prop, tokens, ar)
-  } yield new ErgoBoxCandidate(value, prop, creationHeight, tokens, ar)
+  lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = ergoBoxWithPropositionGen(TrueLeaf)
 
   def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBox] = for {
     prop <- falseLeafGen
@@ -110,6 +104,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     creationHeight <- Gen.choose(-1, Int.MaxValue)
     tokens <- additionalTokensGen
     value <- Gen.choose(minValue, maxValue)
+  } yield new ErgoBoxCandidate(value, prop, creationHeight, tokens, ar).toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
+
+  def ergoBoxWithPropositionGen(prop: Value[SBoolean.type]): Gen[ErgoBox] = for {
+    ar <- additionalRegistersGen
+    creationHeight <- Gen.choose(-1, Int.MaxValue)
+    tokens <- additionalTokensGen
+    value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, creationHeight, tokens, ar).toBox(scorex.util.bytesToId(Array.fill(32)(0: Byte)), 0)
 
   lazy val inputGen: Gen[Input] = for {

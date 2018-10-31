@@ -37,7 +37,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
     var lastBlockOpt: Option[Header] = None
-    requireEqualStateContexts(us.stateContext, ds.stateContext, 0)
+    requireEqualStateContexts(us.stateContext, ds.stateContext, -1)
     forAll { seed: Int =>
       val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1

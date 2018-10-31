@@ -7,8 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import sigmastate.{SBoolean, Values}
 import sigmastate.Values.Constant
+import sigmastate.{SBoolean, Values}
 
 
 object Constants {

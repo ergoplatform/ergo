@@ -19,7 +19,7 @@ val scorexVersion = "8adeddba-SNAPSHOT"
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "sigma-state" % "ei390-128f8fd3-SNAPSHOT")
+  ("org.scorexfoundation" %% "sigma-state" % "creationHeight-190d2f4c-SNAPSHOT")
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",

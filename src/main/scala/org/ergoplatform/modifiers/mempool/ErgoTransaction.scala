@@ -100,13 +100,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       blockchainState: ErgoStateContext,
+                       stateContext: ErgoStateContext,
                        metadata: Metadata): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
     failFast
       .payload(0L)
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
+      .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), "box created in future")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
@@ -115,7 +115,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
 
-        val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
+        val ctx = new ErgoContext(stateContext, transactionContext, metadata, proverExtension)
 
         val verifier: ErgoInterpreter = ErgoInterpreter.instance
 
@@ -214,11 +214,12 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
   implicit private val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
+      creationHeight <- cursor.downField("creationHeight").as[Int]
       value <- cursor.downField("value").as[Long]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition, creationHeight, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

@@ -88,18 +88,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getLastHeadersLength(10) shouldBe 2
   }
 
-  private val t6 = TestCase("add transaction to memory pool") { fixture =>
-    import fixture._
-    if (stateType == Utxo) {
-      val (_, bh) = createUtxoState(Some(nodeViewHolderRef))
-      val tx = validTransactionsFromBoxHolder(bh)._1.head
-      subscribeEvents(classOf[FailedTransaction[_]])
-      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      expectNoMsg()
-      getPoolSize shouldBe 1
-    }
-  }
-
   private val t7 = TestCase("apply invalid full block") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -264,7 +252,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongOutputs = tx.outputCandidates.map(o =>
-        new ErgoBoxCandidate(o.value + 10L, o.proposition, o.additionalTokens, o.additionalRegisters)
+        new ErgoBoxCandidate(o.value + 10L, o.proposition, us.stateContext.currentHeight, o.additionalTokens, o.additionalRegisters)
       )
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)
@@ -323,7 +311,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   }
 
   private val t14 = TestCase("do not apply genesis block header if " +
-                             "it's not equal to genesisId from config") { fixture =>
+    "it's not equal to genesisId from config") { fixture =>
     import fixture._
     updateConfig(genesisIdConfig(modifierIdGen.sample))
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -360,7 +348,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHeightOf(block.header.id) shouldBe Some(0)
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t7, t8, t9)
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
@@ -369,7 +357,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val verifyingTxCases = List(t10, t11, t12, t13)
+  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>
@@ -380,6 +368,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   }
 
   val genesisIdTestCases = List(t14, t15)
+
   def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
     protoSettings.copy(chainSettings = protoSettings.chainSettings.copy(genesisId = expectedGenesisIdOpt))
   }

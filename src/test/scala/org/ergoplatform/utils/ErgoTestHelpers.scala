@@ -27,14 +27,14 @@ trait ErgoTestHelpers
 
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
-    new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)
+    new ErgoBoxCandidate(box.value, box.proposition, creationHeight, box.additionalTokens, box.additionalRegisters)
 
   def changeValue(box: ErgoBoxCandidate, delta: Long): Option[ErgoBoxCandidate] = {
     if (-delta >= box.value) {
       None
     } else {
-      Some(new ErgoBoxCandidate(box.value + delta, box.proposition, box.additionalTokens,
-        box.additionalRegisters, box.creationHeight))
+      Some(new ErgoBoxCandidate(box.value + delta, box.proposition, box.creationHeight, box.additionalTokens,
+        box.additionalRegisters))
     }
   }
 

@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -19,13 +18,6 @@ import scala.util.{Random, Try}
 
 
 class UtxoStateSpecification extends ErgoPropertyTest {
-
-  property("valid coinbase transaction generation when emission box is present") {
-    val (us, _) = createUtxoState()
-    us.emissionBoxOpt should not be None
-    val tx = ErgoMiner.createCoinbase(us, Seq(), defaultMinerPk, us.constants.emission)
-    us.validate(tx) shouldBe 'success
-  }
 
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()
@@ -154,7 +146,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, emptyStateContext.currentHeight)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -173,7 +165,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, emptyStateContext.currentHeight)))
 
       val txs = spendingTx +: txsFromHolder
 

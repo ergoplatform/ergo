@@ -192,13 +192,13 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext.empty(p.digest)
+    val emptyStateContext = ErgoStateContext.empty(p.digest)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,
-      metadata(ErgoState.genesisStateVersion, p.digest, currentEmissionBoxOpt, defaultStateContext),
+      metadata(ErgoState.genesisStateVersion, p.digest, currentEmissionBoxOpt, emptyStateContext),
       paranoidChecks = true
     ).get
 

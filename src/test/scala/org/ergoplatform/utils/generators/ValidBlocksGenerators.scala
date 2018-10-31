@@ -70,7 +70,9 @@ trait ValidBlocksGenerators
     defaultProver.sign(unsignedTx, inputBoxes, settings.metadata, emptyStateContext).get
   }
 
-  def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, Constants.TrueLeaf)
+  def outputForAnyone(value: Long): ErgoBoxCandidate = {
+    new ErgoBoxCandidate(value, Constants.TrueLeaf, creationHeight = emptyStateContext.currentHeight)
+  }
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
@@ -79,7 +81,6 @@ trait ValidBlocksGenerators
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
-    val outBoxesLength = stateBoxesIn.length
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
@@ -94,7 +95,7 @@ trait ValidBlocksGenerators
       stateBoxes.find(isEmissionBox) match {
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
-          val height: Int = (emissionBox.additionalRegisters(R4).value.asInstanceOf[Long] + 1).toInt
+          val height: Int = emissionBox.additionalRegisters(R4).value.asInstanceOf[Long].toInt
           val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, defaultMinerPk, settings.emission)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))

@@ -239,23 +239,23 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight + 1, feeBoxes, minerPk, emissionRules)
+    createCoinbase(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],
-                     height: Int,
+                     currentHeight: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerPk: ProveDlog,
                      emission: EmissionRules): ErgoTransaction = {
-    feeBoxes.foreach(b =>
-      assert(b.proposition == Constants.FeeProposition, s"Trying to create coinbase from protected fee box $b"))
+    feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
+    val nextHeight = currentHeight + 1
 
     val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
       case Some(emissionBox) =>
         val prop = emissionBox.proposition
-        val emissionAmount = emission.emissionAtHeight(height)
-        val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)))
+        val emissionAmount = emission.emissionAtHeight(nextHeight)
+        val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
+          currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
 
         ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
       case None => (feeBoxes, 0L, None)
@@ -269,7 +269,7 @@ object ErgoMiner extends ScorexLogging {
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
 
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerPk, feeAssets, Map())
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerPk, currentHeight, feeAssets, Map())
 
     ErgoTransaction(
       inputs,

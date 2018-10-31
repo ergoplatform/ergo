@@ -25,7 +25,7 @@ class AutoleakusPowSchemeSpecification extends ErgoPropertyTest {
         RequiredDifficulty.encodeCompactBits(Constants.InitialDifficulty),
         ADDigest @@ Array.fill(33)(0: Byte),
         SerializedAdProof @@ Array.emptyByteArray,
-        Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, Constants.TrueLeaf)))),
+        Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, Constants.TrueLeaf, -1)))),
         ts,
         ExtensionCandidate(Seq(), Seq()),
         defaultMinerSecretNumber

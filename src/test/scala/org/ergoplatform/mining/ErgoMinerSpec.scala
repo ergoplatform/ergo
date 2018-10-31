@@ -90,7 +90,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       toSpend.take(toSend) foreach { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-        val outputs = (0 until desiredSize).map(_ => new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk))
+        val outputs = (0 until desiredSize).map { _ =>
+          new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
+        }
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = defaultProver.sign(
           unsignedTx,
@@ -167,10 +169,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
     val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
 

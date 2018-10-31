@@ -128,6 +128,7 @@ trait ApiCodecs {
   implicit val boxEncoder: Encoder[ErgoBox] = { box =>
     Json.obj(
       "boxId" -> box.id.asJson,
+      "creationHeight" -> box.creationHeight.asJson,
       "value" -> box.value.asJson,
       "proposition" -> valueEncoder(box.proposition),
       "assets" -> box.additionalTokens.asJson,

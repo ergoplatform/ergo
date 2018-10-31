@@ -60,7 +60,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, stateContext.currentHeight))
       )
 
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
@@ -147,7 +147,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
-        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
+        new ErgoBoxCandidate(value, address.script, stateContext.currentHeight, assets.getOrElse(Seq.empty),
+          registers.getOrElse(Map.empty))
       case AssetIssueRequest(address, amount, name, description, decimals) =>
         val firstInput = inputsFor(
           requests
@@ -164,7 +165,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           R5 -> StringConstant(description),
           R6 -> IntConstant(decimals)
         )
-        new ErgoBoxCandidate(0L, address.script, Seq(assetId -> amount), nonMandatoryRegisters)
+        new ErgoBoxCandidate(0L, address.script, stateContext.currentHeight, Seq(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }
@@ -198,7 +199,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val changeBoxCandidates = r.changeBoxes.map { case (chb, cha) =>
           val assets = cha.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-          new ErgoBoxCandidate(chb, changeAddress, assets)
+          new ErgoBoxCandidate(chb, changeAddress, stateContext.currentHeight, assets)
         }
 
         val unsignedTx = new UnsignedErgoTransaction(

@@ -2,15 +2,13 @@ package org.ergoplatform.modifiers.mempool
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
 import scapi.sigma.ProveDiffieHellmanTuple
-import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import sigmastate._
 import sigmastate.Values.GroupElementConstant
+import sigmastate._
 import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
@@ -21,6 +19,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     new ErgoBoxCandidate(
       boxCandidate.value + delta,
       boxCandidate.proposition,
+      boxCandidate.creationHeight,
       boxCandidate.additionalTokens,
       boxCandidate.additionalRegisters)
   }
@@ -37,6 +36,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     new ErgoBoxCandidate(
       boxCandidate.value,
       boxCandidate.proposition,
+      boxCandidate.creationHeight,
       tokens,
       boxCandidate.additionalRegisters)
   }
@@ -134,7 +134,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
               id -> amount
             }
           }
-          new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+          new ErgoBoxCandidate(c.value, c.proposition, emptyStateContext.currentHeight, updTokens, c.additionalRegisters)
         }
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
@@ -213,7 +213,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
               val updTokens = Seq(assetId -> amount) ++ (1 to (amount - updAmount).toInt).map(_ => assetId -> 1L) ++
                 c.additionalTokens.filterNot(t => java.util.Arrays.equals(t._1, assetId))
               modified = true
-              new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+              new ErgoBoxCandidate(c.value, c.proposition, emptyStateContext.currentHeight, updTokens, c.additionalRegisters)
             case None => c
           }
         } else {

@@ -38,7 +38,7 @@ class TransactionApiRouteSpec extends FlatSpec
     ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
   val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
-  val output = new ErgoBoxCandidate(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf)
+  val output = new ErgoBoxCandidate(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf, -1)
   val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
 
   it should "post transaction" in {

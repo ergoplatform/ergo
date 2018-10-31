@@ -59,7 +59,8 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     expectNoMessage(1.second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
     val wallet: ErgoWalletReader = r.w
-    val address: P2PKAddress = await(wallet.randomPublicKey())
+    val addresses: Seq[P2PKAddress] = await(wallet.publicKeys(0, 100))
+    addresses.exists(_.pubkey == defaultMinerPk) shouldBe true
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,

@@ -14,6 +14,7 @@ case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
   def requestsWithFee: Seq[TransactionRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(Constants.FeeProposition), fee, None, None)
   }
+
 }
 
 class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {

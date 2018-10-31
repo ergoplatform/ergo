@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
@@ -34,11 +34,11 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private var transactionsPerBlock = 0
-  private var currentFullHeight = 0
+  private var transactionsPerBlock: Int = 0
+  private var currentFullHeight: Int = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
 
-  private val MaxTransactionsPerBlock = settings.testingSettings.maxTransactionsPerBlock
+  private val MaxTransactionsPerBlock: Int = settings.testingSettings.maxTransactionsPerBlock
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
@@ -71,16 +71,16 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
 
     case Success(tx: ErgoTransaction@unchecked) =>
-      log.info("Locally generated tx: " + tx)
+      log.debug("Locally generated tx: " + tx)
       viewHolder ! LocallyGeneratedTransaction[ErgoTransaction](tx)
 
     case Failure(e) =>
-      log.info(s"Failed to generate tx: ${e.getMessage}")
+      log.debug(s"Failed to generate tx: ${e.getMessage}")
 
     case SuccessfulTransaction(_) => self ! Attempt
   }
 
-  def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+  private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
     val feeReq = PaymentRequest(Pay2SAddress(Constants.FeeProposition), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
@@ -89,8 +89,10 @@ class TransactionGenerator(viewHolder: ActorRef,
         case i if i < 95 && balances.assetBalances.nonEmpty =>
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
+          val approximateBoxSize = 200
+          val minimalErgoAmount = approximateBoxSize * Parameters.MinValuePerByte
           Algos.decode(tokenToSpend._1).map { id =>
-            PaymentRequest(randProposition, 0L, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
+            PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
           }.toOption
         case _ =>
           val assetInfo = genNewAssetInfo
@@ -102,11 +104,11 @@ class TransactionGenerator(viewHolder: ActorRef,
     }
   }
 
-  def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
+  private def randProposition: ErgoAddress = propositions(Random.nextInt(propositions.size))
 
-  def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
+  private def randAmount: Int = (Random.nextInt(10) + 1) * 100000000
 
-  def genNewAssetInfo: (Int, String, String, Int) = {
+  private def genNewAssetInfo: (Int, String, String, Int) = {
     val emissionAmount: Int = (Random.nextInt(10) + 1) * 100000000
     val tokenName: String = Base16.encode(scorex.util.Random.randomBytes(4)).toUpperCase
     val tokenDescription: String = s"$tokenName description"

@@ -139,7 +139,7 @@ components:
         registers:
           $ref: '#/components/schemas/Registers'
         fee:
-          description: Transaction fee
+          description: Optional, default transaction fee from settings will be used if not defined
           type: integer
           format: int64
           example: 100
@@ -148,13 +148,13 @@ components:
       description: Request for generation of asset issue transaction
       type: object
       required:
-      - address
       - amount
       - name
       - description
       - decimals
       properties:
         address:
+          description: Optional, first address in the wallet will be used if not defined
           $ref: '#/components/schemas/ErgoAddress'
         amount:
           description: Supply amount
@@ -175,7 +175,7 @@ components:
           format: int32
           example: 8
         fee:
-          description: Transaction fee
+          description: Optional, default transaction fee from settings will be used if not defined
           type: integer
           format: int64
           example: 100

@@ -31,11 +31,11 @@ object DefaultFakePowScheme extends AutoleakusPowScheme(1, 1) {
     val pk: ECPoint = genPk(sk)
     val w: ECPoint = genPk(1123)
     val n: HKSumNonce = HKSumNonce(Array.fill(8)(0: Byte))
-    val s = AutoleakusSolution(pk, w, n: HKSumNonce, 0)
+    val d: BigInt = q / (height + 10)
+    val s = AutoleakusSolution(pk, w, n: HKSumNonce, d)
     Some(Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, s))
   }
 
-  override def realDifficulty(header: Header): BigInt = q
-
+  override def realDifficulty(header: Header): PrivateKey = header.requiredDifficulty
 }

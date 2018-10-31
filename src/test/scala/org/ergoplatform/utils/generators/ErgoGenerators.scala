@@ -62,12 +62,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
                     boxId: Short = 0,
                     creationHeight: Long = 0): Gen[Int] = {
-    val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
-      transactionId, boxId, creationHeight)
+    val b = ErgoBox(Int.MaxValue, proposition, creationHeight, additionalTokens, additionalRegisters,
+      transactionId, boxId)
     Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
   }
 
-  lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))
+  lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf, 0))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))

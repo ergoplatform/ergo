@@ -111,7 +111,7 @@ object ErgoState extends ScorexLogging {
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
 
     val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
-    ErgoBox(emission.coinsTotal, prop, Seq(), Map(register -> LongConstant(-1)))
+    ErgoBox(emission.coinsTotal, prop, -1, Seq(), Map(register -> LongConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File,

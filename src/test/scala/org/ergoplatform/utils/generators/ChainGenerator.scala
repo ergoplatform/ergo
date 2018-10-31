@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{BoxUtils, ErgoTestHelpers}
 import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.utils.NetworkTimeProvider
@@ -27,6 +27,7 @@ trait ChainGenerator {
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val afterGenesisDigest: ADDigest = ADDigest @@ Base16.decode("04c3b15906e39b9d9659ded8fc24e9cea7ca96468516136ec6738256730d400901").get
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
+  val startHeight: Int = emptyStateContext.currentHeight
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
   val defaultProver: ErgoProvingInterpreter = new ErgoProvingInterpreter(defaultSeed, 1)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
@@ -104,8 +105,8 @@ trait ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
-    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf))
+    val bValue = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, startHeight)
+    val outputs = IndexedSeq(ErgoBox(bValue, Constants.TrueLeaf, startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

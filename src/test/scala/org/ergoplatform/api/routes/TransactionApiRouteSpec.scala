@@ -37,7 +37,7 @@ class TransactionApiRouteSpec extends FlatSpec
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
     ProverResult(Array.emptyByteArray, ContextExtension(Map())))
 
-  val currentHeight: Int = emptyStateContext.currentHeight
+  val currentHeight: Int = startHeight
 
   val minValue: Long = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, currentHeight)
   val output = new ErgoBoxCandidate(minValue, Constants.TrueLeaf, currentHeight)

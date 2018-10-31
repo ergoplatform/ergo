@@ -30,11 +30,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val ergoBoxGen: Gen[ErgoBox] = for {
     prop <- ergoPropositionGen
+    creationHeight <- Gen.choose(-1, Int.MaxValue)
+    regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
+    tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    tokens <- additionalTokensGen(tokensCount)
+    ar <- additionalRegistersGen(regNum)
     value <- positiveIntGen
-    reg <- positiveIntGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <-  boxIndexGen
-  } yield ErgoBox(value, prop, Seq(), Map(R4 -> IntConstant(reg)), transactionId.toModifierId, boxId)
+  } yield ErgoBox(value, prop, creationHeight, tokens, ar, transactionId.toModifierId, boxId)
 
   val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
     length <- Gen.chooseNum(1, 100)
@@ -71,6 +75,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = for {
     prop <- trueLeafGen
+    creationHeight <- Gen.choose(-1, Int.MaxValue)
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- boxIndexGen
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
@@ -78,17 +83,18 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokensCount <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
     tokens <- additionalTokensGen(tokensCount)
     value <- validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId)
-  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
+  } yield ErgoBox(value, prop, creationHeight, tokens, ar, transactionId.toModifierId, boxId)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = for {
     prop <- propositionGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- boxIndexGen
+    creationHeight <- Gen.choose(-1, Int.MaxValue)
     regNum <- Gen.chooseNum[Byte](0, ErgoBox.nonMandatoryRegistersCount)
     ar <- additionalRegistersGen(regNum)
     value <- validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId)
-  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId)
+  } yield ErgoBox(value, prop, creationHeight, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     prop <- trueLeafGen
@@ -172,7 +178,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, TrueLeaf, normalizedTokens)
+      ErgoBox(amt, TrueLeaf, -1,  normalizedTokens)
     }
 
     val noProof = ProverResult(SigSerializer.toBytes(NoProof), ContextExtension.empty)

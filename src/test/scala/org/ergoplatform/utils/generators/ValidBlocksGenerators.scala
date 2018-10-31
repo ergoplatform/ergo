@@ -71,7 +71,7 @@ trait ValidBlocksGenerators
   }
 
   def outputForAnyone(value: Long): ErgoBoxCandidate = {
-    new ErgoBoxCandidate(value, Constants.TrueLeaf, creationHeight = emptyStateContext.currentHeight)
+    new ErgoBoxCandidate(value, Constants.TrueLeaf, creationHeight = startHeight)
   }
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =

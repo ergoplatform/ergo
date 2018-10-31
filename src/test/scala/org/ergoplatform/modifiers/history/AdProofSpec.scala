@@ -26,12 +26,12 @@ class AdProofSpec extends ErgoPropertyTest {
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = ErgoBox(0, Constants.TrueLeaf, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId, 0)
+    val zeroBox = ErgoBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId, 0)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 
     val prevDigest = prover.digest
-    val boxes = (1 to howMany) map { i => ErgoBox(1, Constants.TrueLeaf, boxId = i.toShort) }
+    val boxes = (1 to howMany) map { i => ErgoBox(1, Constants.TrueLeaf, startHeight, boxId = i.toShort) }
     boxes.foreach(box => prover.performOneOperation(Insert(box.id, ADValue @@ box.bytes)))
     val pf = prover.generateProof()
 
@@ -65,14 +65,14 @@ class AdProofSpec extends ErgoPropertyTest {
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val moreInsertions = operations :+ Insertion(ErgoBox(10, Constants.TrueLeaf))
+    val moreInsertions = operations :+ Insertion(ErgoBox(10, Constants.TrueLeaf, startHeight))
     proof.verify(StateChanges(Seq(), moreInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val differentInsertions = operations.init :+ Insertion(ErgoBox(10, Constants.TrueLeaf))
+    val differentInsertions = operations.init :+ Insertion(ErgoBox(10, Constants.TrueLeaf, startHeight))
     proof.verify(StateChanges(Seq(), differentInsertions), prevDigest, newDigest) shouldBe 'failure
   }
 

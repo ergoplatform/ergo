@@ -12,19 +12,19 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
@@ -85,25 +85,31 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == defaultMinerPk)
+      val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
-      toSpend.take(toSend) foreach { boxToSend =>
+      val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-        val outputs = (0 until desiredSize).map { _ =>
+        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, Constants.FeeProposition, r.s.stateContext.currentHeight)
+        val outputs = (1 until desiredSize).map { _ =>
           new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
         }
-        val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
-        val tx = defaultProver.sign(
+        val unsignedTx = new UnsignedErgoTransaction(inputs, feeBox +: outputs)
+        defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
           r.s.stateContext).get
-
-        nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }
+
+      // put txs in mempool altogether to speedup test
+      await(nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        v.pool.put(txs)
+      })
+
       if (toSend > toSpend.size) {
-        Thread.sleep(1000)
+        // wait for the next block
+        testProbe.expectMsgClass(newBlockDuration, newBlock)
         loop(toSend - toSpend.size)
       }
     }

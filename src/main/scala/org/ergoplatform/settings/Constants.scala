@@ -24,9 +24,6 @@ object Constants {
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
 
-  // Max cost of coinbase transaction. todo calculate? todo: do we need this constant
-  val CoinbaseTxCost: Int = 10000
-
   val BlocksPerHour = 30
 
   // Number of last block headers available is scripts from ErgoStateContext

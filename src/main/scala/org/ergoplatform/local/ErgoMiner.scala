@@ -50,6 +50,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val ExpectedTxCost: Int = 10000
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
+  // Leave this cost empty when collection transactions to put reward txs
+  private val CostDrift: Int = 50000
+  // Leave this space empty when collection transactions to put reward txs
+  private val SizeDrift: Int = 5000
 
   private var skOpt: Option[DLogProverInput] = inSkOpt
 
@@ -202,8 +206,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val txsNoConflict = collectTxs(state,
       state.emissionBoxOpt.map(_.id).toSeq,
       pool.unconfirmed.values,
-      Parameters.MaxBlockCost - Constants.CoinbaseTxCost,
-      Parameters.MaxBlockSize,
+      Parameters.MaxBlockCost - CostDrift,
+      Parameters.MaxBlockSize - SizeDrift,
       Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2

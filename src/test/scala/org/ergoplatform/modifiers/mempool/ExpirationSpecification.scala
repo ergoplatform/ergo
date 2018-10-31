@@ -22,7 +22,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val in = Input(from.id,
       ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h = Constants.StoragePeriod + heightDelta
+    val h: Int = (from.creationHeight + Constants.StoragePeriod + heightDelta).toInt
 
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
     val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
@@ -30,16 +30,17 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val updContext = emptyStateContext.appendHeader(invalidHeaderGen.sample.get.copy(height = h))
 
     tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity
+    val expect = if (expectedValidity) 'success else 'failure
+    tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata) shouldBe expect
   }
 
-  property("successful spending w. same value") {
+  property("successful spending with same value") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, _ => IndexedSeq(from), expectedValidity = true)
     }
   }
 
-  property("successful spending w. max spending") {
+  property("successful spending with max spending") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, h => {
         val fee = Math.min(Parameters.K * from.bytes.length, from.value)
@@ -50,7 +51,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("unsuccessful spending due too big storage fee charged") {
-    forAll(unspendableErgoBoxGen(Parameters.K  * 100 + 1, Long.MaxValue)) { from =>
+    forAll(unspendableErgoBoxGen(Parameters.K * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 0, h => {
         val fee = Math.min(Parameters.K * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)

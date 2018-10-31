@@ -73,14 +73,21 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val txs: immutable.Seq[ErgoTransaction] = receiveWhile(transactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) => tx
+    val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction)
+        if tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx) => true
     }
 
-    txs.nonEmpty shouldBe true
-    txs.exists(tx => tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx)) shouldBe true
-    txs.exists(tx => tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx)) shouldBe true
-    txs.exists(containsAssetIssuingBox) shouldBe true
+    val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction)
+        if tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx) => true
+    }
+
+    val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
+    }
+
+    ergoTransferringTx && tokenTransferringTx && tokenIssuingTx shouldBe true
   }
 
 }

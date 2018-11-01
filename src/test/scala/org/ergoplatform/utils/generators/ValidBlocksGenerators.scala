@@ -73,6 +73,7 @@ trait ValidBlocksGenerators
           if (currentSize < sizeLimit - 2 * averageSize) {
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
+            // disable tokens generation to avoid situation with too many tokens
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd)
             loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
           } else {

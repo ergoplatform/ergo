@@ -54,7 +54,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @param boxes - boxes to
     * @return map from asset id to to balance
     */
-  private def getAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate]): Try[Map[ByteArrayWrapper, Long]] = Try {
+  private def getAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate]): Try[scala.collection.Map[ByteArrayWrapper, Long]] = Try {
     val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     boxes.foreach { box =>
       require(box.additionalTokens.size <= ErgoBox.MaxTokens, "Output contains too many assets")
@@ -66,10 +66,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         require(map.size <= ErgoTransaction.MaxTokens, s"Transaction is operating with too many(${map.size}) assets")
       }
     }
-    map.toMap
+    map
   }
 
-  lazy val outAssetsOpt: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates)
+  lazy val outAssetsTry: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates).map(_.toMap)
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
@@ -91,7 +91,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
       .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o)), s"Transaction is trying to create dust: $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
-      .demandSuccess(outAssetsOpt, s"Asset rules violated $outAssetsOpt in $this")
+      .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
       .result
   }
 
@@ -130,7 +130,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demandTry(outAssetsOpt, outAssetsOpt.toString) { (validation, outAssets) =>
+      .demandTry(outAssetsTry, outAssetsTry.toString) { (validation, outAssets) =>
         getAssetsMap(boxesToSpend) match {
           case Success(inAssets) =>
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)

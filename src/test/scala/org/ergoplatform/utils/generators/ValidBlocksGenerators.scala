@@ -57,6 +57,9 @@ trait ValidBlocksGenerators
 
       val currentSize = acc.map(_.bytes.length).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
+      val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens)
+      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size
+      val issueNew = customTokensNum == 0
 
       stateBoxes.find(isEmissionBox) match {
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
@@ -74,12 +77,12 @@ trait ValidBlocksGenerators
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
             // disable tokens generation to avoid situation with too many tokens
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd)
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd, issueNew)
             loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd)
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
             ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
           }
       }

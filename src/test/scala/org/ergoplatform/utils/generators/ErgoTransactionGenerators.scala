@@ -107,7 +107,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield ErgoTransaction(from, to)
 
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                rnd: Random = new Random): ErgoTransaction = {
+                                rnd: Random = new Random,
+                                issueNew: Boolean = true): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
     boxesToSpend.foreach { b =>
       require(b.proposition == defaultMinerPk || b.proposition == Values.TrueLeaf,
@@ -119,9 +120,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
         ByteArrayWrapper(bs) -> amt
       }: _*)
+    require(assetsMap.size <= ErgoTransaction.MaxTokens,
+      s"Too much different tokens ${assetsMap.size} in ${boxesToSpend.size} boxes")
 
     //randomly creating a new asset
-    if (rnd.nextBoolean()) assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
+    if (rnd.nextBoolean() && issueNew) {
+      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
+    }
 
     val inputsCount = boxesToSpend.size
     val outputsCount = Math.min(Short.MaxValue, Math.max(inputsCount + 1, rnd.nextInt(inputsCount * 2)))

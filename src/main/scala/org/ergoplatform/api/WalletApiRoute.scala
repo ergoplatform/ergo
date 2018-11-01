@@ -58,7 +58,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       .fold(_ => reject, s => provide(s))
   }
 
-  private def adderessResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
+  private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
   private def compileSource(source: String): Try[Value[SBoolean.type]] = {
     val compiler = new SigmaCompiler
@@ -131,17 +131,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.balancesWithUnconfirmed())
   }
 
-  def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
-    compileSource(source).map(Pay2SAddress.apply).fold(
+  def p2sAddressR: Route = (path("p2s_address") & post & source) {
+    compileSource(_).map(Pay2SAddress.apply).fold(
       e => BadRequest(e.getMessage),
-      address => ApiResponse(adderessResponse(address))
+      address => ApiResponse(addressResponse(address))
     )
   }
 
-  def p2shAddressR: Route = (path("p2sh_address") & post & source) { source =>
-    compileSource(source).map(Pay2SHAddress.apply).fold(
+  def p2shAddressR: Route = (path("p2sh_address") & post & source) {
+    compileSource(_).map(Pay2SHAddress.apply).fold(
       e => BadRequest(e.getMessage),
-      address => ApiResponse(adderessResponse(address))
+      address => ApiResponse(addressResponse(address))
     )
   }
 

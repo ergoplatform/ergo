@@ -8,9 +8,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
-import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}

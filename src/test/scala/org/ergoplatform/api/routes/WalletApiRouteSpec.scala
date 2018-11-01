@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueR
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
-import org.scalatest.{FlatSpec, Matchers, TryValues}
+import org.scalatest.{FlatSpec, Matchers}
 import sigmastate.Values
 
 import scala.util.Try
@@ -22,8 +22,7 @@ class WalletApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport
-  with TryValues {
+  with FailFastCirceSupport {
 
   val prefix = "/wallet"
 
@@ -104,8 +103,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate valid P2SAddress form source" in {
-    val p = Json.obj("source" -> source.asJson)
-    Post(prefix + "/p2s_address", p) ~> route ~> check {
+    Post(prefix + "/p2s_address", Json.obj("source" -> source.asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
@@ -113,8 +111,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate valid P2SHAddress form source" in {
-    val p = Json.obj("source" -> source.asJson)
-    Post(prefix + "/p2sh_address", p) ~> route ~> check {
+    Post(prefix + "/p2sh_address", Json.obj("source" -> source.asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix

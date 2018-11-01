@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoLikeContext.Metadata
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils._
-import org.ergoplatform._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -21,6 +21,31 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
+  property("Generate asset issuing transaction") {
+    withFixture { implicit w =>
+      val meta = Metadata(Metadata.TestnetNetworkPrefix)
+      val address = getTrackedAddresses.head
+      val genesisBlock = makeGenesisBlock(address.script, randomNewAsset)
+      val genesisTx = genesisBlock.transactions.head
+      applyBlock(genesisBlock) shouldBe 'success
+      wallet.scanPersistent(genesisBlock)
+      blocking(Thread.sleep(scanTime(genesisBlock)))
+      val availableAmount = getConfirmedBalances.balance
+      val emissionAmount: Int = 100000000
+      val tokenName: String = "ERG"
+      val tokenDescription: String = s"ERG description"
+      val tokenDecimals: Int = 9
+      val feeAmount = availableAmount / 4
+      val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), feeAmount, None, None)
+      val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
+      val tx = Await.result(wallet.generateTransaction(Seq(feeReq, req)), awaitDuration).get
+      log.info(s"Generated transaction $tx")
+      val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
+      val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
+      tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
+    }
+  }
 
   property("Generate transaction with multiple inputs") {
     withFixture { implicit w =>

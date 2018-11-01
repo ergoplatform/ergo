@@ -1,7 +1,6 @@
 package org.ergoplatform.utils.generators
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -10,7 +9,8 @@ import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.Constants
+import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -20,12 +20,12 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
 import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
-import sigmastate.{SBoolean, _}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.{SBoolean, _}
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Matchers {
+trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
@@ -53,13 +53,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                     additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
                     boxId: Short = 0,
-                    creationHeight: Long = 0): Gen[Int] = {
-    val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
-                        transactionId, boxId, creationHeight)
-    Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
+                    creationHeight: Long = 0): Gen[Long] = {
+    val minValue = BoxUtils.minimalErgoAmountSimulated(proposition, additionalTokens, additionalRegisters)
+    Gen.choose(minValue, coinsTotal / 2000)
   }
-
-  lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
@@ -93,7 +90,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   }
 
   def genSecureBoundedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] =
-    Gen.choose(minSize, maxSize).flatMap { scorex.util.Random.randomBytes }
+    Gen.choose(minSize, maxSize).flatMap {
+      scorex.util.Random.randomBytes
+    }
 
   def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
@@ -144,6 +143,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
 
   /** Random long from 1 to maximum - 1
+    *
     * @param maximum should be positive
     */
   def randomLong(maximum: Long = Long.MaxValue): Long = {

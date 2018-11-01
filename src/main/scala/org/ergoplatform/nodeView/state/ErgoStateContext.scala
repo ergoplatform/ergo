@@ -11,7 +11,7 @@ import scala.util.Try
   * Additional data required for transactions validation
   *
   * @param currentHeight - height of the next block
-  * @param stateDigest - An AVL tree root hash of the UTXO state BEFORE current block application
+  * @param stateDigest   - An AVL tree root hash of the UTXO state BEFORE current block application
   */
 case class ErgoStateContext(currentHeight: Int, stateDigest: ADDigest) extends BytesSerializable {
 
@@ -23,6 +23,15 @@ case class ErgoStateContext(currentHeight: Int, stateDigest: ADDigest) extends B
     ErgoStateContext(header.height + 1, header.stateRoot)
   }
 }
+
+object ErgoStateContext {
+
+  def empty(afterGenesisStateDigest: ADDigest): ErgoStateContext = {
+    ErgoStateContext(0, afterGenesisStateDigest)
+  }
+
+}
+
 
 object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 

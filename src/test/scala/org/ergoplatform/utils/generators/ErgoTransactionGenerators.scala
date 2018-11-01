@@ -106,22 +106,25 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, to)
 
+  /**
+    * Generates a transaction, that is valid, if correct boxes were provided.
+    * Generated transaction may still be invalid, if:
+    * - default prover does not know how to sign at least one input
+    * - number of assets exceeds Transaction.MaxTokens
+    */
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,
                                 issueNew: Boolean = true): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
-    boxesToSpend.foreach { b =>
-      require(b.proposition == defaultMinerPk || b.proposition == Values.TrueLeaf,
-        s"Incorrect proposition ${b.proposition}")
-    }
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
     val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
         ByteArrayWrapper(bs) -> amt
       }: _*)
-    require(assetsMap.size <= ErgoTransaction.MaxTokens,
-      s"Too much different tokens ${assetsMap.size} in ${boxesToSpend.size} boxes")
+    if (assetsMap.size > ErgoTransaction.MaxTokens) {
+      log.warn("Going to generate a transaction with too much tokens")
+    }
 
     //randomly creating a new asset
     if (rnd.nextBoolean() && issueNew) {
@@ -143,7 +146,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
       mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
 
-    var availableTokenSlots = Math.min(outputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens)
+    var availableTokenSlots = outputsCount * ErgoBox.MaxTokens
 
     if (assetsMap.nonEmpty) {
       do {
@@ -177,7 +180,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
     val inputs = boxesToSpend.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, emptyStateContext).get
+    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, emptyStateContext).getOrElse {
+      log.debug("Going to generate a transaction with incorrect proofs")
+      new ErgoTransaction(inputs, newBoxes)
+    }
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {

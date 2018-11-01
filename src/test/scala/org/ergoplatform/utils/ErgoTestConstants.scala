@@ -12,10 +12,11 @@ import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 
-trait ErgoTestConstants {
+trait ErgoTestConstants extends ScorexLogging {
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)

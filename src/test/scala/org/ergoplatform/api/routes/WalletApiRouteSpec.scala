@@ -39,7 +39,7 @@ class WalletApiRouteSpec extends FlatSpec
   val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
-  val source = """{ if (HEIGHT < 100) getVar[SigmaProp](1).get else getVar[SigmaProp](2).get }"""
+  val source = """{ HEIGHT < 100 }"""
 
   it should "generate arbitrary transaction" in {
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
@@ -105,7 +105,7 @@ class WalletApiRouteSpec extends FlatSpec
 
   it should "generate valid P2SAddress form source" in {
     val p = Json.obj("source" -> source.asJson)
-    Post(prefix + "p2s_address", p) ~> route ~> check {
+    Post(prefix + "/p2s_address", p) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
@@ -114,7 +114,7 @@ class WalletApiRouteSpec extends FlatSpec
 
   it should "generate valid P2SHAddress form source" in {
     val p = Json.obj("source" -> source.asJson)
-    Post(prefix + "p2sh_address", p) ~> route ~> check {
+    Post(prefix + "/p2sh_address", p) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix

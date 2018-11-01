@@ -16,7 +16,6 @@ import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.scalatest.FlatSpec
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
 
-import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
@@ -31,11 +30,13 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read(None)
 
-    val nodeSettings = empty.nodeSettings.copy(mining = true,
+    val nodeSettings = empty.nodeSettings.copy(
+      mining = true,
       stateType = StateType.Utxo,
       miningDelay = 1.second,
       offlineGeneration = true,
-      verifyTransactions = true)
+      verifyTransactions = true
+    )
     val chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
@@ -73,14 +74,23 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val txs: immutable.Seq[ErgoTransaction] = receiveWhile(transactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) => tx
+    val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction)
+        if tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx) => true
     }
 
-    txs.nonEmpty shouldBe true
-    txs.exists(tx => tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx)) shouldBe true
-    txs.exists(tx => tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx)) shouldBe true
-    txs.exists(containsAssetIssuingBox) shouldBe true
+    val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction)
+        if tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx) => true
+    }
+
+    val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
+    }
+
+    ergoTransferringTx shouldBe true
+    tokenTransferringTx shouldBe true
+    tokenIssuingTx shouldBe true
   }
 
 }

@@ -64,7 +64,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))
-        require(map.size <= ErgoTransaction.MaxTokens, "Transaction is operating with too many assets")
+        require(map.size <= ErgoTransaction.MaxTokens, s"Transaction is operating with too many(${map.size}) assets")
       }
     }
   }
@@ -94,7 +94,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
       .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o)), s"Transaction is trying to create dust: $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
-      .demandSuccess(outAssetsOpt, s"Asset rules violated in $this")
+      .demandSuccess(outAssetsOpt, s"Asset rules violated $outAssetsOpt in $this")
       .result
   }
 
@@ -133,7 +133,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demandTry(outAssetsOpt, s"Assets preservation rule is broken in $this") { (validation, outAssets) =>
+      .demandTry(outAssetsOpt, outAssetsOpt.toString) { (validation, outAssets) =>
         val inAssets = mutable.Map[ByteArrayWrapper, Long]()
         fillAssetsMap(boxesToSpend, inAssets)
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
@@ -216,10 +216,11 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
+      creationHeight <- cursor.downField("creationHeight").as[Long]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition, assets, registers, creationHeight = creationHeight), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

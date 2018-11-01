@@ -3,13 +3,16 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}
 import org.scalatest.{EitherValues, Inspectors, OptionValues, TryValues}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.collection.{GenMap, GenTraversable}
 import scala.concurrent.ExecutionContext
@@ -22,7 +25,6 @@ trait ErgoTestHelpers
     with OptionValues
     with EitherValues {
 
-
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
     new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)
 
@@ -34,8 +36,6 @@ trait ErgoTestHelpers
         box.additionalRegisters, box.creationHeight))
     }
   }
-
-  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
 
   def inspectAll[E, C[_], A](xs: C[E])(fun: E => A)
                             (implicit collecting: Collecting[E, C[E]],

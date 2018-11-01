@@ -150,7 +150,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -169,7 +169,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder
 
@@ -218,7 +218,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
     //Different state
     val (us2, bh2) = {
-      lazy val initialBoxes: Seq[ErgoBox] = (1 to 1).map(_ => truePropBoxGen.sample.get)
+      lazy val initialBoxes: Seq[ErgoBox] = (1 to 1).map(_ => ergoBoxGenNoProp.sample.get)
 
       val bh = BoxHolder(initialBoxes)
 

@@ -87,7 +87,9 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
       case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
     }
 
-    ergoTransferringTx && tokenTransferringTx && tokenIssuingTx shouldBe true
+    ergoTransferringTx shouldBe true
+    tokenTransferringTx shouldBe true
+    tokenIssuingTx shouldBe true
   }
 
 }

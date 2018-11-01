@@ -32,7 +32,6 @@ object ErgoStateContext {
 
 }
 
-
 object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
   override def toBytes(obj: ErgoStateContext): Array[Byte] = {

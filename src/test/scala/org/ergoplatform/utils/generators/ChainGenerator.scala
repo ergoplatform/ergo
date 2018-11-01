@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderCha
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Constants, Parameters}
-import org.ergoplatform.utils.ErgoTestConstants
+import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -79,8 +79,8 @@ trait ChainGenerator extends ErgoTestConstants {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf, creationHeight = startHeight)
-    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf, creationHeight = startHeight))
+    val minimalEmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Seq(), Map())
+    val outputs = IndexedSeq(ErgoBox(minimalEmount, Constants.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

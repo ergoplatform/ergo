@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -31,6 +32,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
+  val loadMaxKeys: Int = 10
 
   override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesR ~
@@ -60,9 +63,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
-  private def compileSource(source: String): Try[Value[SBoolean.type]] = {
+  private def compileSource(source: String, publicKeys: Seq[ProveDlog]): Try[Value[SBoolean.type]] = {
     val compiler = new SigmaCompiler
-    Try(compiler.compile(Map.empty, source)).flatMap {
+    val env = publicKeys.zipWithIndex.map { case (pk, i) => s"myPubKey$i" -> pk }.toMap
+    Try(compiler.compile(env, source)).flatMap {
       case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
         Success(script)
       case other =>
@@ -131,18 +135,22 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.balancesWithUnconfirmed())
   }
 
-  def p2sAddressR: Route = (path("p2s_address") & post & source) {
-    compileSource(_).map(Pay2SAddress.apply).fold(
-      e => BadRequest(e.getMessage),
-      address => ApiResponse(addressResponse(address))
-    )
+  def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { pks =>
+      compileSource(source, pks.map(_.pubkey)).map(Pay2SAddress.apply).fold(
+        e => BadRequest(e.getMessage),
+        address => ApiResponse(addressResponse(address))
+      )
+    }
   }
 
-  def p2shAddressR: Route = (path("p2sh_address") & post & source) {
-    compileSource(_).map(Pay2SHAddress.apply).fold(
-      e => BadRequest(e.getMessage),
-      address => ApiResponse(addressResponse(address))
-    )
+  def p2shAddressR: Route = (path("p2sh_address") & post & source) { source =>
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { pks =>
+      compileSource(source, pks.map(_.pubkey)).map(Pay2SHAddress.apply).fold(
+        e => BadRequest(e.getMessage),
+        address => ApiResponse(addressResponse(address))
+      )
+    }
   }
 
   def addressesR: Route = (path("addresses") & get) {

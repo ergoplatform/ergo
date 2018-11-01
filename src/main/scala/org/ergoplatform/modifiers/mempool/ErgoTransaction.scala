@@ -30,7 +30,7 @@ import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
@@ -52,11 +52,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to
-    * @param map   - map to modify
-    * @return
+    * @return map from asset id to to balance
     */
-  private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
-                            map: mutable.Map[ByteArrayWrapper, Long]) = Try {
+  private def getAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate]): Try[Map[ByteArrayWrapper, Long]] = Try {
+    val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     boxes.foreach { box =>
       require(box.additionalTokens.size <= ErgoBox.MaxTokens, "Output contains too many assets")
       box.additionalTokens.foreach { case (assetId, amount) =>
@@ -67,12 +66,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         require(map.size <= ErgoTransaction.MaxTokens, s"Transaction is operating with too many(${map.size}) assets")
       }
     }
+    map.toMap
   }
 
-  lazy val outAssetsOpt: Try[Map[ByteArrayWrapper, Long]] = {
-    val mutableMap = mutable.Map[ByteArrayWrapper, Long]()
-    fillAssetsMap(outputCandidates, mutableMap).map(_ => mutableMap.toMap)
-  }
+  lazy val outAssetsOpt: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates)
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
@@ -121,7 +118,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val verifier: ErgoInterpreter = ErgoInterpreter.instance
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
-        costTry.recover{case t => t.printStackTrace()}
+        costTry.recover { case t => t.printStackTrace() }
 
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
@@ -134,16 +131,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
       .demandTry(outAssetsOpt, outAssetsOpt.toString) { (validation, outAssets) =>
-        val inAssets = mutable.Map[ByteArrayWrapper, Long]()
-        fillAssetsMap(boxesToSpend, inAssets)
-        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-        validation.validateSeq(outAssets) {
-          case (validation, (outAssetId, outAmount)) =>
-            val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
-            validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-              fatal(s"Assets preservation rule is broken in $this. " +
-                s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+        getAssetsMap(boxesToSpend) match {
+          case Success(inAssets) =>
+            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+            validation.validateSeq(outAssets) {
+              case (validation, (outAssetId, outAmount)) =>
+                val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+                validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+                  fatal(s"Assets preservation rule is broken in $this. " +
+                    s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+                }
             }
+          case Failure(e) => fatal(e.getMessage)
         }
       }
       .toTry

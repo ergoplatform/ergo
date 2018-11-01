@@ -9,6 +9,7 @@ import org.scalatest.{FreeSpec, OptionValues}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.util.Random
 
 class NodeRecoverySpec
   extends FreeSpec
@@ -17,7 +18,7 @@ class NodeRecoverySpec
 
   val shutdownAtHeight: Int = 5
 
-  val localVolume = s"$localDataDir/node-recovery-spec/data"
+  val localVolume = s"$localDataDir/node-recovery-spec/${Random.nextInt()}/data"
   val remoteVolume = "/app"
 
   val dir = new File(localVolume)

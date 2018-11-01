@@ -17,11 +17,21 @@ import scorex.core.transaction.box.Box.Amount
   * R5 - description
   * R6 - number of decimal places
   */
-case class AssetIssueRequest(address: ErgoAddress,
+case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              amount: Amount,
                              name: String,
                              description: String,
                              decimals: Int) extends TransactionRequest
+
+object AssetIssueRequest {
+
+  def apply(address: ErgoAddress,
+            amount: Amount,
+            name: String,
+            description: String,
+            decimals: Int): AssetIssueRequest =
+    new AssetIssueRequest(Some(address), amount, name, description, decimals)
+}
 
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
 
@@ -29,13 +39,14 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
 
   def apply(request: AssetIssueRequest): Json = {
     Json.obj(
-      "address" -> request.address.asJson,
+      "address" -> request.addressOpt.asJson,
       "amount" -> request.amount.asJson,
       "name" -> request.name.asJson,
       "description" -> request.description.asJson,
       "decimals" -> request.decimals.asJson
     )
   }
+
 }
 
 class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssueRequest] with ApiCodecs {
@@ -46,11 +57,12 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
 
   def apply(cursor: HCursor): Decoder.Result[AssetIssueRequest] = {
     for {
-      address <- cursor.downField("address").as[ErgoAddress]
+      address <- cursor.downField("address").as[Option[ErgoAddress]]
       amount <- cursor.downField("amount").as[Amount]
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
     } yield AssetIssueRequest(address, amount, name, description, decimals)
   }
+
 }

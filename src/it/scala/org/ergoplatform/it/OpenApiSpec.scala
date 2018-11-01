@@ -4,7 +4,7 @@ import java.io.{File, PrintWriter}
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{ApiChecker, ApiCheckerConfig, IntegrationSuite, Node}
-import org.scalatest.{FreeSpec, TryValues}
+import org.scalatest.FreeSpec
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}

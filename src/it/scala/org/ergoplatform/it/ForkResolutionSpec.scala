@@ -10,7 +10,7 @@ import org.scalatest.FreeSpec
 
 import scala.concurrent.{Await, Future, blocking}
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Random, Try}
 
 class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
 
@@ -33,7 +33,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     .map(_.withFallback(onlineGeneratingPeerConfig))
   val offlineMiningNodesConfig: List[Config] = nodeSeedConfigs.slice(1, nodesQty)
 
-  def localVolume(n: Int): String = s"$localDataDir/fork-resolution-spec/node$n/data"
+  def localVolume(n: Int): String = s"$localDataDir/fork-resolution-spec/node$n/${Random.nextInt()}/data"
 
   def startNodesWithBinds(nodeConfigs: List[Config],
                           configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {

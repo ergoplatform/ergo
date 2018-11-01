@@ -34,16 +34,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesR ~
-      addressesR ~
-      p2sAddressR ~
-      p2shAddressR ~
-      sendTransactionR ~
       unconfirmedBalanceR ~
+      addressesR ~
       generateTransactionR ~
-      sendPaymentTransactionR ~
-      sendAssetIssueTransactionR
       generatePaymentTransactionR ~
-      generateAssetIssueTransactionR
+      generateAssetIssueTransactionR ~
+      sendTransactionR ~
+      sendPaymentTransactionR ~
+      sendAssetIssueTransactionR ~
+      p2shAddressR ~
+      p2sAddressR
   }
 
   private val fee: Directive1[Option[Long]] = entity(as[Json]).flatMap { p =>

@@ -65,7 +65,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   private def compileSource(source: String, publicKeys: Seq[ProveDlog]): Try[Value[SBoolean.type]] = {
     val compiler = new SigmaCompiler
-    val env = publicKeys.zipWithIndex.map { case (pk, i) => s"myPubKey$i" -> pk }.toMap
+    val env = publicKeys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
     Try(compiler.compile(env, source)).flatMap {
       case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
         Success(script)
@@ -136,8 +136,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { pks =>
-      compileSource(source, pks.map(_.pubkey)).map(Pay2SAddress.apply).fold(
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
+      compileSource(source, addrs.map(_.pubkey)).map(Pay2SAddress.apply).fold(
         e => BadRequest(e.getMessage),
         address => ApiResponse(addressResponse(address))
       )
@@ -145,8 +145,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def p2shAddressR: Route = (path("p2sh_address") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { pks =>
-      compileSource(source, pks.map(_.pubkey)).map(Pay2SHAddress.apply).fold(
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
+      compileSource(source, addrs.map(_.pubkey)).map(Pay2SHAddress.apply).fold(
         e => BadRequest(e.getMessage),
         address => ApiResponse(addressResponse(address))
       )

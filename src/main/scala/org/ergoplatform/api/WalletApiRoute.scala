@@ -87,19 +87,21 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  private def generateTransaction(requests: Seq[TransactionRequest]): Route =
+  private def generateTransaction(requests: Seq[TransactionRequest]): Route = {
     withWalletOp(_.generateTransaction(requests)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => ApiResponse(tx)
     }
+  }
 
-  private def sendTransaction(requests: Seq[TransactionRequest]): Route =
+  private def sendTransaction(requests: Seq[TransactionRequest]): Route = {
     withWalletOp(_.generateTransaction(requests)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
         ApiResponse(tx.id)
     }
+  }
 
   def sendTransactionR: Route = (path("transaction" / "send") & post
     & entity(as[RequestsHolder]))(holder => sendTransaction(holder.requestsWithFee))

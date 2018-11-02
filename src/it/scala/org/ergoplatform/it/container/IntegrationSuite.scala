@@ -6,6 +6,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
+import scala.util.Random
 
 trait IntegrationSuite
   extends  BeforeAndAfterAll
@@ -17,7 +18,7 @@ trait IntegrationSuite
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  protected val localDataDir: String = "/tmp/ergo"
+  protected val localDataDir: String = s"/tmp/ergo-${Random.nextInt(Int.MaxValue)}"
 
   protected val docker: Docker = new Docker(tag = getClass.getSimpleName, localDataVolumeOpt = Some(localDataDir))
 

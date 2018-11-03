@@ -33,8 +33,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  val loadMaxKeys: Int = 100
-
   override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesR ~
       unconfirmedBalanceR ~
@@ -48,6 +46,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       p2shAddressR ~
       p2sAddressR
   }
+
+  private val loadMaxKeys: Int = 100
 
   private val fee: Directive1[Option[Long]] = entity(as[Json]).flatMap { p =>
     Try(p.hcursor.downField("fee").as[Long]) match {

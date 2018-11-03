@@ -33,7 +33,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  val loadMaxKeys: Int = 10
+  val loadMaxKeys: Int = 100
 
   override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
     balancesR ~

@@ -40,6 +40,12 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  val digestStatePeerConfig: Config = ConfigFactory.parseString(
+    """
+      |ergo.node.stateType = "digest"
+    """.stripMargin
+  )
+
   val onlineGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=true

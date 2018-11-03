@@ -7,11 +7,10 @@ import org.scalatest.FreeSpec
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
+class NodesUtxoSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val blocksCount = 5
+  val blocksQty = 5
 
-  val forkDepth: Int = blocksCount
   val minerConfig: Config = nodeSeedConfigs.head
 
   val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
@@ -20,13 +19,13 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
   val nodes: List[Node] = docker.startNodes(nodeConfigs).get
 
-  s"Generate $blocksCount blocks" in {
+  s"Nodes with utxo state sync ($blocksQty blocks)" in {
     val result = for {
-      b <- Future.traverse(nodes)(_.height).map(_.max)
-      _ <- Future.traverse(nodes)(_.waitForHeight(b + blocksCount))
-      headers <- Future.traverse(nodes)(_.headerIdsByHeight(b + blocksCount - forkDepth))
+      initHeight <- Future.traverse(nodes)(_.height).map(_.max)
+      _ <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))
+      headers <- Future.traverse(nodes)(_.headerIdsByHeight(initHeight + blocksQty))
     } yield {
-      log.debug(s"Headers at height ${b + blocksCount - forkDepth}: ${headers.mkString(",")}")
+      log.debug(s"Headers at height ${initHeight + blocksQty}: ${headers.mkString(",")}")
       val headerIdsAtSameHeight = headers.flatten
       val sample = headerIdsAtSameHeight.head
       headerIdsAtSameHeight should contain only sample
@@ -35,4 +34,3 @@ class FourNodeSyncSpec extends FreeSpec with IntegrationSuite {
   }
 
 }
-

@@ -8,6 +8,7 @@ import org.ergoplatform.it.container.Docker.{ExtraConfig, noExtraConfig}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
+import scala.async.Async.{async, await}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, blocking}
 import scala.util.Try
@@ -16,7 +17,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
 
   val nodesQty: Int = 4
 
-  val initialCommonChainLength: Int = 5
+  val commonChainLength: Int = 5
   val forkLength: Int = 5
   val syncLength: Int = 10
 
@@ -57,26 +58,28 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
 
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get
 
-    val result = for {
-      b <- Future.traverse(nodes)(_.height).map(_.max)
-      _ <- Future.traverse(nodes)(_.waitForHeight(b + initialCommonChainLength))
-      isolatedNodes <- {
+    val result = async {
+      val initMaxHeight = await(Future.traverse(nodes)(_.height).map(_.max))
+      await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength)))
+      val isolatedNodes = await {
         nodes.foreach(node => docker.stopNode(node.containerId))
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig).get)
       }
-      _ <- Future.traverse(isolatedNodes)(_.waitForHeight(b + initialCommonChainLength + forkLength))
-      regularNodes <- {
+      await(Future.traverse(isolatedNodes)(_.waitForHeight(initMaxHeight + commonChainLength + forkLength)))
+      val regularNodes = await {
         isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig).get)
       }
-      _ <- Future.traverse(regularNodes)(_.waitForHeight(b + initialCommonChainLength + forkLength + syncLength))
-      headers <- Future.traverse(regularNodes)(_.headerIdsByHeight(b + initialCommonChainLength + forkLength))
-    } yield {
-      log.debug(s"Headers at height $b: ${headers.mkString(",")}")
+      await(Future.traverse(regularNodes)(_.waitForHeight(initMaxHeight + commonChainLength + forkLength + syncLength)))
+      val headers = await(
+        Future.traverse(regularNodes)(_.headerIdsByHeight(initMaxHeight + commonChainLength + forkLength)))
+
+      log.debug(s"Headers at height $initMaxHeight: ${headers.mkString(",")}")
       val headerIdsAtSameHeight = headers.map(_.headOption.value)
       val sample = headerIdsAtSameHeight.head
       headerIdsAtSameHeight should contain only sample
     }
+
     Await.result(result, 10.minutes)
   }
 }

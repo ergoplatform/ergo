@@ -9,7 +9,7 @@ import scala.concurrent.duration._
 
 class NodeDigestSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val blocksQty = 5
+  val blocksQty = 15
 
   val minerConfig: Config = nodeSeedConfigs.head
 
@@ -25,11 +25,16 @@ class NodeDigestSyncSpec extends FreeSpec with IntegrationSuite {
       _ <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))
       otherHeaders <- Future.traverse(nodes.init)(_.headerIdsByHeight(initHeight + blocksQty))
       digestNodeHeaders <- nodes.last.headerIdsByHeight(initHeight + blocksQty)
+      otherStates <- Future.traverse(nodes.init)(_.stateRoot)
+      digestState <- nodes.last.stateRoot
     } yield {
       val headerIdsAtSameHeight = otherHeaders.flatten
       val sample = headerIdsAtSameHeight.head
       headerIdsAtSameHeight should contain only sample
       sample shouldEqual digestNodeHeaders.head
+      val stateRoots = otherStates.map(_.get).toSet
+      stateRoots.size shouldEqual 1
+      stateRoots.head shouldEqual digestState.get
     }
     Await.result(result, 10.minutes)
   }

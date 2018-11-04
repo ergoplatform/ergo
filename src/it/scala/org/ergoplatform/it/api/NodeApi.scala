@@ -84,12 +84,19 @@ trait NodeApi {
     waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
   }
 
-  def height: Future[Int] = get("/info") flatMap { r =>
+  def height: Future[Int] = get("/info").flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
-    val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
-    eitherHeight.fold[Future[Int]](
+    response.hcursor.downField("fullHeight").as[Option[Int]].fold(
       e => Future.failed(new Exception(s"Error getting `fullHeight` from /info response: $e\n$response", e)),
       maybeHeight => Future.successful(maybeHeight.getOrElse(0))
+    )
+  }
+
+  def stateRoot: Future[Option[String]] = get("/info").flatMap { r =>
+    val response = ergoJsonAnswerAs[Json](r.getResponseBody)
+    response.hcursor.downField("stateRoot").as[Option[String]].fold(
+      e => Future.failed(new Exception(s"Error getting `stateRoot` from /info response: $e\n$response", e)),
+      rootOpt => Future.successful(rootOpt)
     )
   }
 

@@ -41,7 +41,7 @@ class ErgoProvingInterpreter(seed: String,
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
 
-  override lazy val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
+  override lazy val secrets: IndexedSeq[DLogProverInput] = dlogSecrets
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
     (1 to numOfSecrets).map { i =>

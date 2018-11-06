@@ -131,6 +131,7 @@ trait ApiCodecs {
       "value" -> box.value.asJson,
       "proposition" -> valueEncoder(box.proposition),
       "assets" -> box.additionalTokens.asJson,
+      "creationHeight" -> box.creationHeight.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
     )
   }

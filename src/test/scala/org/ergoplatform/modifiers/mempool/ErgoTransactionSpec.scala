@@ -24,7 +24,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.value + delta,
       boxCandidate.proposition,
       boxCandidate.additionalTokens,
-      boxCandidate.additionalRegisters)
+      boxCandidate.additionalRegisters,
+      creationHeight = boxCandidate.creationHeight)
   }
 
   private def modifyAsset(boxCandidate: ErgoBoxCandidate,
@@ -40,7 +41,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.value,
       boxCandidate.proposition,
       tokens,
-      boxCandidate.additionalRegisters)
+      boxCandidate.additionalRegisters,
+      creationHeight = boxCandidate.creationHeight)
   }
 
   property("a valid transaction is valid") {
@@ -136,7 +138,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
               id -> amount
             }
           }
-          new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+          new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters, creationHeight = startHeight)
         }
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
@@ -215,7 +217,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
               val updTokens = Seq(assetId -> amount) ++ (1 to (amount - updAmount).toInt).map(_ => assetId -> 1L) ++
                 c.additionalTokens.filterNot(t => java.util.Arrays.equals(t._1, assetId))
               modified = true
-              new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters)
+              new ErgoBoxCandidate(c.value, c.proposition, updTokens, c.additionalRegisters, creationHeight = startHeight)
             case None => c
           }
         } else {

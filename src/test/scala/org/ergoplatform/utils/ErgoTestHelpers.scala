@@ -32,7 +32,7 @@ trait ErgoTestHelpers
     if (-delta >= box.value) {
       None
     } else {
-      Some(new ErgoBoxCandidate(box.value + delta, box.proposition, box.additionalTokens,
+      Some(new ErgoBoxCandidate(Math.addExact(box.value, delta), box.proposition, box.additionalTokens,
         box.additionalRegisters, box.creationHeight))
     }
   }

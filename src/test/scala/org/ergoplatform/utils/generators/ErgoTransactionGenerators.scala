@@ -59,7 +59,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens))
   }
 
-  def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = Long.MaxValue): Gen[ErgoBox] = {
+  def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = coinsTotal): Gen[ErgoBox] = {
     ergoBoxGen(propGen = falseLeafGen, valueGenOpt = Some(Gen.choose(minValue, maxValue)))
   }
 

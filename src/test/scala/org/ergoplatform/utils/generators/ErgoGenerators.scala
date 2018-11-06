@@ -55,7 +55,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
                     boxId: Short = 0,
                     creationHeight: Long = 0): Gen[Long] = {
     val minValue = BoxUtils.minimalErgoAmountSimulated(proposition, additionalTokens, additionalRegisters)
-    Gen.choose(minValue, coinsTotal / 2000)
+    Gen.choose(minValue, coinsTotal)
   }
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {

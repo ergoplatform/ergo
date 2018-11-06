@@ -9,7 +9,7 @@ import scala.concurrent.{Await, Future}
 
 class NodesUtxoSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val blocksQty = 15
+  val blocksQty = 10
 
   val minerConfig: Config = nodeSeedConfigs.head
 

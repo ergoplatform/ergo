@@ -30,7 +30,6 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     .maximumSize(config.indexesCacheSize)
     .build[ByteArrayWrapper, ByteArrayWrapper]
 
-
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     Option(modifiersCache.getIfPresent(id)) match {
       case Some(e) =>

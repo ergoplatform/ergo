@@ -99,7 +99,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       bs0.assetBalances shouldBe empty
 
       val balance1 = Random.nextInt(1000) + 1
-      val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, randomNewAsset))
+      val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, randomNewAsset, creationHeight = startHeight))
       wallet.scanOffchain(ErgoTransaction(fakeInput, box1))
 
       blocking(Thread.sleep(1000))
@@ -109,7 +109,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       bs1.assetBalances shouldBe assetAmount(box1)
 
       val balance2 = Random.nextInt(1000) + 1
-      val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, randomNewAsset))
+      val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, randomNewAsset, creationHeight = startHeight))
       wallet.scanOffchain(ErgoTransaction(fakeInput, box2))
 
       blocking(Thread.sleep(1000))
@@ -120,7 +120,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       wallet.watchFor(Pay2SAddress(Constants.TrueLeaf))
       val balance3 = Random.nextInt(1000) + 1
-      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, randomNewAsset))
+      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, randomNewAsset, creationHeight = startHeight))
       wallet.scanOffchain(ErgoTransaction(fakeInput, box3))
 
       blocking(Thread.sleep(1000))

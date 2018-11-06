@@ -45,7 +45,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
 
   def containsAssetIssuingBox(tx: ErgoTransaction): Boolean = {
     val firstInputId = tx.inputs.head.boxId
-    val assetIds = tx.outAssetsOpt.get.map(_._1.data).toSeq
+    val assetIds = tx.outAssetsTry.get.map(_._1.data).toSeq
     assetIds.exists(x => java.util.Arrays.equals(x, firstInputId))
   }
 
@@ -76,12 +76,12 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
 
     val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsOpt.get.isEmpty && !containsAssetIssuingBox(tx) => true
+        if tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx) => true
     }
 
     val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsOpt.get.nonEmpty && !containsAssetIssuingBox(tx) => true
+        if tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx) => true
     }
 
     val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {

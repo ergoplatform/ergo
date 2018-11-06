@@ -33,6 +33,8 @@ class DigestState protected(override val version: VersionTag,
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
 
+  override val constants: StateConstants = StateConstants(None, ergoSettings)
+
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
   store.lastVersionID
@@ -53,11 +55,6 @@ class DigestState protected(override val version: VersionTag,
           Try {
             val txs = fb.blockTransactions.txs
 
-            val maxOps = txs.map(tx => tx.inputs.size + tx.outputCandidates.size).sum
-
-            val verifier = new BatchAVLVerifier[Digest32, HF](rootHash, proofs.proofBytes, ADProofs.KL,
-              None, maxNumOperations = Some(maxOps))
-
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
@@ -71,7 +68,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
+              tx.statefulValidity(boxesToSpend, stateContext.appendHeader(fb.header), ergoSettings.metadata).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 

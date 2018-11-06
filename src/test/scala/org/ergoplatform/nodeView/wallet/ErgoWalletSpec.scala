@@ -41,7 +41,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = Await.result(wallet.generateTransaction(Seq(feeReq, req)), awaitDuration).get
       log.info(s"Generated transaction $tx")
-      val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
+      val context = ErgoStateContext(genesisBlock.header)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
     }
@@ -68,7 +68,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment request $req")
       val tx = Await.result(wallet.generateTransaction(req), awaitDuration).get
       log.info(s"Generated transaction $tx")
-      val context = ErgoStateContext(genesisBlock.header.height, genesisBlock.header.stateRoot)
+      val context = ErgoStateContext(genesisBlock.header)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
 
@@ -83,7 +83,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = Await.result(wallet.generateTransaction(req2), awaitDuration).get
-      val context2 = ErgoStateContext(block.header.height, block.header.stateRoot)
+      val context2 = ErgoStateContext(block.header)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx2.statefulValidity(boxesToSpend2, context2, meta) shouldBe 'success
     }

@@ -22,7 +22,7 @@ import scorex.util._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Success, Try}
+import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: ModifierId,

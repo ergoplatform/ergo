@@ -20,13 +20,6 @@ import scala.util.{Random, Try}
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
-  property("valid coinbase transaction generation when emission box is present") {
-    val (us, _) = createUtxoState()
-    us.emissionBoxOpt should not be None
-    val tx = ErgoMiner.createCoinbase(us, Seq(), Constants.TrueLeaf, us.constants.emission)
-    us.validate(tx) shouldBe 'success
-  }
-
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()
     us.emissionBoxOpt should not be None

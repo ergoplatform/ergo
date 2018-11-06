@@ -49,6 +49,7 @@ components:
       - value
       - proposition
       - additionalRegisters
+      - creationHeight
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
@@ -60,6 +61,11 @@ components:
           example: 147
         proposition:
           $ref: '#/components/schemas/Proposition'
+        creationHeight:
+          description: Height the output was created at
+          type: integer
+          format: int32
+          example: 9149
         assets:
           description: Assets list in the transaction
           type: array

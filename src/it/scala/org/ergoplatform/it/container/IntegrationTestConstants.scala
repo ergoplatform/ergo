@@ -11,7 +11,6 @@ trait IntegrationTestConstants {
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
   val nodeSeedConfigs: List[Config] = nodesJointConfig.getConfigList("nodes").asScala.toList
 
-
   def starTopologyConfig: ExtraConfig = { (docker, nodeConfig) =>
     docker.nodes.headOption collect {
       case node if node.nodeName != nodeNameFromConfig(nodeConfig) => knownPeersConfig(Seq(node.nodeInfo))
@@ -22,6 +21,10 @@ trait IntegrationTestConstants {
     val nodeName = nodeNameFromConfig(nodeConfig)
     val previousNode = docker.nodes.takeWhile(_.nodeName != nodeName).lastOption
     previousNode map { node => knownPeersConfig(Seq(node.nodeInfo)) }
+  }
+
+  def isolatedPeersConfig: ExtraConfig = { (_, _) =>
+    Some(knownPeersConfig(Seq.empty))
   }
 
   def nodeNameFromConfig(nodeConfig: Config): String = {
@@ -54,7 +57,7 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
-  val noDelayConfig: Config = ConfigFactory.parseString(
+  val shortDelayConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.miningDelay=500ms
     """.stripMargin

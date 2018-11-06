@@ -38,11 +38,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       lastBlockOpt = Some(block.header)
       bh = blBh._2
       us = us.applyModifier(block).get
-
-      us.emissionBoxOpt should not be None
-      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == Constants.TrueLeaf).toSeq,
-        Constants.TrueLeaf, us.constants.emission)
-      us.validate(tx) shouldBe 'success
     }
   }
 
@@ -125,6 +120,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - simple case") {
+    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -137,11 +133,12 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).get
+      us.applyTransactions(txs, header.copy(stateRoot = digest, height = 1)).get
     }
   }
 
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
+    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
 
@@ -156,7 +153,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).get
+      us.applyTransactions(txs, header.copy(stateRoot = digest, height = 1)).get
     }
   }
 

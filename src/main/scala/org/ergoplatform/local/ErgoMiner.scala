@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -21,7 +21,6 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
@@ -238,18 +237,20 @@ object ErgoMiner extends ScorexLogging {
   }
 
   def createCoinbase(emissionBoxOpt: Option[ErgoBox],
-                     height: Int,
+                     currentHeight: Int,
                      feeBoxes: Seq[ErgoBox],
                      minerProp: Value[SBoolean.type],
                      emission: EmissionRules): ErgoTransaction = {
     feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
+    val nextHeight = currentHeight + 1
+    val creationHeight = Math.max(0, currentHeight)
 
     val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
       case Some(emissionBox) =>
         val prop = emissionBox.proposition
-        val emissionAmount = emission.emissionAtHeight(height)
+        val emissionAmount = emission.emissionAtHeight(nextHeight)
         val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(height)), creationHeight = height)
+          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(nextHeight)), creationHeight = creationHeight)
 
         ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
       case None => (feeBoxes, 0L, None)
@@ -263,7 +264,7 @@ object ErgoMiner extends ScorexLogging {
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
 
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, feeAssets, Map(), creationHeight = height)
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, feeAssets, Map(), creationHeight = creationHeight)
 
     ErgoTransaction(
       inputs,

@@ -45,7 +45,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
       lastBlockOpt = Some(block.header)
-      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height + 1)
+      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height)
     }
   }
 
@@ -134,7 +134,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   def requireEqualStateContexts(s1: ErgoStateContext, s2: ErgoStateContext, expectedHeight: Int): Unit = {
     s1.currentHeight shouldBe expectedHeight
     s1.currentHeight shouldBe s2.currentHeight
-    s1.stateDigest shouldEqual s2.stateDigest
+    s1.lastStateDigest shouldEqual s2.lastStateDigest
   }
 
 }

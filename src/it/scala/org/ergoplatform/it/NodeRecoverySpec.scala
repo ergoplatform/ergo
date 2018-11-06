@@ -10,20 +10,22 @@ import org.scalatest.{FreeSpec, OptionValues}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class NodeRecoverySpec extends FreeSpec with IntegrationSuite with OptionValues {
+class NodeRecoverySpec
+  extends FreeSpec
+    with IntegrationSuite
+    with OptionValues {
 
   val shutdownAtHeight: Int = 5
 
-  val localVolume = "/tmp/ergo/data"
+  val localVolume = s"$localDataDir/node-recovery-spec/data"
   val remoteVolume = "/app"
 
   val dir = new File(localVolume)
-
   dir.mkdirs()
-  dir.deleteOnExit()
 
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
-    .withFallback(offlineGeneratingPeerConfig.withFallback(nodeSeedConfigs.head))
+    .withFallback(offlineGeneratingPeerConfig)
+    .withFallback(nodeSeedConfigs.head)
 
   val node: Node = docker.startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

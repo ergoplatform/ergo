@@ -37,6 +37,12 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  def prunedHistoryPeerConfig(blocksToKeep: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.blocksToKeep=$blocksToKeep
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false
@@ -57,9 +63,15 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
-  val shortDelayConfig: Config = ConfigFactory.parseString(
+  val shortMiningDelayConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.miningDelay=500ms
+    """.stripMargin
+  )
+
+  val digestStatePeerConfig: Config = ConfigFactory.parseString(
+    """
+      |ergo.node.stateType = "digest"
     """.stripMargin
   )
 

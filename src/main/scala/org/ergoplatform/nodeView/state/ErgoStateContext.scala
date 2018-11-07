@@ -19,7 +19,10 @@ import scala.util.{Failure, Try}
 case class ErgoStateContext(lastStateDigest: ADDigest, lastHeaders: Seq[Header])
   extends BytesSerializable with ScorexEncoding {
 
-  val currentHeight: Int = lastHeaders.headOption.map(_.height).getOrElse(0)
+  def lasteHeaderOpt: Option[Header] = lastHeaders.headOption
+
+  // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
+  val currentHeight: Int = lasteHeaderOpt.map(_.height).getOrElse(0)
 
   override type M = ErgoStateContext
 

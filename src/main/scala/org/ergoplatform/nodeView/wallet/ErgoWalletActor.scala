@@ -143,6 +143,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           registry.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
+      // TODO state context rollback needed. Subtask at https://github.com/ergoplatform/ergo/issues/529
+      stateContext = stateContext.copy(lastHeaders = stateContext.lastHeaders.filter(_.height <= heightTo))
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {

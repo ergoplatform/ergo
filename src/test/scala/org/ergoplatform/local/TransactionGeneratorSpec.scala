@@ -24,7 +24,6 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
   type MsgType = SuccessfulTransaction[_]
   val newTransaction: Class[MsgType] = classOf[MsgType]
 
-  val defaultAwaitDuration: FiniteDuration = 10.seconds
   val transactionAwaitDuration: FiniteDuration = 30.seconds
 
   val defaultSettings: ErgoSettings = {
@@ -40,8 +39,6 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
-
-  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   def containsAssetIssuingBox(tx: ErgoTransaction): Boolean = {
     val firstInputId = tx.inputs.head.boxId

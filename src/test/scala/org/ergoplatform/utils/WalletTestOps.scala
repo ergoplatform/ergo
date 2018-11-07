@@ -29,13 +29,13 @@ trait WalletTestOps extends NodeViewBaseOps {
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
   def getTrackedAddresses(implicit w: WalletFixture): Seq[ErgoAddress] =
-    Await.result(w.wallet.trackedAddresses(), awaitDuration)
+    Await.result(w.wallet.trackedAddresses(), defaultAwaitDuration)
 
   def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.confirmedBalances(), awaitDuration)
+    Await.result(w.wallet.confirmedBalances(), defaultAwaitDuration)
 
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.balancesWithUnconfirmed(), awaitDuration)
+    Await.result(w.wallet.balancesWithUnconfirmed(), defaultAwaitDuration)
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 

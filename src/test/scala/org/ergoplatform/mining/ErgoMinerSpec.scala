@@ -42,8 +42,7 @@ import scala.language.postfixOps
 class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
-  val defaultAwaitDuration: FiniteDuration = 10.seconds
-  implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
+
   val newBlock: Class[msgType] = classOf[msgType]
   val newBlockDuration: FiniteDuration = 30 seconds
 
@@ -58,9 +57,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
-
-
-  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block

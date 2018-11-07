@@ -47,8 +47,8 @@ object ErgoStateContext {
     ErgoStateContext(Seq(), genesisStateDigest)
   }
 
-  def apply(header: Header): ErgoStateContext = {
-    ErgoStateContext(Seq(header), header.stateRoot)
+  def apply(header: Header, genesisStateDigest: ADDigest): ErgoStateContext = {
+    ErgoStateContext(Seq(header), genesisStateDigest)
   }
 }
 

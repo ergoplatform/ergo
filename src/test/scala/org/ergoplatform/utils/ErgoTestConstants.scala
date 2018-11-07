@@ -28,6 +28,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
   val startHeight: Int = emptyStateContext.currentHeight
+  val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
   val defaultProver: ErgoProvingInterpreter = new ErgoProvingInterpreter(defaultSeed, 1)

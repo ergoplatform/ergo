@@ -47,7 +47,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     headers <- Gen.listOfN(size, invalidHeaderGen)
   } yield {
     headers match {
-      case s :: tail => tail.foldLeft(ErgoStateContext(s))((c, h) => c.appendHeader(h))
+      case s :: tail => tail.foldLeft(ErgoStateContext(s, startDigest))((c, h) => c.appendHeader(h))
       case _ => ErgoStateContext.empty(stateRoot)
     }
   }

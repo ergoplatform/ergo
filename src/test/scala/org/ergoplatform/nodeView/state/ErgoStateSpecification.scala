@@ -134,7 +134,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   def requireEqualStateContexts(s1: ErgoStateContext, s2: ErgoStateContext, expectedHeight: Int): Unit = {
     s1.currentHeight shouldBe expectedHeight
     s1.currentHeight shouldBe s2.currentHeight
-    s1.lastStateDigest shouldEqual s2.lastStateDigest
+    s1.previousStateDigest shouldEqual s2.previousStateDigest
   }
 
 }

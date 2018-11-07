@@ -34,18 +34,26 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("stateContext should be the same for Utxo and Digest states") {
+    def requireEqualStateContexts(s1: ErgoStateContext, s2: ErgoStateContext, lastHeaders: Seq[Header]): Unit = {
+      s1.currentHeight shouldBe lastHeaders.headOption.map(_.height).getOrElse(0)
+      s1.currentHeight shouldBe s2.currentHeight
+      s1.previousStateDigest shouldEqual s2.previousStateDigest
+      s1.lastHeaders shouldEqual s2.lastHeaders
+      s1.lastHeaders shouldEqual lastHeaders
+    }
+
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
-    var lastBlockOpt: Option[Header] = None
-    requireEqualStateContexts(us.stateContext, ds.stateContext, 0)
+    var lastHeaders: Seq[Header] = Seq()
+    requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBlockHolder(lastHeaders.headOption, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
-      lastBlockOpt = Some(block.header)
-      requireEqualStateContexts(us.stateContext, ds.stateContext, block.header.height)
+      lastHeaders = block.header +: lastHeaders
+      requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
     }
   }
 
@@ -129,12 +137,6 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         insertionsRev.length should be > insertions.length
       }
     }
-  }
-
-  def requireEqualStateContexts(s1: ErgoStateContext, s2: ErgoStateContext, expectedHeight: Int): Unit = {
-    s1.currentHeight shouldBe expectedHeight
-    s1.currentHeight shouldBe s2.currentHeight
-    s1.previousStateDigest shouldEqual s2.previousStateDigest
   }
 
 }

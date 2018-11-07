@@ -2,8 +2,6 @@ package org.ergoplatform.utils
 
 import akka.actor.ActorRef
 import akka.pattern.ask
-import akka.util.Timeout
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -11,29 +9,25 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 trait NodeViewBaseOps extends ErgoTestHelpers {
 
-  implicit val timeout: Timeout = NodeViewTestOps.timeout
-  val awaitDuration: FiniteDuration = NodeViewTestOps.awaitDuration
-
   type Ctx = NodeViewTestContext
   type CurView = CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]
 
   def getCurrentView(implicit ctx: Ctx): CurView = {
     val request = GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, CurView](view => view)
-    Await.result((nodeViewHolderRef ? request).mapTo[CurView], awaitDuration)
+    await((nodeViewHolderRef ? request).mapTo[CurView])
   }
 
   def getHistory(implicit ctx: Ctx): ErgoHistory = getCurrentView.history
@@ -129,6 +123,4 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 }
 
 object NodeViewTestOps extends NodeViewTestOps {
-  override implicit val timeout: Timeout = Timeout(5.seconds)
-  override val awaitDuration: FiniteDuration = timeout.duration + 1.second
 }

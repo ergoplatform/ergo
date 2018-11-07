@@ -1,61 +1,66 @@
 package org.ergoplatform.nodeView.state
 
-import com.google.common.primitives.{Bytes, Ints}
-import org.ergoplatform.ErgoApp
+import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
   * Additional data required for transactions validation
   *
-  * @param lastStateDigest - An AVL tree root hash of the UTXO state BEFORE current block application
-  * @param lastHeaders   - fixed number of last headers
+  * @param lastHeaders - fixed number of last headers
+  * @param genesisStateDigest - fixed number of last headers
   */
-case class ErgoStateContext(lastStateDigest: ADDigest, lastHeaders: Seq[Header])
+case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
   extends BytesSerializable with ScorexEncoding {
 
-  def lasteHeaderOpt: Option[Header] = lastHeaders.headOption
+  // State root hash before the last block
+  val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
+    lastHeaders(1).stateRoot
+  } else {
+    genesisStateDigest
+  }
+
+  def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
   // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
-  val currentHeight: Int = lasteHeaderOpt.map(_.height).getOrElse(0)
+  val currentHeight: Int = lastHeaderOpt.map(_.height).getOrElse(0)
 
   override type M = ErgoStateContext
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
   def appendHeader(header: Header): ErgoStateContext = {
-    ErgoStateContext(header.stateRoot,
-      header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1))
+    ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
   }
 
-  override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(lastStateDigest)}, $lastHeaders)"
+  override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders)"
 }
 
 object ErgoStateContext {
 
-  def empty(afterGenesisStateDigest: ADDigest):ErgoStateContext = {
-    ErgoStateContext(afterGenesisStateDigest, Seq())
+  def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
+    ErgoStateContext(Seq(), genesisStateDigest)
   }
 
   def apply(header: Header): ErgoStateContext = {
-    ErgoStateContext(header.stateRoot, Seq(header))
+    ErgoStateContext(Seq(header), header.stateRoot)
   }
 }
 
 object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
   override def toBytes(obj: ErgoStateContext): Array[Byte] = {
-    Bytes.concat(obj.lastStateDigest,
+    Bytes.concat(obj.genesisStateDigest,
       scorex.core.utils.concatBytes(obj.lastHeaders.map(_.bytes)))
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {
-    val digest = ADDigest @@ bytes.take(33)
+    val genesisDigest = ADDigest @@ bytes.take(33)
     val length = bytes.length
 
     def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
@@ -66,6 +71,6 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
       acc.reverse
     }
 
-    ErgoStateContext(digest, loop(33, Seq()))
+    ErgoStateContext(loop(33, Seq()), genesisDigest)
   }
 }

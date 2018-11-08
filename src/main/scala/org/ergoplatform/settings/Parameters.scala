@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
 import com.google.common.primitives.Ints
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
@@ -11,6 +12,8 @@ import scala.util.Try
   */
 abstract class Parameters {
 
+  def height: Height
+
   def parametersTable: Map[Byte, Int]
 
   // Max size of transactions section of a block.
@@ -20,7 +23,7 @@ abstract class Parameters {
   lazy val MaxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
   val Kdefault = 1250000
-  val Kmax = 2500000
+  val Kmax = 5000000
   val Kmin = 0
   val Kstep = 50000
 
@@ -54,33 +57,43 @@ abstract class Parameters {
   val MaxBlockCostIncrease = 4: Byte
   val MaxBlockCostDecrease = -MaxBlockCostIncrease
 
-  /*
-   def changeParameter(paramId: Byte) = {
-     ???
-   }*/
+
+   def changeParameter(newHeight: Height, paramId: Byte): Parameters = {
+     paramId match {
+       case b: Byte if b == KIncrease =>
+         val newK = if(K < Kmax) K + Kstep else K
+         Parameters(newHeight, parametersTable.updated(KIncrease, newK))
+       case _ => ???
+     }
+   }
 
   override def toString: String = s"Parameters(${parametersTable.mkString("; ")})"
 }
 
 object Parameters {
-  def apply(paramsTable: Map[Byte, Int]): Parameters = new Parameters {
+  def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters {
+    override val height: Height = h
     override val parametersTable: Map[Byte, Int] = paramsTable
   }
 }
 
 object ParametersSerializer extends Serializer[Parameters] {
   override def toBytes(obj: Parameters): Array[Byte] = {
-    obj.parametersTable.map { case (k, v) => k +: Ints.toByteArray(v) }.reduce(_ ++ _)
+    Ints.toByteArray(obj.height) ++
+      obj.parametersTable.map { case (k, v) => k +: Ints.toByteArray(v) }.reduce(_ ++ _)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Parameters] = Try {
-    assert(bytes.length % 5 == 0)
-    val table = bytes.grouped(5).map { bs => bs.head -> Ints.fromByteArray(bs.tail) }.toMap
-    Parameters(table)
+    assert(bytes.length % 5 == 4)
+    val height = Ints.fromByteArray(bytes.take(4))
+    val table = bytes.drop(4).grouped(5).map { bs => bs.head -> Ints.fromByteArray(bs.tail) }.toMap
+    Parameters(height, table)
   }
 }
 
 object LaunchParameters extends Parameters {
+  override val height = 0
+
   override val parametersTable = Map(
     KIncrease -> Kdefault,
     MinValuePerByteIncrease -> MinValuePerByteDefault,

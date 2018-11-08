@@ -8,13 +8,14 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
+import org.ergoplatform._
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{IntConstant, LongConstant}
+import sigmastate.Values.{ConcreteCollection, IntConstant, LongConstant}
+import sigmastate.serialization.OpCodes
 import sigmastate.utxo._
 import sigmastate.{SLong, _}
 
@@ -98,20 +99,29 @@ object ErgoState extends ScorexLogging {
     val s = emission.settings
 
     val register = R4
-    val out = ByIndex(Outputs, IntConstant(0))
+    val rewardOut = ByIndex(Outputs, IntConstant(0))
+    val minerOut = ByIndex(Outputs, IntConstant(1))
+
     val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
     val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
       s.fixedRate,
       Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
     )
-    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(OptionGet(ExtractRegisterAs[SLong.type](out, register)), Height)
-    val heightIncreased = GT(Height, OptionGet(ExtractRegisterAs[SLong.type](Self, register)))
-    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
+    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(rewardOut))
+    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](rewardOut, register).get, Height)
+    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register).get)
+    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+    val outputsNum = EQ(SizeOf(Outputs), 2)
+    val correctMinerProposition = EQ(ExtractScriptBytes(minerOut),
+      Append(ConcreteCollection(OpCodes.ProveDlogCode, SGroupElement.typeCode), MinerPubkey))
 
-    val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
-    ErgoBox(emission.coinsTotal, prop, 0, Seq(), Map(register -> LongConstant(-1)))
+    val prop = AND(
+      heightIncreased,
+      correctMinerProposition,
+      OR(AND(outputsNum, sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins)
+    )
+    ErgoBox(emission.coinsTotal, prop, -1, Seq(), Map(register -> LongConstant(-1)))
   }
 
   def generateGenesisUtxoState(stateDir: File,

@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
@@ -22,7 +21,7 @@ class HeadersSpec extends ErgoPropertyTest {
       header.copy(nBits = header.nBits + 1).id should not equal initialId
       header.copy(height = header.height + 1).id should not equal initialId
       header.copy(extensionRoot = Blake2b256(header.extensionRoot)).id should not equal initialId
-      header.copy(equihashSolution = EquihashSolution(Seq.fill(header.equihashSolution.ints.length)(0x0B0B0B0B))).id should not equal initialId
+      header.copy(powSolution = header.powSolution.copy(d = header.powSolution.d + 1)).id should not equal initialId
     }
   }
 

@@ -240,6 +240,12 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)
 
+    case GetFirstSecret =>
+      prover.secrets.headOption.foreach(s => sender() ! s)
+
+    case GetBoxes =>
+      sender() ! registry.unspentBoxesIterator.map(_.box)
+
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
@@ -282,5 +288,9 @@ object ErgoWalletActor {
   case object ReadRandomPublicKey
 
   case object ReadTrackedAddresses
+
+  case object GetFirstSecret
+
+  case object GetBoxes
 
 }

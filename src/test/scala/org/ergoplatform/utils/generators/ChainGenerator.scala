@@ -57,7 +57,8 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyDigest32,
       EmptyDigest32,
       prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
-      extensionHash
+      extensionHash,
+      defaultMinerSecretNumber
     ).get
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
@@ -101,7 +102,8 @@ trait ChainGenerator extends ErgoTestConstants {
       emptyProofs,
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      extension
+      extension,
+      defaultMinerSecretNumber
     ).get
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

@@ -36,7 +36,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
-  } yield new ErgoBoxCandidate(value, prop, tokens, ar, creationHeight = h)
+  } yield new ErgoBoxCandidate(value, prop, h, tokens, ar)
 
   def ergoBoxGen(propGen: Gen[Value[SBoolean.type]] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
@@ -48,7 +48,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
-  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId, h)
+  } yield ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
@@ -177,7 +177,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, TrueLeaf, normalizedTokens, creationHeight = 0)
+      ErgoBox(amt, TrueLeaf, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)

@@ -265,7 +265,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongOutputs = tx.outputCandidates.map(o =>
-        new ErgoBoxCandidate(o.value + 10L, o.proposition, o.additionalTokens, o.additionalRegisters, creationHeight = currentHeight)
+        new ErgoBoxCandidate(o.value + 10L, o.proposition, currentHeight, o.additionalTokens, o.additionalRegisters)
       )
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)

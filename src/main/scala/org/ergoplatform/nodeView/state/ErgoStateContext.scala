@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Constants
+import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
@@ -17,6 +18,9 @@ import scala.util.Try
   */
 case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
   extends BytesSerializable with ScorexEncoding {
+
+  // todo
+  val lastBlockMinerPk: Array[Byte] = Array.fill(32)(0: Byte)
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {

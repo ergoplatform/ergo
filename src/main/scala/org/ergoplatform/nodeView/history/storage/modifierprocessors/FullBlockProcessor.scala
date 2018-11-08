@@ -132,7 +132,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
   }
 
-  //Not used so far
+  //todo: not used so far
   private def pruneOnNewBestBlock(header: Header, blocksToKeep: Int): Unit = {
     heightOf(header.id).filter(h => h > blocksToKeep)
       .foreach(h => pruneBlockDataAt(Seq(h - blocksToKeep)))

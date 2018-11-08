@@ -243,7 +243,8 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
+    val h = state.stateContext.lastHeaderOpt.map(_.height).getOrElse(-1)
+    collectRewards(emissionBoxOpt, h, feeBoxes, minerPk, emissionRules)
   }
 
   def collectRewards(emissionBoxOpt: Option[ErgoBox],
@@ -252,15 +253,16 @@ object ErgoMiner extends ScorexLogging {
                      minerPk: ProveDlog,
                      emission: EmissionRules): Seq[ErgoTransaction] = {
     feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
+    val nextHeight = currentHeight + 1
+    val creationHeight = Math.max(0, currentHeight)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
-      val nextHeight = currentHeight + 1
       val prop = emissionBox.proposition
       val emissionAmount = emission.emissionAtHeight(nextHeight)
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
         currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerPk, currentHeight, Seq.empty, Map())
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerPk, creationHeight, Seq.empty, Map())
       ErgoTransaction(
         inputs,
         IndexedSeq(newEmissionBox, minerBox)
@@ -270,7 +272,7 @@ object ErgoMiner extends ScorexLogging {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      val minerBox = new ErgoBoxCandidate(feeAmount, minerPk, currentHeight, feeAssets, Map())
+      val minerBox = new ErgoBoxCandidate(feeAmount, minerPk, creationHeight, feeAssets, Map())
       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
     } else {
       None

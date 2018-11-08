@@ -22,11 +22,6 @@ trait WalletTestOps extends NodeViewBaseOps {
   def emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
 
-  override def initSettings: ErgoSettings = {
-    val settings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
-    settings.copy(walletSettings = settings.walletSettings.copy(scanningInterval = 15.millis))
-  }
-
   def withFixture[T](test: WalletFixture => T): T = {
     new WalletFixture(settings, getCurrentView(_).vault).apply(test)
   }
@@ -102,8 +97,8 @@ trait WalletTestOps extends NodeViewBaseOps {
     val newEmissionAmount = emissionBox.value - emissionAmount
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
     val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, Seq.empty, emissionRegs)
-    val minerBox = new ErgoBoxCandidate(emissionAmount, script, replaceNewAssetStub(assets, inputs), Map.empty)
+    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, Seq.empty, emissionRegs, creationHeight = startHeight)
+    val minerBox = new ErgoBoxCandidate(emissionAmount, script, replaceNewAssetStub(assets, inputs), Map.empty, creationHeight = startHeight)
     ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))
   }
 
@@ -121,8 +116,8 @@ trait WalletTestOps extends NodeViewBaseOps {
              assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
-    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, replaceNewAssetStub(assets, inputs))
-    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf)) else None
+    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, replaceNewAssetStub(assets, inputs), creationHeight = startHeight)
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }

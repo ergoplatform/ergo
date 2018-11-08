@@ -4,7 +4,7 @@ import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
-import scala.async.Async.{async, await}
+import scala.async.Async
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
@@ -31,18 +31,18 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
     val fullNodes: List[Node] = docker.startNodes(nodeConfigs).get
 
-    val result = async {
-      val initHeight = await(Future.traverse(fullNodes)(_.height).map(_.max))
+    val result = Async.async {
+      val initHeight = Async.await(Future.traverse(fullNodes)(_.height).map(_.max))
       val targetHeight = initHeight + blocksQty
-      await(Future.traverse(fullNodes)(_.waitForHeight(targetHeight + syncDelta)))
-      val fullNodesHeaders = await(Future.traverse(fullNodes)(_.headerIdsByHeight(targetHeight))).map(_.head)
+      Async.await(Future.traverse(fullNodes)(_.waitForHeight(targetHeight + syncDelta)))
+      val fullNodesHeaders = Async.await(Future.traverse(fullNodes)(_.headerIdsByHeight(targetHeight))).map(_.head)
       fullNodesHeaders should contain only fullNodesHeaders.head
-      val fullNodesStateRoot = await(fullNodes.head.headerById(fullNodesHeaders.head)).stateRoot
+      val fullNodesStateRoot = Async.await(fullNodes.head.headerById(fullNodesHeaders.head)).stateRoot
       val digestNode = docker.startNode(digestConfig).get
-      await(digestNode.waitForHeight(targetHeight))
-      val digestNodeHeader = await(digestNode.headerIdsByHeight(targetHeight)).head
+      Async.await(digestNode.waitForHeight(targetHeight))
+      val digestNodeHeader = Async.await(digestNode.headerIdsByHeight(targetHeight)).head
       digestNodeHeader shouldEqual fullNodesHeaders.head
-      val digestNodeStateRoot = await(digestNode.headerById(digestNodeHeader)).stateRoot
+      val digestNodeStateRoot = Async.await(digestNode.headerById(digestNodeHeader)).stateRoot
       java.util.Arrays.equals(fullNodesStateRoot, digestNodeStateRoot) shouldBe true
     }
 

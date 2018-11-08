@@ -5,6 +5,7 @@ import org.ergoplatform.{ErgoBoxCandidate, Input}
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
+import scorex.utils.Random
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 object FeeSimulator extends App {
@@ -18,10 +19,10 @@ object FeeSimulator extends App {
   val k1 = DLogProverInput.random().publicImage
   val k2 = DLogProverInput.random().publicImage
 
-  val input = Input(ADKey @@ Array.fill(32)(0: Byte), ProverResult(Array.fill(65)(0: Byte), ContextExtension(Map())))
+  val input = Input(ADKey @@ Random.randomBytes(32), ProverResult(Random.randomBytes(65), ContextExtension(Map())))
 
-  val box1 = new ErgoBoxCandidate(1L, k1, Seq((Digest32 @@ Array.fill(32)(0: Byte)) -> 0L))
-  val box2 = new ErgoBoxCandidate(100L, k2)
+  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
+  val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2)
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2), None)
   val stdSize = simpleTx.outputs.map(_.bytes.length).sum / simpleTx.outputs.length

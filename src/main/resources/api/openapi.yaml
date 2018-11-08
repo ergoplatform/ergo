@@ -49,6 +49,7 @@ components:
       - value
       - proposition
       - additionalRegisters
+      - creationHeight
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
@@ -60,6 +61,11 @@ components:
           example: 147
         proposition:
           $ref: '#/components/schemas/Proposition'
+        creationHeight:
+          description: Height the output was created at
+          type: integer
+          format: int32
+          example: 9149
         assets:
           description: Assets list in the transaction
           type: array
@@ -97,6 +103,15 @@ components:
       type: string
       example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
 
+    AddressHolder:
+      description: Holds encoded ErgoAddress
+      type: object
+      required:
+      - address
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+
     RequestsHolder:
       description: Holds many transaction requests and transaction fee
       type: object
@@ -116,6 +131,15 @@ components:
           type: integer
           format: int64
           example: 100
+
+    SourceHolder:
+      type: object
+      required:
+      - source
+      properties:
+        source:
+          description: Sigma source to be compiled
+          type: string
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -1267,6 +1291,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/p2s_address:
+    post:
+      summary: Create P2SAddress from Sigma source
+      operationId: walletP2SAddress
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/p2sh_address:
+    post:
+      summary: Create P2SHAddress from Sigma source
+      operationId: walletP2SAddress
+      tags:
+      - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/transaction/generate:
     post:
       summary: Generate arbitrary transaction
@@ -1289,15 +1377,15 @@ paths:
         '400':
           description: Bad transaction request
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
 
   /wallet/transaction/send:
     post:
@@ -1321,15 +1409,15 @@ paths:
         '400':
           description: Bad transaction request
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
 
   /wallet/payment/generate:
     post:
@@ -1423,15 +1511,15 @@ paths:
         '400':
           description: Bad asset issue request
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
 
   /wallet/assets/issue:
     post:
@@ -1457,12 +1545,12 @@ paths:
         '400':
           description: Bad asset issue request
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
-            text/plain; charset=UTF-8:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ApiError'

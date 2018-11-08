@@ -7,30 +7,25 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
+import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
-
-  def initSettings: ErgoSettings = ErgoSettings.read(None)
-
-  lazy val settings: ErgoSettings = initSettings
-  lazy val stateConstants: StateConstants = StateConstants(None, settings)
-
-  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
@@ -46,8 +41,6 @@ trait ValidBlocksGenerators
   def noProofInput(id: ErgoBox.BoxId): Input =
     Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-  def outputForAnyone(value: Long): ErgoBoxCandidate = new ErgoBoxCandidate(value, Constants.TrueLeaf)
-
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
@@ -55,7 +48,6 @@ trait ValidBlocksGenerators
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
-    val outBoxesLength = stateBoxesIn.length
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
@@ -64,49 +56,47 @@ trait ValidBlocksGenerators
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
-      def genOuts(remainingAmount: Long,
-                  acc: IndexedSeq[ErgoBoxCandidate],
-                  limit: Int): IndexedSeq[ErgoBoxCandidate] = {
-        val newAmount = remainingAmount / limit
-        if (newAmount >= remainingAmount || limit <= 1) {
-          acc :+ outputForAnyone(remainingAmount)
-        } else {
-          genOuts(remainingAmount - newAmount, acc :+ outputForAnyone(newAmount), limit - 1)
-        }
-      }
-
       val currentSize = acc.map(_.bytes.length).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
+      val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens)
+      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size
+      val issueNew = customTokensNum == 0
 
       stateBoxes.find(isEmissionBox) match {
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
-          val height: Int = (emissionBox.additionalRegisters(R4).value.asInstanceOf[Long] + 1).toInt
-          val tx = ErgoMiner.createCoinbase(Some(emissionBox), height, Seq.empty, Constants.TrueLeaf, settings.emission)
+          val nextHeight: Int = emissionBox.additionalRegisters(R4).value.asInstanceOf[Long].toInt + 1
+          val rewards = ErgoMiner.createCoinbase(Some(emissionBox), nextHeight, Seq.empty, defaultMinerPk, settings.emission)
+          val outs = rewards.outputs
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
-          createdEmissionBox = tx.outputs.filter(b => isEmissionBox(b))
-          val newSelfBoxes = selfBoxes ++ tx.outputs.filter(b => !isEmissionBox(b))
-          loop(remainedBoxes, newSelfBoxes, tx +: acc, rnd)
+          createdEmissionBox = outs.filter(b => isEmissionBox(b))
+          val newSelfBoxes = selfBoxes ++ outs.filter(b => !isEmissionBox(b))
+          loop(remainedBoxes, newSelfBoxes, rewards +: acc, rnd)
 
         case _ =>
           if (currentSize < sizeLimit - 2 * averageSize) {
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
-            val inputs = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.id).map(noProofInput).toIndexedSeq
-            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-            val totalAmount = (consumedSelfBoxes ++ consumedBoxesFromState).map(_.value).sum
-            val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(outBoxesLength) + 1)
-            val tx = new ErgoTransaction(inputs, outputs)
-            loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+            // disable tokens generation to avoid situation with too many tokens
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd, issueNew)
+            tx.statelessValidity match {
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+            }
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-            val inputs = (consumedSelfBoxes ++ stateBoxes).map(_.id).map(noProofInput).toIndexedSeq
-            assert(inputs.nonEmpty, "Trying to create transaction with no inputs")
-            val totalAmount = (consumedSelfBoxes ++ stateBoxes).map(_.value).sum
-            val outputs = genOuts(totalAmount, IndexedSeq.empty, rnd.nextInt(outBoxesLength) + 1)
-            val tx = new ErgoTransaction(inputs, outputs)
-            ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
+            tx.statelessValidity match {
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+            }
           }
       }
     }

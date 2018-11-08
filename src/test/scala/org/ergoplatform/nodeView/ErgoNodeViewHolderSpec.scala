@@ -255,7 +255,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     //sending header
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
-    getHistoryHeight shouldBe 0
+    val currentHeight = getHistoryHeight
+    currentHeight shouldBe 0
     getHeightOf(block.header.id) shouldBe Some(0)
 
     val randomId = modifierIdGen.sample.value
@@ -264,7 +265,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongOutputs = tx.outputCandidates.map(o =>
-        new ErgoBoxCandidate(o.value + 10L, o.proposition, o.additionalTokens, o.additionalRegisters)
+        new ErgoBoxCandidate(o.value + 10L, o.proposition, o.additionalTokens, o.additionalRegisters, creationHeight = currentHeight)
       )
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)

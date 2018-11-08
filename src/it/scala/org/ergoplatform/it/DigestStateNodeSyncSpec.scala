@@ -25,7 +25,7 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // 1. Start up few full nodes and let them mine {targetHeight + syncDelta} blocks;
   // 2. Fetch their headers at {targetHeight} and make sure their chains is synced (all nodes have same best headers);
   // 3. Fetch `stateRoot` of best header at {targetHeight};
-  // 4. Start up digest node and wait until it get synced up to {targetHeight};
+  // 4. Start up digest node and wait until it gets synced with the network up to {targetHeight};
   // 5. Fetch its `stateRoot` of best header at {targetHeight} and make sure it matches full nodes' one;
   s"Digest mode synchronization ($blocksQty blocks)" in {
 

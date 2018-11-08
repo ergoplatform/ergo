@@ -9,11 +9,15 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import sigmastate.SBoolean
+import sigmastate.Values.Value
+import sigmastate.lang.SigmaCompiler
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -24,8 +28,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)
   implicit val requestsHolderDecoder: RequestsHolderDecoder = new RequestsHolderDecoder(ergoSettings)
-  implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
-  implicit val addressEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
+  implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
@@ -38,13 +42,38 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       generateAssetIssueTransactionR ~
       sendTransactionR ~
       sendPaymentTransactionR ~
-      sendAssetIssueTransactionR
+      sendAssetIssueTransactionR ~
+      p2shAddressR ~
+      p2sAddressR
   }
+
+  private val loadMaxKeys: Int = 100
 
   private val fee: Directive1[Option[Long]] = entity(as[Json]).flatMap { p =>
     Try(p.hcursor.downField("fee").as[Long]) match {
       case Success(Right(value)) => provide(Some(value))
       case _ => provide(None)
+    }
+  }
+
+  private val source: Directive1[String] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("source").as[String]
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
+
+  private def keysToEnv(keys: Seq[ProveDlog]): Map[String, Any] = {
+    keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
+  }
+
+  private def compileSource(source: String, env: Map[String, Any]): Try[Value[SBoolean.type]] = {
+    val compiler = new SigmaCompiler
+    Try(compiler.compile(env, source)).flatMap {
+      case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
+        Success(script)
+      case other =>
+        Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))
     }
   }
 
@@ -61,19 +90,21 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  private def generateTransaction(requests: Seq[TransactionRequest]): Route =
+  private def generateTransaction(requests: Seq[TransactionRequest]): Route = {
     withWalletOp(_.generateTransaction(requests)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => ApiResponse(tx)
     }
+  }
 
-  private def sendTransaction(requests: Seq[TransactionRequest]): Route =
+  private def sendTransaction(requests: Seq[TransactionRequest]): Route = {
     withWalletOp(_.generateTransaction(requests)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
         ApiResponse(tx.id)
     }
+  }
 
   def sendTransactionR: Route = (path("transaction" / "send") & post
     & entity(as[RequestsHolder]))(holder => sendTransaction(holder.requestsWithFee))
@@ -107,6 +138,24 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
     withWallet(_.balancesWithUnconfirmed())
+  }
+
+  def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
+      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SAddress.apply).fold(
+        e => BadRequest(e.getMessage),
+        address => ApiResponse(addressResponse(address))
+      )
+    }
+  }
+
+  def p2shAddressR: Route = (path("p2sh_address") & post & source) { source =>
+    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
+      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
+        e => BadRequest(e.getMessage),
+        address => ApiResponse(addressResponse(address))
+      )
+    }
   }
 
   def addressesR: Route = (path("addresses") & get) {

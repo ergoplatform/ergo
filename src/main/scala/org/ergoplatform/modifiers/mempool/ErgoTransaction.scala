@@ -219,7 +219,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, assets, registers, creationHeight = creationHeight), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition, creationHeight, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

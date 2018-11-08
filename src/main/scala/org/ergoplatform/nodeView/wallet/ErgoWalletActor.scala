@@ -62,7 +62,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
 
       val stateContext = ErgoStateContext(height + 1, lastBlockUtxoRootHash, parameters)
@@ -154,7 +154,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
-        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty))
+        new ErgoBoxCandidate(value, address.script, assets.getOrElse(Seq.empty), registers.getOrElse(Map.empty), creationHeight = height)
       case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
         val firstInput = inputsFor(
           requests
@@ -175,7 +175,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           .getOrElse(throw new Exception("No address available for box locking"))
         val minimalErgoAmount =
           BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters, parameters)
-        new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters)
+        new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters, creationHeight = height)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }
@@ -211,7 +211,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
           val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-          new ErgoBoxCandidate(ergChange, changeAddress, assets)
+          new ErgoBoxCandidate(ergChange, changeAddress, assets, creationHeight = height)
         }
 
         val unsignedTx = new UnsignedErgoTransaction(

@@ -1,34 +1,20 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
-import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.{ErgoBox, Input}
-import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
-import scala.concurrent.duration._
 import scala.util.Random
 
-trait ChainGenerator {
-
-  val timeProvider: NetworkTimeProvider
-
-  val parameters = LaunchParameters
-
-  val powScheme: PowScheme = DefaultFakePowScheme
-  private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
-  private val EmptyDigest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
-  val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
-  val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
-  val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
+trait ChainGenerator extends ErgoTestConstants {
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
@@ -93,8 +79,8 @@ trait ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
-    val outputs = IndexedSeq(ErgoBox(b.bytes.length * parameters.MinValuePerByte, Constants.TrueLeaf))
+    val minimalEmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Seq(), Map(), parameters)
+    val outputs = IndexedSeq(ErgoBox(minimalEmount, Constants.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

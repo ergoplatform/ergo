@@ -30,7 +30,7 @@ import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
@@ -52,11 +52,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to
-    * @param map   - map to modify
-    * @return
+    * @return map from asset id to to balance
     */
-  private def fillAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate],
-                            map: mutable.Map[ByteArrayWrapper, Long]) = Try {
+  private def getAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate]): Try[scala.collection.Map[ByteArrayWrapper, Long]] = Try {
+    val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     boxes.foreach { box =>
       require(box.additionalTokens.size <= ErgoBox.MaxTokens, "Output contains too many assets")
       box.additionalTokens.foreach { case (assetId, amount) =>
@@ -64,15 +63,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))
-        require(map.size <= ErgoTransaction.MaxTokens, "Transaction is operating with too many assets")
+        require(map.size <= ErgoTransaction.MaxTokens, s"Transaction is operating with too many(${map.size}) assets")
       }
     }
+    map
   }
 
-  lazy val outAssetsOpt: Try[Map[ByteArrayWrapper, Long]] = {
-    val mutableMap = mutable.Map[ByteArrayWrapper, Long]()
-    fillAssetsMap(outputCandidates, mutableMap).map(_ => mutableMap.toMap)
-  }
+  lazy val outAssetsTry: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates).map(_.toMap)
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
@@ -93,7 +90,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
-      .demandSuccess(outAssetsOpt, s"Asset rules violated in $this")
+      .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
       .result
   }
 
@@ -122,7 +119,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val verifier: ErgoInterpreter = new ErgoInterpreter(blockchainState.currentParameters)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
-        costTry.recover{case t => t.printStackTrace()}
+        costTry.recover { case t => t.printStackTrace() }
 
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
         validation
@@ -134,17 +131,19 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demandTry(outAssetsOpt, s"Assets preservation rule is broken in $this") { (validation, outAssets) =>
-        val inAssets = mutable.Map[ByteArrayWrapper, Long]()
-        fillAssetsMap(boxesToSpend, inAssets)
-        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-        validation.validateSeq(outAssets) {
-          case (validation, (outAssetId, outAmount)) =>
-            val inAmount: Long = inAssets.remove(outAssetId).getOrElse(-1L)
-            validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-              fatal(s"Assets preservation rule is broken in $this. " +
-                s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+      .demandTry(outAssetsTry, outAssetsTry.toString) { (validation, outAssets) =>
+        getAssetsMap(boxesToSpend) match {
+          case Success(inAssets) =>
+            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+            validation.validateSeq(outAssets) {
+              case (validation, (outAssetId, outAmount)) =>
+                val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+                validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+                  fatal(s"Assets preservation rule is broken in $this. " +
+                    s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+                }
             }
+          case Failure(e) => fatal(e.getMessage)
         }
       }
       .toTry
@@ -217,10 +216,11 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
+      creationHeight <- cursor.downField("creationHeight").as[Long]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition, assets, registers, creationHeight = creationHeight), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

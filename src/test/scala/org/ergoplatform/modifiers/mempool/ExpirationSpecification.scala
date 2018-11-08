@@ -1,9 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import scorex.crypto.authds.ADDigest
 import sigmastate.Values
@@ -16,8 +16,15 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte), parameters)
 
-  def falsify(box: ErgoBox): ErgoBox =
-    ErgoBox(box.value, Values.FalseLeaf, box.additionalTokens, box.additionalRegisters)
+  def falsify(box: ErgoBox): ErgoBox = {
+    ErgoBox(box.value,
+      Values.FalseLeaf,
+      box.additionalTokens,
+      box.additionalRegisters,
+      transactionId = box.transactionId,
+      boxId = box.index,
+      creationHeight = box.creationHeight)
+  }
 
   def constructTest(from: ErgoBox,
                     heightDelta: Int,
@@ -26,7 +33,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val in = Input(from.id,
       ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h = Constants.StoragePeriod + heightDelta
+    val h: Int = (from.creationHeight + Constants.StoragePeriod + heightDelta).toInt
 
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
     val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
@@ -86,7 +93,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   property("script changed spending w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
-      val out = new ErgoBoxCandidate(from.value, Values.TrueLeaf, from.additionalTokens)
+      val out = new ErgoBoxCandidate(from.value, Values.TrueLeaf, from.additionalTokens, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
     }
   }
@@ -94,7 +101,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("script changed tokens w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
       whenever(from.additionalTokens.nonEmpty) {
-        val out = new ErgoBoxCandidate(from.value, from.proposition, Seq())
+        val out = new ErgoBoxCandidate(from.value, from.proposition, Seq(), creationHeight = from.creationHeight + 1)
         constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
       }
     }
@@ -103,12 +110,12 @@ class ExpirationSpecification extends ErgoPropertyTest {
   //todo: test register change
 
   property("spending of whole coin when its value no more than storage fee") {
-    val out2 = truePropBoxGen.sample.get
+    val out2 = ergoBoxGenNoProp.sample.get
     val minValue = out2.value + 1
 
     forAll(unspendableErgoBoxGen(minValue, Long.MaxValue)) { from =>
       val outcome = from.value <= from.bytes.length * parameters.K
-      val out1 = new ErgoBoxCandidate(from.value - minValue, Values.FalseLeaf)
+      val out1 = new ErgoBoxCandidate(from.value - minValue, Values.FalseLeaf, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }
   }

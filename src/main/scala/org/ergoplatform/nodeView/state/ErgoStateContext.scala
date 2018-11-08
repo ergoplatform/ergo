@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.settings.{Parameters, ParametersSerializer}
+import org.ergoplatform.settings.{LaunchParameters, Parameters, ParametersSerializer}
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.crypto.authds.ADDigest
 
@@ -12,7 +12,7 @@ import scala.util.Try
   * Additional data required for transactions validation
   *
   * @param currentHeight - height of the next block
-  * @param stateDigest - An AVL tree root hash of the UTXO state BEFORE current block application
+  * @param stateDigest   - An AVL tree root hash of the UTXO state BEFORE current block application
   */
 case class ErgoStateContext(currentHeight: Int,
                             stateDigest: ADDigest,
@@ -24,6 +24,12 @@ case class ErgoStateContext(currentHeight: Int,
 
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header.height + 1, header.stateRoot, currentParameters)
+  }
+}
+
+object ErgoStateContext {
+  def empty(afterGenesisStateDigest: ADDigest): ErgoStateContext = {
+    ErgoStateContext(0, afterGenesisStateDigest, LaunchParameters)
   }
 }
 

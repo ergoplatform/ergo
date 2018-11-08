@@ -1,8 +1,10 @@
 package org.ergoplatform.settings
 
 import com.google.common.primitives.Ints
+import org.ergoplatform.modifiers.history.Extension
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
+import scorex.util.ModifierId
 
 import scala.util.Try
 
@@ -13,6 +15,8 @@ import scala.util.Try
 abstract class Parameters {
 
   def height: Height
+
+  require(parametersTable.size == Parameters.ParametersCount)
 
   def parametersTable: Map[Byte, Int]
 
@@ -58,22 +62,40 @@ abstract class Parameters {
   val MaxBlockCostDecrease = -MaxBlockCostIncrease
 
 
-   def changeParameter(newHeight: Height, paramId: Byte): Parameters = {
-     paramId match {
-       case b: Byte if b == KIncrease =>
-         val newK = if(K < Kmax) K + Kstep else K
-         Parameters(newHeight, parametersTable.updated(KIncrease, newK))
-       case _ => ???
-     }
-   }
+  def changeParameter(newHeight: Height, paramId: Byte): Parameters = {
+    require(newHeight % Constants.VotingEpochLength == 0)
+    paramId match {
+      case b: Byte if b == KIncrease =>
+        val newK = if (K < Kmax) K + Kstep else K
+        Parameters(newHeight, parametersTable.updated(KIncrease, newK))
+      case _ => ???
+    }
+  }
+
+  def toExtension(headerId: ModifierId, optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): Extension = {
+    val mandatoryFields = parametersTable.toSeq.map{case (k,v) => Array(k) -> Ints.toByteArray(v)}
+    Extension(headerId, mandatoryFields, optionalFields)
+  }
 
   override def toString: String = s"Parameters(${parametersTable.mkString("; ")})"
 }
 
 object Parameters {
+  val ParametersCount = 2
+
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters {
     override val height: Height = h
     override val parametersTable: Map[Byte, Int] = paramsTable
+  }
+
+  def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
+    val paramsTable = extension.mandatoryFields.map { case (k, v) =>
+      require(k.length == 1)
+      require(v.length == 4)
+
+      k.head -> Ints.fromByteArray(v)
+    }.toMap
+    Parameters(h, paramsTable)
   }
 }
 

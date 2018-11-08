@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
+import org.ergoplatform.mining.{AutoleakusPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
@@ -36,7 +36,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
 
-  val powScheme: PowScheme = DefaultFakePowScheme
+  val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)

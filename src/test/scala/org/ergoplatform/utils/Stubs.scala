@@ -220,7 +220,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Digest32 @@ Array.fill(HashLength)(0.toByte)
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
+      defaultMinerSecretNumber
     ).value
   }
 }

@@ -1,8 +1,9 @@
 package org.ergoplatform.utils.generators
 
+import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.EquihashSolution
+import org.ergoplatform.mining.{AutoleakusSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
@@ -113,6 +114,16 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
     optionalElementsElements.take(Extension.MaxOptionalFields))
 
+
+  lazy val genECPoint: Gen[ECPoint] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
+
+  lazy val powSolutionGen: Gen[AutoleakusSolution] = for {
+    pk <- genECPoint
+    w <- genECPoint
+    n <- genBytes(8)
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
+  } yield AutoleakusSolution(pk, w, n, d)
+
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
@@ -121,7 +132,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     transactionsRoot <- digest32Gen
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
-    equihashSolutions <- Gen.listOfN(EquihashSolution.length, Arbitrary.arbitrary[Int])
+    powSolution <- powSolutionGen
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
@@ -136,10 +147,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     RequiredDifficulty.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
-    EquihashSolution(equihashSolutions),
+    powSolution,
     None
   )
-
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen

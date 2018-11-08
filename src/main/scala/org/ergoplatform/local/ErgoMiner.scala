@@ -18,29 +18,29 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import sigmastate.SBoolean
-import sigmastate.Values.{LongConstant, TrueLeaf, Value}
+import sigmastate.Values.LongConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
+                inSkOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
+
 
   //shared mutable state
   private var isMining = false
@@ -50,17 +50,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val ExpectedTxCost: Int = 10000
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
+  // Leave this cost empty when collection transactions to put reward txs
+  private val CostDrift: Int = 50000
+  // Leave this space empty when collection transactions to put reward txs
+  private val SizeDrift: Int = 5000
 
-  private var publicKeyOpt: Option[P2PKAddress] = None
-
-  private def minerPropOpt: Option[Value[SBoolean.type]] = extPropOpt.orElse {
-    publicKeyOpt.map(_.pubkey)
-  }
+  private var skOpt: Option[DLogProverInput] = inSkOpt
 
   override def preStart(): Unit = {
-    viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-      v.vault.randomPublicKey().onComplete { keyTry =>
-        publicKeyOpt = keyTry.toOption
+    if (skOpt.isEmpty) {
+      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, UpdateSecret] { v =>
+        UpdateSecret(Await.result(v.vault.firstSecret(), 10.seconds))
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -77,6 +77,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
+  private def onUpdateSecret: Receive = {
+    case UpdateSecret(s) =>
+      skOpt = Some(s)
+
+  }
+
   private def miningStatus: Receive = {
     case MiningStatusRequest =>
       sender ! MiningStatusResponse(isMining, candidateOpt)
@@ -85,10 +91,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
-        log.info("Starting Mining")
-        isMining = true
-        miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, timeProvider)(context)
-        miningThreads.foreach(_ ! candidate)
+        skOpt.foreach { sk =>
+          log.info("Starting Mining")
+          isMining = true
+          miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
+          miningThreads.foreach(_ ! candidate)
+        }
       }
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate()
@@ -132,11 +140,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningStatus orElse
     startMining orElse
     onReaders orElse
+    onUpdateSecret orElse
     unknownMessage
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      minerPropOpt.foreach { minerProp =>
+      skOpt.map(_.publicImage).foreach { minerProp =>
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) => procCandidateBlock(candidate)
           case Failure(e) => log.warn("Failed to produce candidate block.", e)
@@ -187,7 +196,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }
 
-  private def createCandidate(minerProp: Value[SBoolean.type],
+  private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
@@ -197,13 +206,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val txsNoConflict = collectTxs(state,
       state.emissionBoxOpt.map(_.id).toSeq,
       pool.unconfirmed.values,
-      Parameters.MaxBlockCost - Constants.CoinbaseTxCost,
-      Parameters.MaxBlockSize,
+      Parameters.MaxBlockCost - CostDrift,
+      Parameters.MaxBlockSize - SizeDrift,
       Seq())
 
-    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)
-    val coinbase = ErgoMiner.createCoinbase(state, feeBoxes, minerProp, ergoSettings.emission)
-    val txs = txsNoConflict :+ coinbase
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2
+      .filter(_.proposition == Constants.FeeProposition)
+    val rewards = ErgoMiner.collectRewards(state, feeBoxes, minerPk, ergoSettings.emission)
+    val txs = txsNoConflict ++ rewards
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       val timestamp = timeProvider.time()
@@ -225,52 +235,47 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
-  def createCoinbase(state: UtxoStateReader,
+  def collectRewards(state: UtxoStateReader,
                      feeBoxes: Seq[ErgoBox],
-                     minerProp: Value[SBoolean.type],
-                     emissionRules: EmissionRules): ErgoTransaction = {
+                     minerPk: ProveDlog,
+                     emissionRules: EmissionRules): Seq[ErgoTransaction] = {
     val emissionBoxOpt = state.emissionBoxOpt
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    val h = state.stateContext.lastHeaderOpt.map(_.height).getOrElse(-1)
-    createCoinbase(emissionBoxOpt, h, feeBoxes, minerProp, emissionRules)
+    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
   }
 
-  def createCoinbase(emissionBoxOpt: Option[ErgoBox],
+  def collectRewards(emissionBoxOpt: Option[ErgoBox],
                      currentHeight: Int,
                      feeBoxes: Seq[ErgoBox],
-                     minerProp: Value[SBoolean.type],
-                     emission: EmissionRules): ErgoTransaction = {
-    feeBoxes.foreach(b => assert(b.proposition == TrueLeaf, s"Trying to create coinbase from protected fee box $b"))
-    val nextHeight = currentHeight + 1
-    val creationHeight = Math.max(0, currentHeight)
+                     minerPk: ProveDlog,
+                     emission: EmissionRules): Seq[ErgoTransaction] = {
+    feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
 
-    val (inputBoxes, emissionAmount, newEmissionBoxOpt) = emissionBoxOpt match {
-      case Some(emissionBox) =>
-        val prop = emissionBox.proposition
-        val emissionAmount = emission.emissionAtHeight(nextHeight)
-        val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, creationHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
-
-        ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
-      case None => (feeBoxes, 0L, None)
+    val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
+      val nextHeight = currentHeight + 1
+      val prop = emissionBox.proposition
+      val emissionAmount = emission.emissionAtHeight(nextHeight)
+      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
+        currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
+      val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerPk, currentHeight, Seq.empty, Map())
+      ErgoTransaction(
+        inputs,
+        IndexedSeq(newEmissionBox, minerBox)
+      )
     }
-
-    val inputs = inputBoxes
-      .map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      .toIndexedSeq
-
-    val feeAmount = feeBoxes.map(_.value).sum
-
-    val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
-
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, creationHeight, feeAssets, Map())
-
-    ErgoTransaction(
-      inputs,
-      IndexedSeq(newEmissionBoxOpt, Some(minerBox)).flatten
-    )
+    val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
+      val feeAmount = feeBoxes.map(_.value).sum
+      val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+      val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      val minerBox = new ErgoBoxCandidate(feeAmount, minerPk, currentHeight, feeAssets, Map())
+      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
+    } else {
+      None
+    }
+    Seq(emissionTxOpt, feeTxOpt).flatten
   }
 
   def fixTxsConflicts(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs
@@ -288,6 +293,8 @@ object ErgoMiner extends ScorexLogging {
 
   case object MiningStatusRequest
 
+  case class UpdateSecret(s: DLogProverInput)
+
   case class MiningStatusResponse(isMining: Boolean, candidateBlock: Option[CandidateBlock])
 
   implicit val jsonEncoder: Encoder[MiningStatusResponse] = (r: MiningStatusResponse) =>
@@ -304,23 +311,15 @@ object ErgoMinerRef {
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            minerPropOpt: Option[Value[SBoolean.type]] = None): Props =
-    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, minerPropOpt))
+            skOpt: Option[DLogProverInput] = None): Props =
+    Props(new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, skOpt))
 
   def apply(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,
-            minerPropOpt: Option[Value[SBoolean.type]] = None)
+            skOpt: Option[DLogProverInput] = None)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, minerPropOpt))
+    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, skOpt))
 
-
-  def apply(ergoSettings: ErgoSettings,
-            viewHolderRef: ActorRef,
-            readersHolderRef: ActorRef,
-            timeProvider: NetworkTimeProvider,
-            name: String)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, viewHolderRef, readersHolderRef, timeProvider), name)
 }

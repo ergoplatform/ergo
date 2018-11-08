@@ -111,6 +111,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     * Generated transaction may still be invalid, if:
     * - default prover does not know how to sign at least one input
     * - number of assets exceeds Transaction.MaxTokens
+    * - transaction is trying to create dust
     */
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,

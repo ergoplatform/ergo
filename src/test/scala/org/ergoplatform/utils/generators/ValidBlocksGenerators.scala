@@ -11,6 +11,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
@@ -21,7 +22,7 @@ import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -78,12 +79,24 @@ trait ValidBlocksGenerators
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
             // disable tokens generation to avoid situation with too many tokens
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd, issueNew)
-            loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+            tx.statelessValidity match {
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+            }
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
-            ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+            tx.statelessValidity match {
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+            }
           }
       }
     }

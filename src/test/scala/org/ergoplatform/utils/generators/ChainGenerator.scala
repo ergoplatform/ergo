@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.core.utils.NetworkTimeProvider
@@ -20,6 +20,8 @@ import scala.util.Random
 trait ChainGenerator {
 
   val timeProvider: NetworkTimeProvider
+
+  val parameters = LaunchParameters
 
   val powScheme: PowScheme = DefaultFakePowScheme
   private val EmptyStateRoot = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
@@ -92,7 +94,7 @@ trait ChainGenerator {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val b = ErgoBox(Int.MaxValue, Constants.TrueLeaf)
-    val outputs = IndexedSeq(ErgoBox(b.bytes.length * Parameters.MinValuePerByte, Constants.TrueLeaf))
+    val outputs = IndexedSeq(ErgoBox(b.bytes.length * parameters.MinValuePerByte, Constants.TrueLeaf))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

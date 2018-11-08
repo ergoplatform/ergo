@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, Stubs}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalatest.FlatSpec
@@ -64,11 +64,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
+    val desiredSize: Int = ((parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
     val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1",
-      settings.walletSettings.dlogSecretsNumber)
+    private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber, parameters)
     val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)
@@ -108,8 +107,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.fullBlockHeight,
-          r.s.rootHash)).get
+          ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash, parameters)).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }

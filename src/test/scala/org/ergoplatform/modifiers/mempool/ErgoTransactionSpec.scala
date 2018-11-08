@@ -4,7 +4,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, Stubs}
 import org.scalacheck.Gen
 import scapi.sigma.ProveDiffieHellmanTuple
 import scorex.crypto.authds.ADDigest
@@ -17,7 +17,7 @@ import scala.util.Random
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
 
-  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
+  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte), parameters)
 
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(

@@ -9,21 +9,26 @@ import sigmastate.Values.{EvaluatedValue, Value}
 
 object BoxUtils {
 
-  /** Used when completed ErgoBox is unavailable. */
+  /** Used when complete instance of ErgoBox is unavailable. */
   @inline
   def minimalErgoAmountSimulated(script: Value[sigmastate.SBoolean.type],
                                  tokens: Seq[(TokenId, Long)] = Seq(),
-                                 additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map()): Long = {
+                                 additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
+                                 parameters: Parameters): Long = {
     val candidateMock = new ErgoBoxCandidate(Long.MaxValue, script, tokens, additionalRegisters)
     val mockId = ModifierId @@ Algos.encode(scorex.util.Random.randomBytes(32))
-    minimalErgoAmount(candidateMock.toBox(mockId, 1))
+    minimalErgoAmount(candidateMock.toBox(mockId, 1), parameters)
   }
 
   @inline
-  def minimalErgoAmountSimulated(candidate: ErgoBoxCandidate): Long = {
-    minimalErgoAmountSimulated(candidate.proposition, candidate.additionalTokens, candidate.additionalRegisters)
-  }
+  def minimalErgoAmountSimulated(candidate: ErgoBoxCandidate, parameters: Parameters): Long =
+    minimalErgoAmountSimulated(
+      candidate.proposition,
+      candidate.additionalTokens,
+      candidate.additionalRegisters,
+      parameters
+    )
 
   @inline
-  def minimalErgoAmount(box: ErgoBox): Long = box.bytes.length * Parameters.MinValuePerByte
+  def minimalErgoAmount(box: ErgoBox, parameters: Parameters): Long = box.bytes.length * parameters.MinValuePerByte
 }

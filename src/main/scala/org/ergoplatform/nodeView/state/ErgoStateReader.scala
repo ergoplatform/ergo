@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, LaunchParameters}
 import scorex.core.transaction.state.StateReader
 import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
@@ -15,7 +15,7 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
     .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)
     .getOrElse {
       log.warn("Unable to parse state context, situation is only valid on empty state")
-      ErgoStateContext(0, rootHash)
+      ErgoStateContext(0, rootHash, LaunchParameters)
     }
 }
 

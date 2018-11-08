@@ -4,7 +4,6 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -73,8 +72,8 @@ class DigestState protected(override val version: VersionTag,
               }
               tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
             }.sum
-            if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
+            if (totalCost > stateContext.currentParameters.MaxBlockCost)
+              throw new Error(s"Transaction cost $totalCost exeeds limit")
           }
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))

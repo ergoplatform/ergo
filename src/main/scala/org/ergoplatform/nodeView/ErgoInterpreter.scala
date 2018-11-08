@@ -13,10 +13,10 @@ import scala.util.Try
   * ErgoTree language interpreter, Ergo version. In addition to ErgoLikeInterpreter, it contains
   * rules for expired boxes spending validation.
   *
-  * @param maxCost - maximum cost of a script
+  * @param params - current values of adjustable blockchain settings
   */
-class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
-  extends ErgoLikeInterpreter(maxCost) {
+class ErgoInterpreter(params: Parameters)
+  extends ErgoLikeInterpreter(params.MaxBlockCost) {
 
   override type CTX = ErgoContext
 
@@ -29,7 +29,7 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = Parameters.K * box.bytes.length
+    val maxStorageFee = params.K * box.bytes.length
 
     (box.value - maxStorageFee <= 0) || {
       output.creationHeight == currentHeight &&
@@ -60,8 +60,4 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)
       super.verify(exp, context, proof, message)
     }
   }
-}
-
-object ErgoInterpreter {
-  val instance = new ErgoInterpreter()
 }

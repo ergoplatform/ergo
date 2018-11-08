@@ -36,8 +36,8 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Parameters.MaxBlockCost)
-  extends ErgoInterpreter(maxCost) with ProverInterpreter {
+                             params: Parameters)
+  extends ErgoInterpreter(params) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
 

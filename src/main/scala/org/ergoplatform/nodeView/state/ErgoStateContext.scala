@@ -19,8 +19,8 @@ import scala.util.Try
 case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
   extends BytesSerializable with ScorexEncoding {
 
-  // todo
-  val lastBlockMinerPk: Array[Byte] = Array.fill(32)(0: Byte)
+  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {

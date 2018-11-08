@@ -26,9 +26,6 @@ object Constants {
 
   val BlocksPerHour = 30
 
-  // Number of last block headers available is scripts from ErgoStateContext
-  val LastHeadersInContext = 10
-
   val BlocksPerDay = BlocksPerHour * 24
 
   val BlocksPerWeek = BlocksPerDay * 7
@@ -44,6 +41,9 @@ object Constants {
   val StorageContractCost: Long = 50
 
   val StorageIndexVarId: Byte = Byte.MaxValue
+  
+  // Number of last block headers available is scripts from ErgoStateContext
+  val LastHeadersInContext = 10
 
   val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 

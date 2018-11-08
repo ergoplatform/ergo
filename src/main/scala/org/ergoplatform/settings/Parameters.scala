@@ -16,8 +16,6 @@ abstract class Parameters {
 
   def height: Height
 
-  require(parametersTable.size == Parameters.ParametersCount)
-
   def parametersTable: Map[Byte, Int]
 
   // Max size of transactions section of a block.

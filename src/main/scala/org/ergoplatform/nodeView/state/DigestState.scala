@@ -72,8 +72,9 @@ class DigestState protected(override val version: VersionTag,
               }
               tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
             }.sum
-            if (totalCost > stateContext.currentParameters.MaxBlockCost)
-              throw new Error(s"Transaction cost $totalCost exeeds limit")
+            if (totalCost > stateContext.currentParameters.MaxBlockCost) {
+              throw new Error(s"Transaction cost $totalCost exceeds limit")
+            }
           }
         case None =>
           Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
@@ -98,7 +99,7 @@ class DigestState protected(override val version: VersionTag,
           Failure(e)
       }
 
-    case fb: ErgoFullBlock if !nodeSettings.verifyTransactions =>
+    case _: ErgoFullBlock if !nodeSettings.verifyTransactions =>
       log.warn("Should not get full blocks from node view holders if !settings.verifyTransactions")
       Try(this)
 
@@ -106,7 +107,7 @@ class DigestState protected(override val version: VersionTag,
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(h)
 
-    case h: Header if nodeSettings.verifyTransactions =>
+    case _: Header if nodeSettings.verifyTransactions =>
       log.warn("Should not get header from node view holders if settings.verifyTransactions")
       Try(this)
 

@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.{Bytes, Ints}
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.{Extension, Header}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.settings.{LaunchParameters, Parameters, ParametersSerializer}
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.crypto.authds.ADDigest
@@ -24,6 +25,10 @@ case class ErgoStateContext(currentHeight: Int,
 
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header.height + 1, header.stateRoot, currentParameters)
+  }
+
+  def appendExtension(height: Height, extension: Extension): ErgoStateContext = {
+    ErgoStateContext(currentHeight, stateDigest, Parameters.parseExtension(height, extension).get) //todo: .get
   }
 }
 

@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import akka.actor.ActorRef
 import akka.pattern.ask
+import akka.util.Timeout
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -24,6 +25,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   type Ctx = NodeViewTestContext
   type CurView = CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]
+  implicit private val timeout: Timeout = defaultTimeout
 
   def getCurrentView(implicit ctx: Ctx): CurView = {
     val request = GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, CurView](view => view)
@@ -89,10 +91,10 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   @inline private def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef
   @inline def send(msg: Any)(implicit ctx: Ctx): Unit = ctx.testProbe.send(nodeViewHolderRef, msg)
-  @inline def defaultTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
+  @inline def ctxTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
   @inline def expectMsg[T](obj: T)(implicit ctx: Ctx): T = ctx.testProbe.expectMsg(obj)
   @inline def expectMsgType[T](implicit ctx: Ctx, t: ClassTag[T]): T = ctx.testProbe.expectMsgType
-  @inline def expectNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.expectNoMessage(defaultTimeout)
+  @inline def expectNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.expectNoMessage(ctxTimeout)
   @inline def ignoreMsg(f: PartialFunction[Any, Boolean])(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreMsg(f)
   @inline def ignoreNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreNoMsg()
 

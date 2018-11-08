@@ -46,7 +46,7 @@ object FeeSimulator extends App {
 
   def bitcoinUtxos = 60000000
 
-  println(s"Reward per block: ${perOutputFee * (bitcoinUtxos.toDouble / StoragePeriod)} Erg")
+  println(s"Reward per block: ${perOutputFee * (bitcoinUtxos.toDouble / StoragePeriod)} Erg + tx fees")
 
 
   println("=====================")

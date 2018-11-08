@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Parameters}
+import org.ergoplatform.settings.{Algos, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -83,7 +83,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         tx.statefulValidity(boxesToSpend, stateContext, constants.settings.metadata).get
       }.sum
 
-      if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+      if (totalCost > stateContext.currentParameters.MaxBlockCost){
+        throw new Error(s"Transaction cost $totalCost exeeds limit")
+      }
 
       persistentProver.synchronized {
 
@@ -196,7 +198,7 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext(0, p.digest)
+    val defaultStateContext = ErgoStateContext(0, p.digest, LaunchParameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(

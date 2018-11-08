@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -44,7 +44,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     height <- positiveIntGen
     digest <- stateRootGen
-  } yield ErgoStateContext(height, digest)
+  } yield ErgoStateContext(height, digest, LaunchParameters)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
@@ -56,7 +56,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers {
                     creationHeight: Long = 0): Gen[Int] = {
     val b = ErgoBox(Int.MaxValue, proposition, additionalTokens, additionalRegisters,
                         transactionId, boxId, creationHeight)
-    Gen.choose((Parameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
+    Gen.choose((LaunchParameters.MinValuePerByte * (b.bytes.length + 5)).toInt, Int.MaxValue)
   }
 
   lazy val truePropBoxGen: Gen[ErgoBox] = validValueGen(TrueLeaf).map(v => ErgoBox(v, TrueLeaf))

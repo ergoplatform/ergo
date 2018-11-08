@@ -198,8 +198,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val txsNoConflict = collectTxs(state,
       state.emissionBoxOpt.map(_.id).toSeq,
       pool.unconfirmed.values,
-      Parameters.MaxBlockCost - Constants.CoinbaseTxCost,
-      Parameters.MaxBlockSize,
+      state.stateContext.currentParameters.MaxBlockCost - Constants.CoinbaseTxCost,
+      state.stateContext.currentParameters.MaxBlockSize,
       Seq())
 
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2.filter(_.proposition == TrueLeaf)

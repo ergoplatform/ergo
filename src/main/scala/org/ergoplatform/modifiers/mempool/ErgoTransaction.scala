@@ -92,7 +92,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
-      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o)), s"Transaction is trying to create dust: $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
       .demandSuccess(outAssetsOpt, s"Asset rules violated in $this")
       .result
@@ -107,6 +106,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
     failFast
       .payload(0L)
+      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, blockchainState.currentParameters)), s"Transaction is trying to create dust: $this")
       .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
@@ -118,7 +118,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
 
-        val verifier: ErgoInterpreter = ErgoInterpreter.instance
+        //todo: reuse the interpreter?
+        val verifier: ErgoInterpreter = new ErgoInterpreter(blockchainState.currentParameters)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover{case t => t.printStackTrace()}

@@ -17,9 +17,9 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
 
   val nodesQty: Int = 4
 
-  val commonChainLength: Int = 5
+  val commonChainLength: Int = 10
   val forkLength: Int = 5
-  val syncLength: Int = 10
+  val syncLength: Int = 15
 
   val localVolumes: Seq[String] = (1 to nodesQty).map(localVolume)
   val remoteVolume = "/app"

@@ -29,6 +29,14 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
+  val BlocksPerDay = BlocksPerHour * 24
+
+  val BlocksPerWeek = BlocksPerDay * 7
+
+  val BlocksPerMonth = BlocksPerDay * 30
+
+  val BlocksPerYear = BlocksPerDay * 365
+
   //For how many blocks a box could be put into the state with no paying.
   //4 years
   val StoragePeriod: Int = 4 * 365 * 24 * BlocksPerHour

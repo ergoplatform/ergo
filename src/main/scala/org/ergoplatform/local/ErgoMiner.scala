@@ -250,9 +250,8 @@ object ErgoMiner extends ScorexLogging {
       case Some(emissionBox) =>
         val prop = emissionBox.proposition
         val emissionAmount = emission.emissionAtHeight(nextHeight)
-        val newEmissionBox: ErgoBoxCandidate =
-          new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, Seq(), Map(R4 -> LongConstant(nextHeight)), creationHeight = creationHeight)
-
+        val v = emissionBox.value - emissionAmount
+        val newEmissionBox = new ErgoBoxCandidate(v, prop, Seq(), Map(R4 -> LongConstant(nextHeight)), creationHeight)
         ((emissionBox +: feeBoxes).toIndexedSeq, emissionAmount, Some(newEmissionBox))
       case None => (feeBoxes, 0L, None)
     }
@@ -265,7 +264,7 @@ object ErgoMiner extends ScorexLogging {
 
     val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
 
-    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, feeAssets, Map(), creationHeight = creationHeight)
+    val minerBox = new ErgoBoxCandidate(emissionAmount + feeAmount, minerProp, feeAssets, Map(), creationHeight)
 
     ErgoTransaction(
       inputs,

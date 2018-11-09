@@ -4,20 +4,16 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.authds.avltree.batch.BatchAVLVerifier
-import scorex.crypto.hash.Digest32
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
@@ -54,6 +50,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) =>
           Try {
             val txs = fb.blockTransactions.txs
+            val currentStateContext = stateContext.appendHeader(fb.header)
 
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
@@ -68,7 +65,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, stateContext.appendHeader(fb.header), ergoSettings.metadata).get
+              tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 

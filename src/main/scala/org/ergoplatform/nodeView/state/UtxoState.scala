@@ -4,7 +4,6 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -67,9 +66,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   @SuppressWarnings(Array("TryGet"))
-  private[state] def applyTransactions(transactions: Seq[ErgoTransaction], header: Header) = Try {
-    val currentStateContext = stateContext.appendHeader(header)
-    val expectedDigest = header.stateRoot
+  private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       expectedDigest: ADDigest,
+                                       currentStateContext: ErgoStateContext) = Try {
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
@@ -108,10 +107,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
       persistentProver.synchronized {
         val inRoot = rootHash
+        val newStateContext = stateContext.appendHeader(fb.header)
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header).map { _: Unit =>
+        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
           val emissionBox = extractEmissionBox(fb)
-          val newStateContext = stateContext.appendHeader(fb.header)
           val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
           val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
           val proofHash = ADProofs.proofDigest(proofBytes)

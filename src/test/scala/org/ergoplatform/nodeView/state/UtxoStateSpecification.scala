@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -126,7 +125,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, header.copy(stateRoot = digest, height = 1)).get
+      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      us.applyTransactions(txs, digest, newSC).get
     }
   }
 
@@ -146,7 +146,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, header.copy(stateRoot = digest, height = 1)).get
+      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      us.applyTransactions(txs, digest, newSC).get
     }
   }
 

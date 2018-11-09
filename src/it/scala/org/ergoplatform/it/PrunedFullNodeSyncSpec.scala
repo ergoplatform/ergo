@@ -31,11 +31,11 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
     .withFallback(nonGeneratingPeerConfig)
 
   // Testing scenario:
-  // 1. Start up few full nodes and let them mine {targetHeight + syncDelta} blocks;
-  // 2. Fetch their headers at {targetHeight} and make sure chains are synced (all nodes have same best headers);
-  // 3. Fetch `stateRoot` of best header at {targetHeight};
-  // 4. Start up pruned full node and wait until it gets synced with the network up to {targetHeight};
-  // 5. Fetch its `stateRoot` of best header at {targetHeight} and make sure it matches full nodes' one;
+  // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};
+  // 2. Shut it down, restart with turned off mining and fetch its info to get actual {targetHeight};
+  // 3. Start pruned full node and wait until it gets synced with the first one up to {targetHeight};
+  // 4. Fetch pruned node info and compare it with first node's one;
+  // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
   s"Pruned full node synchronization ($approxTargetHeight blocks)" in {
 
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get

@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.NodeConfigurationSettings
 
 /**
-  * Class that keeps and calculates minimal height for full blocks starting from which we need to download these full
+  * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
@@ -13,7 +13,8 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
   @volatile private[history] var minimalFullBlockHeightVar: Int = 0
 
   /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
-    * `true` if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+    * `true` if we estimate that our chain is synced with the network.
+    * Full blocks downloading is to be started after that.
     */
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 

@@ -26,7 +26,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(miningDelayConfig(10000))
   val prunedConfig: Config = nodeSeedConfigs(1)
-    .withFallback(blockIntervalConfig(9500))
+    .withFallback(blockIntervalConfig(8000))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
 

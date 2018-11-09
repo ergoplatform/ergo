@@ -24,9 +24,11 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
   dir.mkdirs()
 
   val minerConfig: Config = nodeSeedConfigs.head
+    .withFallback(miningDelayConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
   val digestConfig: Config = digestStatePeerConfig
-    .withFallback(prunedHistoryPeerConfig(blocksToKeep))
+    .withFallback(blockIntervalConfig(9500))
+    .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
 

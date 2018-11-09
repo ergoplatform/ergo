@@ -35,17 +35,12 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     */
   def updateBestFullBlock(header: Header): Int = {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
-      log.info("~>>> IF branch")
       0 // keep all blocks in history
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
-      log.info("~>>> ELSE IF branch")
       0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
     } else {
       // Start from config.blocksToKeep blocks back
-      log.info("~>>> ELSE branch")
-      log.info(s"~>>> 'minimalFullBlockHeight = $minimalFullBlockHeight")
-      log.info(s"~>>> 'header.height - config.blocksToKeep + 1 = ${header.height - config.blocksToKeep + 1}")
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true

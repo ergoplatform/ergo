@@ -64,7 +64,6 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def processBetterChain: BlockProcessing = {
     case toProcess@ToProcess(fullBlock, newModRow, newBestAfterThis, blocksToKeep, _)
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestAfterThis.id) =>
-      log.info("~>>> In Block processing branch")
 
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestAfterThis)
@@ -76,7 +75,6 @@ trait FullBlockProcessor extends HeadersProcessor {
         //block have higher score but is not linkable to full chain
         nonBestBlock(toProcess)
       } else {
-        log.info(s"~>>> Applying better block h:${fullBlock.header.height}")
         //application of this block leads to full chain with higher score
         logStatus(toRemove, toApply, fullBlock, Some(prevBest))
         val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
@@ -84,11 +82,9 @@ trait FullBlockProcessor extends HeadersProcessor {
         updateStorage(newModRow, newBestAfterThis.id)
 
         if (blocksToKeep >= 0) {
-          log.info(s"~>>> In `blocksToKeep >= 0` branch")
           val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
           val bestHeight: Int = newBestAfterThis.height
           val diff = bestHeight - prevBest.header.height
-          log.info(s"~>>> {lastKept=$lastKept}, {bestHeight=$bestHeight}, {diff=$diff}")
           pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)

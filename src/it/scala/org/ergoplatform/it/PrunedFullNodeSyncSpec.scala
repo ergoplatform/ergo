@@ -17,7 +17,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val approxTargetHeight = 10
   val blocksToKeep: Int = approxTargetHeight / 2
 
-  val localVolume = s"$localDataDir/digest-node-sync-spec/data"
+  val localVolume = s"$localDataDir/full-node-sync-spec/data"
   val remoteVolume = "/app"
 
   val dir = new File(localVolume)
@@ -36,7 +36,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // 3. Start pruned full node and wait until it gets synced with the first one up to {targetHeight};
   // 4. Fetch pruned node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
-  s"Pruned full node synchronization ($approxTargetHeight blocks)" in {
+  s"Pruned full node synchronization" in {
 
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

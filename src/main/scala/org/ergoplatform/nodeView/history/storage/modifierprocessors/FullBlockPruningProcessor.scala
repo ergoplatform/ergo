@@ -2,13 +2,12 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.NodeConfigurationSettings
-import scorex.util.ScorexLogging
 
 /**
   * Class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends ScorexLogging {
+class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = 0

@@ -2,12 +2,13 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.NodeConfigurationSettings
+import scorex.util.ScorexLogging
 
 /**
   * Class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
+class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends ScorexLogging {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = 0
@@ -34,12 +35,17 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
     */
   def updateBestFullBlock(header: Header): Int = {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
+      log.info("~>>> IF branch")
       0 // keep all blocks in history
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
+      log.info("~>>> ELSE IF branch")
       0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
     } else {
       // Start from config.blocksToKeep blocks back
+      log.info("~>>> ELSE branch")
+      log.info(s"~>>> 'minimalFullBlockHeight = $minimalFullBlockHeight")
+      log.info(s"~>>> 'header.height - config.blocksToKeep + 1 = ${header.height - config.blocksToKeep + 1}")
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true

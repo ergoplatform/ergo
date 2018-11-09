@@ -45,6 +45,7 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
       docker.stopNode(minerNode.containerId, secondsToWait = 0)
       val nodeForSyncing = docker.startNode(
         minerConfig.withFallback(nonGeneratingPeerConfig), specialVolumeOpt = Some((localVolume, remoteVolume))).get
+      Async.await(nodeForSyncing.waitForHeight(approxTargetHeight))
       val sampleInfo = Async.await(nodeForSyncing.info)
       val digestNode = docker.startNode(digestConfig).get
       val targetHeight = sampleInfo.bestBlockHeightOpt.value

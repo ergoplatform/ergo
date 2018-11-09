@@ -12,7 +12,7 @@ import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
+class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
   val approxTargetHeight = 10
   val blocksToKeep: Int = approxTargetHeight / 2
@@ -27,7 +27,7 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
     .withFallback(miningDelayConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
   val digestConfig: Config = digestStatePeerConfig
-    .withFallback(blockIntervalConfig(9500))
+    .withFallback(blockIntervalConfig(8000))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
@@ -38,7 +38,7 @@ class DigestStateNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // 3. Start digest node and wait until it gets synced with the first one up to {targetHeight};
   // 4. Fetch digest node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
-  s"Digest mode synchronization ($approxTargetHeight blocks)" in {
+  "Pruned digest node synchronization" in {
 
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

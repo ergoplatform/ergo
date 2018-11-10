@@ -37,6 +37,7 @@ case class UtxoSnapshotChunk(stateElements: IndexedSeq[StateElement], index: Sho
   def correspondsTo(manifest: UtxoSnapshotManifest): Boolean = {
     manifest.chunkRootHashes.exists(java.util.Arrays.equals(_, rootHash))
   }
+
 }
 
 object UtxoSnapshotChunk {
@@ -44,6 +45,7 @@ object UtxoSnapshotChunk {
   type StateElement = ErgoBox
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (107: Byte)
+
 }
 
 object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
@@ -70,7 +72,7 @@ object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
       Traverse[List].sequence(elementsTry)
     }
     indexTry.flatMap { idx =>
-      stateElementsTry.map(UtxoSnapshotChunk(_, idx))
+      stateElementsTry.map(stateElems => UtxoSnapshotChunk(stateElems.toIndexedSeq, idx))
     }
   }
 

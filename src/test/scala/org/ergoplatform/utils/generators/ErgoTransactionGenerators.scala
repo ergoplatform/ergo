@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue)
@@ -230,8 +229,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UtxoSnapshotChunk(stateElements, index)
+    stateElements: IndexedSeq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
+  } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

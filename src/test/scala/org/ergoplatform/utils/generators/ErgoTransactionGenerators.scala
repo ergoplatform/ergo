@@ -229,8 +229,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: IndexedSeq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UTXOSnapshotChunk(stateElements, index)
+    stateElements: List[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
+  } yield UTXOSnapshotChunk(stateElements.toIndexedSeq, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

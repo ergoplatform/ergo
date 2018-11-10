@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.NodeConfigurationSettings

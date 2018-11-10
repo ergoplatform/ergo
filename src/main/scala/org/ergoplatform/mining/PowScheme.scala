@@ -19,8 +19,7 @@ trait PowScheme {
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            extensionHash: Digest32
-           ): Option[Header]
+            extensionHash: Digest32): Option[Header]
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,

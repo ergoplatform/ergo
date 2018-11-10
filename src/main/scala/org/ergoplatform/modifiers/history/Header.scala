@@ -1,8 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.crypto.digests.SHA256Digest
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.crypto.Equihash
@@ -22,7 +22,7 @@ import scorex.util._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Success, Try}
+import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -37,7 +37,6 @@ case class Header(version: Version,
                   equihashSolution: EquihashSolution,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
-
 
   override type M = Header
 
@@ -137,6 +136,7 @@ object Header extends ApiCodecs {
     } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
   }
+
 }
 
 object HeaderSerializer extends Serializer[Header] {
@@ -222,4 +222,5 @@ object HeaderSerializer extends Serializer[Header] {
         nBits, height, extensionHash, equihashSolution, Some(bytes.length))
     }
   }.flatten
+
 }

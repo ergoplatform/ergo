@@ -1,10 +1,10 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
+package org.ergoplatform.nodeView.history.modifierprocessors.popow
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{HistoryModifierSerializer, PoPoWProof, PoPoWProofUtils}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.HeadersProcessor
 import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Success, Try}

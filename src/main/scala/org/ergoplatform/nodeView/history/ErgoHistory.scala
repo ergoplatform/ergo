@@ -5,10 +5,10 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.modifiers.state.UtxoSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
+import org.ergoplatform.nodeView.history.modifierprocessors._
+import org.ergoplatform.nodeView.history.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
 import scorex.core.consensus.History
@@ -57,7 +57,7 @@ trait ErgoHistory
           (this, process(section))
         case poPoWProof: PoPoWProof =>
           (this, process(poPoWProof))
-        case chunk: UTXOSnapshotChunk =>
+        case chunk: UtxoSnapshotChunk =>
           (this, process(chunk))
       }
     }

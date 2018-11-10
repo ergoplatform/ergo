@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.modifiers.state.UtxoSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors._
+import org.ergoplatform.nodeView.history.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
@@ -211,7 +211,7 @@ trait ErgoHistoryReader
         validate(m)
       case m: PoPoWProof =>
         validate(m)
-      case chunk: UTXOSnapshotChunk =>
+      case chunk: UtxoSnapshotChunk =>
         validate(chunk)
       case m: Any =>
         Failure(new Error(s"Modifier $m has incorrect type"))

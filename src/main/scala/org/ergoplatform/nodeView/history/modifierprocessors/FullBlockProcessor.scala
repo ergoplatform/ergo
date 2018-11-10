@@ -1,8 +1,8 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
+import org.ergoplatform.nodeView.history.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.{ModifierId, bytesToId}

@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.EmptyBlockSectionProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.EmptyBlockSectionProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen

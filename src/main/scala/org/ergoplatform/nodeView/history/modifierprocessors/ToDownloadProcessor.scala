@@ -1,17 +1,18 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifest}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
+import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
-/**
-  * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
+/** Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends ScorexLogging {
 
@@ -66,17 +67,18 @@ trait ToDownloadProcessor extends ScorexLogging {
     }
   }
 
-  /**
-    * Checks, whether it's time to download full chain and return toDownload modifiers
+  /** Checks, whether it's time to download full chain and return toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
-
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction
       Seq.empty
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers
       requiredModifiersForHeader(header)
+    } else if (config.blocksToKeep > 0 && !config.stateType.requireProofs &&
+      pruningProcessor.shouldDownloadBlockAtHeight(header.height + 1)) {
+      Seq((UtxoSnapshotManifest.modifierTypeId, UtxoSnapshot.rootHashToId(Digest32 !@@ header.stateRoot)))
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)

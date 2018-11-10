@@ -59,21 +59,16 @@ object UTXOSnapshotChunkSerializer extends Serializer[UTXOSnapshotChunk] {
       Bytes.concat(obj.stateElements.map(elt => Ints.toByteArray(elt.bytes.length) ++ elt.bytes): _*)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[UTXOSnapshotChunk] = {
-    val indexTry = Try(Shorts.fromByteArray(bytes.take(2)))
-    val elementsQtyTry = Try(Ints.fromByteArray(bytes.slice(2, 6)))
-    val stateElementsTry = elementsQtyTry.flatMap { qty =>
-      val elementsTry = (1 to qty).foldLeft((List.empty[Try[StateElement]], bytes.drop(6))) {
-        case ((acc, leftBytes), _) =>
-          val eltSize = Ints.fromByteArray(leftBytes.take(4))
-          val boxTry = ErgoBoxSerializer.parseBytes(leftBytes.slice(4, eltSize))
-          (acc :+ boxTry, leftBytes.drop(4 + eltSize))
-      }._1
-      Traverse[List].sequence(elementsTry)
-    }
-    indexTry.flatMap { idx =>
-      stateElementsTry.map(stateElems => UTXOSnapshotChunk(stateElems.toIndexedSeq, idx))
-    }
-  }
+  override def parseBytes(bytes: Array[Byte]): Try[UTXOSnapshotChunk] = Try {
+    val index = Shorts.fromByteArray(bytes.take(2))
+    val elementsQty = Ints.fromByteArray(bytes.slice(2, 6))
+    val stateElementsTry = (0 to elementsQty).tail.foldLeft((List.empty[Try[StateElement]], bytes.drop(6))) {
+      case ((acc, leftBytes), _) =>
+        val eltSize = Ints.fromByteArray(leftBytes.take(4))
+        val boxTry = ErgoBoxSerializer.parseBytes(leftBytes.slice(4, 4 + eltSize))
+        (acc :+ boxTry, leftBytes.drop(4 + eltSize))
+    }._1
+    Traverse[List].sequence(stateElementsTry).map(stateElems => UTXOSnapshotChunk(stateElems.toIndexedSeq, index))
+  }.flatten
 
 }

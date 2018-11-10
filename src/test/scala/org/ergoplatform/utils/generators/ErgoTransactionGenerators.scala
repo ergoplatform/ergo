@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.modifiers.state._
 import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -231,6 +231,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     index: Short <- Arbitrary.arbitrary[Short]
     stateElements: List[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
   } yield UTXOSnapshotChunk(stateElements.toIndexedSeq, index)
+
+  lazy val randomUTXOSnapshotManifestGen: Gen[UTXOSnapshotManifest] = for {
+    chunksQty <- Gen.chooseNum(1, 100)
+    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UTXOSnapshotManifestSerializer.rootHashSize))
+    blockId <- modifierIdGen
+  } yield UTXOSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

@@ -8,7 +8,9 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.state.UtxoState.ModifierProcessing
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, Parameters}
 import org.ergoplatform.utils.LoggingUtil
@@ -16,6 +18,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 
@@ -90,7 +93,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       }.toList
     }.map(_.sum)
     executionCostTry match {
-      case Success(value) if value <= Parameters.MaxBlockCost =>
+      case Success(executionCost) if executionCost <= Parameters.MaxBlockCost =>
         persistentProver.synchronized {
           val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
           val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
@@ -101,13 +104,21 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               s"${Algos.encode(persistentProver.digest)} given"))
           }
         }
-      case Success(totalCost) => Failure(new Exception(s"Transaction cost $totalCost exceeds limit"))
+      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
       case failure => failure.map(_ => ())
     }
   }
 
-  //todo: utxo snapshot could go here
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = processing(mod)
+
+  private def processing: ModifierProcessing = {
+    applyFullBlock orElse
+      applyHeader orElse
+      applySnapshot orElse
+      other
+  }
+
+  private def applyFullBlock: ModifierProcessing = {
     case fb: ErgoFullBlock =>
       val height = fb.header.height
 
@@ -115,38 +126,56 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       persistentProver.synchronized {
         val inRoot = rootHash
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
-          val emissionBox = extractEmissionBox(fb)
-          val newStateContext = stateContext.appendHeader(fb.header)
-          val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-          val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
-          val proofHash = ADProofs.proofDigest(proofBytes)
-          if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height)
+          .map { _: Unit =>
+            val emissionBox = extractEmissionBox(fb)
+            val newStateContext = stateContext.appendHeader(fb.header)
+            val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+            val proofHash = ADProofs.proofDigest(proofBytes)
+            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-          if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
-            throw new Exception("Storage kept roothash is not equal to the declared one")
-          } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-            throw new Exception("Calculated proofHash is not equal to the declared one")
-          } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-            throw new Exception("Calculated stateRoot is not equal to the declared one")
+            if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
+              throw new Exception("Storage kept roothash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+              throw new Exception("Calculated proofHash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Exception("Calculated stateRoot is not equal to the declared one")
+            }
+
+            log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
+              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
-
-          log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-            s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-          new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
-        }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
             s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
-          persistentProver.rollback(inRoot)
-            .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+          persistentProver.rollback(inRoot).ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
       }
+  }
 
+  private def applyHeader: ModifierProcessing = {
     case h: Header =>
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+  }
 
+  private def applySnapshot: ModifierProcessing = {
+    case UtxoSnapshot(manifest, chunks) =>
+      val serializer = new BatchAVLProverSerializer[Digest32, HF]
+      serializer.combine(manifest.proverManifest -> chunks.flatMap(_.subtrees))
+        .map { prover =>
+          val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+            val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
+            val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+            PersistentBatchAVLProver.create(prover, storage).get
+          }
+          new UtxoState(persistentProver, idToVersion(manifest.blockId), store, constants)
+        }
+  }
+
+  private def other: ModifierProcessing = {
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
       Failure(new Exception("unknown modifier"))
@@ -162,6 +191,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 }
 
 object UtxoState {
+
+  type ModifierProcessing = PartialFunction[ErgoPersistentModifier, Try[UtxoState]]
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey = Algos.hash("emission box id key")

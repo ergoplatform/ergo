@@ -227,16 +227,16 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
   } yield BlockTransactions(headerId, txs)
 
-  lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
+  lazy val randomUTXOSnapshotChunkGen: Gen[AUtxoSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
     stateElements: List[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UTXOSnapshotChunk(stateElements.toIndexedSeq, index)
+  } yield AUtxoSnapshotChunk(stateElements.toIndexedSeq, index)
 
-  lazy val randomUTXOSnapshotManifestGen: Gen[UTXOSnapshotManifest] = for {
+  lazy val randomUTXOSnapshotManifestGen: Gen[AUtxoSnapshotManifest] = for {
     chunksQty <- Gen.chooseNum(1, 100)
-    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UTXOSnapshotManifestSerializer.rootHashSize))
+    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(AUtxoSnapshotManifestSerializer.rootHashSize))
     blockId <- modifierIdGen
-  } yield UTXOSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId)
+  } yield AUtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

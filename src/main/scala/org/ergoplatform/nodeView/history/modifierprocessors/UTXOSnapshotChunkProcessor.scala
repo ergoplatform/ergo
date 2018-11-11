@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
+import org.ergoplatform.modifiers.state.AUtxoSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
@@ -17,14 +17,14 @@ trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 
-  def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
+  def process(m: AUtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     //TODO
     val toInsert = ???
     historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, toInsert)
     ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
   }
 
-  def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
+  def validate(m: AUtxoSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
     Failure(new Error(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
   } else {
     Success(Unit)

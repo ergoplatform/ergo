@@ -3,7 +3,7 @@ package org.ergoplatform.serialization
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
-import org.ergoplatform.modifiers.state.{UTXOSnapshotChunkSerializer, UTXOSnapshotManifestSerializer}
+import org.ergoplatform.modifiers.state.{AUtxoSnapshotChunkSerializer, AUtxoSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.settings.Constants
@@ -88,11 +88,11 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("UTXOSnapshotChunk serialization") {
-    checkSerializationRoundtrip(randomUTXOSnapshotChunkGen, UTXOSnapshotChunkSerializer)
+    checkSerializationRoundtrip(randomUTXOSnapshotChunkGen, AUtxoSnapshotChunkSerializer)
   }
 
   property("UTXOSnapshotManifest serialization") {
-    checkSerializationRoundtrip(randomUTXOSnapshotManifestGen, UTXOSnapshotManifestSerializer)
+    checkSerializationRoundtrip(randomUTXOSnapshotManifestGen, AUtxoSnapshotManifestSerializer)
   }
 
 }

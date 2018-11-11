@@ -36,6 +36,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
+  import UtxoState.metadata
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
@@ -45,8 +46,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
     constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
-
-  import UtxoState.metadata
 
   override val maxRollbackDepth = 10
 
@@ -153,6 +152,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
     }
   }
+
 }
 
 object UtxoState {
@@ -208,5 +208,5 @@ object UtxoState {
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
-}
 
+}

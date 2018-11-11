@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.state.{AUtxoSnapshotChunk, AUtxoSnapshotManifest}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
@@ -16,7 +17,7 @@ import scala.util.{Failure, Try}
 
 trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
 
-  protected implicit val hf = Algos.hash
+  protected implicit val hf: HF = Algos.hash
 
   val constants: StateConstants
 
@@ -65,7 +66,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       .flatMap(_.toOption)
   }
 
-  def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
+  def randomBox: Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
   }
 
@@ -87,4 +88,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
+
+  def takeSnapshot: (AUtxoSnapshotManifest, Seq[AUtxoSnapshotChunk]) = ???
+
 }

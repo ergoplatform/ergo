@@ -13,18 +13,18 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 
-case class UTXOSnapshotManifest(chunkRootHashes: IndexedSeq[Array[Byte]], blockId: ModifierId)
+case class AUtxoSnapshotManifest(chunkRootHashes: IndexedSeq[Array[Byte]], blockId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
-  override type M = UTXOSnapshotManifest
+  override type M = AUtxoSnapshotManifest
 
-  override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = AUtxoSnapshotManifest.modifierTypeId
 
-  override def serializedId: Array[Byte] = UTXOSnapshot.rootHashToSerializedId(rootHash)
+  override def serializedId: Array[Byte] = AUtxoSnapshot.rootHashToSerializedId(rootHash)
 
-  override lazy val id: ModifierId = UTXOSnapshot.rootHashToId(rootHash)
+  override lazy val id: ModifierId = AUtxoSnapshot.rootHashToId(rootHash)
 
-  override lazy val serializer: Serializer[UTXOSnapshotManifest] = UTXOSnapshotManifestSerializer
+  override lazy val serializer: Serializer[AUtxoSnapshotManifest] = AUtxoSnapshotManifestSerializer
 
   override def parentId: ModifierId = ???
 
@@ -41,22 +41,22 @@ case class UTXOSnapshotManifest(chunkRootHashes: IndexedSeq[Array[Byte]], blockI
   }
 }
 
-object UTXOSnapshotManifest {
+object AUtxoSnapshotManifest {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (106: Byte)
 }
 
-object UTXOSnapshotManifestSerializer extends Serializer[UTXOSnapshotManifest] {
+object AUtxoSnapshotManifestSerializer extends Serializer[AUtxoSnapshotManifest] {
 
   val rootHashSize: Int = 33
 
-  override def toBytes(obj: UTXOSnapshotManifest): Array[Byte] = {
+  override def toBytes(obj: AUtxoSnapshotManifest): Array[Byte] = {
     idToBytes(obj.blockId) ++ Bytes.concat(obj.chunkRootHashes: _*)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[UTXOSnapshotManifest] = Try {
+  override def parseBytes(bytes: Array[Byte]): Try[AUtxoSnapshotManifest] = Try {
     val blockId = bytesToId(bytes.take(Constants.ModifierIdSize))
     val chunkRootHashes = bytes.drop(Constants.ModifierIdSize).grouped(rootHashSize).toIndexedSeq
-    UTXOSnapshotManifest(chunkRootHashes, blockId)
+    AUtxoSnapshotManifest(chunkRootHashes, blockId)
   }
 
 }

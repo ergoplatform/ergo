@@ -5,7 +5,7 @@ import com.google.common.primitives.{Bytes, Ints, Shorts}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
+import org.ergoplatform.modifiers.state.AUtxoSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
@@ -15,18 +15,18 @@ import scorex.util.ModifierId
 
 import scala.util.Try
 
-case class UTXOSnapshotChunk(stateElements: IndexedSeq[StateElement], index: Short)
+case class AUtxoSnapshotChunk(stateElements: IndexedSeq[StateElement], index: Short)
   extends ErgoPersistentModifier {
 
-  override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = AUtxoSnapshotChunk.modifierTypeId
 
-  override lazy val id: ModifierId = UTXOSnapshot.rootHashToId(rootHash)
+  override lazy val id: ModifierId = AUtxoSnapshot.rootHashToId(rootHash)
 
-  override def serializedId: Array[Byte] = UTXOSnapshot.rootHashToSerializedId(rootHash)
+  override def serializedId: Array[Byte] = AUtxoSnapshot.rootHashToSerializedId(rootHash)
 
-  override type M = UTXOSnapshotChunk
+  override type M = AUtxoSnapshotChunk
 
-  override lazy val serializer: Serializer[UTXOSnapshotChunk] = UTXOSnapshotChunkSerializer
+  override lazy val serializer: Serializer[AUtxoSnapshotChunk] = AUtxoSnapshotChunkSerializer
 
   lazy val rootHash: Digest32 = Algos.merkleTreeRoot(stateElements.map(LeafData @@ _.bytes))
 
@@ -34,13 +34,13 @@ case class UTXOSnapshotChunk(stateElements: IndexedSeq[StateElement], index: Sho
 
   override val sizeOpt: Option[Int] = None
 
-  def correspondsTo(manifest: UTXOSnapshotManifest): Boolean = {
+  def correspondsTo(manifest: AUtxoSnapshotManifest): Boolean = {
     manifest.chunkRootHashes.exists(java.util.Arrays.equals(_, rootHash))
   }
 
 }
 
-object UTXOSnapshotChunk {
+object AUtxoSnapshotChunk {
 
   type StateElement = ErgoBox
 
@@ -48,18 +48,18 @@ object UTXOSnapshotChunk {
 
 }
 
-object UTXOSnapshotChunkSerializer extends Serializer[UTXOSnapshotChunk] {
+object AUtxoSnapshotChunkSerializer extends Serializer[AUtxoSnapshotChunk] {
 
   import cats.instances.try_._
   import cats.instances.list._
 
-  override def toBytes(obj: UTXOSnapshotChunk): Array[Byte] = {
+  override def toBytes(obj: AUtxoSnapshotChunk): Array[Byte] = {
     Shorts.toByteArray(obj.index) ++
       Ints.toByteArray(obj.stateElements.size) ++
       Bytes.concat(obj.stateElements.map(elt => Ints.toByteArray(elt.bytes.length) ++ elt.bytes): _*)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[UTXOSnapshotChunk] = Try {
+  override def parseBytes(bytes: Array[Byte]): Try[AUtxoSnapshotChunk] = Try {
     val index = Shorts.fromByteArray(bytes.take(2))
     val elementsQty = Ints.fromByteArray(bytes.slice(2, 6))
     val stateElementsTry = (0 to elementsQty).tail.foldLeft((List.empty[Try[StateElement]], bytes.drop(6))) {
@@ -68,7 +68,7 @@ object UTXOSnapshotChunkSerializer extends Serializer[UTXOSnapshotChunk] {
         val boxTry = ErgoBoxSerializer.parseBytes(leftBytes.slice(4, 4 + eltSize))
         (acc :+ boxTry, leftBytes.drop(4 + eltSize))
     }._1
-    Traverse[List].sequence(stateElementsTry).map(stateElems => UTXOSnapshotChunk(stateElems.toIndexedSeq, index))
+    Traverse[List].sequence(stateElementsTry).map(stateElems => AUtxoSnapshotChunk(stateElems.toIndexedSeq, index))
   }.flatten
 
 }

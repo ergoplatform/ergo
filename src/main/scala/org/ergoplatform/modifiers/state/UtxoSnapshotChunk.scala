@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.state
 
 import cats.Traverse
-import com.google.common.primitives.{Bytes, Ints, Shorts}
+import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
@@ -13,7 +13,7 @@ import scorex.util.ModifierId
 
 import scala.util.Try
 
-case class UtxoSnapshotChunk(subtrees: IndexedSeq[BatchAVLProverSubtree[Digest32, Algos.HF]], index: Short)
+case class UtxoSnapshotChunk(subtrees: IndexedSeq[BatchAVLProverSubtree[Digest32, Algos.HF]], index: Int)
   extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
@@ -52,16 +52,16 @@ object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
 
   override def toBytes(obj: UtxoSnapshotChunk): Array[Byte] = {
     val serializedSubtrees = obj.subtrees.map(serializer.subtreeToBytes)
-    Shorts.toByteArray(obj.index) ++
+    Ints.toByteArray(obj.index) ++
       Ints.toByteArray(obj.subtrees.size) ++
       Bytes.concat(serializedSubtrees.map(st => Ints.toByteArray(st.length) ++ st): _*)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotChunk] = Try {
-    val index = Shorts.fromByteArray(bytes.take(2))
-    val elementsQty = Ints.fromByteArray(bytes.slice(2, 6))
+    val index = Ints.fromByteArray(bytes.take(4))
+    val elementsQty = Ints.fromByteArray(bytes.slice(4, 8))
     val stateElementsTry = (0 to elementsQty).tail
-      .foldLeft((List.empty[Try[BatchAVLProverSubtree[Digest32, Algos.HF]]], bytes.drop(6))) {
+      .foldLeft((List.empty[Try[BatchAVLProverSubtree[Digest32, Algos.HF]]], bytes.drop(8))) {
         case ((acc, leftBytes), _) =>
           val eltSize = Ints.fromByteArray(leftBytes.take(4))
           val subtreeTry = serializer.subtreeFromBytes(leftBytes.slice(4, 4 + eltSize), Constants.HashLength)

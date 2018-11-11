@@ -5,13 +5,15 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
-import org.ergoplatform.modifiers.state.{AUtxoSnapshotChunk, AUtxoSnapshotManifest}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.transaction.state.TransactionValidation
-import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
+import scorex.crypto.authds.avltree.batch._
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.ModifierId
 
 import scala.util.{Failure, Try}
 
@@ -26,11 +28,12 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
-  override def validate(tx: ErgoTransaction): Try[Unit] =
+  override def validate(tx: ErgoTransaction): Try[Unit] = {
     tx.statelessValidity
       .flatMap(_ =>
         tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext, constants.settings.metadata)
           .map(_ => Unit))
+  }
 
   /**
     *
@@ -89,6 +92,16 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  def takeSnapshot: (AUtxoSnapshotManifest, Seq[AUtxoSnapshotChunk]) = ???
+  def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = {
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]
+    val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
+    val chunks = proverSubtrees
+      .grouped(Constants.UtxoChunkCapacity)
+      .zipWithIndex
+      .map { case (trees, idx) =>
+          UtxoSnapshotChunk(trees.toIndexedSeq, idx.toShort)
+      }
+    UtxoSnapshotManifest(chunks.map(_.rootHash).toIndexedSeq, ModifierId !@@ version, proverManifest)
+  }
 
 }

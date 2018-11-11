@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.{AUtxoSnapshot, AUtxoSnapshotManifest}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifest}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
@@ -78,7 +78,7 @@ trait ToDownloadProcessor extends ScorexLogging {
       requiredModifiersForHeader(header)
     } else if (config.blocksToKeep > 0 && !config.stateType.requireProofs &&
       pruningProcessor.shouldDownloadBlockAtHeight(header.height + 1)) {
-      Seq((AUtxoSnapshotManifest.modifierTypeId, AUtxoSnapshot.rootHashToId(Digest32 !@@ header.stateRoot)))
+      Seq((UtxoSnapshotManifest.modifierTypeId, UtxoSnapshot.rootHashToId(Digest32 !@@ header.stateRoot)))
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)

@@ -3,16 +3,13 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.generators.ValidBlocksGenerators
+import org.ergoplatform.utils.generators.{UtxoStateGenerators, ValidBlocksGenerators}
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}
-import org.scalatest.{EitherValues, Inspectors, OptionValues, TryValues}
+import org.scalatest.{EitherValues, Inspectors, OptionValues}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
-import scorex.util.encode.Base16
 
 import scala.collection.{GenMap, GenTraversable}
 import scala.concurrent.ExecutionContext
@@ -20,6 +17,7 @@ import scala.language.higherKinds
 
 trait ErgoTestHelpers
   extends ValidBlocksGenerators
+    with UtxoStateGenerators
     with ScorexLogging
     with ScorexEncoding
     with OptionValues

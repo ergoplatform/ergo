@@ -4,7 +4,7 @@ import org.ergoplatform.settings.Algos
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 
-object AUtxoSnapshot {
+object UtxoSnapshot {
 
   def rootHashToSerializedId(rootHash: Digest32): Array[Byte] = Algos.hash(rootHash)
 

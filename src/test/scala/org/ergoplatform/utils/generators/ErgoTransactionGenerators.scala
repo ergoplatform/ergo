@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Gen
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
@@ -226,17 +226,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
   } yield BlockTransactions(headerId, txs)
-
-  lazy val randomUTXOSnapshotChunkGen: Gen[AUtxoSnapshotChunk] = for {
-    index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: List[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield AUtxoSnapshotChunk(stateElements.toIndexedSeq, index)
-
-  lazy val randomUTXOSnapshotManifestGen: Gen[AUtxoSnapshotManifest] = for {
-    chunksQty <- Gen.chooseNum(1, 100)
-    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(AUtxoSnapshotManifestSerializer.rootHashSize))
-    blockId <- modifierIdGen
-  } yield AUtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- invalidHeaderGen

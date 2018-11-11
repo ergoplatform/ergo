@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.AUtxoSnapshotChunk
+import org.ergoplatform.modifiers.state.UtxoSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.modifierprocessors._
@@ -211,7 +211,7 @@ trait ErgoHistoryReader
         validate(m)
       case m: PoPoWProof =>
         validate(m)
-      case chunk: AUtxoSnapshotChunk =>
+      case chunk: UtxoSnapshotChunk =>
         validate(chunk)
       case m: Any =>
         Failure(new Error(s"Modifier $m has incorrect type"))

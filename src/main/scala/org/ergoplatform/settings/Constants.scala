@@ -12,6 +12,7 @@ import sigmastate.Values.Constant
 
 
 object Constants {
+
   val HashLength: Int = 32
 
   val CoinsInOneErgo: Long = 1000000000
@@ -26,13 +27,13 @@ object Constants {
 
   val BlocksPerHour = 30
 
-  val BlocksPerDay = BlocksPerHour * 24
+  val BlocksPerDay: Int = BlocksPerHour * 24
 
-  val BlocksPerWeek = BlocksPerDay * 7
+  val BlocksPerWeek: Int = BlocksPerDay * 7
 
-  val BlocksPerMonth = BlocksPerDay * 30
+  val BlocksPerMonth: Int = BlocksPerDay * 30
 
-  val BlocksPerYear = BlocksPerDay * 365
+  val BlocksPerYear: Int = BlocksPerDay * 365
 
   //For how many blocks a box could be put into the state with no paying.
   //4 years

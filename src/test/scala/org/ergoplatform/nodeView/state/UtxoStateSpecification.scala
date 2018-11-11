@@ -99,7 +99,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     Future {
       (0 until 1000) foreach { _ =>
         Try {
-          val boxes = stateReader.randomBox().toSeq
+          val boxes = stateReader.randomBox.toSeq
           val txs = validTransactionsFromBoxes(400, boxes, new Random)._1
           stateReader.proofsForTransactions(txs).get
         }

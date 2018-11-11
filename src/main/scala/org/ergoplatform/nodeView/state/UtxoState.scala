@@ -224,7 +224,6 @@ object UtxoState {
     new UtxoState(persistentProver, version, store, constants)
   }
 
-  @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
@@ -241,7 +240,7 @@ object UtxoState {
       storage,
       metadata(ErgoState.genesisStateVersion, p.digest, currentEmissionBoxOpt, defaultStateContext),
       paranoidChecks = true
-    ).get
+    ).fold(e => throw new Exception(s"Failed to create PersistentProver: $e"), p => p)
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }

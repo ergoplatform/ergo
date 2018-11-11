@@ -101,7 +101,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       .map { case (trees, idx) =>
           UtxoSnapshotChunk(trees.toIndexedSeq, idx.toShort)
       }
-    UtxoSnapshotManifest(chunks.map(_.rootHash).toIndexedSeq, ModifierId !@@ version, proverManifest)
+    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash).toIndexedSeq, ModifierId !@@ version, proverManifest)
+    manifest -> chunks.toSeq
   }
 
 }

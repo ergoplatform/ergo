@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import cats.Traverse
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
@@ -61,41 +62,47 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         store.clean(constants.keepVersions)
         rollbackResult
       case None =>
-        Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
+        Failure(new Exception(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
     }
   }
 
-  @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       height: Height) = Try {
+                                       height: Height): Try[Unit] = {
+    import cats.instances.list._
+    import cats.instances.try_._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = transactions.map { tx =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-          case Some(box) => box
-          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+    val executionCostTry = Traverse[List].sequence {
+      transactions.map { tx =>
+        tx.statelessValidity.flatMap { _ =>
+          val boxesToSpendTry = Traverse[List].sequence {
+            tx.inputs.map(_.boxId).map { id =>
+              createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+                case Some(value) => Success(value)
+                case _ => Failure(new Exception(s"Box with id ${Algos.encode(id)} not found"))
+              }
+            }.toList
+          }
+          boxesToSpendTry.flatMap { boxes =>
+            tx.statefulValidity(boxes.toIndexedSeq, stateContext, constants.settings.metadata)
+          }
         }
-      }
-      tx.statefulValidity(boxesToSpend, stateContext, constants.settings.metadata).get
-    }.sum
-
-    if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
-    persistentProver.synchronized {
-
-      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-        t.flatMap(_ => {
-          persistentProver.performOneOperation(m)
-        })
-      }.get
-
-      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-          s"${Algos.encode(persistentProver.digest)} given")
-      }
+      }.toList
+    }.map(_.sum)
+    executionCostTry match {
+      case Success(value) if value <= Parameters.MaxBlockCost =>
+        persistentProver.synchronized {
+          val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+          val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+            resultTry
+          } else {
+            Failure(new Exception(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+              s"${Algos.encode(persistentProver.digest)} given"))
+          }
+        }
+      case Success(totalCost) => Failure(new Exception(s"Transaction cost $totalCost exceeds limit"))
+      case failure => failure.map(_ => ())
     }
   }
 
@@ -117,11 +124,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
           if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
-            throw new Error("Storage kept roothash is not equal to the declared one")
+            throw new Exception("Storage kept roothash is not equal to the declared one")
           } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-            throw new Error("Calculated proofHash is not equal to the declared one")
+            throw new Exception("Calculated proofHash is not equal to the declared one")
           } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-            throw new Error("Calculated stateRoot is not equal to the declared one")
+            throw new Exception("Calculated stateRoot is not equal to the declared one")
           }
 
           log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +

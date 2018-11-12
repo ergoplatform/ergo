@@ -29,11 +29,11 @@ trait ValidBlocksGenerators
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
-    ErgoState.generateGenesisUtxoState(createTempDir, constants)
+    ErgoState.generateGenesisUtxoState(createTempDir, constants, settings)
   }
 
   def createUtxoState(bh: BoxHolder): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, settings)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))

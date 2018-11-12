@@ -115,13 +115,14 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants): (UtxoState, BoxHolder) = {
+                               constants: StateConstants,
+                               settings: ErgoSettings): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val emissionBox = Some(genesisEmissionBox(constants.emission))
     val bh = BoxHolder(emissionBox.toSeq)
 
-    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants, settings).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
@@ -143,8 +144,9 @@ object ErgoState extends ScorexLogging {
 
     settings.nodeSettings.stateType match {
       case StateType.Digest => DigestState.create(None, None, dir, settings)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants, settings)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants, settings)._1
     }
   }
+
 }

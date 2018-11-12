@@ -178,11 +178,11 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-  ignore("applyModifier() - utxo snapshot") {
-    var (us: UtxoState, _) = createUtxoState()
-    forAll(randomUtxoSnapshotGen) { snapshot =>
-      us = us.applyModifier(snapshot).get
-      java.util.Arrays.equals(us.rootHash, snapshot.manifest.rootHash) shouldBe true
+  property("applyModifier() - utxo snapshot") {
+    val (us: UtxoState, _) = createUtxoState()
+    forAll(validUtxoSnapshotGen) { snapshot =>
+      val recoveredState = us.applyModifier(snapshot).get
+      java.util.Arrays.equals(recoveredState.rootHash, snapshot.manifest.rootHash) shouldBe true
     }
   }
 
@@ -241,13 +241,13 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   property("2 forks switching") {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, settings).applyModifier(genesis).get
     val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
     val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1).get
     val chain1block2 = validFullBlock(Some(chain1block1.header), wusChain1Block1)
 
     val (us2, bh2) = createUtxoState()
-    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, stateConstants).applyModifier(genesis).get
+    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, stateConstants, settings).applyModifier(genesis).get
     val chain2block1 = validFullBlock(Some(genesis.header), wus2AfterGenesis)
     val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1).get
     val chain2block2 = validFullBlock(Some(chain2block1.header), wusChain2Block1)
@@ -273,7 +273,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
         val us = createUtxoState(bh)
         bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+        val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, settings).applyModifier(genesis).get
         wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)

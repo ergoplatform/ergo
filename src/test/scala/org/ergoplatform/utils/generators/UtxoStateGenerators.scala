@@ -38,9 +38,10 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
     tree <- proverGen
   } yield serializer.slice(tree)._2.head
 
-  lazy val randomUtxoSnapshotGen: Gen[UtxoSnapshot] = for {
+  lazy val validUtxoSnapshotGen: Gen[UtxoSnapshot] = for {
     tree <- proverGen
     blockId <- modifierIdGen
+    height <- Gen.negNum[Int]
   } yield {
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
     val chunks = proverSubtrees
@@ -50,7 +51,7 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
       .map { case (trees, idx) =>
         UtxoSnapshotChunk(trees.toIndexedSeq, idx)
       }
-    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), blockId, proverManifest)
+    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), blockId, height, proverManifest)
     UtxoSnapshot(manifest, chunks)
   }
 
@@ -64,5 +65,7 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
     chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootHashSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-  } yield UtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId, proverManifest)
+    height <- Gen.negNum[Int]
+  } yield UtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId, height, proverManifest)
+
 }

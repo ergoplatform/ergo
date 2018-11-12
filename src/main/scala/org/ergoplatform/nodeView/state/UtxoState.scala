@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.UtxoState.ModifierProcessing
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -35,7 +35,8 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: Store,
-                override val constants: StateConstants)
+                override val constants: StateConstants,
+                settings: ErgoSettings)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
@@ -60,7 +61,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash.data
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants)
+          new UtxoState(p, version, store, constants, settings)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -144,7 +145,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, settings)
           }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -157,7 +158,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private def applyHeader: ModifierProcessing = {
     case h: Header =>
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, settings))
   }
 
   private def applySnapshot: ModifierProcessing = {
@@ -165,12 +166,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       serializer.combine(manifest.proverManifest -> chunks.sortBy(_.index).flatMap(_.subtrees))
         .map { prover =>
-          val pp: PersistentBatchAVLProver[Digest32, HF] = {
+          val recoveredStateContext = ErgoStateContext(manifest.height, prover.digest)
+          val newStore = dropStoreAndCreateNew()
+          val recoveredPersistentProver = {
             val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
-            val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
-            PersistentBatchAVLProver.create(prover, storage).get
+            val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(newStore, np)(Algos.hash)
+            UtxoState.createPersistentProver(
+              prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
           }
-          new UtxoState(pp, idToVersion(manifest.blockId), store, constants)
+          new UtxoState(recoveredPersistentProver, idToVersion(manifest.blockId), newStore, constants, settings)
         }
   }
 
@@ -178,6 +182,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
       Failure(new Exception("unknown modifier"))
+  }
+
+  private def dropStoreAndCreateNew(): LSMStore = {
+    val stateDir = ErgoState.stateDir(settings)
+    stateDir.mkdirs()
+    stateDir.listFiles().foreach(_.delete())
+    new LSMStore(stateDir, keepVersions = constants.keepVersions)
   }
 
   override def rollbackVersions: Iterable[VersionTag] = {
@@ -215,7 +226,7 @@ object UtxoState {
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants): UtxoState = {
+  def create(dir: File, constants: StateConstants, settings: ErgoSettings): UtxoState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val version = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
       .getOrElse(ErgoState.genesisStateVersion)
@@ -225,13 +236,27 @@ object UtxoState {
       val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants)
+    new UtxoState(persistentProver, version, store, constants, settings)
+  }
+
+  def createPersistentProver(prover: BatchAVLProver[Digest32, HF],
+                             storage: VersionedIODBAVLStorage[Digest32],
+                             stateVersion: VersionTag,
+                             currentEmissionBoxOpt: Option[ErgoBox],
+                             stateContext: ErgoStateContext): PersistentBatchAVLProver[Digest32, HF] = {
+    PersistentBatchAVLProver.create(
+      prover,
+      storage,
+      metadata(stateVersion, prover.digest, currentEmissionBoxOpt, stateContext),
+      paranoidChecks = true
+    ).fold(e => throw new Exception(s"Failed to create PersistentProver: $e"), p => p)
   }
 
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
-                    constants: StateConstants): UtxoState = {
+                    constants: StateConstants,
+                    settings: ErgoSettings): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = Constants.HashLength, valueLengthOpt = None)
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
@@ -239,14 +264,10 @@ object UtxoState {
     val defaultStateContext = ErgoStateContext(0, p.digest)
     val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
-    val persistentProver = PersistentBatchAVLProver.create(
-      p,
-      storage,
-      metadata(ErgoState.genesisStateVersion, p.digest, currentEmissionBoxOpt, defaultStateContext),
-      paranoidChecks = true
-    ).fold(e => throw new Exception(s"Failed to create PersistentProver: $e"), p => p)
+    val persistentProver =
+      createPersistentProver(p, storage, ErgoState.genesisStateVersion, currentEmissionBoxOpt, defaultStateContext)
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, settings)
   }
 
 }

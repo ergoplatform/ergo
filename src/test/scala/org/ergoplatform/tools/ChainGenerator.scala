@@ -46,7 +46,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
-  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
+  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings), settings)
   log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, boxHolder, None, Seq())

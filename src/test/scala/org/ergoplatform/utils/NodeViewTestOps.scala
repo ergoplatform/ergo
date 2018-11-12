@@ -3,7 +3,6 @@ package org.ergoplatform.utils
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -11,29 +10,26 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 trait NodeViewBaseOps extends ErgoTestHelpers {
 
-  implicit val timeout: Timeout = NodeViewTestOps.timeout
-  val awaitDuration: FiniteDuration = NodeViewTestOps.awaitDuration
-
   type Ctx = NodeViewTestContext
   type CurView = CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]
+  implicit private val timeout: Timeout = defaultTimeout
 
   def getCurrentView(implicit ctx: Ctx): CurView = {
     val request = GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, CurView](view => view)
-    Await.result((nodeViewHolderRef ? request).mapTo[CurView], awaitDuration)
+    await((nodeViewHolderRef ? request).mapTo[CurView])
   }
 
   def getHistory(implicit ctx: Ctx): ErgoHistory = getCurrentView.history
@@ -95,10 +91,10 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   @inline private def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef
   @inline def send(msg: Any)(implicit ctx: Ctx): Unit = ctx.testProbe.send(nodeViewHolderRef, msg)
-  @inline def defaultTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
+  @inline def ctxTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
   @inline def expectMsg[T](obj: T)(implicit ctx: Ctx): T = ctx.testProbe.expectMsg(obj)
   @inline def expectMsgType[T](implicit ctx: Ctx, t: ClassTag[T]): T = ctx.testProbe.expectMsgType
-  @inline def expectNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.expectNoMessage(defaultTimeout)
+  @inline def expectNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.expectNoMessage(ctxTimeout)
   @inline def ignoreMsg(f: PartialFunction[Any, Boolean])(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreMsg(f)
   @inline def ignoreNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreNoMsg()
 
@@ -129,6 +125,4 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 }
 
 object NodeViewTestOps extends NodeViewTestOps {
-  override implicit val timeout: Timeout = Timeout(5.seconds)
-  override val awaitDuration: FiniteDuration = timeout.duration + 1.second
 }

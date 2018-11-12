@@ -39,7 +39,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var lastBlockOpt: Option[Header] = None
     requireEqualStateContexts(us.stateContext, ds.stateContext, 0)
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -62,7 +62,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[Header] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       parentOpt = Some(block.header)
       bh = blBh._2

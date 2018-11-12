@@ -32,7 +32,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     us.emissionBoxOpt should not be None
     var lastBlockOpt: Option[Header] = None
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       us.extractEmissionBox(block) should not be None
       lastBlockOpt = Some(block.header)

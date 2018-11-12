@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import com.google.common.primitives.Longs
 import org.ergoplatform.local.ErgoMiningThread.MineBlock
 import org.ergoplatform.mining.{CandidateBlock, PrivateKey}
 import org.ergoplatform.nodeView.state.StateType
@@ -21,7 +22,9 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
   implicit val ec: ExecutionContext = context.dispatcher
 
   private val powScheme = ergoSettings.chainSettings.powScheme
+  private val NonceStep = 1000
   private var candidate: CandidateBlock = startCandidate
+  private var nonce: Long = 0
 
   protected def mineCmd(): Unit =
     context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
@@ -39,16 +42,13 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
   override def receive: Receive = {
     case newCandidate: CandidateBlock =>
       candidate = newCandidate
+      nonce = 0
 
     case MineBlock =>
-      // timestamp is increased for at least 1 as a role of a nonce
-      val newTimestamp = Math.max(candidate.timestamp + 1, timeProvider.time())
-      candidate = candidate.copy(timestamp = newTimestamp)
-      log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp $newTimestamp " +
-        s"containing ${candidate.transactions.size} transactions")
-      powScheme.proveCandidate(candidate, sk) match {
+      val lastNonce = nonce + NonceStep
+      powScheme.proveCandidate(candidate, sk, nonce, lastNonce) match {
         case Some(newBlock) =>
-          log.info(s"New block ${newBlock.id} with ${newBlock.transactions.size} transactions found")
+          log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
 
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
@@ -60,6 +60,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
           mineCmd()
         case _ =>
+          nonce = lastNonce
           self ! MineBlock
       }
   }

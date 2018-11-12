@@ -23,6 +23,7 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   private var list: IndexedSeq[BigInt] = IndexedSeq()
   private var x: BigInt = randomSecret()
+  private var lastInitMsg: Array[Byte] = Array()
 
   private val NBigInteger: BigInteger = BigInt(N).bigInteger
 
@@ -61,7 +62,7 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
       nBits, height, extensionHash, null)
     val msg = HeaderSerializer.bytesWithoutPow(h)
     val b = getB(nBits)
-    initialize(msg, sk)
+    initializeIfNeeded(msg, sk)
     checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
 
@@ -106,8 +107,15 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
     )
   }
 
-  def initialize(m: Array[Byte], sk: BigInt): Unit = {
+  /**
+    * Generate new random secret `x` and fill `list` with numbers, corresponding to message `m`
+    *
+    * @param m - header bytes without pow
+    * @param sk - secret key
+    */
+  private def initializeIfNeeded(m: Array[Byte], sk: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
     x = randomSecret()
+    lastInitMsg = m
     val pk = genPk(sk)
     val w = genPk(x)
     val p1 = pkToBytes(pk)
@@ -132,13 +140,12 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
       val d = (genIndexes(m, nonce).map(i => list(i)).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
-        Some(AutoleakusSolution(genPk(sk), genPk(x),nonce, d))
+        Some(AutoleakusSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)
       }
     }
 
-    log.debug(s"Start search of solution with $k elements from list with $N elements")
     loop(startNonce)
   }
 
@@ -182,7 +189,6 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
     }
     indexes.take(k)
   }.ensuring(_.length == k)
-
 
 
   /**

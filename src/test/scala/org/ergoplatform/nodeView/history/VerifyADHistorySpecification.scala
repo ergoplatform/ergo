@@ -16,15 +16,16 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
   type PM = ErgoPersistentModifier
 
-  private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
+  private def genHistory(blocksNum: Int = 0,
+                         minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
       inHistory.pruningProcessor.minimalFullBlockHeightVar = h
       inHistory.pruningProcessor.isHeadersChainSyncedVar = true
     }
 
-    if (height > 0) {
-      val chain = genChain(height, inHistory)
+    if (blocksNum > 0) {
+      val chain = genChain(blocksNum, inHistory)
       (applyChain(inHistory, chain), chain)
     } else {
       (inHistory, Seq.empty)

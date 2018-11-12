@@ -7,7 +7,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 
 import scala.math.BigInt
-import scala.util.{Success, Try}
+import scala.util.{Random, Success, Try}
 
 /**
   * Fake Pow Scheme for tests.
@@ -29,7 +29,7 @@ object DefaultFakePowScheme extends AutoleakusPowScheme(1, 1) {
                      maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
     val pk: ECPoint = genPk(sk)
-    val w: ECPoint = genPk(1123)
+    val w: ECPoint = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
     val s = AutoleakusSolution(pk, w, n, d)

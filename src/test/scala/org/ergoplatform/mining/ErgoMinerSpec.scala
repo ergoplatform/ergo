@@ -35,15 +35,15 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
-  val defaultAwaitDuration: FiniteDuration = 10.seconds
-  implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
+  implicit private val timeout: Timeout = defaultTimeout
+
   val newBlock: Class[msgType] = classOf[msgType]
   val newBlockDuration: FiniteDuration = 30 seconds
 
@@ -58,9 +58,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
-
-
-  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
@@ -108,7 +105,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.fullBlockHeight, r.s.rootHash, parameters)).get
+          ErgoStateContext(r.h.bestFullBlockOpt.map(_.header).toSeq, startDigest, parameters)).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }

@@ -3,10 +3,12 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform._
+import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
@@ -24,8 +26,8 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
-  def getTrackedAddresses(implicit w: WalletFixture): Seq[ErgoAddress] =
-    await(w.wallet.trackedAddresses())
+  def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
+    await(w.wallet.publicKeys(0, Int.MaxValue))
 
   def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
     await(w.wallet.confirmedBalances())
@@ -80,15 +82,15 @@ trait WalletTestOps extends NodeViewBaseOps {
     getHistory.heightOf(scorex.core.versionToId(state.version))
   }
 
-  def makeGenesisBlock(script: Value[SBoolean.type], assets: Seq[(TokenId, Long)] = Seq.empty)
+  def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
                       (implicit ctx: Ctx): ErgoFullBlock = {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
-  def makeGenesisTx(script: Value[SBoolean.type], assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+  def makeGenesisTx(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     //ErgoMiner.createCoinbase(Some(genesisEmissionBox), 0, Seq.empty, script, emission)
     val emissionBox = genesisEmissionBox
-    val height = 0
+    val height = ErgoHistory.GenesisHeight
     val emissionAmount = settings.emission.emissionAtHeight(height)
     val newEmissionAmount = emissionBox.value - emissionAmount
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))

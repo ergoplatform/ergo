@@ -15,7 +15,6 @@ import scala.util.Try
 
 case class UtxoSnapshotManifest(chunkRootHashes: IndexedSeq[Array[Byte]],
                                 blockId: ModifierId,
-                                height: Int,
                                 proverManifest: BatchAVLProverManifest[Digest32, Algos.HF])
   extends ErgoPersistentModifier with ModifierValidator {
 
@@ -62,7 +61,6 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
   override def toBytes(obj: UtxoSnapshotManifest): Array[Byte] = {
     val serializedProverManifest = serializer.manifestToBytes(obj.proverManifest)
     idToBytes(obj.blockId) ++
-      Ints.toByteArray(obj.height) ++
       Ints.toByteArray(serializedProverManifest.length) ++
       serializedProverManifest ++
       Bytes.concat(obj.chunkRootHashes: _*)
@@ -70,14 +68,13 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotManifest] = Try {
     val blockId = bytesToId(bytes.take(Constants.ModifierIdSize))
-    val height = Ints.fromByteArray(bytes.slice(Constants.ModifierIdSize, Constants.ModifierIdSize + 4))
     val proverManifestLen = Ints.fromByteArray(
-      bytes.slice(Constants.ModifierIdSize + 4, Constants.ModifierIdSize + 4 + 4))
+      bytes.slice(Constants.ModifierIdSize, Constants.ModifierIdSize + 4))
     val proverManifestTry = serializer.manifestFromBytes(
-      bytes.slice(Constants.ModifierIdSize + 4 + 4, Constants.ModifierIdSize + 4 + 4 + proverManifestLen))
-    val chunkRootHashes = bytes.drop(Constants.ModifierIdSize + 4 + 4 + proverManifestLen)
+      bytes.slice(Constants.ModifierIdSize + 4, Constants.ModifierIdSize + 4 + proverManifestLen))
+    val chunkRootHashes = bytes.drop(Constants.ModifierIdSize + 4 + proverManifestLen)
       .grouped(rootHashSize).toIndexedSeq
-    proverManifestTry.map(proverManifest => UtxoSnapshotManifest(chunkRootHashes, blockId, height, proverManifest))
+    proverManifestTry.map(proverManifest => UtxoSnapshotManifest(chunkRootHashes, blockId, proverManifest))
   }.flatten
 
 }

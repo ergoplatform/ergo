@@ -1,13 +1,16 @@
 package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 
-case class UtxoSnapshot(manifest: UtxoSnapshotManifest, chunks: IndexedSeq[UtxoSnapshotChunk])
+case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
+                        chunks: IndexedSeq[UtxoSnapshotChunk],
+                        lastHeaders: Seq[Header])
   extends ErgoPersistentModifier {
 
   override type M = UtxoSnapshot

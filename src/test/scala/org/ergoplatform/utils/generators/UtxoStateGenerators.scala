@@ -12,7 +12,11 @@ import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.CoreGenerators
 
-trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestConstants  {
+trait UtxoStateGenerators
+  extends CoreGenerators
+    with ValidBlocksGenerators
+    with Matchers
+    with ErgoTestConstants {
 
   private implicit val hf: Algos.HF = Algos.hash
   private val serializer = new BatchAVLProverSerializer[Digest32, Algos.HF]
@@ -40,8 +44,7 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
 
   lazy val validUtxoSnapshotGen: Gen[UtxoSnapshot] = for {
     tree <- proverGen
-    blockId <- modifierIdGen
-    height <- Gen.negNum[Int]
+    lastHeaders <- Gen.listOfN(Constants.LastHeadersInContext, invalidHeaderGen)
   } yield {
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
     val chunks = proverSubtrees
@@ -51,8 +54,8 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
       .map { case (trees, idx) =>
         UtxoSnapshotChunk(trees.toIndexedSeq, idx)
       }
-    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), blockId, height, proverManifest)
-    UtxoSnapshot(manifest, chunks)
+    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), lastHeaders.head.id, proverManifest)
+    UtxoSnapshot(manifest, chunks, lastHeaders)
   }
 
   lazy val randomUtxoSnapshotChunkGen: Gen[UtxoSnapshotChunk] = for {
@@ -65,7 +68,6 @@ trait UtxoStateGenerators extends CoreGenerators with Matchers with ErgoTestCons
     chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootHashSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-    height <- Gen.negNum[Int]
-  } yield UtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId, height, proverManifest)
+  } yield UtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId, proverManifest)
 
 }

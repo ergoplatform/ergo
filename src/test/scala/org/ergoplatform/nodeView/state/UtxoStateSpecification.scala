@@ -17,7 +17,6 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-
 class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("extractEmissionBox() should extract correct box") {
@@ -229,7 +228,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     us.applyModifier(validBlock).isSuccess shouldBe true
   }
 
-  property("takeSnapshot() and restore from it") {
+  property("takeSnapshot() of utxo state and restore from it") {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, settings).applyModifier(genesis).get
@@ -239,11 +238,12 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     state = state.applyModifier(genesis).get
     state = state.applyModifier(chain1block1).get
 
-    val (manifest, chunks) = state.takeSnapshot(currentHeight = chain1block1.header.height)
+    val (manifest, chunks) = state.takeSnapshot
 
     var (recoveredState, _) = createUtxoState()
 
-    recoveredState = recoveredState.applyModifier(UtxoSnapshot(manifest, chunks)).get
+    recoveredState = recoveredState.applyModifier(
+      UtxoSnapshot(manifest, chunks, Seq(chain1block1.header, genesis.header))).get
 
     java.util.Arrays.equals(state.rootHash, recoveredState.rootHash) shouldBe true
   }

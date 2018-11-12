@@ -161,11 +161,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   private def applySnapshot: ModifierProcessing = {
-    case UtxoSnapshot(manifest, chunks) =>
+    case UtxoSnapshot(manifest, chunks, lastHeaders) =>
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       serializer.combine(manifest.proverManifest -> chunks.sortBy(_.index).flatMap(_.subtrees))
         .map { prover =>
-          val recoveredStateContext = ErgoStateContext(manifest.height, prover.digest)
+          val recoveredStateContext = ErgoStateContext(lastHeaders, prover.digest)
           val newStore = dropStoreAndCreateNew()
           val recoveredPersistentProver = {
             val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)

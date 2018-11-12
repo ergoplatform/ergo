@@ -1,12 +1,11 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers}
-import scorex.core._
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, bytesToId}
-
 
 import scala.annotation.tailrec
 
@@ -64,7 +63,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
     val c1 = modifiersCache.popCandidate(history0).value
     c1.isInstanceOf[Header] shouldBe true
     val h1 = c1.asInstanceOf[Header]
-    h1.height shouldBe 0
+    h1.height shouldBe ErgoHistory.GenesisHeight
 
     val history1 = history0.append(c1).get._1
 

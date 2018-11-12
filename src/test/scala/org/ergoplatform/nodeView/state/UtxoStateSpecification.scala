@@ -66,7 +66,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     var bh = BoxHolder(Seq(genesisEmissionBox))
     var us = createUtxoState(bh)
 
-    var height: Int = 0
+    var height: Int = ErgoHistory.GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
       val header = defaultHeaderGen.sample.value

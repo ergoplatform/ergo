@@ -20,7 +20,7 @@ object Constants {
   val CoinsInOneErgo: Long = 1000000000
 
   val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
-  val InitialDifficulty: Difficulty = BigInt(1)
+  val InitialDifficulty: Difficulty = BigInt(10000)
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
 

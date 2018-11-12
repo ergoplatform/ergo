@@ -123,7 +123,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
           val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
-            val newStateContext = stateContext.appendHeader(fb.header)
+            val newStateContext = sc.appendHeader(fb.header)
             val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
             val proofHash = ADProofs.proofDigest(proofBytes)

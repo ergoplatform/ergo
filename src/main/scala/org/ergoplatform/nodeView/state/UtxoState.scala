@@ -97,7 +97,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         persistentProver.synchronized {
           val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
           val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest) || resultTry.isFailure) {
             resultTry
           } else {
             Failure(new Exception(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
@@ -181,10 +181,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       Failure(new Exception("unknown modifier"))
   }
 
-  @SuppressWarnings(Array("OptionGet"))
-  override def rollbackVersions: Iterable[VersionTag] = persistentProver.synchronized {
-    persistentProver.storage.rollbackVersions.map { v =>
-      bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+  override def rollbackVersions: Iterable[VersionTag] = {
+    persistentProver.synchronized {
+      persistentProver.storage.rollbackVersions
+        .map { v =>
+          store.get(ByteArrayWrapper(Algos.hash(v))).map(w => bytesToVersion(w.data))
+        }
+        .collect {
+          case Some(value) => value
+        }
     }
   }
 

@@ -80,10 +80,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         tx.statelessValidity.flatMap { _ =>
           val boxesToSpendTry = Traverse[List].sequence {
             tx.inputs.map(_.boxId).map { id =>
-              createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-                case Some(value) => Success(value)
-                case _ => Failure(new Exception(s"Box with id ${Algos.encode(id)} not found"))
-              }
+              createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id))
+                .map(Success.apply)
+                .getOrElse(Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))
             }.toList
           }
           boxesToSpendTry.flatMap { boxes =>

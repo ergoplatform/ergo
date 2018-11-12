@@ -1,10 +1,9 @@
 package org.ergoplatform.settings
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.modifiers.history.Extension
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
-import scorex.util.ModifierId
 
 import scala.util.Try
 
@@ -27,7 +26,7 @@ abstract class Parameters {
   val Kdefault = 1250000
   val Kmax = 5000000
   val Kmin = 0
-  val Kstep = 50000
+  val Kstep = 25000
 
   /** Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs
     */
@@ -61,7 +60,6 @@ abstract class Parameters {
 
 
   def changeParameter(newHeight: Height, paramId: Byte): Parameters = {
-    require(newHeight % Constants.VotingEpochLength == 0)
     paramId match {
       case b: Byte if b == KIncrease =>
         val newK = if (K < Kmax) K + Kstep else K
@@ -70,9 +68,9 @@ abstract class Parameters {
     }
   }
 
-  def toExtension(headerId: ModifierId, optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): Extension = {
+  def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
     val mandatoryFields = parametersTable.toSeq.map{case (k,v) => Array(k) -> Ints.toByteArray(v)}
-    Extension(headerId, mandatoryFields, optionalFields)
+    ExtensionCandidate(mandatoryFields, optionalFields)
   }
 
   override def toString: String = s"Parameters(${parametersTable.mkString("; ")})"

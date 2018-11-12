@@ -34,7 +34,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
   property("Should generate empty extension on fly") {
     val (history, _) = genHistory()
     val block = genChain(1, history, extension = emptyExtension).head
-    block.extension shouldBe Extension(block.header.id, Seq(), Seq())
+    block.extension shouldBe Extension(block.header.id, block.header.height, Seq(), Seq())
     history.bestFullBlockOpt shouldBe None
     history.append(block.header) shouldBe 'success
     history.contains(block.extension) shouldBe true

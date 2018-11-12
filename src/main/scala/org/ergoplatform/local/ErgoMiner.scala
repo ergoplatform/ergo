@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -17,11 +17,10 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.{LongConstant, TrueLeaf, Value}
@@ -42,6 +41,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 extPropOpt: Option[Value[SBoolean.type]]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
+
+  private lazy val VotingEpochLength = ergoSettings.chainSettings.votingLength
 
   //shared mutable state
   private var isMining = false
@@ -213,8 +214,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         .map(d => RequiredDifficulty.encodeCompactBits(d))
         .getOrElse(Constants.InitialNBits)
 
+      val optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq.empty
+
+      lazy val emptyExtensionCandidate = ExtensionCandidate(Seq(), optionalFields)
+
       // todo fill with interlinks and other useful values after nodes update
-      val extensionCandidate = ExtensionCandidate(Seq(), Seq())
+      val extensionCandidate: ExtensionCandidate = bestHeaderOpt.map { header =>
+        if (header.height % VotingEpochLength == 0 && header.height > 0) {
+          state.stateContext.currentParameters.toExtensionCandidate(optionalFields)
+        } else {
+          emptyExtensionCandidate
+        }
+      }.getOrElse(emptyExtensionCandidate)
 
       CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate)
     }

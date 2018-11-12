@@ -120,9 +120,10 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
             .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
               fatal(s"Extension ${m.encodedId} have too many optional fields")
             }
-            .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
-            }
+            //todo: fix extension validation
+           // .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
+           //   fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
+          //  }
             .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
               fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
             }

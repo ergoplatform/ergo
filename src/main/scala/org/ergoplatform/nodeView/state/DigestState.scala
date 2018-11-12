@@ -4,7 +4,7 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings._
@@ -80,6 +80,10 @@ class DigestState protected(override val version: VersionTag,
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = mod match {
+    case ext: Extension =>
+      log.info(s"Got new full block ${ext.encodedId} at height ${ext.height}")
+      update(ext)
+
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
@@ -131,6 +135,15 @@ class DigestState protected(override val version: VersionTag,
     val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
     update(version, header.stateRoot, Seq(cb))
   }
+
+  private def update(extension: Extension): Try[DigestState] = {
+    val version: VersionTag = idToVersion(extension.id)
+    stateContext.appendExtension(stateContext.currentHeight, extension).flatMap{ newContext =>
+      val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
+      update(version, ADDigest @@ Array.fill(33)(0: Byte), Seq(cb)) //todo: fix root
+    }
+  }
+
 
   private def update(newVersion: VersionTag,
                      newRootHash: ADDigest,

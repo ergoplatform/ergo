@@ -222,7 +222,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val chain = genHeaderChain(BlocksInChain, history)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(-1)
+      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true

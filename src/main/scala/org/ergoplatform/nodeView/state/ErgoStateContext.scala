@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.serialization.{BytesSerializable, Serializer}
@@ -31,8 +32,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
-  val currentHeight: Int = lastHeaderOpt.map(_.height).getOrElse(0)
+  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
 

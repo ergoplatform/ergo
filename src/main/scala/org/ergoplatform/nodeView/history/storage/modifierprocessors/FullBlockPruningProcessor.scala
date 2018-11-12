@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.NodeConfigurationSettings
 
 /**
@@ -10,7 +11,7 @@ import org.ergoplatform.settings.NodeConfigurationSettings
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
-  @volatile private[history] var minimalFullBlockHeightVar: Int = 0
+  @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
 
   /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
     * `true` if we estimate, that our chain is synced with the network. Start downloading full blocks after that

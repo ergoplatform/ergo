@@ -9,6 +9,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -149,7 +150,7 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
 
-    val height = parentOpt.map(parent => parent.height + 1).getOrElse(0)
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
     val version = Header.CurrentVersion
 

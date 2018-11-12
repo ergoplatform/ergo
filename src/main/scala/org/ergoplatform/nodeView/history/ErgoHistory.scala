@@ -174,7 +174,10 @@ object ErgoHistory extends ScorexLogging {
   type Difficulty = BigInt
   type NBits = Long
 
-  val GenesisHeight = 0
+  val EmptyHistoryHeight: Int = 0
+  val GenesisHeight: Int = EmptyHistoryHeight + 1
+  def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
+
 
   def historyDir(settings: ErgoSettings): File = {
     val dir = new File(s"${settings.directory}/history")

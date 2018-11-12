@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -96,6 +97,7 @@ object ErgoState extends ScorexLogging {
     *         that allows to take part of them every block.
     */
   def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
+    val emptyHeight = ErgoHistory.EmptyHistoryHeight
     val s = emission.settings
 
     val register = R4
@@ -121,7 +123,7 @@ object ErgoState extends ScorexLogging {
       correctMinerProposition,
       OR(AND(outputsNum, sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins)
     )
-    ErgoBox(emission.coinsTotal, prop, -1, Seq(), Map(register -> LongConstant(-1)))
+    ErgoBox(emission.coinsTotal, prop, emptyHeight, Seq(), Map(register -> LongConstant(emptyHeight)))
   }
 
   def generateGenesisUtxoState(stateDir: File,

@@ -3,9 +3,8 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.hash.Digest32
@@ -13,9 +12,6 @@ import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.{SBoolean, SLong}
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 trait WalletTestOps extends NodeViewBaseOps {
 
@@ -29,13 +25,13 @@ trait WalletTestOps extends NodeViewBaseOps {
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
   def getTrackedAddresses(implicit w: WalletFixture): Seq[ErgoAddress] =
-    Await.result(w.wallet.trackedAddresses(), defaultAwaitDuration)
+    await(w.wallet.trackedAddresses())
 
   def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.confirmedBalances(), defaultAwaitDuration)
+    await(w.wallet.confirmedBalances())
 
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.balancesWithUnconfirmed(), defaultAwaitDuration)
+    await(w.wallet.balancesWithUnconfirmed())
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 

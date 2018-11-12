@@ -3,6 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
+import akka.util.Timeout
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
@@ -21,6 +22,7 @@ import scala.concurrent.{Await, Future}
 
 class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with WalletTestOps {
 
+  implicit private val timeout: Timeout = defaultTimeout
   type MsgType = SuccessfulTransaction[_]
   val newTransaction: Class[MsgType] = classOf[MsgType]
 

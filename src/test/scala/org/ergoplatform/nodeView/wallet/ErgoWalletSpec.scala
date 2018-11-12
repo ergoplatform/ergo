@@ -14,7 +14,7 @@ import scorex.util.idToBytes
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
-import scala.concurrent.{Await, blocking}
+import scala.concurrent.blocking
 import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {

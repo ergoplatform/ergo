@@ -31,13 +31,13 @@ import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
-  implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
+  implicit private val timeout: Timeout = defaultTimeout
+
   val newBlock: Class[msgType] = classOf[msgType]
   val newBlockDuration: FiniteDuration = 30 seconds
 

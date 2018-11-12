@@ -75,6 +75,6 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
       acc.reverse
     }
 
-    ErgoStateContext(loop(33, Seq()), genesisDigest)
+    ErgoStateContext(loop(offset = 33, Seq.empty), genesisDigest)
   }
 }

@@ -1,17 +1,14 @@
 package org.ergoplatform.it.container
 
-import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import org.ergoplatform.it.container.Docker.ExtraConfig
 import org.ergoplatform.utils.ErgoTestConstants
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 
 trait IntegrationTestConstants extends ErgoTestConstants {
 
-  override implicit val defaultTimeout: Timeout = Timeout(10.minutes)
   val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
   val nodeSeedConfigs: List[Config] = nodesJointConfig.getConfigList("nodes").asScala.toList

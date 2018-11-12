@@ -3,19 +3,16 @@ package org.ergoplatform.utils
 import java.util.concurrent.Executors
 
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}
-import org.scalatest.{EitherValues, Inspectors, OptionValues, TryValues}
+import org.scalatest.{EitherValues, Inspectors, OptionValues}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
-import scorex.util.encode.Base16
 
 import scala.collection.{GenMap, GenTraversable}
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.higherKinds
 
 trait ErgoTestHelpers
@@ -24,6 +21,8 @@ trait ErgoTestHelpers
     with ScorexEncoding
     with OptionValues
     with EitherValues {
+
+  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
     new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)

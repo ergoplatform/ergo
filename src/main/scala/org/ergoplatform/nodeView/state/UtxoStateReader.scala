@@ -25,6 +25,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
+  /**
+    * Validate transaction as if it was included at the end of the last block.
+    * This validation does not guarantee that transaction will be valid in future
+    * as soon as state (both UTXO set and state context) will change.
+    */
   override def validate(tx: ErgoTransaction): Try[Unit] =
     tx.statelessValidity
       .flatMap(_ =>

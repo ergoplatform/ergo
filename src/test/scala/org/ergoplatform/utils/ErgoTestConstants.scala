@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+import akka.util.Timeout
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{DefaultFakePowScheme, PowScheme}
@@ -27,6 +28,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
   val startHeight: Int = emptyStateContext.currentHeight
+  val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
   val defaultProver: ErgoProvingInterpreter = new ErgoProvingInterpreter(defaultSeed, 1)
@@ -40,5 +42,8 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
+
+  val defaultTimeout: Timeout = Timeout(14.seconds)
+  val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second
 
 }

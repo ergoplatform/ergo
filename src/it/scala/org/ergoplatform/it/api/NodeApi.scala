@@ -116,6 +116,9 @@ trait NodeApi {
   def headerById(id: String): Future[Header] = get(s"/blocks/$id/header")
     .map(r => ergoJsonAnswerAs[Header](r.getResponseBody))
 
+  def headers(offset: Int, limit: Int): Future[Seq[String]] = get(s"/blocks?offset=$offset&limit=$limit")
+    .map(r => ergoJsonAnswerAs[Seq[String]](r.getResponseBody))
+
   def waitFor[A](f: this.type => Future[A], cond: A => Boolean, retryInterval: FiniteDuration): Future[A] = {
     timer.retryUntil(f(this), cond, retryInterval)
   }

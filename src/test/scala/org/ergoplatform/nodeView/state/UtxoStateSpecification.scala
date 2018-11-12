@@ -7,8 +7,9 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
@@ -178,7 +179,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-  property("applyModifier() - utxo snapshot") {
+  property("applyModifier() - valid utxo snapshot") {
     val (us: UtxoState, _) = createUtxoState()
     forAll(validUtxoSnapshotGen) { snapshot =>
       val recoveredState = us.applyModifier(snapshot).get
@@ -237,6 +238,24 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     us.applyModifier(validBlock).isSuccess shouldBe true
   }
 
+  property("takeSnapshot() and restore from it") {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, settings).applyModifier(genesis).get
+    val chain1block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
+
+    var (state, _) = createUtxoState()
+    state = state.applyModifier(genesis).get
+    state = state.applyModifier(chain1block1).get
+
+    val (manifest, chunks) = state.takeSnapshot(currentHeight = chain1block1.header.height)
+
+    var (recoveredState, _) = createUtxoState()
+
+    recoveredState = recoveredState.applyModifier(UtxoSnapshot(manifest, chunks)).get
+
+    java.util.Arrays.equals(state.rootHash, recoveredState.rootHash) shouldBe true
+  }
 
   property("2 forks switching") {
     val (us, bh) = createUtxoState()
@@ -264,7 +283,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     state = state.rollbackTo(idToVersion(genesis.id)).get
     state = state.applyModifier(chain1block1).get
     state = state.applyModifier(chain1block2).get
-
   }
 
   property("rollback n blocks and apply again") {

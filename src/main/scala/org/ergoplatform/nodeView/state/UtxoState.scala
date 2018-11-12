@@ -163,14 +163,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private def applySnapshot: ModifierProcessing = {
     case UtxoSnapshot(manifest, chunks) =>
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      serializer.combine(manifest.proverManifest -> chunks.flatMap(_.subtrees))
+      serializer.combine(manifest.proverManifest -> chunks.sortBy(_.index).flatMap(_.subtrees))
         .map { prover =>
-          val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+          val pp: PersistentBatchAVLProver[Digest32, HF] = {
             val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
             val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
             PersistentBatchAVLProver.create(prover, storage).get
           }
-          new UtxoState(persistentProver, idToVersion(manifest.blockId), store, constants)
+          new UtxoState(pp, idToVersion(manifest.blockId), store, constants)
         }
   }
 

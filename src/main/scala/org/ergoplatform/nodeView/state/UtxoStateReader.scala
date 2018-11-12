@@ -92,17 +92,18 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = {
+  def takeSnapshot: (UtxoSnapshotManifest, IndexedSeq[UtxoSnapshotChunk]) = {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]
     val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
     val chunks = proverSubtrees
       .grouped(Constants.UtxoChunkCapacity)
+      .toIndexedSeq
       .zipWithIndex
       .map { case (trees, idx) =>
-          UtxoSnapshotChunk(trees.toIndexedSeq, idx.toShort)
+          UtxoSnapshotChunk(trees.toIndexedSeq, idx)
       }
-    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash).toIndexedSeq, ModifierId !@@ version, proverManifest)
-    manifest -> chunks.toSeq
+    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), ModifierId !@@ version, proverManifest)
+    manifest -> chunks
   }
 
 }

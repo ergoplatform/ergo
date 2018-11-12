@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
@@ -178,6 +178,13 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     }
   }
 
+  ignore("applyModifier() - utxo snapshot") {
+    var (us: UtxoState, _) = createUtxoState()
+    forAll(randomUtxoSnapshotGen) { snapshot =>
+      us = us.applyModifier(snapshot).get
+      java.util.Arrays.equals(us.rootHash, snapshot.manifest.rootHash) shouldBe true
+    }
+  }
 
   property("applyModifier() for real genesis state") {
     var (us: UtxoState, bh) = createUtxoState()

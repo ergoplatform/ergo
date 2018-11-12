@@ -12,7 +12,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.util.ScorexLogging
 
 import scala.collection.{GenMap, GenTraversable}
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.higherKinds
 
 trait ErgoTestHelpers
@@ -22,6 +22,8 @@ trait ErgoTestHelpers
     with ScorexEncoding
     with OptionValues
     with EitherValues {
+
+  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
     new ErgoBoxCandidate(box.value, box.proposition, box.additionalTokens, box.additionalRegisters, creationHeight)

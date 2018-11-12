@@ -42,9 +42,15 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
-    height <- positiveIntGen
-    digest <- stateRootGen
-  } yield ErgoStateContext(height, digest)
+    size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
+    stateRoot <- stateRootGen
+    headers <- Gen.listOfN(size, invalidHeaderGen)
+  } yield {
+    headers match {
+      case s :: tail => tail.foldLeft(ErgoStateContext(s, startDigest))((c, h) => c.appendHeader(h))
+      case _ => ErgoStateContext.empty(stateRoot)
+    }
+  }
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 

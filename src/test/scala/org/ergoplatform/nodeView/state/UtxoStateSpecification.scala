@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -21,13 +20,6 @@ import scala.util.{Random, Try}
 
 class UtxoStateSpecification extends ErgoPropertyTest {
 
-  property("valid coinbase transaction generation when emission box is present") {
-    val (us, _) = createUtxoState()
-    us.emissionBoxOpt should not be None
-    val tx = ErgoMiner.createCoinbase(us, Seq(), Constants.TrueLeaf, us.constants.emission)
-    us.validate(tx) shouldBe 'success
-  }
-
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()
     us.emissionBoxOpt should not be None
@@ -39,11 +31,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       lastBlockOpt = Some(block.header)
       bh = blBh._2
       us = us.applyModifier(block).get
-
-      us.emissionBoxOpt should not be None
-      val tx = ErgoMiner.createCoinbase(us, bh.boxes.take(5).values.filter(_.proposition == Constants.TrueLeaf).toSeq,
-        Constants.TrueLeaf, us.constants.emission)
-      us.validate(tx) shouldBe 'success
     }
   }
 
@@ -126,6 +113,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - simple case") {
+    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -138,11 +126,13 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).get
+      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      us.applyTransactions(txs, digest, newSC).get
     }
   }
 
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
+    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
 
@@ -157,7 +147,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
-      us.applyTransactions(txs, digest, height = 1).get
+      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      us.applyTransactions(txs, digest, newSC).get
     }
   }
 

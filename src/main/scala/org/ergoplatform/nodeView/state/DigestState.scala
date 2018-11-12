@@ -88,7 +88,7 @@ class DigestState protected(override val version: VersionTag,
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap { _ =>
-        update(fb.header)
+        update(fb.header, Some(fb.extension))
       }.recoverWith {
         case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
@@ -101,7 +101,7 @@ class DigestState protected(override val version: VersionTag,
 
     case h: Header if !nodeSettings.verifyTransactions =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
-      update(h)
+      update(h, None)
 
     case _: Header if nodeSettings.verifyTransactions =>
       log.warn("Should not get header from node view holders if settings.verifyTransactions")
@@ -129,16 +129,25 @@ class DigestState protected(override val version: VersionTag,
 
   def close(): Unit = store.close()
 
-  private def update(header: Header): Try[DigestState] = {
+  private def update(header: Header, extensionOpt: Option[Extension]): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
-    val newContext = stateContext.appendHeader(header)
-    val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
-    update(version, header.stateRoot, Seq(cb))
+
+    val sc1 = stateContext.appendHeader(header)
+
+    val sc2 = extensionOpt match {
+      case Some(ext) => sc1.appendExtension(ext)
+      case None => Success(sc1)
+    }
+
+    sc2.flatMap {newContext =>
+      val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
+      update(version, header.stateRoot, Seq(cb))
+    }
   }
 
   private def update(extension: Extension): Try[DigestState] = {
     val version: VersionTag = idToVersion(extension.id)
-    stateContext.appendExtension(stateContext.currentHeight, extension).flatMap{ newContext =>
+    stateContext.appendExtension(extension).flatMap{ newContext =>
       val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
       update(version, ADDigest @@ Array.fill(33)(0: Byte), Seq(cb)) //todo: fix root
     }

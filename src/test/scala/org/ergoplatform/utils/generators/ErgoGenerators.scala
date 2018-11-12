@@ -101,9 +101,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
+    height <- positiveIntGen
     mandatoryElements <- Gen.listOf(kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
     optionalElementsElements <- Gen.listOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
-  } yield Extension(headerId,
+  } yield Extension(headerId, height,
     mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
     optionalElementsElements.take(Extension.MaxOptionalFields))
 

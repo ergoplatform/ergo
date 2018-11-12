@@ -51,8 +51,6 @@ object Constants {
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
 
-  //Voting parameters
-  val VotingEpochLength = 1024
   val SoftForkEpochs = 32 //about 45.5 days
 
 //  println(VotingEpochLength * SoftForkEpochs / BlocksPerHour.toDouble / 24)

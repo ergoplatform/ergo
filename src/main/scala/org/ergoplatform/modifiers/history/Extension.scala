@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.Bytes
+import com.google.common.primitives.{Bytes, Ints}
 import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
@@ -28,6 +28,7 @@ import scala.util.Try
   *                        bytes value size.
   */
 case class Extension(headerId: ModifierId,
+                     height: Int,
                      mandatoryFields: Seq[(Array[Byte], Array[Byte])],
                      optionalFields: Seq[(Array[Byte], Array[Byte])],
                      override val sizeOpt: Option[Int] = None) extends BlockSection {
@@ -62,7 +63,7 @@ object Extension extends ApiCodecs {
 
   val MaxOptionalFields: Int = 2
 
-  def apply(headerId: ModifierId): Extension = Extension(headerId, Seq(), Seq())
+  def apply(header: Header): Extension = Extension(header.id, header.height, Seq(), Seq())
 
   def rootHash(e: Extension): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
 
@@ -81,6 +82,7 @@ object Extension extends ApiCodecs {
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
+      "height" -> e.height.asJson,
       "digest" -> Algos.encode(e.digest).asJson,
       "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
       "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
@@ -90,9 +92,10 @@ object Extension extends ApiCodecs {
   implicit val jsonDecoder: Decoder[Extension] = { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
+      height <- c.downField("height").as[Int]
       mandatoryFields <- c.downField("mandatoryFields").as[List[(Array[Byte], Array[Byte])]]
       optionalFields <- c.downField("optionalFields").as[List[(Array[Byte], Array[Byte])]]
-    } yield Extension(headerId, mandatoryFields, optionalFields)
+    } yield Extension(headerId, height, mandatoryFields, optionalFields)
   }
 }
 
@@ -100,14 +103,15 @@ object ExtensionSerializer extends Serializer[Extension] {
   val Delimiter: Array[Byte] = Array.fill(4)(0: Byte)
 
   override def toBytes(obj: Extension): Array[Byte] = {
+    val heightBytes = Ints.toByteArray(obj.height)
     val mandBytes = scorex.core.utils.concatBytes(obj.mandatoryFields.map(f =>
       Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
     val optBytes = scorex.core.utils.concatBytes(obj.optionalFields.map(f =>
       Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
     if (optBytes.nonEmpty) {
-      Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimiter, optBytes)
+      Bytes.concat(idToBytes(obj.headerId), heightBytes, mandBytes, Delimiter, optBytes)
     } else {
-      Bytes.concat(idToBytes(obj.headerId), mandBytes)
+      Bytes.concat(idToBytes(obj.headerId), heightBytes, mandBytes)
     }
   }
 
@@ -137,8 +141,9 @@ object ExtensionSerializer extends Serializer[Extension] {
     }
 
     val headerId = bytesToId(bytes.take(32))
-    val (mandatory, newPos) = parseSection(32, Extension.MandatoryFieldKeySize, Seq())
+    val height = Ints.fromByteArray(bytes.slice(32, 36))
+    val (mandatory, newPos) = parseSection(36, Extension.MandatoryFieldKeySize, Seq())
     val (optional, _) = parseSection(newPos, Extension.OptionalFieldKeySize, Seq())
-    Extension(headerId, mandatory, optional, Some(bytes.length))
+    Extension(headerId, height, mandatory, optional, Some(bytes.length))
   }
 }

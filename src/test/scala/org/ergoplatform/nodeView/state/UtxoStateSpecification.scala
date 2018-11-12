@@ -65,7 +65,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }
@@ -88,7 +88,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id, Seq(), Seq()), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
       fb
     }
@@ -189,7 +189,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }

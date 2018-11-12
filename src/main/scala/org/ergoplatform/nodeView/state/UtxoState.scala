@@ -36,6 +36,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
+  private lazy val VotingEpochLength = constants.settings.chainSettings.votingLength
+
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
@@ -83,7 +85,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         tx.statefulValidity(boxesToSpend, stateContext, constants.settings.metadata).get
       }.sum
 
-      if (totalCost > stateContext.currentParameters.MaxBlockCost){
+      if (totalCost > stateContext.currentParameters.MaxBlockCost) {
         throw new Error(s"Transaction cost $totalCost exeeds limit")
       }
 
@@ -107,37 +109,44 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       val height = fb.header.height
+      val scTry: Try[ErgoStateContext] = if (height % VotingEpochLength == 0 && height > 0) {
+        val ext = fb.extension
+        stateContext.appendExtension(height, ext)
+      } else {
+        Success(stateContext)
+      }
 
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
-      persistentProver.synchronized {
-        val inRoot = rootHash
+      scTry.flatMap { sc =>
+        persistentProver.synchronized {
+          val inRoot = rootHash
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
-          val emissionBox = extractEmissionBox(fb)
-          val newStateContext = stateContext.appendHeader(fb.header)
-          val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-          val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
-          val proofHash = ADProofs.proofDigest(proofBytes)
-          if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+          val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
+            val emissionBox = extractEmissionBox(fb)
+            val newStateContext = stateContext.appendHeader(fb.header)
+            val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+            val proofHash = ADProofs.proofDigest(proofBytes)
+            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-          if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
-            throw new Error("Storage kept roothash is not equal to the declared one")
-          } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-            throw new Error("Calculated proofHash is not equal to the declared one")
-          } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-            throw new Error("Calculated stateRoot is not equal to the declared one")
+            if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
+              throw new Error("Storage kept roothash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+              throw new Error("Calculated proofHash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Error("Calculated stateRoot is not equal to the declared one")
+            }
+            log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
+              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
-
-          log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-            s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-          new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
-        }
-        stateTry.recoverWith[UtxoState] { case e =>
-          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
-          persistentProver.rollback(inRoot)
-            .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-          Failure(e)
+          stateTry.recoverWith[UtxoState] { case e =>
+            log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+              s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+            persistentProver.rollback(inRoot)
+              .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+            Failure(e)
+          }
         }
       }
 
@@ -211,4 +220,3 @@ object UtxoState {
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 }
-

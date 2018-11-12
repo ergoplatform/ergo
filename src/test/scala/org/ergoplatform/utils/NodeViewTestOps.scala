@@ -55,7 +55,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       lastResult.flatMap { _ =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
         section match {
-          case Extension(_, Seq(), Seq(), _) => Success(()) // doesn't send back any outcome
+          case Extension(_, _, Seq(), Seq(), _) => Success(()) // doesn't send back any outcome
           case _ => expectModificationOutcome(section) // normal flow
         }
       }

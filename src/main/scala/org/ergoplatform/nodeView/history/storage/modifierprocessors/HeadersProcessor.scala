@@ -364,7 +364,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
         .validateNot(historyStorage.contains(header.id)) {
-          error("Header is already in history")
+          error(s"Header ${header.id} is already in history")
         }
         .result
     }

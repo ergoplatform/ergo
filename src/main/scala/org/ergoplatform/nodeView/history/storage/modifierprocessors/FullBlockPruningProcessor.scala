@@ -35,10 +35,10 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
     */
   def updateBestFullBlock(header: Header): Int = {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
-      0 // keep all blocks in history
+      ErgoHistory.GenesisHeight // keep all blocks in history
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
-      0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+      ErgoHistory.GenesisHeight //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

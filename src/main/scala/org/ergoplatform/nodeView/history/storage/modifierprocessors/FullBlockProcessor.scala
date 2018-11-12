@@ -49,7 +49,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   protected def isValidFirstFullBlock(header: Header): Boolean = {
     pruningProcessor.isHeadersChainSynced &&
-      header.isGenesis &&
+      header.height == pruningProcessor.minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
   }
 

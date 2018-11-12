@@ -3,9 +3,7 @@ package org.ergoplatform.settings
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import scorex.core.serialization.Serializer
-import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
 

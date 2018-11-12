@@ -31,8 +31,6 @@ class TransactionApiRouteSpec extends FlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
-  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
-
   val input = Input(
     ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
     ProverResult(Array.emptyByteArray, ContextExtension(Map())))

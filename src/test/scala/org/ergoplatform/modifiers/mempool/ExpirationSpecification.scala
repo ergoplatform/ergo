@@ -1,11 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
-import scorex.crypto.authds.ADDigest
 import sigmastate.Values
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -13,8 +11,6 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ExpirationSpecification extends ErgoPropertyTest {
   type Height = Long
-
-  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
 
   def falsify(box: ErgoBox): ErgoBox = {
     ErgoBox(box.value,
@@ -38,7 +34,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
     val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
 
-    val updContext = context.copy(currentHeight = h)
+    val updContext = emptyStateContext.appendHeader(invalidHeaderGen.sample.get.copy(height = h))
 
     tx.statelessValidity.isSuccess shouldBe true
     tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity

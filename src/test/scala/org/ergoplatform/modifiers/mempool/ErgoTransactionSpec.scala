@@ -17,8 +17,6 @@ import scala.util.Random
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
 
-  private val context = ErgoStateContext(0, ADDigest @@ Array.fill(32)(0: Byte))
-
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
       boxCandidate.value + delta,
@@ -48,7 +46,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      tx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe true
+      tx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe true
     }
   }
 
@@ -60,7 +58,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, delta) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess &&
-        wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+        wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -71,7 +69,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, -(tx.outputCandidates.head.value + negValue)) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -83,7 +81,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, overflowSurplus) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -106,7 +104,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       val wrongTx = updateAnAsset(tx, from, _ + 1)
       wrongTx.statelessValidity.isSuccess shouldBe true
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -114,7 +112,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       val wrongTx = updateAnAsset(tx, from, _ => -1)
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -143,7 +141,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
         wrongTx.statelessValidity.isSuccess shouldBe false
-        wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+        wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
       }
     }
   }
@@ -153,7 +151,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, context, settings.metadata)
+      val validity = tx.statefulValidity(from, emptyStateContext, settings.metadata)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
       log.info(s"Validation message: ${e.getMessage}", e)
@@ -180,7 +178,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, context, settings.metadata)
+      val validity = tx.statefulValidity(from, emptyStateContext, settings.metadata)
       validity.isSuccess shouldBe false
       val cause = validity.failed.get.getCause
       Option(cause) shouldBe defined
@@ -197,7 +195,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, context, settings.metadata)
+      val validity = tx.statefulValidity(from, emptyStateContext, settings.metadata)
       validity.isSuccess shouldBe false
       val cause = validity.failed.get.getCause
       Option(cause) shouldBe defined
@@ -226,7 +224,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       }
       val wrongTx = tx.copy(outputCandidates = updCandidates)
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 
@@ -238,7 +236,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       ErgoTransaction.MaxTokens + 8)
     forAll(gen) { case (from, wrongTx) =>
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, context, settings.metadata).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyStateContext, settings.metadata).isSuccess shouldBe false
     }
   }
 

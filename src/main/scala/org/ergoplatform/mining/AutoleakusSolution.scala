@@ -32,8 +32,8 @@ object AutoleakusSolution extends ApiCodecs {
 object AutoleakusSolutionSerializer extends Serializer[AutoleakusSolution] {
 
   override def toBytes(obj: AutoleakusSolution): Array[Byte] = {
-    Bytes.concat(pkToBytes(obj.pk), pkToBytes(obj.w), obj.n,
-      BigIntegers.asUnsignedByteArray(obj.d.bigInteger))
+    val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
+    Bytes.concat(pkToBytes(obj.pk), pkToBytes(obj.w), obj.n, Array(dBytes.length.toByte), dBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[AutoleakusSolution] = Try {
@@ -41,7 +41,8 @@ object AutoleakusSolutionSerializer extends Serializer[AutoleakusSolution] {
     val pk2End = 2 * PublicKeyLength
     val w = pkFromBytes(bytes.slice(PublicKeyLength, pk2End))
     val nonce = bytes.slice(pk2End, pk2End + 8)
-    val d = BigInt(BigIntegers.fromUnsignedByteArray(bytes.slice(pk2End + 8, bytes.length)))
+    val dBytesLength = bytes(pk2End + 8)
+    val d = BigInt(BigIntegers.fromUnsignedByteArray(bytes.slice(pk2End + 9, pk2End + 9 + dBytesLength)))
     AutoleakusSolution(pk, w, nonce, d)
   }
 

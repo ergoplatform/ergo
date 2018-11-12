@@ -19,7 +19,7 @@ class ErgoContext(val stateContext: ErgoStateContext,
                   override val metadata: Metadata,
                   override val extension: ContextExtension = ContextExtension(Map()))
   extends ErgoLikeContext(stateContext.currentHeight,
-    ErgoContext.stateTreeFromDigest(stateContext.stateDigest),
+    ErgoContext.stateTreeFromDigest(stateContext.previousStateDigest),
     transactionContext.boxesToSpend,
     transactionContext.spendingTransaction,
     transactionContext.self, metadata, extension) {

@@ -36,7 +36,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[Header] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get

@@ -158,7 +158,6 @@ class DigestState protected(override val version: VersionTag,
 
   // DigestState is not initialized yet. Waiting for first full block to apply without checks
   private lazy val notInitialized = nodeSettings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
-
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {

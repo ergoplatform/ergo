@@ -1,6 +1,7 @@
 package org.ergoplatform.utils
 
 import akka.util.Timeout
+import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{AutoleakusPowScheme, DefaultFakePowScheme}
@@ -35,6 +36,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
+  val defaultMinerPkPoint: ECPoint = defaultMinerPk.h
 
   val powScheme: AutoleakusPowScheme = DefaultFakePowScheme
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)

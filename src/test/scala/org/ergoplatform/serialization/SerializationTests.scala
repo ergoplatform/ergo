@@ -71,7 +71,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtripAndSize(invalidHeaderGen, HeaderSerializer)
+    checkSerializationRoundtripAndSize(defaultHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {

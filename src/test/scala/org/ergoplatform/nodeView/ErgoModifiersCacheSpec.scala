@@ -15,7 +15,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 
   private def genCachePair(i: Int): (ModifierId, Header) = {
-    val header = invalidHeaderGen.sample.value
+    val header = defaultHeaderGen.sample.value
     val k = genKey(i)
     k -> header
   }

@@ -10,7 +10,7 @@ class HeadersSpec extends ErgoPropertyTest {
   val genesisId: ModifierId = chain.head.id
 
   property("Any field change should lead to different id") {
-    forAll(invalidHeaderGen) { header =>
+    forAll(defaultHeaderGen) { header =>
       val initialId = header.id
       header.copy(version = (header.version + 1).toByte).id should not equal initialId
       header.copy(parentId = initialId).id should not equal initialId

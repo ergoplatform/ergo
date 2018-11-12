@@ -16,7 +16,6 @@ import scorex.core.transaction.wallet.VaultReader
 import scala.concurrent.Future
 import scala.util.Try
 
-
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
 

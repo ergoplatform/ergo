@@ -6,6 +6,7 @@ import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -16,6 +17,7 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.ModifierId
+import sigmastate.Values
 
 class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
@@ -35,7 +37,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     val block = validFullBlock(None, us, bh)
 
     getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
 
@@ -43,8 +45,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
 
-    getHistoryHeight shouldBe 0
-    getHeightOf(block.header.id) shouldBe Some(0)
+    getHistoryHeight shouldBe ErgoHistory.GenesisHeight
+    getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
     getLastHeadersLength(10) shouldBe 1
     getOpenSurfaces shouldBe Seq(block.header.id)
     getBestHeaderOpt shouldBe Some(block.header)
@@ -84,15 +86,21 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
 
     getBestHeaderOpt shouldBe Some(block.header)
-    getHistoryHeight shouldBe 1
+    getHistoryHeight shouldBe block.header.height
     getLastHeadersLength(10) shouldBe 2
   }
 
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
     if (stateType == Utxo) {
-      val (_, bh) = createUtxoState(Some(nodeViewHolderRef))
-      val tx = validTransactionsFromBoxHolder(bh)._1.head
+      val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.proposition == Values.TrueLeaf)
+      boxes.nonEmpty shouldBe true
+
+      val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
       subscribeEvents(classOf[FailedTransaction[_]])
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       expectNoMsg()
@@ -247,7 +255,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
     getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
@@ -256,8 +264,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
     val currentHeight = getHistoryHeight
-    currentHeight shouldBe 0
-    getHeightOf(block.header.id) shouldBe Some(0)
+    currentHeight shouldBe ErgoHistory.GenesisHeight
+    getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
 
     val randomId = modifierIdGen.sample.value
     val wrongTxs1 = block.blockTransactions.copy(headerId = randomId)
@@ -300,7 +308,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     val block = validFullBlock(None, us, bh)
     getBestHeaderOpt shouldBe None
 
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
@@ -324,14 +332,14 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   }
 
   private val t14 = TestCase("do not apply genesis block header if " +
-                             "it's not equal to genesisId from config") { fixture =>
+    "it's not equal to genesisId from config") { fixture =>
     import fixture._
     updateConfig(genesisIdConfig(modifierIdGen.sample))
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
 
     getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
@@ -340,7 +348,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallyFailedModification[Header]]
     getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
   }
 
   private val t15 = TestCase("apply genesis block header if it's equal to genesisId from config") { fixture =>
@@ -350,18 +358,19 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     updateConfig(genesisIdConfig(Some(ModifierId @@ Algos.encode(block.header.id))))
 
     getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe -1
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
     subscribeEvents(classOf[SyntacticallyFailedModification[_]])
 
     nodeViewHolderRef ! LocallyGeneratedModifier[Header](block.header)
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
-    getHistoryHeight shouldBe 0
-    getHeightOf(block.header.id) shouldBe Some(0)
+    getHistoryHeight shouldBe ErgoHistory.GenesisHeight
+    getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
   }
 
   val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>
       property(s"${t.name} - $c") {
@@ -370,7 +379,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val verifyingTxCases = List(t10, t11, t12, t13)
+  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>
@@ -381,6 +390,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   }
 
   val genesisIdTestCases = List(t14, t15)
+
   def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
     protoSettings.copy(chainSettings = protoSettings.chainSettings.copy(genesisId = expectedGenesisIdOpt))
   }

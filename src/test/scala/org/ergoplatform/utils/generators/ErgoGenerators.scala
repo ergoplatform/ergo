@@ -45,7 +45,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
     stateRoot <- stateRootGen
-    headers <- Gen.listOfN(size, invalidHeaderGen)
+    headers <- Gen.listOfN(size, defaultHeaderGen)
   } yield {
     headers match {
       case s :: tail => tail.foldLeft(ErgoStateContext(s, startDigest))((c, h) => c.appendHeader(h))
@@ -123,6 +123,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     n <- genBytes(8)
     d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
   } yield AutoleakusSolution(pk, w, n, d)
+
+  /**
+    * Header generator with default miner pk in pow solution
+    */
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map{ h =>
+    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+  }
 
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]

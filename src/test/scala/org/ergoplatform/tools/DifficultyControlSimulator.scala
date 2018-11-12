@@ -18,7 +18,7 @@ import scala.util.Random
   */
 object DifficultyControlSimulator extends App with ErgoGenerators {
 
-  val baseHeader = invalidHeaderGen.sample.get
+  val baseHeader = defaultHeaderGen.sample.get
 //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
   val difficultyControl = new LinearDifficultyControl(2.minute, useLastEpochs = 8, epochLength = 256)
   // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
@@ -83,7 +83,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   }
 
   def printTestnetData(): Unit = {
-    val baseHeader = invalidHeaderGen.sample.get
+    val baseHeader = defaultHeaderGen.sample.get
     val chainSettings = ErgoSettings.read(None).chainSettings.copy(epochLength = 1)
     val difficultyControl = new LinearDifficultyControl(chainSettings.blockInterval,
       chainSettings.useLastEpochs, chainSettings.epochLength)

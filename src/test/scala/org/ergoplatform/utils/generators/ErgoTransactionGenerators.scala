@@ -234,7 +234,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
-    header <- invalidHeaderGen
+    header <- defaultHeaderGen
     txs <- invalidBlockTransactionsGen
     extension <- extensionGen
     proof <- randomADProofsGen

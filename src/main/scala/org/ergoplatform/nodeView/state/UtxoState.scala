@@ -111,7 +111,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val height = fb.header.height
       val scTry: Try[ErgoStateContext] = if (height % VotingEpochLength == 0 && height > 0) {
         val ext = fb.extension
-        stateContext.appendExtension(height, ext)
+        stateContext.appendExtension(ext)
       } else {
         Success(stateContext)
       }

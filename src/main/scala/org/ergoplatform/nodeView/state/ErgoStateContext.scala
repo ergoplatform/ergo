@@ -27,8 +27,8 @@ case class ErgoStateContext(currentHeight: Int,
     ErgoStateContext(header.height + 1, header.stateRoot, currentParameters)
   }
 
-  def appendExtension(extHeight: Height, extension: Extension): Try[ErgoStateContext] =
-    Parameters.parseExtension(extHeight, extension).map { params =>
+  def appendExtension(extension: Extension): Try[ErgoStateContext] =
+    Parameters.parseExtension(extension.height, extension).map { params =>
       ErgoStateContext(currentHeight, stateDigest, params)
     }
 }

@@ -2,10 +2,12 @@ package org.ergoplatform.it.container
 
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
-import Docker.ExtraConfig
+import org.ergoplatform.it.container.Docker.ExtraConfig
+import org.ergoplatform.utils.ErgoTestConstants
+
 import scala.collection.JavaConverters._
 
-trait IntegrationTestConstants {
+trait IntegrationTestConstants extends ErgoTestConstants {
 
   val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
@@ -33,7 +35,7 @@ trait IntegrationTestConstants {
 
   def specialDataDirConfig(dir: String): Config = ConfigFactory.parseString(
     s"""
-      |ergo.directory=$dir
+       |ergo.directory=$dir
     """.stripMargin
   )
 

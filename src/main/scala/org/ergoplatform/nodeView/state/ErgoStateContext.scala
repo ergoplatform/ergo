@@ -68,7 +68,6 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
     val length = bytes.length
 
     def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
-      // todo use only required bytes when header size will be fixed after https://github.com/ergoplatform/ergo/issues/452
       val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
       loop(offset + header.bytes.length, header +: acc)
     } else {

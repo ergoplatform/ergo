@@ -3,7 +3,9 @@ package org.ergoplatform.settings
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import scorex.core.serialization.Serializer
+import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
 
@@ -96,9 +98,10 @@ object Parameters {
 }
 
 object ParametersSerializer extends Serializer[Parameters] {
-  override def toBytes(obj: Parameters): Array[Byte] = {
-    Ints.toByteArray(obj.height) ++
-      obj.parametersTable.map { case (k, v) => k +: Ints.toByteArray(v) }.reduce(_ ++ _)
+  override def toBytes(params: Parameters): Array[Byte] = {
+    require(params.parametersTable.nonEmpty, s"$params is empty")
+    Ints.toByteArray(params.height) ++
+      params.parametersTable.map { case (k, v) => k +: Ints.toByteArray(v) }.reduce(_ ++ _)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Parameters] = Try {

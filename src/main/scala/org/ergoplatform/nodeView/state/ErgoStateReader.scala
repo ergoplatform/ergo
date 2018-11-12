@@ -10,12 +10,13 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
 
   def rootHash: ADDigest
   val store: Store
+  val constants: StateConstants
 
   def stateContext: ErgoStateContext = store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
     .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)
     .getOrElse {
       log.warn("Unable to parse state context, situation is only valid on empty state")
-      ErgoStateContext(0, rootHash, LaunchParameters)
+      ErgoStateContext.empty(constants.emission.settings.afterGenesisStateDigest)
     }
 }
 

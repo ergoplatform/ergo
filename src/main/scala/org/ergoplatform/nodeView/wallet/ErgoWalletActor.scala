@@ -41,8 +41,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   val parameters: Parameters = LaunchParameters
   private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber, parameters)
 
-  private var height = 0
-  private var lastBlockUtxoRootHash: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
+  private def height = stateContext.currentHeight
+  // TODO looks like incorrect to initialize in such a way
+  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte))
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
@@ -64,8 +65,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         IndexedSeq(new UnsignedInput(box.id)),
         IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
-
-      val stateContext = ErgoStateContext(height + 1, lastBlockUtxoRootHash, parameters)
 
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
 
@@ -117,12 +116,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     }
   }
 
-  private def extractFromBlock(fb: ErgoFullBlock): Int = {
-    height = fb.header.height
-    lastBlockUtxoRootHash = fb.header.stateRoot
-    fb.transactions.count(tx => scan(tx, Some(height)))
-  }
-
   private def scanLogic: Receive = {
     case ScanOffchain(tx) =>
       if (scan(tx, None)) {
@@ -137,7 +130,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
-      val txsFound = extractFromBlock(fullBlock)
+      val txsFound = {
+        stateContext = stateContext.appendHeader(fullBlock.header)
+        fullBlock.transactions.count(tx => scan(tx, Some(height)))
+      }
       (1 to txsFound).foreach(_ => self ! Resolve)
 
     //todo: update utxo root hash
@@ -148,7 +144,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           registry.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
-      height = heightTo
+      // TODO state context rollback needed. Subtask at https://github.com/ergoplatform/ergo/issues/529
+      stateContext = stateContext.copy(lastHeaders = stateContext.lastHeaders.filter(_.height <= heightTo))
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
@@ -219,7 +216,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, ergoSettings.metadata, ErgoStateContext(height, lastBlockUtxoRootHash, parameters)).toOption
+        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
       } match {
         case Some(tx) => tx
         case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")

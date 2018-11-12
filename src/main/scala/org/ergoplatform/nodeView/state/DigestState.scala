@@ -5,6 +5,7 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings._
@@ -12,8 +13,8 @@ import org.ergoplatform.utils.LoggingUtil
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
@@ -29,7 +30,11 @@ class DigestState protected(override val version: VersionTag,
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
 
+  override val constants: StateConstants = StateConstants(None, ergoSettings)
+
   private lazy val nodeSettings = ergoSettings.nodeSettings
+
+  private lazy val VotingEpochLength = ergoSettings.chainSettings.votingLength
 
   store.lastVersionID
     .foreach(id => assert(version == bytesToVersion(id.data), "version should always be equal to store.lastVersionID"))
@@ -48,6 +53,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) =>
           Try {
             val txs = fb.blockTransactions.txs
+            val currentStateContext = stateContext.appendHeader(fb.header)
 
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
@@ -62,7 +68,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, stateContext, ergoSettings.metadata).get
+              tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
             }.sum
             if (totalCost > stateContext.currentParameters.MaxBlockCost) {
               throw new Error(s"Transaction cost $totalCost exceeds limit")
@@ -88,7 +94,11 @@ class DigestState protected(override val version: VersionTag,
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap { _ =>
-        update(fb.header, Some(fb.extension))
+        if(fb.header.height % VotingEpochLength == 0 && fb.header.height > 0) {
+          update(fb.header, Some(fb.extension))
+        } else {
+          update(fb.header, None)
+        }
       }.recoverWith {
         case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")

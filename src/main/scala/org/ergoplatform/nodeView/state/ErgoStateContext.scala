@@ -52,11 +52,14 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
-  def appendFullBlock(fullBlock: ErgoFullBlock, votingStart: Boolean): Try[ErgoStateContext] = {
+  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = {
+    def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
+
     val header = fullBlock.header
+    val height = header.height
     val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
 
-    if(votingStart) {
+    if(votingStarts(height)) {
       val extension = fullBlock.extension
 
       val newVoting = VotingResults(

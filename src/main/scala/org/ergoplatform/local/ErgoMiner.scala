@@ -220,8 +220,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
       // todo fill with interlinks and other useful values after nodes update
       val extensionCandidate: ExtensionCandidate = bestHeaderOpt.map { header =>
-        if (header.height % VotingEpochLength == 0 && header.height > 0) {
-          state.stateContext.currentParameters.toExtensionCandidate(optionalFields)
+        val newHeight = header.height + 1
+        if (newHeight % VotingEpochLength == 0 && newHeight > 0) {
+          val sc = state.stateContext
+          sc.currentParameters
+            .update(newHeight, sc.currentVoting.results, VotingEpochLength)
+            .toExtensionCandidate(optionalFields)
         } else {
           emptyExtensionCandidate
         }

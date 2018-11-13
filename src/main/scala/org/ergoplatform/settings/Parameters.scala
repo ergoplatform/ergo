@@ -55,14 +55,20 @@ abstract class Parameters {
   val MaxBlockCostIncrease = 4: Byte
   val MaxBlockCostDecrease = -MaxBlockCostIncrease
 
-
-  def changeParameter(newHeight: Height, paramId: Byte): Parameters = {
-    paramId match {
-      case b: Byte if b == KIncrease =>
-        val newK = if (K < Kmax) K + Kstep else K
-        Parameters(newHeight, parametersTable.updated(KIncrease, newK))
-      case _ => ???
+  def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
+    val paramsTable = votes.foldLeft(parametersTable){case (table, (paramId, count)) =>
+      paramId match {
+        case b: Byte if b == KIncrease =>
+          if(count > votingEpochLength / 2) {
+            val newK = if (K < Kmax) K + Kstep else K
+            table.updated(KIncrease, newK)
+          } else {
+            table
+          }
+        case _ => table
+      }
     }
+    Parameters(newHeight, paramsTable)
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
@@ -70,7 +76,7 @@ abstract class Parameters {
     ExtensionCandidate(mandatoryFields, optionalFields)
   }
 
-  override def toString: String = s"Parameters(${parametersTable.mkString("; ")})"
+  override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
 }
 
 object Parameters {

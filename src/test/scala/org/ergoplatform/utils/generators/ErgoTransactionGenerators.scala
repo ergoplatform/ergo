@@ -249,7 +249,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     headers match {
       case s :: tail => tail.
         foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingResults.empty)) { case (c, h) =>
-          c.appendFullBlock(s, false).get
+          c.appendFullBlock(s, 1024).get
         }
       case _ => ErgoStateContext.empty(stateRoot)
     }

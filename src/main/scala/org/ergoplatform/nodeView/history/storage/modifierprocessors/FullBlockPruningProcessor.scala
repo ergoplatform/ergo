@@ -50,7 +50,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
       // Start from config.blocksToKeep blocks back
       val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
       // ... but not later than the beginning of a voting epoch
-      if(h > VotingEpochLength) {
+      if (h > VotingEpochLength) {
         Math.max(h, extensionWithParametersHeight(h))
       } else {
         h

@@ -4,7 +4,6 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.history.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -34,8 +33,6 @@ class DigestState protected(override val version: VersionTag,
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
-  private lazy val VotingEpochLength = ergoSettings.chainSettings.votingLength
-
   store.lastVersionID
     .foreach(id => assert(version == bytesToVersion(id.data), "version should always be equal to store.lastVersionID"))
 
@@ -51,27 +48,28 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          Try {
-            val txs = fb.blockTransactions.txs
-            val currentStateContext = stateContext.appendHeader(fb.header)
+          stateContext.appendFullBlock(fb, votingStarts(fb.header.height)).flatMap {currentStateContext =>
+            Try {
+              val txs = fb.blockTransactions.txs
 
-            val declaredHash = fb.header.stateRoot
-            // Check modifications, returning sequence of old values
-            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
-            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
-            val totalCost = txs.map { tx =>
-              tx.statelessValidity.get
-              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-                knownBoxes.get(ByteArrayWrapper(id)) match {
-                  case Some(box) => box
-                  case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+              val declaredHash = fb.header.stateRoot
+              // Check modifications, returning sequence of old values
+              val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
+                .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+              val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+              val totalCost = txs.map { tx =>
+                tx.statelessValidity.get
+                val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+                  knownBoxes.get(ByteArrayWrapper(id)) match {
+                    case Some(box) => box
+                    case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+                  }
                 }
+                tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
+              }.sum
+              if (totalCost > stateContext.currentParameters.MaxBlockCost) {
+                throw new Error(s"Transaction cost $totalCost exceeds limit")
               }
-              tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
-            }.sum
-            if (totalCost > stateContext.currentParameters.MaxBlockCost) {
-              throw new Error(s"Transaction cost $totalCost exceeds limit")
             }
           }
         case None =>
@@ -89,12 +87,8 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
-      this.validate(fb).flatMap { _ =>
-        if(fb.header.height % VotingEpochLength == 0 && fb.header.height > 0) {
-          update(fb.header, Some(fb.extension))
-        } else {
-          update(fb.header, None)
-        }
+      this.validate(fb).flatMap {_ =>
+        update(fb)
       }.recoverWith {
         case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
@@ -107,7 +101,7 @@ class DigestState protected(override val version: VersionTag,
 
     case h: Header if !nodeSettings.verifyTransactions =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
-      update(h, None)
+      update(h)
 
     case _: Header if nodeSettings.verifyTransactions =>
       log.warn("Should not get header from node view holders if settings.verifyTransactions")
@@ -135,28 +129,19 @@ class DigestState protected(override val version: VersionTag,
 
   def close(): Unit = store.close()
 
-  private def update(header: Header, extensionOpt: Option[Extension]): Try[DigestState] = {
-    val version: VersionTag = idToVersion(header.id)
-
-    val sc1 = stateContext.appendHeader(header)
-
-    val sc2 = extensionOpt match {
-      case Some(ext) => sc1.appendExtension(ext)
-      case None => Success(sc1)
-    }
-
-    sc2.flatMap {newContext =>
-      val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
-      update(version, header.stateRoot, Seq(cb))
+  private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
+    val version: VersionTag = idToVersion(fullBlock.header.id)
+    val height = fullBlock.header.height
+    stateContext.appendFullBlock(fullBlock, votingStarts(height)).flatMap {newStateContext =>
+      val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      update(version, fullBlock.header.stateRoot, Seq(cb))
     }
   }
 
-  private def update(extension: Extension): Try[DigestState] = {
-    val version: VersionTag = idToVersion(extension.id)
-    stateContext.appendExtension(extension).flatMap{ newContext =>
-      val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContext.bytes)
-      update(version, ADDigest @@ Array.fill(33)(0: Byte), Seq(cb)) //todo: fix root
-    }
+
+  private def update(header: Header): Try[DigestState] = {
+    val version: VersionTag = idToVersion(header.id)
+    update(version, header.stateRoot, Seq())
   }
 
   private def update(newVersion: VersionTag,

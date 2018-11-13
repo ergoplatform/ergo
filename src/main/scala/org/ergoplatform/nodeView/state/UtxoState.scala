@@ -35,9 +35,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
 
-  private lazy val VotingEpochLength = constants.settings.chainSettings.votingLength
-
-
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
@@ -107,18 +104,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       val height = fb.header.height
-      val scTry: Try[ErgoStateContext] = if (height % VotingEpochLength == 0 && height > 0) {
-        val ext = fb.extension
-        stateContext.appendExtension(ext)
-      } else {
-        Success(stateContext)
-      }
 
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
-      scTry.flatMap { sc =>
+      stateContext.appendFullBlock(fb, votingStarts(height)).flatMap { newStateContext =>
         persistentProver.synchronized {
           val inRoot = rootHash
-          val newStateContext = sc.appendHeader(fb.header)
 
           val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)

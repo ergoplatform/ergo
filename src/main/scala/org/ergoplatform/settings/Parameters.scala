@@ -42,9 +42,6 @@ abstract class Parameters {
 
   lazy val MinValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
 
-  //A vote for nothing
-  val NoParameter = 0: Byte
-
   //Parameter identifiers
   val KIncrease = 1: Byte
   val KDecrease = -KIncrease
@@ -77,6 +74,10 @@ abstract class Parameters {
 }
 
 object Parameters {
+
+  //A vote for nothing
+  val NoParameter = 0: Byte
+
   val ParametersCount = 2
 
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters {

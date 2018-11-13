@@ -19,8 +19,8 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
-import org.ergoplatform.utils.{ErgoTestHelpers, Stubs}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalatest.FlatSpec
@@ -105,7 +105,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.bestFullBlockOpt.map(_.header).toSeq, startDigest, parameters)).get
+          ErgoStateContext(r.h.bestFullBlockOpt.map(_.header).toSeq, startDigest, parameters, VotingResults.empty)).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
-import org.ergoplatform.nodeView.state.BoxHolder
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingResults}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
@@ -239,6 +239,21 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     extension <- extensionGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
+
+
+  lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
+    size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
+    stateRoot <- stateRootGen
+    headers <- Gen.listOfN(size, invalidErgoFullBlockGen)
+  } yield {
+    headers match {
+      case s :: tail => tail.
+        foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingResults.empty)) { case (c, h) =>
+          c.appendFullBlock(s, false).get
+        }
+      case _ => ErgoStateContext.empty(stateRoot)
+    }
+  }
 }
 
 object ErgoTransactionGenerators extends ErgoTransactionGenerators

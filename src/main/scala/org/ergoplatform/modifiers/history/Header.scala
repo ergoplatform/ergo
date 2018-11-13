@@ -35,6 +35,7 @@ case class Header(version: Version,
                   height: Int,
                   extensionRoot: Digest32,
                   equihashSolution: EquihashSolution,
+                  votes: Array[Byte] = new Array[Byte](3), //3 bytes
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
@@ -219,7 +220,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, equihashSolution, Some(bytes.length))
+        nBits, height, extensionHash, equihashSolution, new Array[Byte](3), Some(bytes.length))
     }
   }.flatten
 }

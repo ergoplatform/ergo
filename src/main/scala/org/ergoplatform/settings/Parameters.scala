@@ -71,6 +71,10 @@ abstract class Parameters {
     Parameters(newHeight, paramsTable)
   }
 
+  def suggestVotes(ownTargets: Map[Byte, Int]): Seq[(Byte, Int)] = {
+    if(ownTargets.get(KIncrease).getOrElse(Kmin) > parametersTable(KIncrease)) Seq(KIncrease -> 1) else Seq()
+  }
+
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
     val mandatoryFields = parametersTable.toSeq.map{case (k,v) => Array(k) -> Ints.toByteArray(v)}
     ExtensionCandidate(mandatoryFields, optionalFields)

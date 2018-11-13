@@ -33,7 +33,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
         } else {
           emptyProgressInfo
         }
-      case None =>
+      case _ =>
         emptyProgressInfo
     }
   }
@@ -49,7 +49,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
       historyStorage.modifierById(acc.headOption.map(_.parentId).getOrElse(lastHeaderId)) match {
         case Some(h: Header) =>
           acc :+ h
-        case None =>
+        case _ =>
           acc
       }
     }

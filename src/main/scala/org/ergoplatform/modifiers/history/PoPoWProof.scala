@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
-import org.ergoplatform.mining.AutoleakusPowScheme
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
@@ -19,7 +19,7 @@ case class PoPoWProof(m: Byte,
                       innerchain: Seq[Header],
                       suffix: Seq[Header],
                       override val sizeOpt: Option[Int] = None)
-                     (implicit powScheme: AutoleakusPowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                     (implicit powScheme: AutolykosPowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -44,7 +44,7 @@ object PoPoWProof {
 }
 
 @SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
-class PoPoWProofUtils(powScheme: AutoleakusPowScheme) extends ScorexEncoding with ModifierValidator{
+class PoPoWProofUtils(powScheme: AutolykosPowScheme) extends ScorexEncoding with ModifierValidator{
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
@@ -118,7 +118,7 @@ class PoPoWProofUtils(powScheme: AutoleakusPowScheme) extends ScorexEncoding wit
 }
 
 @SuppressWarnings(Array("TraversableHead"))
-class PoPoWProofSerializer(powScheme: AutoleakusPowScheme) extends Serializer[PoPoWProof] {
+class PoPoWProofSerializer(powScheme: AutolykosPowScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
       val bytes = HeaderSerializer.bytesWithoutInterlinks(h)

@@ -13,7 +13,7 @@ import scala.util.{Random, Success, Try}
   * Fake Pow Scheme for tests.
   * All blocks are correct here
   */
-object DefaultFakePowScheme extends AutoleakusPowScheme(1, 1) {
+object DefaultFakePowScheme extends AutolykosPowScheme(1, 1) {
   override def verify(header: Header): Boolean = true
 
   override def prove(parentOpt: Option[Header],
@@ -32,7 +32,7 @@ object DefaultFakePowScheme extends AutoleakusPowScheme(1, 1) {
     val w: ECPoint = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
-    val s = AutoleakusSolution(pk, w, n, d)
+    val s = AutolykosSolution(pk, w, n, d)
     Some(Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, s))
   }

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.mining.AutoleakusPowScheme
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
@@ -200,7 +200,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutoleakusPowScheme = chainSettings.powScheme
+          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
@@ -210,7 +210,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutoleakusPowScheme = chainSettings.powScheme
+          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
@@ -220,7 +220,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutoleakusPowScheme = chainSettings.powScheme
+          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
@@ -230,7 +230,7 @@ object ErgoHistory extends ScorexLogging {
           override protected val chainSettings: ChainSettings = settings.chainSettings
           override protected val config: NodeConfigurationSettings = nodeSettings
           override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutoleakusPowScheme = chainSettings.powScheme
+          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
     }

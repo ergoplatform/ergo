@@ -2,7 +2,7 @@ package org.ergoplatform.tools
 
 import java.io.File
 
-import org.ergoplatform.mining.{AutoleakusPowScheme, CandidateBlock}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -28,7 +28,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
     val N: Int = 10000000
   val k: Int = 128
-  val pow = new AutoleakusPowScheme(k, N)
+  val pow = new AutolykosPowScheme(k, N)
   val blockInterval = 2.minute
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)

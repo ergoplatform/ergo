@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.state.UtxoSnapshotManifest
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
@@ -16,10 +16,9 @@ trait UtxoSnapshotManifestProcessor extends ScorexLogging with ScorexEncoding {
   protected val historyStorage: HistoryStorage
 
   def process(m: UtxoSnapshotManifest): ProgressInfo[ErgoPersistentModifier] = {
-    //TODO
-    val toInsert = ???
-    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, toInsert)
-    ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
+    val chunksToRequest = m.chunkRoots.map(UtxoSnapshot.rootDigestToId).map(UtxoSnapshotChunk.modifierTypeId -> _)
+    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
+    ProgressInfo(None, Seq.empty, Seq(m), chunksToRequest)
   }
 
   def validate(m: UtxoSnapshotManifest): Try[Unit] = if (historyStorage.contains(m.id)) {

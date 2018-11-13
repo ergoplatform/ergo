@@ -17,18 +17,18 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   private val emptyProgressInfo = ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
 
-  def process(chunk: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.modifierById(chunk.manifestId) match {
+  def process(m: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
+    historyStorage.modifierById(m.manifestId) match {
       case Some(manifest: UtxoSnapshotManifest) =>
-        historyStorage.insert(Algos.idToBAW(chunk.id), Seq.empty, Seq(chunk))
+        historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
         val otherChunks = manifest.chunkRoots
           .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
-          .collect { case Some(m: UtxoSnapshotChunk) => m }
+          .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
         val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
         if (otherChunks.lengthCompare(manifest.size - 1) == 0 &&
           lastHeaders.lengthCompare(Constants.LastHeadersInContext) != 0) {
           // Time to apply snapshot
-          val snapshot = UtxoSnapshot(manifest, otherChunks :+ chunk, lastHeaders)
+          val snapshot = UtxoSnapshot(manifest, otherChunks :+ m, lastHeaders)
           ProgressInfo(None, Seq.empty, Seq(snapshot), Seq.empty)
         } else {
           emptyProgressInfo

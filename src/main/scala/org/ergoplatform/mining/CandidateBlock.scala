@@ -14,7 +14,8 @@ case class CandidateBlock(parentOpt: Option[Header],
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[ErgoTransaction],
                           timestamp: Timestamp,
-                          extension: ExtensionCandidate) {
+                          extension: ExtensionCandidate,
+                          votes: Seq[Byte]) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
 }
@@ -29,6 +30,7 @@ object CandidateBlock {
       "timestamp" -> c.timestamp.asJson,
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
+      "votes" -> c.votes.asJson,
       "extensionHash" -> Algos.encode(Extension.rootHash(c.extension)).asJson
     ).asJson
 

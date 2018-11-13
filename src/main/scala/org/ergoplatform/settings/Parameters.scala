@@ -56,10 +56,10 @@ abstract class Parameters {
   val MaxBlockCostDecrease = -MaxBlockCostIncrease
 
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
-    val paramsTable = votes.foldLeft(parametersTable){case (table, (paramId, count)) =>
+    val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
       paramId match {
         case b: Byte if b == KIncrease =>
-          if(count > votingEpochLength / 2) {
+          if (count > votingEpochLength / 2) {
             val newK = if (K < Kmax) K + Kstep else K
             table.updated(KIncrease, newK)
           } else {
@@ -71,12 +71,18 @@ abstract class Parameters {
     Parameters(newHeight, paramsTable)
   }
 
-  def suggestVotes(ownTargets: Map[Byte, Int]): Seq[(Byte, Int)] = {
-    if(ownTargets.get(KIncrease).getOrElse(Kmin) > parametersTable(KIncrease)) Seq(KIncrease -> 1) else Seq()
+  def suggestVotes(ownTargets: Map[Byte, Int]): Seq[Byte] = {
+    if (ownTargets.getOrElse(KIncrease, Kmin) > parametersTable(KIncrease)) Seq(KIncrease) else Seq()
+  }
+
+  def vote(ownTargets: Map[Byte, Int], votes: Seq[(Byte, Int)]): Seq[Byte] = {
+    votes.filter { case (paramId, _) =>
+      ownTargets.get(paramId).exists(_ > parametersTable(paramId))
+    }.map(_._1)
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
-    val mandatoryFields = parametersTable.toSeq.map{case (k,v) => Array(k) -> Ints.toByteArray(v)}
+    val mandatoryFields = parametersTable.toSeq.map { case (k, v) => Array(k) -> Ints.toByteArray(v) }
     ExtensionCandidate(mandatoryFields, optionalFields)
   }
 

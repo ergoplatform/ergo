@@ -15,6 +15,8 @@ import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.{SBoolean, SLong}
 
+import scala.concurrent.blocking
+
 trait WalletTestOps extends NodeViewBaseOps {
 
   def emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
@@ -37,6 +39,10 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 
+  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = {
+    blocking(Thread.sleep(scanTime(block)))
+  }
+
   def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
     val boxes = block.transactions.flatMap(_.outputs)
     val tokens = boxes.flatMap(_.additionalTokens)
@@ -45,6 +51,10 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
     boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 1000
+  }
+
+  def waitForOffchainScanning(tx: ErgoTransaction): Unit = {
+    blocking(Thread.sleep(offchainScanTime(tx)))
   }
 
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
@@ -87,7 +97,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
-  def makeGenesisTx(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+  def makeGenesisTx(publicKey: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     //ErgoMiner.createCoinbase(Some(genesisEmissionBox), 0, Seq.empty, script, emission)
     val emissionBox = genesisEmissionBox
     val height = ErgoHistory.GenesisHeight
@@ -96,7 +106,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
     val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
     val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, startHeight, Seq.empty, emissionRegs)
-    val minerBox = new ErgoBoxCandidate(emissionAmount, script, startHeight, replaceNewAssetStub(assets, inputs), Map.empty)
+    val minerBox = new ErgoBoxCandidate(emissionAmount, publicKey, startHeight, replaceNewAssetStub(assets, inputs), Map.empty)
     ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))
   }
 

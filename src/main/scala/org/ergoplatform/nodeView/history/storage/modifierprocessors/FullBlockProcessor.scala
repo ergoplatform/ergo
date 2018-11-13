@@ -51,15 +51,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   protected def isValidFirstFullBlock(header: Header): Boolean = {
     pruningProcessor.isHeadersChainSynced &&
       header.height == pruningProcessor.minimalFullBlockHeight &&
-      bestFullBlockIdOpt.isEmpty && {
-      if (header.height > VotingEpochLength) {
-        pruningProcessor.requiredParametersForHeight(this, header.height).headOption.forall { case (_, eid) =>
-          contains(eid)
-        }
-      } else {
-        true
-      }
-    }
+      bestFullBlockIdOpt.isEmpty
   }
 
   private def processValidFirstBlock: BlockProcessing = {
@@ -68,14 +60,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
-      val ta = if (fullBlock.header.height > VotingEpochLength) {
-        pruningProcessor.requiredParametersForHeight(this, fullBlock.header.height).flatMap { case (_, eid) =>
-          typedModifierById[Extension](eid)
-        } ++ toApply
-      } else {
-        toApply
-      }
-      ProgressInfo(None, Seq.empty, ta, Seq.empty)
+      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {

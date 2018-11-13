@@ -51,9 +51,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       case _ if !isHeadersChainSynced || !config.verifyTransactions =>
         Seq.empty
       case Some(fb) =>
-        continuation(fb.header.height + 1, pruningProcessor.requiredParametersForHeight(this, fb.header.height))
+        continuation(fb.header.height + 1, Seq.empty)
       case None =>
-        continuation(pruningProcessor.minimalFullBlockHeight, pruningProcessor.requiredParametersForHeight(this, pruningProcessor.minimalFullBlockHeight))
+        continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
     }
   }
 

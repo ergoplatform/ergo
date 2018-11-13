@@ -11,7 +11,7 @@ import scala.util.{Random, Success, Try}
 
 /**
   * Fake Pow Scheme for tests.
-  * All blocks are correct here
+  * Fill solution with random values, all blocks are valid during validation
   */
 object DefaultFakePowScheme extends AutolykosPowScheme(1, 1) {
   override def verify(header: Header): Boolean = true

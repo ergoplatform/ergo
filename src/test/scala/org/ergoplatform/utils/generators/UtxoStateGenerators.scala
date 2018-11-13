@@ -4,14 +4,13 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest, UtxoSnapshotManifestSerializer}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoTestConstants
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Gen
 import org.scalatest.Matchers
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.CoreGenerators
-import scorex.util.ModifierId
 
 trait UtxoStateGenerators
   extends CoreGenerators

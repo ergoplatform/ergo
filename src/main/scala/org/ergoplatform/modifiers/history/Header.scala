@@ -5,7 +5,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.{AutoleakusSolution, AutoleakusSolutionSerializer}
+import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -32,7 +32,7 @@ case class Header(version: Version,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
                   extensionRoot: Digest32,
-                  powSolution: AutoleakusSolution,
+                  powSolution: AutolykosSolution,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
@@ -112,7 +112,7 @@ object Header extends ApiCodecs {
       nBits <- c.downField("nBits").as[Long]
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
-      solutions <- c.downField("powSolutions").as[AutoleakusSolution]
+      solutions <- c.downField("powSolutions").as[AutolykosSolution]
     } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
   }
@@ -152,7 +152,7 @@ object HeaderSerializer extends Serializer[Header] {
   }
 
   def solutionBytes(h: Header): Array[Byte] = {
-    AutoleakusSolutionSerializer.toBytes(h.powSolution)
+    AutolykosSolutionSerializer.toBytes(h.powSolution)
   }
 
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
@@ -193,7 +193,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     val powSolutionsBytes = bytes.slice(180 + interlinksSize, bytes.length)
 
-    AutoleakusSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
+    AutolykosSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
         nBits, height, extensionHash, powSolution, Some(bytes.length))
     }

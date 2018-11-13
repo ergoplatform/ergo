@@ -19,7 +19,7 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.Try
 
-class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
+class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   private var list: IndexedSeq[BigInt] = IndexedSeq()
   private var x: BigInt = randomSecret()
@@ -47,8 +47,7 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   def prove(parentOpt: Option[Header],
             nBits: Long,
-            stateRoot:
-            ADDigest,
+            stateRoot: ADDigest,
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
@@ -128,11 +127,11 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
     }
   }
 
-  def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutoleakusSolution] = {
+  def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
 
     @tailrec
-    def loop(i: Long): Option[AutoleakusSolution] = if (i == endNonce) {
+    def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
@@ -140,7 +139,7 @@ class AutoleakusPowScheme(k: Int, N: Int) extends ScorexLogging {
       val d = (genIndexes(m, nonce).map(i => list(i)).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
-        Some(AutoleakusSolution(genPk(sk), genPk(x), nonce, d))
+        Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)
       }

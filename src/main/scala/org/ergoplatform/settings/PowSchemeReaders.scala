@@ -8,12 +8,12 @@ import org.ergoplatform.mining._
 
 trait PowSchemeReaders {
 
-  val readers: Seq[PowSchemeReader[_ <: AutoleakusPowScheme]] = Seq(
-    AutoleakusPowSchemeReader,
+  val readers: Seq[PowSchemeReader[_ <: AutolykosPowScheme]] = Seq(
+    AutolykosPowSchemeReader,
     FakePowSchemeReader
   )
 
-  implicit val powSchemeReader: ValueReader[AutoleakusPowScheme] = { (cfg, path) =>
+  implicit val powSchemeReader: ValueReader[AutolykosPowScheme] = { (cfg, path) =>
     val schemeNameKey = s"$path.powType"
     val schemeName = cfg.getString(schemeNameKey)
     val schemeReader = readers.find(_.schemeName == schemeName)
@@ -22,24 +22,24 @@ trait PowSchemeReaders {
   }
 }
 
-sealed trait PowSchemeReader[T <: AutoleakusPowScheme] {
+sealed trait PowSchemeReader[T <: AutolykosPowScheme] {
   def schemeName: String
 
   def read(config: Config, path: String): T
 }
 
-object AutoleakusPowSchemeReader extends PowSchemeReader[AutoleakusPowScheme] {
-  val schemeName = "autoleakus"
+object AutolykosPowSchemeReader extends PowSchemeReader[AutolykosPowScheme] {
+  val schemeName = "autolykos"
 
-  def read(config: Config, path: String): AutoleakusPowScheme = {
-    val N = config.as[Int](s"$path.N").toChar
-    val k = config.as[Int](s"$path.k").toChar
-    new AutoleakusPowScheme(k, N)
+  def read(config: Config, path: String): AutolykosPowScheme = {
+    val N = config.as[Int](s"$path.N")
+    val k = config.as[Int](s"$path.k")
+    new AutolykosPowScheme(k, N)
   }
 }
 
-object FakePowSchemeReader extends PowSchemeReader[AutoleakusPowScheme] {
+object FakePowSchemeReader extends PowSchemeReader[AutolykosPowScheme] {
   val schemeName = "fake"
 
-  def read(config: Config, path: String): AutoleakusPowScheme = DefaultFakePowScheme
+  def read(config: Config, path: String): AutolykosPowScheme = DefaultFakePowScheme
 }

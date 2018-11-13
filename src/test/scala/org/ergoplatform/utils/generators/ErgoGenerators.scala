@@ -3,7 +3,7 @@ package org.ergoplatform.utils.generators
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.{AutoleakusSolution, genPk, q}
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
@@ -117,12 +117,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val genECPoint: Gen[ECPoint] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
 
-  lazy val powSolutionGen: Gen[AutoleakusSolution] = for {
+  lazy val powSolutionGen: Gen[AutolykosSolution] = for {
     pk <- genECPoint
     w <- genECPoint
     n <- genBytes(8)
     d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
-  } yield AutoleakusSolution(pk, w, n, d)
+  } yield AutolykosSolution(pk, w, n, d)
 
   /**
     * Header generator with default miner pk in pow solution

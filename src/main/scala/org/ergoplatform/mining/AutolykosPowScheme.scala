@@ -19,6 +19,13 @@ import scala.annotation.tailrec
 import scala.math.BigInt
 import scala.util.Try
 
+/**
+  * Autolykos PoW puzzle.
+  *
+  * @see papers/yellow/pow/ErgoPow.tex for full description
+  * @param k - number of elements in one solution
+  * @param N - list size
+  */
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   private var list: IndexedSeq[BigInt] = IndexedSeq()
@@ -27,6 +34,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   private val NBigInteger: BigInteger = BigInt(N).bigInteger
 
+  /**
+    * Verify, that `header` contains correct solution of the Autolykos PoW puzzle.
+    */
   def verify(header: Header): Boolean = Try {
     val b = getB(header.nBits)
     val msg = HeaderSerializer.bytesWithoutPow(header)
@@ -41,10 +51,18 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     require(gExp.add(pkExp) == s.pk, "Incorrect points")
   }.isSuccess
 
+  /**
+    * Real difficulty of `header`.
+    * May occasionally exceeds required difficulty due to random nature of PoW puzzle.
+    */
   def realDifficulty(header: Header): BigInt = {
     q / header.powSolution.d
   }
 
+  /**
+    * Find a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
+    * correct solution of the Autolykos PoW puzzle.
+    */
   def prove(parentOpt: Option[Header],
             nBits: Long,
             stateRoot: ADDigest,
@@ -65,6 +83,10 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
 
+  /**
+    * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
+    * correct solution of the Autolykos PoW puzzle.
+    */
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
                  stateRoot: ADDigest,
@@ -89,6 +111,10 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     }
   }
 
+  /**
+    * Find a nonce from `minNonce` to `maxNonce`, such that full block created from block candidate `candidateBlock`
+    * will contain correct solution of the Autolykos PoW puzzle.
+    */
   def proveCandidate(candidateBlock: CandidateBlock,
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
@@ -107,7 +133,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   }
 
   /**
-    * Initialize the pow task if it was not initialized yet.
+    * Initialize the PoW task if it was not initialized yet.
     * Generate a new random secret `x` and fill `list` with numbers if difficulty is big enough
     *
     * @param m  - header bytes without pow
@@ -135,7 +161,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     */
   private def onFlyCalculation(b: BigInt): Boolean = N > (q / b)
 
-  def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
+  private def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
 
     @tailrec
@@ -153,7 +179,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       }
     }
 
-    if(onFlyCalculation(b)) {
+    if (onFlyCalculation(b)) {
       val p1 = pkToBytes(genPk(sk))
       val p2 = pkToBytes(genPk(x))
       loop(startNonce, i => genFullElement(m, p1, p2, i))
@@ -162,7 +188,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     }
   }
 
-  protected def getB(nBits: Long): BigInt = {
+  private def getB(nBits: Long): BigInt = {
     q / RequiredDifficulty.decodeCompactBits(nBits)
   }
 
@@ -178,7 +204,6 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
     (parentId, version, interlinks, height)
   }
-
 
   private def f1(m: Array[Byte], pk: ECPoint, w: ECPoint, nonce: Array[Byte]): BigInt = {
     val p1 = pkToBytes(pk)
@@ -206,9 +231,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   /**
     * Generate element for left (orderByte = 0) or for right (orderByte = 1) part
-    * of Autolykus equation.
+    * of Autolykos equation.
     */
-  protected def genElement(m: Array[Byte],
+  private def genElement(m: Array[Byte],
                            p1: Array[Byte],
                            p2: Array[Byte],
                            indexBytes: Array[Byte],
@@ -217,9 +242,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   }
 
   /**
-    * Generate full element of Autolykus equation.
+    * Generate full element of Autolykos equation.
     */
-  protected def genFullElement(m: Array[Byte],
+  private def genFullElement(m: Array[Byte],
                                p1: Array[Byte],
                                p2: Array[Byte],
                                i: Int): BigInt = {

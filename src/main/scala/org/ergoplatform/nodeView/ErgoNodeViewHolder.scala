@@ -17,7 +17,6 @@ import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
 
-
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
@@ -97,7 +96,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         "State root is incorrect")
   }
 
-  // scalastyle:off cyclomatic.complexity
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
@@ -107,10 +105,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
-      case (_, None, state) =>
+      case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
-      case (_, Some(bestFullBlock), state: DigestState) =>
+      case (_, Some(bestFullBlock), _: DigestState) =>
         // Just update state root hash
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))
@@ -124,7 +122,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val toApply = newChain.headers.map { h =>
           history.getFullBlock(h) match {
             case Some(fb) => fb
-            case None => throw new Error(s"Failed to get full block for header $h")
+            case None => throw new Exception(s"Failed to get full block for header $h")
           }
         }
         toApply.foldLeft(startState) { (s, m) =>
@@ -135,8 +133,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.error("Failed to recover state, try to resync from genesis manually", e)
     ErgoApp.forceStopApplication(500)
   }.get
-
-  // scalastyle:on
 
 }
 

@@ -92,7 +92,6 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   /**
-    *
     * @param id - id of a header to compare
     * @return `true`, if block with id `id` is better, than current best block, `false` otherwise.
     */
@@ -132,12 +131,6 @@ trait FullBlockProcessor extends HeadersProcessor {
       s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
   }
 
-  //Not used so far
-  private def pruneOnNewBestBlock(header: Header, blocksToKeep: Int): Unit = {
-    heightOf(header.id).filter(h => h > blocksToKeep)
-      .foreach(h => pruneBlockDataAt(Seq(h - blocksToKeep)))
-  }
-
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
@@ -161,12 +154,10 @@ object FullBlockProcessor {
 
   type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
 
-  case class ToProcess(
-                        fullBlock: ErgoFullBlock,
-                        newModRow: ErgoPersistentModifier,
-                        newBestAfterThis: Header,
-                        blocksToKeep: Int,
-                        bestFullChain: Seq[ErgoFullBlock]
-                      )
+  case class ToProcess(fullBlock: ErgoFullBlock,
+                       newModRow: ErgoPersistentModifier,
+                       newBestAfterThis: Header,
+                       blocksToKeep: Int,
+                       bestFullChain: Seq[ErgoFullBlock])
 
 }

@@ -1,39 +1,37 @@
 package org.ergoplatform.modifiers.state
 
-import cats.Traverse
-import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.crypto.authds.LeafData
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import scorex.util._
 
 import scala.util.Try
 
-case class UtxoSnapshotChunk(subtrees: IndexedSeq[BatchAVLProverSubtree[Digest32, Algos.HF]], index: Int)
+case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
   extends ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
 
-  override lazy val id: ModifierId = UtxoSnapshot.rootHashToId(rootHash)
+  override lazy val id: ModifierId = UtxoSnapshot.rootDigestToId(rootDigest)
 
-  override def serializedId: Array[Byte] = UtxoSnapshot.rootHashToSerializedId(rootHash)
+  override def serializedId: Array[Byte] = UtxoSnapshot.rootHashToSerializedId(rootDigest)
 
   override type M = UtxoSnapshotChunk
 
   override lazy val serializer: Serializer[UtxoSnapshotChunk] = UtxoSnapshotChunkSerializer
 
-  lazy val rootHash: Digest32 = Algos.merkleTreeRoot(subtrees.map(LeafData !@@ _.subtreeTop.key))
+  lazy val rootDigest: ADDigest = ADDigest !@@ subtree.subtreeTop.label
 
-  override def parentId: ModifierId = ???
+  override def parentId: ModifierId = manifestId
 
   override val sizeOpt: Option[Int] = None
 
   def correspondsTo(manifest: UtxoSnapshotManifest): Boolean = {
-    manifest.chunkRootHashes.exists(java.util.Arrays.equals(_, rootHash))
+    manifest.chunkRoots.exists(java.util.Arrays.equals(_, rootDigest))
   }
 
 }
@@ -44,30 +42,18 @@ object UtxoSnapshotChunk {
 
 object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
 
-  import cats.instances.list._
-  import cats.instances.try_._
-
   private implicit val hf: Algos.HF = Algos.hash
   private val serializer = new BatchAVLProverSerializer[Digest32, Algos.HF]
 
   override def toBytes(obj: UtxoSnapshotChunk): Array[Byte] = {
-    val serializedSubtrees = obj.subtrees.map(serializer.subtreeToBytes)
-    Ints.toByteArray(obj.index) ++
-      Ints.toByteArray(obj.subtrees.size) ++
-      Bytes.concat(serializedSubtrees.map(st => Ints.toByteArray(st.length) ++ st): _*)
+    val serializedSubtree = serializer.subtreeToBytes(obj.subtree)
+    idToBytes(obj.manifestId) ++ serializedSubtree
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotChunk] = Try {
-    val index = Ints.fromByteArray(bytes.take(4))
-    val elementsQty = Ints.fromByteArray(bytes.slice(4, 8))
-    val stateElementsTry = (0 to elementsQty).tail
-      .foldLeft((List.empty[Try[BatchAVLProverSubtree[Digest32, Algos.HF]]], bytes.drop(8))) {
-        case ((acc, leftBytes), _) =>
-          val eltSize = Ints.fromByteArray(leftBytes.take(4))
-          val subtreeTry = serializer.subtreeFromBytes(leftBytes.slice(4, 4 + eltSize), Constants.HashLength)
-          (acc :+ subtreeTry, leftBytes.drop(4 + eltSize))
-      }._1
-    Traverse[List].sequence(stateElementsTry).map(stateElems => UtxoSnapshotChunk(stateElems.toIndexedSeq, index))
+    val manifestId = bytesToId(bytes.take(Constants.ModifierIdSize))
+    val subtreeTry = serializer.subtreeFromBytes(bytes.drop(Constants.ModifierIdSize), Constants.HashLength)
+    subtreeTry.map(subtree => UtxoSnapshotChunk(subtree, manifestId))
   }.flatten
 
 }

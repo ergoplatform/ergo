@@ -71,16 +71,17 @@ trait ToDownloadProcessor extends ScorexLogging {
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!config.verifyTransactions) {
-      // Regime that do not download and verify transaction
+      // Regime that do not download and verify transaction.
       Seq.empty
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
-      // Already synced and header is not too far back. Download required modifiers
+      // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
     } else if (config.blocksToKeep > 0 && !config.stateType.requireProofs &&
       pruningProcessor.shouldDownloadBlockAtHeight(header.height + 1)) {
-      Seq((UtxoSnapshotManifest.modifierTypeId, UtxoSnapshot.rootHashToId(Digest32 !@@ header.stateRoot)))
+      // Pruned full node regime - node should recover state before full blocks application.
+      Seq((UtxoSnapshotManifest.modifierTypeId, UtxoSnapshot.rootDigestToId(header.stateRoot)))
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
-      // Headers chain is synced after this header. Start downloading full blocks
+      // Headers chain is synced after this header. Start downloading full blocks.
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       Seq.empty

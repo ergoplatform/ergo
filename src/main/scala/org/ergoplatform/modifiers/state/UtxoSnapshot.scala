@@ -5,11 +5,11 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.crypto.hash.Digest32
+import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, bytesToId}
 
 case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
-                        chunks: IndexedSeq[UtxoSnapshotChunk],
+                        chunks: Seq[UtxoSnapshotChunk],
                         lastHeaders: Seq[Header])
   extends ErgoPersistentModifier {
 
@@ -21,20 +21,20 @@ case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
 
   override def serializedId: Array[Byte] = manifest.serializedId
 
-  override def parentId: ModifierId = ???
-
   override val sizeOpt: Option[Int] = None
 
   override lazy val serializer: Serializer[M] =
     throw new Exception("Serialization for UtxoSnapshot is not (and will not be) implemented")
+
+  override def parentId: ModifierId = ???
 }
 
 object UtxoSnapshot {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  def rootHashToSerializedId(rootHash: Digest32): Array[Byte] = Algos.hash(rootHash)
+  def rootHashToSerializedId(rootHash: ADDigest): Array[Byte] = Algos.hash(rootHash)
 
-  def rootHashToId(rootHash: Digest32): ModifierId = bytesToId(rootHashToSerializedId(rootHash))
+  def rootDigestToId(rootHash: ADDigest): ModifierId = bytesToId(rootHashToSerializedId(rootHash))
 
 }

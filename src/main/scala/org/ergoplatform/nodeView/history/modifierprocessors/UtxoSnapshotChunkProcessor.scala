@@ -10,22 +10,18 @@ import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
-/**
-  * Contains all functions required by History to process UTXOSnapshotChunk
-  */
-trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
+trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 
-  def process(m: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
-    //TODO
+  def process(chunk: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     val toInsert = ???
-    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, toInsert)
-    ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
+    historyStorage.insert(Algos.idToBAW(chunk.id), Seq.empty, toInsert)
+    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
   def validate(m: UtxoSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
-    Failure(new Error(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
+    Failure(new Exception(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
   } else {
     Success(Unit)
   }

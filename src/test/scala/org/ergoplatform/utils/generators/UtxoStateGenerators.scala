@@ -8,9 +8,10 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
-import scorex.crypto.authds.{ADKey, ADValue}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.CoreGenerators
+import scorex.util.ModifierId
 
 trait UtxoStateGenerators
   extends CoreGenerators
@@ -47,27 +48,21 @@ trait UtxoStateGenerators
     lastHeaders <- Gen.listOfN(Constants.LastHeadersInContext, invalidHeaderGen)
   } yield {
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
-    val chunks = proverSubtrees
-      .grouped(Constants.UtxoChunkCapacity)
-      .toIndexedSeq
-      .zipWithIndex
-      .map { case (trees, idx) =>
-        UtxoSnapshotChunk(trees.toIndexedSeq, idx)
-      }
-    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), lastHeaders.head.id, proverManifest)
+    val manifest = UtxoSnapshotManifest(proverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), lastHeaders.head.id)
+    val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     UtxoSnapshot(manifest, chunks, lastHeaders)
   }
 
   lazy val randomUtxoSnapshotChunkGen: Gen[UtxoSnapshotChunk] = for {
-    index <- Arbitrary.arbitrary[Short]
-    stateElements <- Gen.listOf(proverSubtreeGen)
-  } yield UtxoSnapshotChunk(stateElements.toIndexedSeq, index)
+    stateElement <- proverSubtreeGen
+    manifestId <- modifierIdGen
+  } yield UtxoSnapshotChunk(stateElement, manifestId)
 
   lazy val randomUtxoSnapshotManifestGen: Gen[UtxoSnapshotManifest] = for {
     chunksQty <- Gen.chooseNum(1, 100)
-    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootHashSize))
+    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootDigestSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-  } yield UtxoSnapshotManifest(chunkRootHashes.toIndexedSeq, blockId, proverManifest)
+  } yield UtxoSnapshotManifest(proverManifest, chunkRootHashes.map(ADDigest @@ _), blockId)
 
 }

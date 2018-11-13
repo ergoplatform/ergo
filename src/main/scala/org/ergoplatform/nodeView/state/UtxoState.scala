@@ -127,12 +127,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
         val newStateContext = stateContext.appendHeader(fb.header)
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
-          val emissionBox = extractEmissionBox(fb)
-          val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-          val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
-          val proofHash = ADProofs.proofDigest(proofBytes)
-          if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          .map { _: Unit =>
+            val emissionBox = extractEmissionBox(fb)
+            val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+            val proofHash = ADProofs.proofDigest(proofBytes)
+            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
             if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
               throw new Exception("Storage kept roothash is not equal to the declared one")
@@ -163,10 +164,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private def applySnapshot: ModifierProcessing = {
     case UtxoSnapshot(manifest, chunks, lastHeaders) =>
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      serializer.combine(manifest.proverManifest -> chunks.sortBy(_.index).flatMap(_.subtrees))
+      serializer.combine(manifest.proverManifest -> chunks.map(_.subtree))
         .map { prover =>
-          val recoveredStateContext = ErgoStateContext(lastHeaders, prover.digest)
-          val newStore = dropStoreAndCreateNew()
+          val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
+          val newStore = recreateStore()
           val recoveredPersistentProver = {
             val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
             val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(newStore, np)(Algos.hash)
@@ -183,7 +184,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       Failure(new Exception("unknown modifier"))
   }
 
-  private def dropStoreAndCreateNew(): LSMStore = {
+  private def recreateStore(): LSMStore = {
     val stateDir = ErgoState.stateDir(settings)
     stateDir.mkdirs()
     stateDir.listFiles().foreach(_.delete())

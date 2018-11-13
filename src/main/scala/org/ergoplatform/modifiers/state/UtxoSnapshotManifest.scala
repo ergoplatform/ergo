@@ -7,43 +7,44 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 
-case class UtxoSnapshotManifest(chunkRootHashes: IndexedSeq[Array[Byte]],
-                                blockId: ModifierId,
-                                proverManifest: BatchAVLProverManifest[Digest32, Algos.HF])
+case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
+                                chunkRoots: Seq[ADDigest],
+                                blockId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
   override type M = UtxoSnapshotManifest
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotManifest.modifierTypeId
 
-  override def serializedId: Array[Byte] = UtxoSnapshot.rootHashToSerializedId(rootHash)
+  override def serializedId: Array[Byte] = UtxoSnapshot.rootHashToSerializedId(rootDigest)
 
-  override lazy val id: ModifierId = UtxoSnapshot.rootHashToId(rootHash)
+  override lazy val id: ModifierId = UtxoSnapshot.rootDigestToId(rootDigest)
 
   override lazy val serializer: Serializer[UtxoSnapshotManifest] = UtxoSnapshotManifestSerializer
 
-  override def parentId: ModifierId = ???
-
-  lazy val rootHash: Digest32 = { //todo: calculate root from chunks.
-    val (root, height) = proverManifest.oldRootAndHeight
-    Digest32 @@ (root.label :+ height.toByte)
-  }
-
   override val sizeOpt: Option[Int] = None
+
+  lazy val rootDigest: ADDigest = {
+    val (root, height) = proverManifest.oldRootAndHeight
+    ADDigest @@ (root.label :+ height.toByte)
+  }
 
   def validate(header: Header): Try[Unit] = {
     failFast
       .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
-      .demandEqualArrays(rootHash, header.stateRoot, "`rootHash` does not correspond to header's `stateRoot`")
+      .demandEqualArrays(rootDigest, header.stateRoot, "`rootHash` does not correspond to header's `stateRoot`")
       .result
       .toTry
   }
+
+  override def parentId: ModifierId = ???
 
 }
 
@@ -53,7 +54,7 @@ object UtxoSnapshotManifest {
 
 object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
 
-  val rootHashSize: Int = 33
+  val rootDigestSize: Int = 33
 
   private implicit val hf: Algos.HF = Algos.hash
   private val serializer = new BatchAVLProverSerializer[Digest32, Algos.HF]
@@ -63,7 +64,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
     idToBytes(obj.blockId) ++
       Ints.toByteArray(serializedProverManifest.length) ++
       serializedProverManifest ++
-      Bytes.concat(obj.chunkRootHashes: _*)
+      Bytes.concat(obj.chunkRoots: _*)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotManifest] = Try {
@@ -73,8 +74,10 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
     val proverManifestTry = serializer.manifestFromBytes(
       bytes.slice(Constants.ModifierIdSize + 4, Constants.ModifierIdSize + 4 + proverManifestLen))
     val chunkRootHashes = bytes.drop(Constants.ModifierIdSize + 4 + proverManifestLen)
-      .grouped(rootHashSize).toIndexedSeq
-    proverManifestTry.map(proverManifest => UtxoSnapshotManifest(chunkRootHashes, blockId, proverManifest))
+      .grouped(rootDigestSize)
+      .map(ADDigest @@ _)
+      .toSeq
+    proverManifestTry.map(proverManifest => UtxoSnapshotManifest(proverManifest, chunkRootHashes, blockId))
   }.flatten
 
 }

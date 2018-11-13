@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.UtxoSnapshotChunk
+import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.modifierprocessors._
@@ -23,7 +23,8 @@ trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
     with HeadersProcessor
     with PoPoWProofsProcessor
-    with UTXOSnapshotChunkProcessor
+    with UtxoSnapshotChunkProcessor
+    with UtxoSnapshotManifestProcessor
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
@@ -211,6 +212,8 @@ trait ErgoHistoryReader
         validate(m)
       case m: PoPoWProof =>
         validate(m)
+      case manifest: UtxoSnapshotManifest =>
+        validate(manifest)
       case chunk: UtxoSnapshotChunk =>
         validate(chunk)
       case m: Any =>
@@ -297,4 +300,5 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
+
 }

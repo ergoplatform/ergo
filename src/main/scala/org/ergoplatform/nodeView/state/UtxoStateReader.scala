@@ -35,9 +35,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   override def validate(tx: ErgoTransaction): Try[Unit] = {
     tx.statelessValidity
-      .flatMap(_ =>
+      .flatMap { _ =>
         tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext, constants.settings.metadata)
-          .map(_ => Unit))
+          .map(_ => Unit)
+      }
   }
 
   /**
@@ -97,17 +98,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  def takeSnapshot: (UtxoSnapshotManifest, IndexedSeq[UtxoSnapshotChunk]) = {
+  def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]
     val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
-    val chunks = proverSubtrees
-      .grouped(Constants.UtxoChunkCapacity)
-      .toIndexedSeq
-      .zipWithIndex
-      .map { case (trees, idx) =>
-          UtxoSnapshotChunk(trees.toIndexedSeq, idx)
-      }
-    val manifest = UtxoSnapshotManifest(chunks.map(_.rootHash), ModifierId !@@ version, proverManifest)
+    val manifest = UtxoSnapshotManifest(proverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), ModifierId !@@ version)
+    val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     manifest -> chunks
   }
 

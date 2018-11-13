@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion

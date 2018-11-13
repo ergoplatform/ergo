@@ -1,9 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{Extension, Header}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
-import scorex.core.ModifierTypeId
-import scorex.util.ModifierId
 
 /**
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
@@ -19,19 +17,6 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
   def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)
     height - (height % VotingEpochLength)
-  }
-
-  def requiredParametersForHeight(basicReaders: BasicReaders, height: Int): Seq[(ModifierTypeId, ModifierId)] = {
-    if(height < VotingEpochLength) {
-      Seq.empty
-    } else {
-      val paramHeight = extensionWithParametersHeight(height)
-      basicReaders.headerIdsAtHeight(paramHeight).headOption.flatMap(id => basicReaders.typedModifierById[Header](id)).map { h =>
-        h.extensionId
-      }.flatMap { eId =>
-        Some(eId).filter(basicReaders.contains)
-      }.map(eId => Extension.modifierTypeId -> eId).toSeq
-    }
   }
 
   /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
@@ -63,7 +48,13 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
       0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
     } else {
       // Start from config.blocksToKeep blocks back
-      Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
+      val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
+      // ... but not later than the beginning of a voting epoch
+      if(h > VotingEpochLength) {
+        Math.max(h, extensionWithParametersHeight(h))
+      } else {
+        h
+      }
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     minimalFullBlockHeightVar

@@ -61,7 +61,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       nBits, height, extensionHash, null)
     val msg = HeaderSerializer.bytesWithoutPow(h)
     val b = getB(nBits)
-    initializeIfNeeded(msg, sk)
+    initializeIfNeeded(msg, sk, b)
     checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
 
@@ -107,45 +107,59 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   }
 
   /**
-    * Generate new random secret `x` and fill `list` with numbers, corresponding to message `m`
+    * Initialize the pow task if it was not initialized yet.
+    * Generate a new random secret `x` and fill `list` with numbers if difficulty is big enough
     *
-    * @param m - header bytes without pow
+    * @param m  - header bytes without pow
     * @param sk - secret key
+    * @param b  - difficulty
     */
-  private def initializeIfNeeded(m: Array[Byte], sk: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
+  private def initializeIfNeeded(m: Array[Byte],
+                                 sk: BigInt,
+                                 b: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
     x = randomSecret()
     lastInitMsg = m
-    val pk = genPk(sk)
-    val w = genPk(x)
-    val p1 = pkToBytes(pk)
-    val p2 = pkToBytes(w)
-    log.debug(s"Generate list of $N elements")
-    list = (0 until N).map { i =>
-      if (i % 1000000 == 0 && i > 0) log.debug(s"$i generated")
-      val indexBytes = Ints.toByteArray(i)
-      (genElement(m, p1, p2, indexBytes, 0: Byte) + x * genElement(m, p1, p2, indexBytes, 1: Byte)).mod(q)
+    if (!onFlyCalculation(b)) {
+      log.debug(s"Initialize PoW task by generating list of $N elements")
+      val p1 = pkToBytes(genPk(sk))
+      val p2 = pkToBytes(genPk(x))
+      list = (0 until N).map { i =>
+        if (i % 1000000 == 0 && i > 0) log.debug(s"$i generated")
+        genFullElement(m, p1, p2, i)
+      }
     }
   }
+
+  /**
+    * Check, that on-fly calculation is more profitable
+    */
+  private def onFlyCalculation(b: BigInt): Boolean = N > (q / b)
 
   def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
 
     @tailrec
-    def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
+    def loop(i: Long, getElement: Int => BigInt): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (genIndexes(m, nonce).map(i => list(i)).sum - sk).mod(q)
+      val d = (genIndexes(m, nonce).map(i => getElement(i)).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
-        loop(i + 1)
+        loop(i + 1, getElement)
       }
     }
 
-    loop(startNonce)
+    if(onFlyCalculation(b)) {
+      val p1 = pkToBytes(genPk(sk))
+      val p2 = pkToBytes(genPk(x))
+      loop(startNonce, i => genFullElement(m, p1, p2, i))
+    } else {
+      loop(startNonce, list)
+    }
   }
 
   protected def getB(nBits: Long): BigInt = {
@@ -201,5 +215,17 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
                            orderByte: Byte): BigInt = {
     hash(Bytes.concat(m, p1, p2, indexBytes, Array(orderByte)))
   }
+
+  /**
+    * Generate full element of Autolykus equation.
+    */
+  protected def genFullElement(m: Array[Byte],
+                               p1: Array[Byte],
+                               p2: Array[Byte],
+                               i: Int): BigInt = {
+    val indexBytes = Ints.toByteArray(i)
+    (genElement(m, p1, p2, indexBytes, 0: Byte) + x * genElement(m, p1, p2, indexBytes, 1: Byte)).mod(q)
+  }
+
 
 }

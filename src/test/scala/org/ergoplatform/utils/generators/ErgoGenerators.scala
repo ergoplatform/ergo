@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingResults}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.scalacheck.Arbitrary.arbByte
@@ -40,17 +40,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
-
-  lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
-    size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
-    stateRoot <- stateRootGen
-    headers <- Gen.listOfN(size, invalidHeaderGen)
-  } yield {
-    headers match {
-      case s :: tail => tail.foldLeft(ErgoStateContext(Seq(s), startDigest, parameters))((c, h) => c.appendHeader(h))
-      case _ => ErgoStateContext.empty(stateRoot)
-    }
-  }
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
@@ -137,8 +126,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     RequiredDifficulty.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
-    EquihashSolution(equihashSolutions),
-    None
+    EquihashSolution(equihashSolutions)
   )
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {

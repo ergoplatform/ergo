@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -17,7 +18,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
-class UtxoStateSpecification extends ErgoPropertyTest {
+class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()
@@ -112,7 +113,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - simple case") {
-    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -125,13 +125,12 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      val newSC = us.stateContext.appendFullBlock(invalidErgoFullBlockGen.sample.get, false).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
 
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
-    val header = invalidHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
 
@@ -146,7 +145,10 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+
+      val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
+      val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), Extension(header), None)
+      val newSC = us.stateContext.appendFullBlock(fb, false).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }

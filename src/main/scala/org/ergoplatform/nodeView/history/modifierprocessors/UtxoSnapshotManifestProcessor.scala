@@ -26,7 +26,7 @@ trait UtxoSnapshotManifestProcessor extends ScorexLogging with ScorexEncoding {
   } else {
     historyStorage.modifierById(m.blockId) match {
       case Some(h: Header) => m.validate(h)
-      case _ => Failure(new Exception("Header manifest relates to is not found in the history"))
+      case _ => Failure(new Exception("Header manifest relates to is not found in history"))
     }
   }
 

@@ -43,7 +43,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
-    minimalState().closeStorage
+    minimalState().closeStorage()
   }
 
   /**

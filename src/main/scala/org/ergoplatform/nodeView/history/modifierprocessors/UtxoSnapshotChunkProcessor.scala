@@ -24,7 +24,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
         val otherChunks = manifest.chunkRoots
           .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
           .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
-        val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
+        lazy val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
         if (otherChunks.lengthCompare(manifest.size - 1) == 0 &&
           lastHeaders.lengthCompare(Constants.LastHeadersInContext) != 0) {
           // Time to apply snapshot

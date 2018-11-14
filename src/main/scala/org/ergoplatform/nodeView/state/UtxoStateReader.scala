@@ -6,8 +6,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotManifest}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
@@ -89,9 +89,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     val rootHash = persistentProver.digest
     log.trace(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
-      Failure(new Error("Trying to generate proof for empty transaction sequence"))
+      Failure(new Exception("Trying to generate proof for empty transaction sequence"))
     } else if (!storage.version.exists(t => java.util.Arrays.equals(t, rootHash))) {
-      Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
+      Failure(new Exception(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         "Possible reason - state update is in process."))
     } else {
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
@@ -101,7 +101,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]
     val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
-    val manifest = UtxoSnapshotManifest(proverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), ModifierId !@@ version)
+    val manifest = UtxoSnapshotManifest(
+      proverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), ModifierId !@@ version)
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     manifest -> chunks
   }

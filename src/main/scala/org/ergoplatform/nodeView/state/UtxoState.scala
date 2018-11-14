@@ -169,8 +169,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
           val newStore = recreateStore()
           val recoveredPersistentProver = {
-            val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
-            val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(newStore, np)(Algos.hash)
+            val storage: VersionedIODBAVLStorage[Digest32] =
+              new VersionedIODBAVLStorage(newStore, UtxoState.nodeParameters)(Algos.hash)
             UtxoState.createPersistentProver(
               prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
           }
@@ -187,6 +187,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private def recreateStore(): LSMStore = {
     val stateDir = ErgoState.stateDir(settings)
     stateDir.mkdirs()
+    closeStorage()
     stateDir.listFiles().foreach(_.delete())
     new LSMStore(stateDir, keepVersions = constants.keepVersions)
   }
@@ -208,6 +209,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 object UtxoState {
 
   type ModifierProcessing = PartialFunction[ErgoPersistentModifier, Try[UtxoState]]
+
+  private val nodeParameters = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey = Algos.hash("emission box id key")
@@ -232,8 +235,7 @@ object UtxoState {
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = Constants.HashLength, valueLengthOpt = None)
-      val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
-      val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+      val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, nodeParameters)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants, settings)
@@ -262,8 +264,7 @@ object UtxoState {
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val defaultStateContext = ErgoStateContext.empty(p.digest)
-    val np = NodeParameters(keySize = Constants.HashLength, valueSize = None, labelSize = 32)
-    val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+    val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, nodeParameters)(Algos.hash)
     val persistentProver =
       createPersistentProver(p, storage, ErgoState.genesisStateVersion, currentEmissionBoxOpt, defaultStateContext)
 

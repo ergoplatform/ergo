@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView
 
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransactionTemplate, UnsignedInput}
@@ -23,7 +22,7 @@ class ErgoContext(val stateContext: ErgoStateContext,
     stateContext.lastBlockMinerPk,
     transactionContext.boxesToSpend,
     transactionContext.spendingTransaction,
-    transactionContext.self, metadata, extension) {
+    transactionContext.self, extension) {
 
   override def withExtension(newExtension: ContextExtension): ErgoContext =
     new ErgoContext(stateContext, transactionContext, metadata, newExtension)

@@ -65,7 +65,7 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
+              tx.statefulValidity(boxesToSpend, currentStateContext).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 

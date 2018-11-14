@@ -15,11 +15,12 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "8adeddba-SNAPSHOT"
+val sigmaStateVersion = "use-public-special-and-sigma-a9e27957-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "sigma-state" % "master-c645b1a1-SNAPSHOT")
+  ("org.scorexfoundation" %% "sigma-state" % sigmaStateVersion)
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",

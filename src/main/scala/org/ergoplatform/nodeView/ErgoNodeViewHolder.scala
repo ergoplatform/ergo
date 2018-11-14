@@ -2,15 +2,17 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -34,6 +36,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
 
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+  }
+
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
     reason.printStackTrace()
@@ -44,6 +50,34 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
     minimalState().closeStorage()
+  }
+
+  override def receive: Receive =
+    processRemoteModifiers orElse
+      processLocallyGeneratedModifiers orElse
+      processNewTransactions orElse
+      getCurrentInfo orElse
+      getNodeViewChanges orElse
+      successfulModifier orElse
+      unknownMessage
+
+  private def successfulModifier: Receive = {
+    case SemanticallySuccessfulModifier(mod: ErgoFullBlock)
+      if mod.header.height % Constants.UtxoSnapshotCreationInterval == 0 =>
+      createStateSnapshot()
+  }
+
+  private def unknownMessage: Receive = {
+    case other => log.error("Strange input: " + other)
+  }
+
+  private def createStateSnapshot(): Unit = {
+    minimalState().getReader match {
+      case r: UtxoStateReader =>
+        val (manifest, chunks) = r.takeSnapshot
+        val snapshot = UtxoSnapshot(manifest, chunks, Seq.empty)
+        history().append(snapshot)
+    }
   }
 
   /**

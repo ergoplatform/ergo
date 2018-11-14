@@ -10,7 +10,6 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 import sigmastate.SBoolean
 import sigmastate.Values.Constant
 
-
 object Constants {
 
   val HashLength: Int = 32
@@ -45,6 +44,9 @@ object Constants {
   
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
+
+  // Interval of utxo snapshot creation in blocks.
+  val UtxoSnapshotCreationInterval = 10000
 
   val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 

@@ -5,7 +5,7 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.mining.PowScheme
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotManifest}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.modifierprocessors._
 import org.ergoplatform.nodeView.history.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
@@ -61,6 +61,8 @@ trait ErgoHistory
           (this, process(manifest))
         case chunk: UtxoSnapshotChunk =>
           (this, process(chunk))
+        case localSnapshot: UtxoSnapshot =>
+          (this, process(localSnapshot))
       }
     }
   }

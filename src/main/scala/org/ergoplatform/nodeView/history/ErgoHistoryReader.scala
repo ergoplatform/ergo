@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotManifest}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.modifierprocessors._
@@ -25,6 +25,7 @@ trait ErgoHistoryReader
     with PoPoWProofsProcessor
     with UtxoSnapshotChunkProcessor
     with UtxoSnapshotManifestProcessor
+    with UtxoSnapshotProcessor
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
@@ -216,6 +217,8 @@ trait ErgoHistoryReader
         validate(manifest)
       case chunk: UtxoSnapshotChunk =>
         validate(chunk)
+      case localSnapshot: UtxoSnapshot =>
+        validate(localSnapshot)
       case m: Any =>
         Failure(new Error(s"Modifier $m has incorrect type"))
     }

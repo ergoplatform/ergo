@@ -8,12 +8,11 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 package object mining {
 
   type PrivateKey = BigInt
-  type SecretsSum = BigInt
 
   val PublicKeyLength: Byte = 33
   val group: BcDlogFp[EcPointType] = CryptoConstants.dlogGroup
   val q: BigInt = group.q
-  val hashFn: NumericHash = new NumericHash(q)
+  private val hashFn: NumericHash = new NumericHash(q)
 
   def hash(in: Array[Byte]): BigInt = hashFn.hash(in)
 
@@ -23,10 +22,8 @@ package object mining {
 
   def lg(x: Int): Int = (Math.log(x) / Math.log(2)).toInt.ensuring(s => Math.pow(2, s) == x)
 
-  // TODO revisit
-  def pkToBytes(pk: ECPoint): Array[Byte] = pk.getEncoded(true)
+  def pkToBytes(pk: ECPoint): Array[Byte] = pk.getEncoded(true).ensuring(_.size == PublicKeyLength)
 
-  // TODO revisit
   def pkFromBytes(bytes: Array[Byte]): ECPoint = group.curve.decodePoint(bytes)
 
 }

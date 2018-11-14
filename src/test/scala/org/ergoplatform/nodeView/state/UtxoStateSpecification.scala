@@ -8,10 +8,10 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
+import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -141,7 +141,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -161,7 +161,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder
 

@@ -45,9 +45,6 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  // TODO remove?
-  val TrueLeaf: Constant[SBoolean.type] = Values.TrueLeaf
-
   val FeeProposition: Value[SBoolean.type] = {
     val correctMinerProposition = EQ(ExtractScriptBytes(ByIndex(Outputs, IntConstant(0))),
       Append(ConcreteCollection(OpCodes.ProveDlogCode, SGroupElement.typeCode), MinerPubkey))

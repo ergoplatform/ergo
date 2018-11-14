@@ -2,7 +2,6 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.local.TransactionGenerator.{Attempt, StartGeneration}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -11,6 +10,7 @@ import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
@@ -81,7 +81,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), 100000L, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(Constants.FeeProposition), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>

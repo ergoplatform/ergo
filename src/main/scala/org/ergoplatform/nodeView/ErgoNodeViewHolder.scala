@@ -77,6 +77,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val (manifest, chunks) = r.takeSnapshot
         val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
         history().append(snapshot)
+      case _ => // Do nothing
     }
   }
 

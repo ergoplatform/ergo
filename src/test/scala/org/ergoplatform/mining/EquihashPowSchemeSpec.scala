@@ -27,7 +27,8 @@ class EquihashPowSchemeSpec extends ErgoPropertyTest {
         SerializedAdProof @@ Array.emptyByteArray,
         Seq(ErgoTransaction(IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(10, Constants.TrueLeaf)))),
         ts,
-        ExtensionCandidate(Seq(), Seq())
+        ExtensionCandidate(Seq(), Seq()),
+        Array.fill(3)(0: Byte)
       ).getOrElse(loop(ts + 1))
     }
 

@@ -19,8 +19,8 @@ trait PowScheme {
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            extensionHash: Digest32
-           ): Option[Header]
+            extensionHash: Digest32,
+            votes: Array[Byte]): Option[Header]
 
   def proveBlock(parentOpt: Option[Header],
                  nBits: Long,
@@ -28,14 +28,15 @@ trait PowScheme {
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
-                 extensionCandidate: ExtensionCandidate): Option[ErgoFullBlock] = {
+                 extensionCandidate: ExtensionCandidate,
+                 votes: Array[Byte]): Option[ErgoFullBlock] = {
 
     val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot).map { h =>
+      timestamp, extensionRoot, votes).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
       val extension = Extension(h.id, h.height, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
@@ -50,7 +51,8 @@ trait PowScheme {
       candidateBlock.adProofBytes,
       candidateBlock.transactions,
       candidateBlock.timestamp,
-      candidateBlock.extension)
+      candidateBlock.extension,
+      candidateBlock.votes.toArray)
   }
 
   def verify(header: Header): Boolean

@@ -17,13 +17,14 @@ class FakePowScheme(levelOpt: Option[Int]) extends PowScheme {
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
-            extensionHash: Digest32
+            extensionHash: Digest32,
+            votes: Array[Byte],
            ): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
     val level: Int = levelOpt.map(lvl => BigInt(2).pow(lvl).toInt).getOrElse(Random.nextInt(1000) + 1)
     val solution = EquihashSolution(level +: Seq.fill(EquihashSolution.length - 1)(Random.nextInt))
     Some(new Header(version, parentId, interlinks,
-      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, extensionHash, solution))
+      adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits, height, extensionHash, solution, votes))
   }
 
   override def verify(header: Header): Boolean = true

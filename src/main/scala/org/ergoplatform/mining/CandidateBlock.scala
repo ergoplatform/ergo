@@ -33,5 +33,4 @@ object CandidateBlock {
       "votes" -> c.votes.asJson,
       "extensionHash" -> Algos.encode(Extension.rootHash(c.extension)).asJson
     ).asJson
-
 }

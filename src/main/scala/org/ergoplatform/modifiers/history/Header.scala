@@ -108,7 +108,7 @@ object Header extends ApiCodecs {
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
       "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
       "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
-      "stateRoot" -> Algos.encode(h.stateRoot).asJson,
+      "stateHash" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "extensionHash" -> Algos.encode(h.extensionRoot).asJson,

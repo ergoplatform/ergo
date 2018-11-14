@@ -53,7 +53,7 @@ case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
 
 object Extension extends ApiCodecs {
 
-  val MandatoryFieldKeySize: Int = 4
+  val MandatoryFieldKeySize: Int = 1
 
   val OptionalFieldKeySize: Int = 32
 

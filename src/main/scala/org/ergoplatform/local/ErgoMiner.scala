@@ -220,7 +220,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       lazy val sc = state.stateContext
 
       // todo fill with interlinks and other useful values after nodes update
-      val (extensionCandidate, votes: Seq[Byte]) = bestHeaderOpt.map { header =>
+      val (extensionCandidate, votes: Array[Byte]) = bestHeaderOpt.map { header =>
         val newHeight = header.height + 1
         if (newHeight % VotingEpochLength == 0 && newHeight > 0) {
           val newParams = sc.currentParameters
@@ -231,7 +231,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           val votes = sc.currentParameters.vote(ergoSettings.votingTargets, sc.currentVoting.results)
           emptyExtensionCandidate -> votes
         }
-      }.getOrElse(emptyExtensionCandidate -> Seq(0: Byte, 0: Byte, 0: Byte))
+      }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))
 
       CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)
     }

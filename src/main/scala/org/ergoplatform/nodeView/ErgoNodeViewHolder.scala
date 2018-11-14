@@ -63,19 +63,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   private def successfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock)
-      if mod.header.height % Constants.UtxoSnapshotCreationInterval == 0 =>
-      createStateSnapshot()
+      if mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0 =>
+      createStateSnapshot(mod.header)
   }
 
   private def unknownMessage: Receive = {
     case other => log.error("Strange input: " + other)
   }
 
-  private def createStateSnapshot(): Unit = {
+  private def createStateSnapshot(lastHeader: Header): Unit = {
     minimalState().getReader match {
       case r: UtxoStateReader =>
         val (manifest, chunks) = r.takeSnapshot
-        val snapshot = UtxoSnapshot(manifest, chunks, Seq.empty)
+        val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
         history().append(snapshot)
     }
   }

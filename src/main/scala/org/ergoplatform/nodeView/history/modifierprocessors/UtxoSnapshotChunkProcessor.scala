@@ -20,7 +20,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   def process(m: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.modifierById(m.manifestId) match {
       case Some(manifest: UtxoSnapshotManifest) =>
-        historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
+        historyStorage.insertObjects(Seq(m))
         val otherChunks = manifest.chunkRoots
           .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
           .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }

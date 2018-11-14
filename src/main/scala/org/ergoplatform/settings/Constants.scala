@@ -45,9 +45,6 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  // Interval of utxo snapshot creation in blocks.
-  val UtxoSnapshotCreationInterval = 10000
-
   val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =

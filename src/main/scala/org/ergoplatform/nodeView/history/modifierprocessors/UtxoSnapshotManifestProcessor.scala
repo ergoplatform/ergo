@@ -17,7 +17,7 @@ trait UtxoSnapshotManifestProcessor extends ScorexLogging with ScorexEncoding {
 
   def process(m: UtxoSnapshotManifest): ProgressInfo[ErgoPersistentModifier] = {
     val chunksToRequest = m.chunkRoots.map(UtxoSnapshot.rootDigestToId).map(UtxoSnapshotChunk.modifierTypeId -> _)
-    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
+    historyStorage.insertObjects(Seq(m))
     ProgressInfo(None, Seq.empty, Seq(m), chunksToRequest)
   }
 

@@ -9,7 +9,7 @@ import scorex.util.ModifierId
 import scorex.core.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Storage for Ergo history
@@ -61,6 +61,17 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
 
   def contains(id: ModifierId): Boolean = objectsStore.contains(id)
+
+  def insertObjects(objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {
+    objectsToInsert
+      .map { o =>
+        modifiersCache.put(o.id, o)
+        objectsStore.put(o)
+      }
+      .foldLeft[Try[Unit]](Success(())) { case (acc, t) =>
+        acc.flatMap(_ => t)
+      }
+  }
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],

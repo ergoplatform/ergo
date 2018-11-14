@@ -19,7 +19,9 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean,
-                                     keepVersions: Int)
+                                     keepVersions: Int,
+                                     snapshotCreationInterval: Int,
+                                     keepLastSnapshots: Int)
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
@@ -35,7 +37,9 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Boolean](s"$path.mining"),
       cfg.as[FiniteDuration](s"$path.miningDelay"),
       cfg.as[Boolean](s"$path.offlineGeneration"),
-      cfg.as[Int](s"$path.keepVersions")
+      cfg.as[Int](s"$path.keepVersions"),
+      cfg.as[Int](s"$path.snapshotCreationInterval"),
+      cfg.as[Int](s"$path.keepLastSnapshots")
     )
   }
 

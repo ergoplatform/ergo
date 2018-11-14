@@ -78,7 +78,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(Constants.TrueLeaf),
+    requests :+ PaymentRequest(Pay2SAddress(Constants.FeeProposition),
       feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), None, None)
   }
 

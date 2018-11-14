@@ -5,7 +5,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
@@ -37,7 +37,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tokenDescription: String = s"ERG description"
       val tokenDecimals: Int = 9
       val feeAmount = availableAmount / 4
-      val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), feeAmount, None, None)
+      val feeReq = PaymentRequest(Pay2SAddress(Values.TrueLeaf), feeAmount, None, None)
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
@@ -118,9 +118,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       bs2.balance shouldBe (balance1 + balance2)
       bs2.assetBalances shouldBe assetAmount(box1 ++ box2)
 
-      wallet.watchFor(Pay2SAddress(Constants.TrueLeaf))
+      wallet.watchFor(Pay2SAddress(Values.TrueLeaf))
       val balance3 = Random.nextInt(1000) + 1
-      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, startHeight, randomNewAsset))
+      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Values.TrueLeaf, startHeight, randomNewAsset))
       wallet.scanOffchain(ErgoTransaction(fakeInput, box3))
 
       blocking(Thread.sleep(1000))

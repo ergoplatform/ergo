@@ -26,8 +26,8 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,
-                     extensionHash: Digest32
-                    ): Option[Header] = {
+                     extensionHash: Digest32,
+                     votes: Array[Byte]): Option[Header] = {
 
     val difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -38,7 +38,7 @@ class EquihashPowScheme(n: Char, k: Char) extends PowScheme with ScorexLogging {
 
     val digest = new Blake2bDigest(null, bytesPerWord * wordsPerHash, null, ergoPerson) // scalastyle:ignore
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash,  EquihashSolution.empty)
+      nBits, height, extensionHash, EquihashSolution.empty, votes)
 
     val I = HeaderSerializer.bytesWithoutPow(h)
     digest.update(I, 0, I.length)

@@ -12,10 +12,10 @@ import scorex.crypto.authds.ADDigest
 
 import scala.util.{Success, Try}
 
-case class VotingResults(results: Seq[(Byte, Int)]){
+case class VotingResults(results: Seq[(Byte, Int)]) {
   def update(voteFor: Byte): VotingResults = {
-    VotingResults(results.map{case (id, votes) =>
-      if(id == voteFor) id -> (votes + 1) else id -> votes
+    VotingResults(results.map { case (id, votes) =>
+      if (id == voteFor) id -> (votes + 1) else id -> votes
     })
   }
 }
@@ -27,7 +27,7 @@ object VotingResults {
 /**
   * Additional data required for transactions validation
   *
-  * @param lastHeaders - fixed number of last headers
+  * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - fixed number of last headers
   */
 case class ErgoStateContext(lastHeaders: Seq[Header],
@@ -59,7 +59,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
     val height = header.height
     val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
 
-    if(votingStarts(height)) {
+    if (votingStarts(height)) {
       val extension = fullBlock.extension
 
       val newVoting = VotingResults(
@@ -70,7 +70,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
         ErgoStateContext(newHeaders, genesisStateDigest, params, newVoting)
       }
     } else {
-      val newVotes = header.votes.filter(_ != Parameters.NoParameter).foldLeft(currentVoting){case (v, id) =>
+      val newVotes = header.votes.filter(_ != Parameters.NoParameter).foldLeft(currentVoting) { case (v, id) =>
         v.update(id)
       }
       Success(ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, newVotes))
@@ -90,17 +90,28 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
   override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
     val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
+    val votesCount = ctx.currentVoting.results.length.toByte
+
+    val votesBytes = if (votesCount > 0) {
+      ctx.currentVoting.results.map { case (id, cnt) =>
+        id +: Ints.toByteArray(cnt)
+      }.reduce(_ ++ _)
+    } else {
+      Array.emptyByteArray
+    }
 
     Bytes.concat(
       ctx.genesisStateDigest,
       Ints.toByteArray(lastHeaderBytes.length),
       lastHeaderBytes,
+      Array(votesCount),
+      votesBytes,
       ParametersSerializer.toBytes(ctx.currentParameters))
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {
     val genesisDigest = ADDigest @@ bytes.take(33)
-    val length =  Ints.fromByteArray(bytes.slice(33, 37))
+    val length = Ints.fromByteArray(bytes.slice(33, 37))
 
     def loop(startPos: Int, finishPos: Int, acc: Seq[Header]): Seq[Header] = if (startPos < length) {
       // todo use only required bytes when header size will be fixed after https://github.com/ergoplatform/ergo/issues/452
@@ -110,9 +121,22 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
       acc.reverse
     }
 
-    ParametersSerializer.parseBytes(bytes.slice(37 + length, bytes.length)).map{params =>
+    val votesCount = bytes(37 + length)
+
+    val (votes: VotingResults, votesLength: Int) = if (votesCount > 0) {
+      val vl = votesCount * 5
+      val votesBytes = bytes.slice(37 + length + 1, 37 + length + 1 + vl)
+      VotingResults(votesBytes.grouped(5).map { bs =>
+        bs.head -> Ints.fromByteArray(bs.tail)
+      }.toSeq) -> vl
+    } else {
+      VotingResults.empty -> 0
+    }
+
+    ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
-      ErgoStateContext(loop(startPos = 37, 37 + length, Seq.empty), genesisDigest, params, VotingResults.empty)
+      val lastHeaders = loop(startPos = 37, 37 + length, Seq.empty)
+      ErgoStateContext(lastHeaders, genesisDigest, params, votes)
     }
   }.flatten
 }

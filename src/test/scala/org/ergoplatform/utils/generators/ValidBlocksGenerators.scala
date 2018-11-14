@@ -170,6 +170,6 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = defaultExtension
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension).get
+      transactions, time, extension, Array.fill(3)(0: Byte)).get
   }
 }

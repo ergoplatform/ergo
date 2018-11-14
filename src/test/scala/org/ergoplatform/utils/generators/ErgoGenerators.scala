@@ -126,7 +126,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     RequiredDifficulty.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
-    EquihashSolution(equihashSolutions)
+    EquihashSolution(equihashSolutions),
+    Array.fill(3)(0: Byte)
   )
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {

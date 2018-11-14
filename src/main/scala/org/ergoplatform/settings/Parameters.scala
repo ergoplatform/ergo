@@ -65,6 +65,13 @@ abstract class Parameters {
           } else {
             table
           }
+        case b: Byte if b == KDecrease =>
+          if (count > votingEpochLength / 2) {
+            val newK = if (K > Kmin) K - Kstep else K
+            table.updated(KIncrease, newK)
+          } else {
+            table
+          }
         case _ => table
       }
     }
@@ -72,18 +79,26 @@ abstract class Parameters {
   }
 
   def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
-    if (ownTargets.getOrElse(KIncrease, Kmin) > parametersTable(KIncrease)){
+    if (ownTargets.getOrElse(KIncrease, Kmin) > parametersTable(KIncrease)) {
       Array(KIncrease, 0: Byte, 0: Byte)
+    } else if (ownTargets.getOrElse(KIncrease, Kmin) < parametersTable(KIncrease)) {
+      Array((-KIncrease).toByte, 0: Byte, 0: Byte)
     } else {
-      Array(0: Byte, 0: Byte, 0: Byte)
+      Array.fill(3)(0: Byte)
     }
   }
 
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
     val vs = votes.filter { case (paramId, _) =>
-      ownTargets.get(paramId).exists(_ > parametersTable(paramId))
+      if(paramId > 0) {
+        ownTargets.get(paramId).exists(_ > parametersTable(paramId))
+      } else if(paramId < 0) {
+        ownTargets.get((-paramId).toByte).exists(_ < parametersTable((-paramId).toByte))
+      } else {
+        false
+      }
     }.map(_._1)
-    if(vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
+    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {

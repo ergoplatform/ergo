@@ -178,7 +178,6 @@ object ErgoHistory extends ScorexLogging {
   val GenesisHeight: Int = EmptyHistoryHeight + 1
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 
-
   def historyDir(settings: ErgoSettings): File = {
     val dir = new File(s"${settings.directory}/history")
     dir.mkdirs()

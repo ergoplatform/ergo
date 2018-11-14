@@ -151,19 +151,15 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def solutionBytes(h: Header): Array[Byte] = {
-    AutolykosSolutionSerializer.toBytes(h.powSolution)
-  }
-
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
     Bytes.concat(
       bytesWithoutInterlinksAndPow(h),
       Chars.toByteArray(0),
-      solutionBytes(h)
+      h.powSolution.bytes
     )
 
   override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutPow(h), solutionBytes(h))
+    Bytes.concat(bytesWithoutPow(h), h.powSolution.bytes)
 
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {

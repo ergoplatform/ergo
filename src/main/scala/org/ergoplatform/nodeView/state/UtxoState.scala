@@ -78,7 +78,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      tx.statefulValidity(boxesToSpend, currentStateContext, constants.settings.metadata).get
+      tx.statefulValidity(boxesToSpend, currentStateContext).get
     }.sum
 
     if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")

@@ -33,7 +33,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   override def validate(tx: ErgoTransaction): Try[Unit] =
     tx.statelessValidity
       .flatMap(_ =>
-        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext, constants.settings.metadata)
+        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)
           .map(_ => Unit))
 
   /**

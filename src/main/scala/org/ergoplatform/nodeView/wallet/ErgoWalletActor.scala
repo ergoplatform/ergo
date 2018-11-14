@@ -70,7 +70,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
 
       val context =
-        new ErgoContext(stateContext, transactionContext, ergoSettings.metadata, ContextExtension.empty)
+        new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>

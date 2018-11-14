@@ -1,10 +1,12 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Bytes
-import io.circe.{Decoder, Encoder}
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, Serializer}
 
 import scala.util.Try
@@ -22,11 +24,22 @@ case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt)
 object AutolykosSolution extends ApiCodecs {
 
   implicit val jsonEncoder: Encoder[AutolykosSolution] = { s: AutolykosSolution =>
-    bytesEncoder.apply(s.bytes)
+    Map(
+      "pk" -> s.pk.asJson,
+      "w" -> s.w.asJson,
+      "n" -> Algos.encode(s.n).asJson,
+      "d" -> s.d.asJson(bigIntEncoder)
+    ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[AutolykosSolution] = bytesDecoder.emapTry(AutolykosSolutionSerializer.parseBytes)
-
+  implicit val jsonDecoder: Decoder[AutolykosSolution] =  { c: HCursor =>
+    for {
+      pk <- c.downField("pk").as[ECPoint]
+      w <- c.downField("w").as[ECPoint]
+      n <- c.downField("n").as[Array[Byte]]
+      d <- c.downField("d").as[BigInt]
+    } yield AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt)
+  }
 }
 
 object AutolykosSolutionSerializer extends Serializer[AutolykosSolution] {

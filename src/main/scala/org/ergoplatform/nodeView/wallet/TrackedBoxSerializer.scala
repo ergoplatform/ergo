@@ -11,7 +11,7 @@ import scorex.core.serialization.Serializer
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import sigmastate.utils.{ByteReader, ByteWriter}
+import sigmastate.utils.{ByteReader, ByteWriter, SigmaByteReader, SigmaByteWriter}
 
 import scala.util.{Failure, Try}
 
@@ -24,7 +24,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
 
   def parseBytes(bytes: Array[Byte]): Try[TrackedBox] = read(startReader(bytes))
 
-  def write(trackedBox: TrackedBox, w: ByteWriter): Unit = {
+  def write(trackedBox: TrackedBox, w: SigmaByteWriter): Unit = {
     w.putBits(headerBits(trackedBox))
       .putBytes(idToBytes(trackedBox.creationTxId))
       .putShort(trackedBox.creationOutIndex)
@@ -34,7 +34,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     ErgoBoxSerializer.write(trackedBox.box, w)
   }
 
-  def read(r: ByteReader): Try[TrackedBox] = {
+  def read(r: SigmaByteReader): Try[TrackedBox] = {
     readHeader(r) { certainty =>
       readTx(r, txLookup) { creationTx =>
         val creationOutIndex = r.getShort()
@@ -49,11 +49,12 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     }
   }
 
-  protected def startWriter(): ByteWriter = sigmastate.serialization.Serializer.startWriter()
+  protected def startWriter(): SigmaByteWriter = sigmastate.serialization.Serializer.startWriter()
 
-  protected def startReader(bytes: Array[Byte]): ByteReader = sigmastate.serialization.Serializer.startReader(bytes, 0)
+  protected def startReader(bytes: Array[Byte]): SigmaByteReader =
+    sigmastate.serialization.Serializer.startReader(bytes, 0)
 
-  protected def makeBytes(encoder: ByteWriter => Unit): Array[Byte] = {
+  protected def makeBytes(encoder: SigmaByteWriter => Unit): Array[Byte] = {
     val w = startWriter()
     encoder(w)
     w.toBytes
@@ -102,7 +103,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     }
   }
 
-  protected def readErgoBox(r: ByteReader)(parser: ErgoBox => TrackedBox): Try[TrackedBox] = {
+  protected def readErgoBox(r: SigmaByteReader)(parser: ErgoBox => TrackedBox): Try[TrackedBox] = {
     ErgoBoxSerializer.read(r) map { box => parser(box) }
   }
 

@@ -184,7 +184,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
         }.flatMap { _ =>
           // check validity and calculate transaction cost
-          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext, ergoSettings.metadata)
+          tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>
             // valid transaction with small enough computations

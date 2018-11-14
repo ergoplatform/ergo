@@ -6,7 +6,6 @@ import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
@@ -22,7 +21,6 @@ case class ErgoSettings(directory: String,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
                         votingTargets: Map[Byte, Int] = Map()) {
-  lazy val metadata = Metadata(chainSettings.addressPrefix)
   lazy val emission = new EmissionRules(chainSettings.monetary)
 }
 

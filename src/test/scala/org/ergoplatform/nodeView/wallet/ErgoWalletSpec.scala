@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoState
@@ -23,7 +22,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
-      val meta = Metadata(Metadata.TestnetNetworkPrefix)
       val address = getPublicKeys.head
       val genesisBlock = makeGenesisBlock(address.script)
       val genesisTx = genesisBlock.transactions.head
@@ -41,13 +39,12 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
     }
   }
 
   property("Generate transaction with multiple inputs") {
     withFixture { implicit w =>
-      val meta = Metadata(Metadata.TestnetNetworkPrefix)
       val addresses = getPublicKeys
       addresses.length should be > 1
       val genesisBlock = makeGenesisBlock(addresses.head.script, randomNewAsset)
@@ -69,7 +66,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
@@ -83,7 +80,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx2 = await(wallet.generateTransaction(req2)).get
       val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx2.statefulValidity(boxesToSpend2, context2, meta) shouldBe 'success
+      tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
     }
   }
 

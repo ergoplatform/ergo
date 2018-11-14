@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec

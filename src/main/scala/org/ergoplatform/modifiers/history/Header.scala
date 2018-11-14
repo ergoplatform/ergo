@@ -15,7 +15,7 @@ import scorex.core.block.Block._
 import scorex.core.serialization.Serializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.util._
 
 import scala.annotation.tailrec
@@ -36,7 +36,7 @@ case class Header(version: Version,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
-  override def serializedId: Array[Version] = Blake2b256(bytes)
+  override def serializedId: Array[Version] = Algos.hash(bytes)
 
   override type M = Header
 

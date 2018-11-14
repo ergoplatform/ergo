@@ -11,6 +11,15 @@ import scorex.core.serialization.{BytesSerializable, Serializer}
 
 import scala.util.Try
 
+/**
+  * Solution of Autolykos PoW puzzle
+  *
+  * @param pk - miner public key. Should be used to collect block rewards
+  * @param w  - hiding public key. Prevents revealing of miners secret
+  * @param n  - nonce
+  * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
+  *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
+  */
 case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt) extends BytesSerializable {
   assert(!pk.isInfinity && !w.isInfinity, s"Infinity points are not allowed ${pk.isInfinity}, ${w.isInfinity}")
 
@@ -32,7 +41,7 @@ object AutolykosSolution extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[AutolykosSolution] =  { c: HCursor =>
+  implicit val jsonDecoder: Decoder[AutolykosSolution] = { c: HCursor =>
     for {
       pk <- c.downField("pk").as[ECPoint]
       w <- c.downField("w").as[ECPoint]

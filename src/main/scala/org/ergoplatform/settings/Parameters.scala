@@ -71,19 +71,19 @@ abstract class Parameters {
     Parameters(newHeight, paramsTable)
   }
 
-  def suggestVotes(ownTargets: Map[Byte, Int]): Seq[Byte] = {
+  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
     if (ownTargets.getOrElse(KIncrease, Kmin) > parametersTable(KIncrease)){
-      Seq(KIncrease, 0: Byte, 0: Byte)
+      Array(KIncrease, 0: Byte, 0: Byte)
     } else {
-      Seq(0: Byte, 0: Byte, 0: Byte)
+      Array(0: Byte, 0: Byte, 0: Byte)
     }
   }
 
-  def vote(ownTargets: Map[Byte, Int], votes: Seq[(Byte, Int)]): Seq[Byte] = {
+  def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
     val vs = votes.filter { case (paramId, _) =>
       ownTargets.get(paramId).exists(_ > parametersTable(paramId))
     }.map(_._1)
-    if(vs.length < 3) vs ++ Seq.fill(3 - vs.length)(0: Byte) else vs
+    if(vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {

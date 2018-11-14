@@ -12,7 +12,7 @@ import scorex.crypto.authds.ADDigest
 
 import scala.util.{Success, Try}
 
-case class VotingResults(results: Seq[(Byte, Int)]) {
+case class VotingResults(results: Array[(Byte, Int)]) {
   def update(voteFor: Byte): VotingResults = {
     VotingResults(results.map { case (id, votes) =>
       if (id == voteFor) id -> (votes + 1) else id -> votes
@@ -21,7 +21,7 @@ case class VotingResults(results: Seq[(Byte, Int)]) {
 }
 
 object VotingResults {
-  val empty = VotingResults(Seq())
+  val empty = VotingResults(Array.empty)
 }
 
 /**
@@ -82,7 +82,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
 object ErgoStateContext {
   def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq(), genesisStateDigest, LaunchParameters, VotingResults(Seq()))
+    ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingResults.empty)
   }
 }
 
@@ -128,7 +128,7 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
       val votesBytes = bytes.slice(37 + length + 1, 37 + length + 1 + vl)
       VotingResults(votesBytes.grouped(5).map { bs =>
         bs.head -> Ints.fromByteArray(bs.tail)
-      }.toSeq) -> vl
+      }.toArray) -> vl
     } else {
       VotingResults.empty -> 0
     }

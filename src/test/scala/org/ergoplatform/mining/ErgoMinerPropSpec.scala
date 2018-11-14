@@ -21,14 +21,15 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     emissionTx.outputs.last.proposition shouldBe defaultMinerPk
   }
 
-  property("collect reward from fees only") {
-    forAll(Gen.nonEmptyListOf(ergoBoxGen(propGen = Constants.FeeProposition))) { feeBoxes =>
+  property("collect reward from transaction fees only") {
+    forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = Constants.FeeProposition))) { btxs =>
+      val blockTxs = btxs.map(_._2)
       val height = Int.MaxValue
-      val txs = ErgoMiner.collectRewards(None, height, feeBoxes, defaultMinerPk, settings.emission)
+      val txs = ErgoMiner.collectRewards(None, height, blockTxs, defaultMinerPk, settings.emission)
       txs.length shouldBe 1
       val feeTx = txs.head
       feeTx.outputs.length shouldBe 1
-      feeTx.outputs.head.value shouldBe feeBoxes.map(_.value).sum
+      feeTx.outputs.head.value shouldBe txs.flatMap(_.outputs).map(_.value).sum
       feeTx.outputs.head.proposition shouldBe defaultMinerPk
     }
   }
@@ -38,9 +39,10 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     us.emissionBoxOpt should not be None
     val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
 
-    forAll(Gen.nonEmptyListOf(ergoBoxGen(propGen = Constants.FeeProposition))) { feeBoxes =>
+    forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = Constants.FeeProposition))) { btxs =>
+      val blockTxs = btxs.map(_._2)
       val height = Int.MaxValue
-      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, feeBoxes, defaultMinerPk, settings.emission)
+      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, settings.emission)
       txs.length shouldBe 2
 
       val emissionTx = txs.head
@@ -50,7 +52,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
       val feeTx = txs.last
       feeTx.outputs.length shouldBe 1
-      feeTx.outputs.head.value shouldBe feeBoxes.map(_.value).sum
+      feeTx.outputs.head.value shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
       feeTx.outputs.head.proposition shouldBe defaultMinerPk
     }
   }

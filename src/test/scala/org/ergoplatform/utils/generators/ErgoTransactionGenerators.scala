@@ -115,7 +115,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     */
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,
-                                issueNew: Boolean = true): ErgoTransaction = {
+                                issueNew: Boolean = true,
+                                outputsProposition: Value[SBoolean.type] = TrueLeaf): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -177,7 +178,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, TrueLeaf, 0, normalizedTokens)
+      ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
@@ -210,7 +211,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
-    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq)
+    prop <- propositionGen
+    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
   } yield from.asScala.toIndexedSeq -> tx
 
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)

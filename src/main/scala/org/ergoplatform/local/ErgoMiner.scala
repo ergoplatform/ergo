@@ -80,7 +80,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def onUpdateSecret: Receive = {
     case UpdateSecret(s) =>
       skOpt = Some(s)
-
   }
 
   private def miningStatus: Receive = {
@@ -210,9 +209,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       Parameters.MaxBlockSize - SizeDrift,
       Seq())
 
-    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txsNoConflict)._2
-      .filter(_.proposition == Constants.FeeProposition)
-    val rewards = ErgoMiner.collectRewards(state, feeBoxes, minerPk, ergoSettings.emission)
+    val rewards = ErgoMiner.collectRewards(state, txsNoConflict, minerPk, ergoSettings.emission)
     val txs = txsNoConflict ++ rewards
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
@@ -235,23 +232,31 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
+  /**
+    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * emission box from `state`
+    */
   def collectRewards(state: UtxoStateReader,
-                     feeBoxes: Seq[ErgoBox],
+                     txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emissionRules: EmissionRules): Seq[ErgoTransaction] = {
     val emissionBoxOpt = state.emissionBoxOpt
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, feeBoxes, minerPk, emissionRules)
+    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, txs, minerPk, emissionRules)
   }
 
+  /**
+    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * emission box `emissionBoxOpt`
+    */
   def collectRewards(emissionBoxOpt: Option[ErgoBox],
                      currentHeight: Int,
-                     feeBoxes: Seq[ErgoBox],
+                     txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules): Seq[ErgoTransaction] = {
-    feeBoxes.foreach(b => assert(b.proposition == Constants.FeeProposition, s"Incorrect fee box $b"))
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2.filter(_.proposition == Constants.FeeProposition)
     val nextHeight = currentHeight + 1
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>

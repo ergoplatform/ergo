@@ -90,7 +90,7 @@ class TransactionGenerator(viewHolder: ActorRef,
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
-          val minimalErgoAmount = approximateBoxSize * LaunchParameters.MinValueMax
+          val minimalErgoAmount = approximateBoxSize * Parameters.MinValueMax
           Algos.decode(tokenToSpend._1).map { id =>
             PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
           }.toOption

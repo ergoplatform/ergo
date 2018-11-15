@@ -33,11 +33,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   private var lastInitMsg: Array[Byte] = Array()
 
   /**
-    * Verify, that `header` contains correct solution of the Autolykos PoW puzzle.
+    * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
     */
-  def verify(header: Header): Boolean = verifyTry(header).isSuccess
-
-  private[mining] def verifyTry(header: Header): Try[Unit] = Try {
+  def validate(header: Header): Try[Unit] = Try {
     val b = getB(header.nBits)
     val msg = HeaderSerializer.bytesWithoutPow(header)
     val s = header.powSolution

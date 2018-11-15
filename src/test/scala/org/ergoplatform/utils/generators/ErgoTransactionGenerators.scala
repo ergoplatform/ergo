@@ -182,12 +182,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
-
-    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, stateCtxOpt.getOrElse(emptyStateContext))
-      .getOrElse {
-        log.debug("Going to generate a transaction with incorrect proofs")
-        new ErgoTransaction(inputs, newBoxes)
-      }
+    defaultProver.sign(unsignedTx, boxesToSpend, emptyStateContext).getOrElse {
+      log.debug("Going to generate a transaction with incorrect proofs")
+      new ErgoTransaction(inputs, newBoxes)
+    }
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {

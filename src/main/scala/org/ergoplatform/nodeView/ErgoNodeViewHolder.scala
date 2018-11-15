@@ -2,22 +2,22 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UtxoSnapshot
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
@@ -164,10 +164,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           s.applyModifier(m).get
         }
     }
-  }.recoverWith { case e =>
-    log.error("Failed to recover state, try to resync from genesis manually", e)
-    ErgoApp.forceStopApplication(500)
-  }.get
+  } match {
+    case Failure(e) =>
+      log.error("Failed to recover state, try to resync from genesis manually", e)
+      ErgoApp.forceStopApplication(500)
+    case Success(state) =>
+      state
+  }
 
 }
 

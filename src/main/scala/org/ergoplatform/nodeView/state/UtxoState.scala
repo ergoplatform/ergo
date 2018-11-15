@@ -9,7 +9,6 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.UtxoState.ModifierProcessing
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
@@ -70,29 +69,37 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
-                                       expectedDigest: ADDigest,
-                                       currentStateContext: ErgoStateContext): Try[Unit] = {
-    import cats.instances.list._
-    import cats.instances.try_._
+  /** Tries to validate and execute transactions.
+    * @return Total cost of transactions execution
+    * */
+  private def execTransactionsTry(transactions: Seq[ErgoTransaction],
+                                  currentStateContext: ErgoStateContext): Try[Long] = {
+    import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val executionCostTry = Traverse[List].sequence {
-      transactions.map { tx =>
+    val execResults: Try[List[Long]] = transactions.toList
+      .map { tx =>
         tx.statelessValidity.flatMap { _ =>
-          val boxesToSpendTry = Traverse[List].sequence {
-            tx.inputs.map(_.boxId).map { id =>
+          val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
+            .map(_.boxId)
+            .map { id =>
               createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id))
-                .map(Success.apply)
-                .getOrElse(Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))
-            }.toList
-          }
+                .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+            }
+            .sequence
           boxesToSpendTry.flatMap { boxes =>
             tx.statefulValidity(boxes.toIndexedSeq, currentStateContext, constants.settings.metadata)
           }
         }
-      }.toList
-    }.map(_.sum)
-    executionCostTry match {
+      }
+      .sequence
+    execResults.map(_.sum)
+  }
+
+  private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       expectedDigest: ADDigest,
+                                       currentStateContext: ErgoStateContext): Try[Unit] = {
+    import cats.implicits._
+    execTransactionsTry(transactions, currentStateContext) match {
       case Success(executionCost) if executionCost <= Parameters.MaxBlockCost =>
         persistentProver.synchronized {
           val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)

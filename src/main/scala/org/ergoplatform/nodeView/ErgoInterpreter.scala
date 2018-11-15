@@ -5,7 +5,8 @@ import org.ergoplatform._
 import org.ergoplatform.settings.{Constants, Parameters}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
-import sigmastate.interpreter.Interpreter.VerificationResult
+import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
 
 import scala.util.Try
 
@@ -16,7 +17,7 @@ import scala.util.Try
   *
   * @param params - current values of adjustable blockchain settings
   */
-class ErgoInterpreter(params: Parameters)
+class ErgoInterpreter(params: Parameters)(implicit IR: IRContext)
   extends ErgoLikeInterpreter(params.maxBlockCost) {
 
   override type CTX = ErgoContext
@@ -39,7 +40,8 @@ class ErgoInterpreter(params: Parameters)
     }
   }
 
-  override def verify(exp: Value[SBoolean.type],
+  override def verify(env: ScriptEnv,
+                      exp: Value[SBoolean.type],
                       context: CTX,
                       proof: Array[Byte],
                       message: Array[Byte]): Try[VerificationResult] = {
@@ -56,9 +58,14 @@ class ErgoInterpreter(params: Parameters)
         val outputCandidate = context.spendingTransaction.outputCandidates(idx)
 
         checkExpiredBox(context.self, outputCandidate, context.currentHeight) -> Constants.StorageContractCost
-      }.recoverWith { case _ => super.verify(exp, context, proof, message) }
+      }.recoverWith { case _ => super.verify(env, exp, context, proof, message) }
     } else {
-      super.verify(exp, context, proof, message)
+      super.verify(env, exp, context, proof, message)
     }
   }
+}
+
+object ErgoInterpreter {
+  implicit lazy val IRInstance: IRContext = new RuntimeIRContext()
+  val instance = new ErgoInterpreter()
 }

@@ -224,7 +224,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext)
+        prover.sign(unsignedTx, inputs, stateContext)
           .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
       } match {
         case Some(txTry) => txTry

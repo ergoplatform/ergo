@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingResults}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.scalacheck.Arbitrary.arbByte

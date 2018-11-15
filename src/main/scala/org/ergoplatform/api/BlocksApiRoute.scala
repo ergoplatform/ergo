@@ -63,7 +63,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
   }
 
   def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
-    if (ergoSettings.chainSettings.powScheme.verify(block.header)) {
+    if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info("Received a new valid block through the API: " + block)
 
       viewHolderRef ! LocallyGeneratedModifier(block.header)

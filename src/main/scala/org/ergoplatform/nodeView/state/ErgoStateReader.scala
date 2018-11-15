@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.settings.{Algos, LaunchParameters}
+import org.ergoplatform.settings.Algos
 import scorex.core.transaction.state.StateReader
 import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest

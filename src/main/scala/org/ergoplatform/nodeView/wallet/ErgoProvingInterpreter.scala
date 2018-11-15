@@ -11,6 +11,7 @@ import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.hash.Blake2b256
+import sigmastate.eval.IRContext
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
@@ -34,7 +35,7 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Parameters.MaxBlockCost)
+                             override val maxCost: Long = Parameters.MaxBlockCost)(implicit IR: IRContext)
   extends ErgoInterpreter(maxCost) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
@@ -85,4 +86,12 @@ class ErgoProvingInterpreter(seed: String,
       ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
     }
   }.flatten
+}
+
+
+object ErgoProvingInterpreter {
+  import ErgoInterpreter.IRInstance
+
+  def apply(seed: String, numOfSecrets: Int, maxCost: Long = Parameters.MaxBlockCost): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(seed, numOfSecrets, maxCost)
 }

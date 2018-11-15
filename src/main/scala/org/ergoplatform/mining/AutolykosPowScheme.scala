@@ -34,10 +34,13 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   private val NBigInteger: BigInteger = BigInt(N).bigInteger
 
+
   /**
     * Verify, that `header` contains correct solution of the Autolykos PoW puzzle.
     */
-  def verify(header: Header): Boolean = Try {
+  def verify(header: Header): Boolean = verifyTry(header).isSuccess
+
+  private[mining] def verifyTry(header: Header): Try[Unit] = Try {
     val b = getB(header.nBits)
     val msg = HeaderSerializer.bytesWithoutPow(header)
     val s = header.powSolution
@@ -49,7 +52,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     val pkExp = s.w.multiply(f2(msg, s.pk, s.w, s.n).bigInteger)
 
     require(gExp.add(pkExp) == s.pk, "Incorrect points")
-  }.isSuccess
+  }
 
   /**
     * Real difficulty of `header`.
@@ -140,7 +143,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * @param sk - secret key
     * @param b  - difficulty
     */
-  private def initializeIfNeeded(m: Array[Byte],
+  private[mining] def initializeIfNeeded(m: Array[Byte],
                                  sk: BigInt,
                                  b: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
     x = randomSecret()
@@ -161,7 +164,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     */
   private def onFlyCalculation(b: BigInt): Boolean = N > (q / b)
 
-  private def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
+  private[mining] def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
 
     @tailrec
@@ -188,7 +191,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     }
   }
 
-  private def getB(nBits: Long): BigInt = {
+  private[mining] def getB(nBits: Long): BigInt = {
     q / RequiredDifficulty.decodeCompactBits(nBits)
   }
 
@@ -234,10 +237,10 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * of Autolykos equation.
     */
   private def genElement(m: Array[Byte],
-                           p1: Array[Byte],
-                           p2: Array[Byte],
-                           indexBytes: Array[Byte],
-                           orderByte: Byte): BigInt = {
+                         p1: Array[Byte],
+                         p2: Array[Byte],
+                         indexBytes: Array[Byte],
+                         orderByte: Byte): BigInt = {
     hash(Bytes.concat(m, p1, p2, indexBytes, Array(orderByte)))
   }
 
@@ -245,9 +248,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * Generate full element of Autolykos equation.
     */
   private def genFullElement(m: Array[Byte],
-                               p1: Array[Byte],
-                               p2: Array[Byte],
-                               i: Int): BigInt = {
+                             p1: Array[Byte],
+                             p2: Array[Byte],
+                             i: Int): BigInt = {
     val indexBytes = Ints.toByteArray(i)
     (genElement(m, p1, p2, indexBytes, 0: Byte) + x * genElement(m, p1, p2, indexBytes, 1: Byte)).mod(q)
   }

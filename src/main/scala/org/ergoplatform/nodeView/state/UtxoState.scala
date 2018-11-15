@@ -42,6 +42,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   import UtxoState.metadata
 
+  override val maxRollbackDepth = 10
+
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
@@ -50,8 +52,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
     constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
-
-  override val maxRollbackDepth = 10
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
@@ -70,7 +70,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   /** Tries to validate and execute transactions.
-    * @return Total cost of transactions execution
+    * @return Result of transactions execution with total cost inside
     * */
   private def execTransactionsTry(transactions: Seq[ErgoTransaction],
                                   currentStateContext: ErgoStateContext): Try[Long] = {

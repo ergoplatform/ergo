@@ -11,7 +11,7 @@ class LongChainSyncSpec extends FreeSpec with IntegrationSuite {
 
   val chainLength = 300
 
-  val minerConfig: Config = shortDelayConfig.withFallback(nodeSeedConfigs.head)
+  val minerConfig: Config = shortMiningDelayConfig.withFallback(nodeSeedConfigs.head)
   val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
 
   val miner: Node = docker.startNode(minerConfig).get

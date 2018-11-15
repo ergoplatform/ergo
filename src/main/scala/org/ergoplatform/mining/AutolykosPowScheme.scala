@@ -32,9 +32,6 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   private var x: BigInt = randomSecret()
   private var lastInitMsg: Array[Byte] = Array()
 
-  private val NBigInteger: BigInteger = BigInt(N).bigInteger
-
-
   /**
     * Verify, that `header` contains correct solution of the Autolykos PoW puzzle.
     */
@@ -48,8 +45,15 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     require(s.d < b || s.d > (q - b), s"Incorrect d=${s.d} for b=$b")
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
-    val gExp = group.exponentiate(group.generator, (f1(msg, s.pk, s.w, s.n) - s.d).mod(q).bigInteger)
-    val pkExp = s.w.multiply(f2(msg, s.pk, s.w, s.n).bigInteger)
+
+    val p1 = pkToBytes(s.pk)
+    val p2 = pkToBytes(s.w)
+    val indexes = genIndexes(msg, s.n)
+    val f1 = indexes.map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib), 0: Byte)).sum
+    val f2 = indexes.map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib), 1: Byte)).sum
+
+    val gExp = group.exponentiate(group.generator, (f1 - s.d).mod(q).bigInteger)
+    val pkExp = s.w.multiply(f2.mod(q).bigInteger)
 
     require(gExp.add(pkExp) == s.pk, "Incorrect points")
   }
@@ -208,25 +212,16 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     (parentId, version, interlinks, height)
   }
 
-  private def f1(m: Array[Byte], pk: ECPoint, w: ECPoint, nonce: Array[Byte]): BigInt = {
-    val p1 = pkToBytes(pk)
-    val p2 = pkToBytes(w)
-    genIndexes(m, nonce).map(ib => genElement(m, p1, p2, Ints.toByteArray(ib), 0: Byte)).sum.mod(q)
-  }
-
-  private def f2(m: Array[Byte], pk: ECPoint, w: ECPoint, nonce: Array[Byte]): BigInt = {
-    val p1 = pkToBytes(pk)
-    val p2 = pkToBytes(w)
-    genIndexes(m, nonce).map(ib => genElement(m, p1, p2, Ints.toByteArray(ib), 1: Byte)).sum.mod(q)
-  }
-
-
+  /**
+    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
+    * [0,`N`)
+    */
   private def genIndexes(m: Array[Byte], nonceBytes: Array[Byte]): Seq[Int] = {
     val seed = Bytes.concat(m, nonceBytes)
     val hashesRequired = (k.toDouble / 8).ceil.toInt
     val indexes = (0 until hashesRequired) flatMap { i =>
       val hash = Blake2b256(Bytes.concat(seed, Ints.toByteArray(i)))
-      hash.grouped(4).map(b => BigIntegers.fromUnsignedByteArray(b).mod(NBigInteger).intValue())
+      hash.grouped(4).map(b => Math.abs(Ints.fromByteArray(b) % N))
     }
     indexes.take(k)
   }.ensuring(_.length == k)

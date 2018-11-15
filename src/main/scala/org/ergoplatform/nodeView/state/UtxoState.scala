@@ -80,7 +80,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       tx.statefulValidity(boxesToSpend, currentStateContext, constants.settings.metadata).get
     }.sum
 
-      if (totalCost > stateContext.currentParameters.MaxBlockCost) {
+      if (totalCost > stateContext.currentParameters.maxBlockCost) {
         throw new Error(s"Transaction cost $totalCost exeeds limit")
       }
 

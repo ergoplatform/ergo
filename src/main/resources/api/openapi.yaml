@@ -532,6 +532,52 @@ components:
           allOf:
           - $ref: '#/components/schemas/ModifierId'
 
+    Parameters:
+          type: object
+          required:
+          - height
+          - K
+          - minValuePerByte
+          - maxBlockSize
+          - maxBlockCost
+          properties:
+            height:
+              type: integer
+              format: int32
+              description: Height when current parameters were considered(not actual height). Can be '0' if state is empty
+              minimum: 0
+              example: 667
+              nullable: false
+            K:
+              type: integer
+              format: int32
+              description: Storage fee coefficient (per byte per storage period ~4 years)
+              minimum: 0
+              example: 100000
+              nullable: false
+            minValuePerByte:
+              type: integer
+              format: int32
+              description: Minimum value per byte of an output
+              minimum: 0
+              example: 360
+              nullable: false
+            maxBlockSize:
+              type: integer
+              format: int32
+              description: Maximum block size (in bytes)
+              minimum: 0
+              example: 1048576
+              nullable: false
+            maxBlockCost:
+              type: integer
+              format: int32
+              description: Maximum cumulative computational complexity of input scipts in block transactions
+              minimum: 0
+              example: 104876
+              nullable: true
+
+
     TransactionBoxId:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long
       type: string
@@ -985,6 +1031,26 @@ paths:
       responses:
         '200':
           description: Node info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /parameters:
+    get:
+      summary: Get the current network parameters
+      operationId: getParameters
+      tags:
+      - info
+      responses:
+        '200':
+          description: Current blockchain parameters
           content:
             application/json:
               schema:

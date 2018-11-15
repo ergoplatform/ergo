@@ -34,5 +34,5 @@ object BoxUtils {
     )
 
   @inline
-  def minimalErgoAmount(box: ErgoBox, parameters: Parameters): Long = box.bytes.length * parameters.MinValuePerByte
+  def minimalErgoAmount(box: ErgoBox, parameters: Parameters): Long = box.bytes.length * parameters.minValuePerByte
 }

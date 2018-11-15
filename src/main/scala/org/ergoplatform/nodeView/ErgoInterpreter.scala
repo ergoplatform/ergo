@@ -16,7 +16,7 @@ import scala.util.Try
   * @param params - current values of adjustable blockchain settings
   */
 class ErgoInterpreter(params: Parameters)
-  extends ErgoLikeInterpreter(params.MaxBlockCost) {
+  extends ErgoLikeInterpreter(params.maxBlockCost) {
 
   override type CTX = ErgoContext
 
@@ -29,7 +29,7 @@ class ErgoInterpreter(params: Parameters)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = params.K * box.bytes.length
+    val maxStorageFee = params.k * box.bytes.length
 
     (box.value - maxStorageFee <= 0) || {
       output.creationHeight == currentHeight &&

@@ -1,6 +1,9 @@
 package org.ergoplatform.settings
 
 import com.google.common.primitives.Ints
+import io.circe.Encoder
+import io.circe.syntax._
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
@@ -18,27 +21,30 @@ abstract class Parameters {
 
   def parametersTable: Map[Byte, Int]
 
-  // Max size of transactions section of a block.
-  lazy val MaxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
-
-  // Max total computation cost of a block.
-  lazy val MaxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
-
   /** Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs
     */
-  lazy val K: Int = parametersTable(KIncrease)
+  lazy val k: Int = parametersTable(KIncrease)
 
-  lazy val MinValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
+  /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
+    * parameter.
+    */
+  lazy val minValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
 
+  // Max size of transactions section of a block.
+  lazy val maxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
+
+  // Max total computation cost of a block.
+  lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
     val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
+      val paramIdAbs = if(paramId < 0) (-paramId).toByte else paramId
 
       if (count > votingEpochLength / 2) {
-        val currentValue = parametersTable(paramId)
-        val maxValue = maxValues.getOrElse(paramId, Int.MaxValue / 2) //todo: more precise upper-bound
-        val minValue = minValues.getOrElse(paramId, 0)
-        val step = stepsTable.getOrElse(paramId, Math.max(1, currentValue / 100))
+        val currentValue = parametersTable(paramIdAbs)
+        val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2) //todo: more precise upper-bound
+        val minValue = minValues.getOrElse(paramIdAbs, 0)
+        val step = stepsTable.getOrElse(paramIdAbs, Math.max(1, currentValue / 100))
 
         val newValue = paramId match {
           case b: Byte if b > 0 =>
@@ -46,7 +52,7 @@ abstract class Parameters {
           case b: Byte if b < 0 =>
             if(currentValue > minValue) currentValue - step else currentValue
         }
-        table.updated(paramId, newValue)
+        table.updated(paramIdAbs, newValue)
       } else {
         table
       }
@@ -106,9 +112,6 @@ object Parameters {
   val Kmin = 0
   val Kstep = 25000
 
-  /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
-    * parameter.
-    */
   val MinValuePerByteDefault: Int = 30 * 12
   val MinValueStep = 10
   val MinValueMin = 0
@@ -146,7 +149,7 @@ object Parameters {
   }
 }
 
-object ParametersSerializer extends Serializer[Parameters] {
+object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
   override def toBytes(params: Parameters): Array[Byte] = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
     Ints.toByteArray(params.height) ++
@@ -159,6 +162,15 @@ object ParametersSerializer extends Serializer[Parameters] {
     val table = bytes.drop(4).grouped(5).map { bs => bs.head -> Ints.fromByteArray(bs.tail) }.toMap
     Parameters(height, table)
   }
+
+  implicit val jsonEncoder: Encoder[Parameters] = (p: Parameters) =>
+    Map(
+      "height" -> p.height.asJson,
+      "K" -> p.k.asJson,
+      "minValuePerByte" -> p.minValuePerByte.asJson,
+      "maxBlockSize" -> p.maxBlockSize.asJson,
+      "maxBlockCost" -> p.maxBlockCost.asJson
+    ).asJson
 }
 
 object LaunchParameters extends Parameters {

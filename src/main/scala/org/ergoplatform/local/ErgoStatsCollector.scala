@@ -5,13 +5,13 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, GetParameters, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
+import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerInfo
@@ -32,6 +32,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   override def preStart(): Unit = {
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.schedule(10.seconds, 10.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
@@ -54,7 +55,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None
   )
 
-  override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
+  var parameters: Parameters = LaunchParameters
+
+  override def receive: Receive = onConnectedPeers orElse getInfo orElse onMempoolChanged orElse onStateChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
   private def init: Receive = {
@@ -68,15 +71,22 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         stateRoot = Some(Algos.encode(s.rootHash)),
         stateVersion = Some(s.version)
       )
+      parameters = s.stateContext.currentParameters
   }
 
-  private def getNodeInfo: Receive = {
-    case GetNodeInfo => sender ! nodeInfo
+  private def getInfo: Receive = {
+    case GetNodeInfo => sender() ! nodeInfo
+    case GetParameters => sender() ! parameters
   }
 
   private def onMempoolChanged: Receive = {
     case ChangedMempool(p) =>
       nodeInfo = nodeInfo.copy(unconfirmedCount = p.size)
+  }
+
+  private def onStateChanged: Receive = {
+    case ChangedState(s: ErgoStateReader@unchecked) =>
+      parameters = s.stateContext.currentParameters
   }
 
   private def onHistoryChanged: Receive = {
@@ -109,6 +119,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 object ErgoStatsCollector {
 
   case object GetNodeInfo
+  case object GetParameters
 
   case class NodeInfo(nodeName: String,
                       appVersion: String,

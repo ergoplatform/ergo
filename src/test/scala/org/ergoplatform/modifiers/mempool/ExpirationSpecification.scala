@@ -49,7 +49,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("successful spending w. max spending") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, h => {
-        val fee = Math.min(parameters.K * from.bytes.length, from.value)
+        val fee = Math.min(parameters.k * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = true)
@@ -57,9 +57,9 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("unsuccessful spending due too big storage fee charged") {
-    forAll(unspendableErgoBoxGen(parameters.K  * 100 + 1, Long.MaxValue)) { from =>
+    forAll(unspendableErgoBoxGen(parameters.k  * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 0, h => {
-        val fee = Math.min(parameters.K * from.bytes.length + 1, from.value)
+        val fee = Math.min(parameters.k * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
@@ -67,9 +67,9 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("unsuccessful spending when more time passed than storage period and charged more than K*storagePeriod") {
-    forAll(unspendableErgoBoxGen(parameters.K * 100 + 1, Long.MaxValue)) { from =>
+    forAll(unspendableErgoBoxGen(parameters.k * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 1, h => {
-        val fee = Math.min(parameters.K * from.bytes.length + 1, from.value)
+        val fee = Math.min(parameters.k * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
 
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
@@ -80,7 +80,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("too early spending") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, -1, h => {
-        val fee = Math.min(parameters.K * from.bytes.length, from.value)
+        val fee = Math.min(parameters.k * from.bytes.length, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Values.TrueLeaf, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
@@ -110,7 +110,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val minValue = out2.value + 1
 
     forAll(unspendableErgoBoxGen(minValue, Long.MaxValue)) { from =>
-      val outcome = from.value <= from.bytes.length * parameters.K
+      val outcome = from.value <= from.bytes.length * parameters.k
       val out1 = new ErgoBoxCandidate(from.value - minValue, Values.FalseLeaf, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }

@@ -217,7 +217,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
+        prover.sign(unsignedTx, inputs, stateContext).toOption
       } match {
         case Some(tx) => tx
         case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")

@@ -14,8 +14,8 @@ import scala.concurrent.duration._
 
 class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val approxTargetHeight = 10
-  val blocksToKeep: Int = approxTargetHeight / 2
+  val approxTargetHeight = 20
+  val blocksToKeep: Int = approxTargetHeight / 5
 
   val localVolume = s"$localDataDir/digest-node-sync-spec/data"
   val remoteVolume = "/app"
@@ -35,7 +35,8 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};
   // 2. Shut it down, restart with turned off mining and fetch its info to get actual {targetHeight};
-  // 3. Start digest node and wait until it gets synced with the first one up to {targetHeight};
+  // 3. Start digest node and wait until it gets synced with the first one up to {targetHeight} ensuring
+  //    it does not load full block that should be pruned;
   // 4. Fetch digest node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
   "Pruned digest node synchronization" in {
@@ -43,7 +44,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
     val result = Async.async {
-      Async.await(minerNode.waitForHeight(approxTargetHeight, 500.millis))
+      Async.await(minerNode.waitForHeight(approxTargetHeight, 1.second))
       docker.stopNode(minerNode.containerId, secondsToWait = 0)
       val nodeForSyncing = docker.startNode(
         minerConfig.withFallback(nonGeneratingPeerConfig), specialVolumeOpt = Some((localVolume, remoteVolume))).get
@@ -51,7 +52,16 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
       val sampleInfo = Async.await(nodeForSyncing.info)
       val digestNode = docker.startNode(digestConfig).get
       val targetHeight = sampleInfo.bestBlockHeightOpt.value
-      Async.await(digestNode.waitForHeight(targetHeight))
+      val targetBlockId = sampleInfo.bestBlockIdOpt.value
+      val blocksToPrune = Async.await(nodeForSyncing.headers(0, targetHeight - blocksToKeep - 1))
+      Async.await(digestNode.waitFor[Option[String]](
+        _.info.map(_.bestBlockIdOpt),
+        blockIdOpt => {
+          blockIdOpt.foreach(blocksToPrune should not contain _)
+          blockIdOpt.contains(targetBlockId)
+        },
+        50.millis
+      ))
       val digestNodeInfo = Async.await(digestNode.info)
       digestNodeInfo shouldEqual sampleInfo
       val digestNodePrunedBlockId = Async.await(digestNode.headerIdsByHeight(targetHeight - blocksToKeep - 1)).head

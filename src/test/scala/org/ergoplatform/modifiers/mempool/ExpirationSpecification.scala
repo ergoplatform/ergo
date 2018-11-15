@@ -37,7 +37,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val updContext = emptyStateContext.appendHeader(defaultHeaderGen.sample.get.copy(height = h))
 
     tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity
+    tx.statefulValidity(IndexedSeq(from), updContext).isSuccess shouldBe expectedValidity
   }
 
   property("successful spending w. same value") {

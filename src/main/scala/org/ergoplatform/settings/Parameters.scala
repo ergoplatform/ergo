@@ -12,6 +12,7 @@ import scala.util.Try
   * System parameters which could be readjusted via collective miners decision.
   */
 abstract class Parameters {
+  import Parameters._
 
   def height: Height
 
@@ -23,52 +24,12 @@ abstract class Parameters {
   // Max total computation cost of a block.
   lazy val MaxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
-  val Kdefault = 1250000
-  val Kmax = 5000000
-  val Kmin = 0
-  val Kstep = 25000
-
   /** Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs
     */
   lazy val K: Int = parametersTable(KIncrease)
 
-  /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
-    * parameter.
-    */
-  val MinValuePerByteDefault: Int = 30 * 12
-  val MinValueStep = 10
-  val MinValueMin = 0
-  val MinValueMax = 10000000 //0.01 Erg
-
   lazy val MinValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
 
-  lazy val stepsTable: Map[Byte, Int] = Map (
-    KIncrease -> Kstep,
-    MinValuePerByteIncrease -> MinValueStep
-  )
-
-  lazy val minValues: Map[Byte, Int] = Map (
-    KIncrease -> Kmin,
-    MinValuePerByteIncrease -> MinValueMin
-  )
-
-  lazy val maxValues: Map[Byte, Int] = Map (
-    KIncrease -> Kmax,
-    MinValuePerByteIncrease -> MinValueMax
-  )
-
-  //Parameter identifiers
-  val KIncrease = 1: Byte
-  val KDecrease = -KIncrease
-
-  val MinValuePerByteIncrease = 2: Byte
-  val MinValuePerByteDecrease = -MinValuePerByteIncrease
-
-  val MaxBlockSizeIncrease = 3: Byte
-  val MaxBlockSizeDecrease = -MaxBlockSizeIncrease
-
-  val MaxBlockCostIncrease = 4: Byte
-  val MaxBlockCostDecrease = -MaxBlockCostIncrease
 
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
     val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
@@ -127,6 +88,47 @@ object Parameters {
   //A vote for nothing
   val NoParameter = 0: Byte
 
+  //Parameter identifiers
+  val KIncrease = 1: Byte
+  val KDecrease = -KIncrease
+
+  val MinValuePerByteIncrease = 2: Byte
+  val MinValuePerByteDecrease = -MinValuePerByteIncrease
+
+  val MaxBlockSizeIncrease = 3: Byte
+  val MaxBlockSizeDecrease = -MaxBlockSizeIncrease
+
+  val MaxBlockCostIncrease = 4: Byte
+  val MaxBlockCostDecrease = -MaxBlockCostIncrease
+
+  val Kdefault = 1250000
+  val Kmax = 5000000
+  val Kmin = 0
+  val Kstep = 25000
+
+  /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
+    * parameter.
+    */
+  val MinValuePerByteDefault: Int = 30 * 12
+  val MinValueStep = 10
+  val MinValueMin = 0
+  val MinValueMax = 10000000 //0.01 Erg
+
+  lazy val stepsTable: Map[Byte, Int] = Map (
+    KIncrease -> Kstep,
+    MinValuePerByteIncrease -> MinValueStep
+  )
+
+  lazy val minValues: Map[Byte, Int] = Map (
+    KIncrease -> Kmin,
+    MinValuePerByteIncrease -> MinValueMin
+  )
+
+  lazy val maxValues: Map[Byte, Int] = Map (
+    KIncrease -> Kmax,
+    MinValuePerByteIncrease -> MinValueMax
+  )
+
   val ParametersCount = 2
 
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters {
@@ -160,6 +162,8 @@ object ParametersSerializer extends Serializer[Parameters] {
 }
 
 object LaunchParameters extends Parameters {
+  import Parameters._
+
   override val height = 0
 
   override val parametersTable = Map(

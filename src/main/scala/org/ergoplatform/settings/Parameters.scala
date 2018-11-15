@@ -76,7 +76,7 @@ abstract class Parameters {
       if (count > votingEpochLength / 2) {
         val currentValue = parametersTable(paramId)
         val maxValue = maxValues.getOrElse(paramId, Int.MaxValue / 2) //todo: more precise upper-bound
-        val minValue = maxValues.getOrElse(paramId, 0)
+        val minValue = minValues.getOrElse(paramId, 0)
         val step = stepsTable.getOrElse(paramId, Math.max(1, currentValue / 100))
 
         val newValue = paramId match {
@@ -98,7 +98,7 @@ abstract class Parameters {
       if(value > parametersTable(paramId)) Some(paramId) else
       if(value < parametersTable(paramId)) Some((-paramId).toByte) else None
     }.take(2).toArray
-    vs ++ new Array[Byte](3 - vs.length)
+    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
   }
 
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
@@ -138,7 +138,6 @@ object Parameters {
     val paramsTable = extension.mandatoryFields.map { case (k, v) =>
       require(k.length == 1)
       require(v.length == 4)
-
       k.head -> Ints.fromByteArray(v)
     }.toMap
     Parameters(h, paramsTable)

@@ -38,9 +38,24 @@ abstract class Parameters {
   val MinValuePerByteDefault: Int = 30 * 12
   val MinValueStep = 10
   val MinValueMin = 0
-  val MinValueMax = 100000000 //0.1 Erg
+  val MinValueMax = 10000000 //0.01 Erg
 
   lazy val MinValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
+
+  lazy val stepsTable: Map[Byte, Int] = Map (
+    KIncrease -> Kstep,
+    MinValuePerByteIncrease -> MinValueStep
+  )
+
+  lazy val minValues: Map[Byte, Int] = Map (
+    KIncrease -> Kmin,
+    MinValuePerByteIncrease -> MinValueMin
+  )
+
+  lazy val maxValues: Map[Byte, Int] = Map (
+    KIncrease -> Kmax,
+    MinValuePerByteIncrease -> MinValueMax
+  )
 
   //Parameter identifiers
   val KIncrease = 1: Byte
@@ -57,35 +72,33 @@ abstract class Parameters {
 
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
     val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
-      paramId match {
-        case b: Byte if b == KIncrease =>
-          if (count > votingEpochLength / 2) {
-            val newK = if (K < Kmax) K + Kstep else K
-            table.updated(KIncrease, newK)
-          } else {
-            table
-          }
-        case b: Byte if b == KDecrease =>
-          if (count > votingEpochLength / 2) {
-            val newK = if (K > Kmin) K - Kstep else K
-            table.updated(KIncrease, newK)
-          } else {
-            table
-          }
-        case _ => table
+
+      if (count > votingEpochLength / 2) {
+        val currentValue = parametersTable(paramId)
+        val maxValue = maxValues.getOrElse(paramId, Int.MaxValue / 2) //todo: more precise upper-bound
+        val minValue = maxValues.getOrElse(paramId, 0)
+        val step = stepsTable.getOrElse(paramId, Math.max(1, currentValue / 100))
+
+        val newValue = paramId match {
+          case b: Byte if b > 0 =>
+            if(currentValue < maxValue) currentValue + step else currentValue
+          case b: Byte if b < 0 =>
+            if(currentValue > minValue) currentValue - step else currentValue
+        }
+        table.updated(paramId, newValue)
+      } else {
+        table
       }
     }
     Parameters(newHeight, paramsTable)
   }
 
   def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
-    if (ownTargets.getOrElse(KIncrease, Kmin) > parametersTable(KIncrease)) {
-      Array(KIncrease, 0: Byte, 0: Byte)
-    } else if (ownTargets.getOrElse(KIncrease, Kmin) < parametersTable(KIncrease)) {
-      Array((-KIncrease).toByte, 0: Byte, 0: Byte)
-    } else {
-      Array.fill(3)(0: Byte)
-    }
+    val vs = ownTargets.flatMap{case (paramId, value) =>
+      if(value > parametersTable(paramId)) Some(paramId) else
+      if(value < parametersTable(paramId)) Some((-paramId).toByte) else None
+    }.take(2).toArray
+    vs ++ new Array[Byte](3 - vs.length)
   }
 
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {

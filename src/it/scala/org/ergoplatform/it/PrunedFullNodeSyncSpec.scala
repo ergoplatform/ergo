@@ -14,8 +14,9 @@ import scala.concurrent.duration._
 
 class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val approxTargetHeight = 10
-  val blocksToKeep: Int = approxTargetHeight / 2
+  val approxTargetHeight = 20
+  val blocksToKeep: Int = approxTargetHeight / 4
+  val snapshotCreationInterval = 10
 
   val localVolume = s"$localDataDir/full-node-sync-spec/data"
   val remoteVolume = "/app"
@@ -25,9 +26,12 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(miningDelayConfig(10000))
+    .withFallback(snapshotCreationIntervalConfig(snapshotCreationInterval))
+    .withFallback(specialDataDirConfig(remoteVolume))
   val prunedConfig: Config = nodeSeedConfigs(1)
     .withFallback(blockIntervalConfig(8000))
     .withFallback(prunedHistoryConfig(blocksToKeep))
+    .withFallback(snapshotCreationIntervalConfig(snapshotCreationInterval))
     .withFallback(nonGeneratingPeerConfig)
 
   // Testing scenario:
@@ -49,10 +53,21 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
       val sampleInfo = Async.await(nodeForSyncing.info)
       val prunedNode = docker.startNode(prunedConfig).get
       val targetHeight = sampleInfo.bestBlockHeightOpt.value
-      Async.await(prunedNode.waitForHeight(targetHeight))
+      val targetBlockId = sampleInfo.bestBlockIdOpt.value
+      val snapshotMaxHeight = targetHeight - blocksToKeep
+      val snapshotHeight = snapshotMaxHeight - (snapshotMaxHeight % snapshotCreationInterval)
+      val blocksToPrune = Async.await(nodeForSyncing.headers(0, snapshotHeight))
+      Async.await(prunedNode.waitFor[Option[String]](
+        _.info.map(_.bestBlockIdOpt),
+        blockIdOpt => {
+          blockIdOpt.foreach(blocksToPrune should not contain _)
+          blockIdOpt.contains(targetBlockId)
+        },
+        50.millis
+      ))
       val prunedNodeInfo = Async.await(prunedNode.info)
       prunedNodeInfo shouldEqual sampleInfo
-      val nodePrunedBlockId = Async.await(prunedNode.headerIdsByHeight(targetHeight - blocksToKeep - 1)).head
+      val nodePrunedBlockId = Async.await(prunedNode.headerIdsByHeight(snapshotHeight)).head
       Async.await(prunedNode.singleGet(s"/blocks/$nodePrunedBlockId")
         .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)) shouldBe false
     }

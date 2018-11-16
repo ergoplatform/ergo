@@ -31,6 +31,8 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   def contains(id: ModifierId): Boolean
 
+  protected def lastSnapshotAppliedHeight: Option[Int]
+
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
   /** return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
@@ -69,21 +71,29 @@ trait ToDownloadProcessor extends ScorexLogging {
   /** Checks, whether it's time to download full chain and return toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
+    lazy val isPrunedFullMode = config.blocksToKeep > 0 && !config.stateType.requireProofs
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction.
       Seq.empty
-    } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
+    } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height) &&
+      (!isPrunedFullMode || lastSnapshotAppliedHeight.exists(_ < header.height))) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (config.blocksToKeep > 0 && !config.stateType.requireProofs &&
-      pruningProcessor.shouldDownloadBlockAtHeight(header.height + 1)) {
-      // Pruned full node regime - node should recover state before full blocks application.
-      Seq((UtxoSnapshotManifest.modifierTypeId, UtxoSnapshot.rootDigestToId(header.stateRoot)))
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks.
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
-      Seq.empty
+      if (isPrunedFullMode && lastSnapshotAppliedHeight.isEmpty) {
+        // Pruned full node regime with no snapshots applied yet -
+        // node should recover state before full blocks application.
+        val snapshotHeight = pruningProcessor.nearestSnapshotHeight(header.height)
+        val snapshotIdOpt = headerIdsAtHeight(snapshotHeight).headOption
+          .flatMap(id => typedModifierById[Header](id))
+          .map(h => UtxoSnapshot.rootDigestToId(h.stateRoot))
+        snapshotIdOpt.map(id => Seq((UtxoSnapshotManifest.modifierTypeId, id))).getOrElse(Seq.empty)
+      } else {
+        Seq.empty
+      }
     } else {
       Seq.empty
     }

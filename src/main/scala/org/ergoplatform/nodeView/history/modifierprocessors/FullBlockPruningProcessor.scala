@@ -27,6 +27,11 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
     isHeadersChainSynced && minimalFullBlockHeight <= height
   }
 
+  def nearestSnapshotHeight(h: Int): Int = {
+    val snapshotMaxHeight = h - config.blocksToKeep
+    snapshotMaxHeight - (snapshotMaxHeight % config.snapshotCreationInterval)
+  }
+
   /** Update minimal full block height and header chain synced flag
     *
     * @param header - header of new best full block
@@ -36,8 +41,9 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
       0 // keep all blocks in history
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
-      // just synced with the headers chain - determine first full block to apply
-      0 //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+      // just synced with the headers chain in pruned full mode -
+      // start from height of the nearest state snapshot available + 1.
+      nearestSnapshotHeight(header.height) + 1
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

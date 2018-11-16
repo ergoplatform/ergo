@@ -27,6 +27,7 @@ case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
     throw new Exception("Serialization for UtxoSnapshot is not (and will not be) implemented")
 
   override def parentId: ModifierId = ???
+
 }
 
 object UtxoSnapshot {

@@ -85,10 +85,6 @@ object ErgoSettings extends ScorexLogging
       failWithError("nodeSettings.keepVersions should not be negative")
     } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
-    } else if (!settings.nodeSettings.stateType.requireProofs && settings.nodeSettings.blocksToKeep > 0 &&
-      settings.nodeSettings.blocksToKeep % settings.nodeSettings.snapshotCreationInterval == 0) {
-      failWithError(
-        "nodeSettings.blocksToKeep should be multiple of nodeSettings.snapshotCreationInterval in pruned full mode")
     } else {
       settings
     }

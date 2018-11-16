@@ -37,12 +37,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs, chainSettings.epochLength)
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
-  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
-
-  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
@@ -55,6 +52,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
+
+  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
+    chainSettings.useLastEpochs, chainSettings.epochLength)
+
+  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
+
+  def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -213,10 +217,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
-
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
-
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id

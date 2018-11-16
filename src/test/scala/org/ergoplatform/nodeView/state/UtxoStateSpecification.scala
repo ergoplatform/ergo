@@ -34,6 +34,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("fromBoxHolder") {
+
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)
       bh.take(1000)._1.foreach { box =>

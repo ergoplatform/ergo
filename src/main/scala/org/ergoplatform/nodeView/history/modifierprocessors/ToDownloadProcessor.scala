@@ -84,7 +84,6 @@ trait ToDownloadProcessor extends ScorexLogging {
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
       // Headers chain is synced after this header. Start downloading full blocks.
       pruningProcessor.updateBestFullBlock(header)
-      log.info(s"Headers chain is synced after header ${header.encodedId} at height ${header.height}")
       if (isPrunedFullMode && lastSnapshotAppliedHeight.isEmpty) {
         // Pruned full node regime with no snapshots applied yet -
         // node should recover state before full blocks application.

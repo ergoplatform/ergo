@@ -42,8 +42,8 @@ case class Extension(headerId: ModifierId,
 
   override def toString: String = {
     s"Extension(${Algos.encode(headerId)}, " +
-      s"${mandatoryFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})" +
-      s"${optionalFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})"
+      s"Mandatory fields: ${mandatoryFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")}) " +
+      s"Optional fields: ${optionalFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})"
   }
 
 }
@@ -100,7 +100,7 @@ object Extension extends ApiCodecs {
 }
 
 object ExtensionSerializer extends Serializer[Extension] {
-  val Delimiter: Array[Byte] = Array.fill(4)(0: Byte)
+  val Delimiter: Array[Byte] = Array.fill(1)(Byte.MinValue)
 
   override def toBytes(obj: Extension): Array[Byte] = {
     val heightBytes = Ints.toByteArray(obj.height)

@@ -35,7 +35,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
           .map(r => historyStorage.modifierById(UtxoSnapshotChunk.rootDigestToId(r)))
           .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
         lazy val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
-        if (otherChunks.lengthCompare(manifest.size - 1) == 0 &&
+        if (otherChunks.lengthCompare(manifest.chunkRoots.size - 1) == 0 &&
           lastHeaders.lengthCompare(Constants.LastHeadersInContext) == 0) {
           // Time to apply snapshot
           val snapshot = UtxoSnapshot(manifest, otherChunks :+ m, lastHeaders)
@@ -59,7 +59,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   }
 
   private def takeLastHeaders(lastHeaderId: ModifierId, qty: Int): Seq[Header] = {
-    (0 to qty).foldLeft(Seq.empty[Header]) { case (acc, _) =>
+    (0 until qty).foldLeft(Seq.empty[Header]) { case (acc, _) =>
       historyStorage.modifierById(acc.headOption.map(_.parentId).getOrElse(lastHeaderId)) match {
         case Some(h: Header) =>
           acc :+ h

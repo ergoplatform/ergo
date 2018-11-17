@@ -67,6 +67,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         mod.header.height <= Constants.LastHeadersInContext) {
         createStateSnapshot(mod.header)
       }
+    case SemanticallySuccessfulModifier =>
+      // ignore other messages
   }
 
   private def unknownMessage: Receive = {
@@ -80,7 +82,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val (manifest, chunks) = r.takeSnapshot
         val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
         history().append(snapshot)
-      case _ => // Do nothing
+      case _ =>
+        log.warn("Attempting to create state snapshot in unsupported state mode")
     }
   }
 

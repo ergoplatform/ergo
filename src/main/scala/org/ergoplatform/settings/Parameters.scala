@@ -61,7 +61,8 @@ abstract class Parameters {
   }
 
   private def padVotes(vs: Array[Byte]): Array[Byte] = {
-    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
+    val maxVotes = ParametersCount + 1
+    if (vs.length < maxVotes) vs ++ Array.fill(maxVotes - vs.length)(0: Byte) else vs
   }
 
 

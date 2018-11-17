@@ -46,10 +46,13 @@ trait UtxoStateGenerators
     tree <- proverGen
     lastHeaders <- Gen.listOfN(Constants.LastHeadersInContext, invalidHeaderGen)
   } yield {
+    val header = lastHeaders.head.copy(stateRoot = tree.digest)
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
-    val manifest = UtxoSnapshotManifest(proverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), lastHeaders.head.id)
+    val serializedProverManifest = serializer.manifestToBytes(proverManifest)
+    val manifest = UtxoSnapshotManifest(serializedProverManifest,
+      proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), lastHeaders.head.id)
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
-    UtxoSnapshot(manifest, chunks, lastHeaders)
+    UtxoSnapshot(manifest, chunks, header +: lastHeaders.tail)
   }
 
   lazy val randomUtxoSnapshotChunkGen: Gen[UtxoSnapshotChunk] = for {
@@ -62,6 +65,6 @@ trait UtxoStateGenerators
     chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootDigestSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-  } yield UtxoSnapshotManifest(proverManifest, chunkRootHashes.map(ADDigest @@ _), blockId)
+  } yield UtxoSnapshotManifest(serializer.manifestToBytes(proverManifest), chunkRootHashes.map(ADDigest @@ _), blockId)
 
 }

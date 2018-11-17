@@ -62,10 +62,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       unknownMessage
 
   private def successfulModifier: Receive = {
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock)
-      if mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0 &&
-        mod.header.height <= Constants.LastHeadersInContext =>
-      createStateSnapshot(mod.header)
+    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
+      if (mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0 &&
+        mod.header.height <= Constants.LastHeadersInContext) {
+        createStateSnapshot(mod.header)
+      }
   }
 
   private def unknownMessage: Receive = {

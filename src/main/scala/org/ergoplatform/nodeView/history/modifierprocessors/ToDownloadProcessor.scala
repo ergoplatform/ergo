@@ -17,6 +17,8 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
 
+  lazy val isPrunedFullMode: Boolean = config.blocksToKeep > 0 && !config.stateType.requireProofs
+
   protected val config: NodeConfigurationSettings
 
   protected val chainSettings: ChainSettings
@@ -59,7 +61,8 @@ trait ToDownloadProcessor extends ScorexLogging {
     }
 
     bestFullBlockOpt match {
-      case _ if !isHeadersChainSynced || !config.verifyTransactions =>
+      case _ if !isHeadersChainSynced || !config.verifyTransactions ||
+        (isPrunedFullMode && lastSnapshotAppliedHeight.isEmpty) =>
         Seq.empty
       case Some(fb) =>
         continuation(fb.header.height + 1, Seq.empty)
@@ -71,7 +74,6 @@ trait ToDownloadProcessor extends ScorexLogging {
   /** Checks, whether it's time to download full chain and return toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    lazy val isPrunedFullMode = config.blocksToKeep > 0 && !config.stateType.requireProofs
     if (!config.verifyTransactions) {
       // Regime that do not download and verify transaction.
       Seq.empty
@@ -89,7 +91,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         val snapshotHeight = pruningProcessor.nearestSnapshotHeight(header.height)
         val snapshotIdOpt = headerIdsAtHeight(snapshotHeight).headOption
           .flatMap(id => typedModifierById[Header](id))
-          .map(h => UtxoSnapshot.rootDigestToId(h.stateRoot))
+          .map(h => UtxoSnapshotManifest.blockIdToManifestId(h.id))
         snapshotIdOpt.map(id => Seq((UtxoSnapshotManifest.modifierTypeId, id))).getOrElse(Seq.empty)
       } else {
         Seq.empty

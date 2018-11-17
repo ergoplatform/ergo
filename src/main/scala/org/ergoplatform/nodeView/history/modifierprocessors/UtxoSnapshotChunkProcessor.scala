@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -32,7 +32,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
     historyStorage.modifierById(m.manifestId) match {
       case Some(manifest: UtxoSnapshotManifest) =>
         val otherChunks = manifest.chunkRoots
-          .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
+          .map(r => historyStorage.modifierById(UtxoSnapshotChunk.rootDigestToId(r)))
           .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
         lazy val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
         if (otherChunks.lengthCompare(manifest.size - 1) == 0 &&

@@ -170,10 +170,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private def applySnapshot: ModifierProcessing = {
     case UtxoSnapshot(manifest, chunks, lastHeaders) =>
-      log.info(s"Trying to recover state from snapshot with rootDigest ${Algos.encode(manifest.rootDigest)}")
+      log.info(s"Trying to recover state from snapshot")
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      serializer.combine(manifest.proverManifest -> chunks.map(_.subtree))
+      val proverManifestTry = serializer.manifestFromBytes(manifest.serializedProverManifest)
+      proverManifestTry
+        .flatMap(manifest => serializer.combine(manifest -> chunks.map(_.subtree)))
         .map { prover =>
+          val manifestRootDigest = lastHeaders.head.stateRoot
           val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
           val newStore = recreateStore()
           val recoveredPersistentProver = {
@@ -182,7 +185,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             UtxoState.createPersistentProver(
               prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
           }
-          if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifest.rootDigest)) {
+          if (!java.util.Arrays.equals(recoveredPersistentProver.digest,manifestRootDigest)) {
             throw new Exception(
               s"Unexpected prover digest after state recovery ${Algos.encode(recoveredPersistentProver.digest)}")
           }

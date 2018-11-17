@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifest}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.core.consensus.History.ProgressInfo
@@ -37,9 +37,9 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
     headerIdsAtHeight(heightToRemove).headOption
       .flatMap { id =>
         typedModifierById[Header](id).flatMap { h =>
-          val manifestId = UtxoSnapshot.rootDigestToId(h.stateRoot)
+          val manifestId = UtxoSnapshotManifest.blockIdToManifestId(h.id)
           typedModifierById[UtxoSnapshotManifest](manifestId).map { manifest =>
-            val chunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
+            val chunks = manifest.chunkRoots.map(UtxoSnapshotChunk.rootDigestToId)
             manifestId -> chunks
           }
         }

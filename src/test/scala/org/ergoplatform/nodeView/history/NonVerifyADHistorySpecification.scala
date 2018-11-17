@@ -16,15 +16,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 
-  ignore("Should apply UTXOSnapshotChunks") {
-    forAll(randomUtxoSnapshotChunkGen) { snapshot: UtxoSnapshotChunk =>
-      popowHistory.applicable(snapshot) shouldBe true
-      val processInfo = popowHistory.append(snapshot).get._2
-      processInfo.toApply shouldEqual Some(snapshot)
-      popowHistory.applicable(snapshot) shouldBe false
-    }
-  }
-
   property("Should calculate difficulty correctly") {
     val epochLength = 3
     val useLastEpochs = 3

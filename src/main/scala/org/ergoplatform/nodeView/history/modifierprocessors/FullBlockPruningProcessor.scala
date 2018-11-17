@@ -43,7 +43,8 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) {
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
       // just synced with the headers chain in pruned full mode -
       // start from height of the nearest state snapshot available + 1.
-      nearestSnapshotHeight(header.height) + 1
+      val snapshotHeight = nearestSnapshotHeight(header.height)
+      if (snapshotHeight > config.snapshotCreationInterval) snapshotHeight + 1 else 0
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

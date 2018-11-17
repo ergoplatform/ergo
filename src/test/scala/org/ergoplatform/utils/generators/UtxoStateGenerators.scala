@@ -62,7 +62,7 @@ trait UtxoStateGenerators
 
   lazy val randomUtxoSnapshotManifestGen: Gen[UtxoSnapshotManifest] = for {
     chunksQty <- Gen.chooseNum(1, 100)
-    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(UtxoSnapshotManifestSerializer.rootDigestSize))
+    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(Constants.ModifierIdSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
   } yield UtxoSnapshotManifest(serializer.manifestToBytes(proverManifest), chunkRootHashes.map(ADDigest @@ _), blockId)

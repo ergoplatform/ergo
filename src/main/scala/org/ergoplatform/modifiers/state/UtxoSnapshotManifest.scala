@@ -43,8 +43,6 @@ object UtxoSnapshotManifest {
 
 object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
 
-  val rootDigestSize: Int = 33
-
   override def toBytes(obj: UtxoSnapshotManifest): Array[Byte] = {
     idToBytes(obj.blockId) ++
       Ints.toByteArray(obj.serializedProverManifest.length) ++
@@ -58,7 +56,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
       bytes.slice(Constants.ModifierIdSize, Constants.ModifierIdSize + 4))
     val proverManifest = bytes.slice(Constants.ModifierIdSize + 4, Constants.ModifierIdSize + 4 + proverManifestLen)
     val chunkRootHashes = bytes.drop(Constants.ModifierIdSize + 4 + proverManifestLen)
-      .grouped(rootDigestSize)
+      .grouped(Constants.ModifierIdSize)
       .map(ADDigest @@ _)
       .toSeq
     UtxoSnapshotManifest(proverManifest, chunkRootHashes, blockId)

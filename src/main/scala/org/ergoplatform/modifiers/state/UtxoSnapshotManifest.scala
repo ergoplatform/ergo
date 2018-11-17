@@ -27,13 +27,6 @@ case class UtxoSnapshotManifest(serializedProverManifest: Array[Byte],
 
   override val sizeOpt: Option[Int] = None
 
-  def validate(header: Header): Try[Unit] = {
-    failFast
-      .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
-      .result
-      .toTry
-  }
-
   override def parentId: ModifierId = ???
 
 }

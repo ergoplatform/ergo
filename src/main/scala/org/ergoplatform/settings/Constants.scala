@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
+import org.ergoplatform.modifiers.state.{UtxoSnapshotChunk, UtxoSnapshotChunkSerializer, UtxoSnapshotManifest, UtxoSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
@@ -47,10 +48,14 @@ object Constants {
 
   val TrueLeaf: Constant[SBoolean.type] = Constant[SBoolean.type](true, SBoolean)
 
-  val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
-    Map(Header.modifierTypeId -> HeaderSerializer,
-      Extension.modifierTypeId -> ExtensionSerializer,
-      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
-      ADProofs.modifierTypeId -> ADProofSerializer,
-      Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+  val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] = Map(
+    Header.modifierTypeId -> HeaderSerializer,
+    Extension.modifierTypeId -> ExtensionSerializer,
+    BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+    ADProofs.modifierTypeId -> ADProofSerializer,
+    Transaction.ModifierTypeId -> ErgoTransactionSerializer,
+    UtxoSnapshotManifest.modifierTypeId -> UtxoSnapshotManifestSerializer,
+    UtxoSnapshotChunk.modifierTypeId -> UtxoSnapshotChunkSerializer
+  )
+
 }

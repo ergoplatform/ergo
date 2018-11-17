@@ -41,11 +41,11 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
   def updateBestFullBlock(header: Header): Int = {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
       0 // keep all blocks in history
-    } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
+    } else if (!config.stateType.requireProofs) {
       // just synced with the headers chain in pruned full mode -
       // start from height of the nearest state snapshot available + 1.
       val snapshotHeight = nearestSnapshotHeight(header.height)
-      if (snapshotHeight > config.snapshotCreationInterval) snapshotHeight + 1 else 0
+      if (snapshotHeight >= config.snapshotCreationInterval) snapshotHeight + 1 else 0
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

@@ -67,8 +67,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         mod.header.height <= Constants.LastHeadersInContext) {
         createStateSnapshot(mod.header)
       }
-    case SemanticallySuccessfulModifier =>
-      // ignore other messages
+    case _: SemanticallySuccessfulModifier[_] => // ignore other messages
   }
 
   private def unknownMessage: Receive = {

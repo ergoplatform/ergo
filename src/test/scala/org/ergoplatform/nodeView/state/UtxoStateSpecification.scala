@@ -174,7 +174,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     val (us: UtxoState, _) = createUtxoState()
     forAll(validUtxoSnapshotGen) { snapshot =>
       val recoveredState = us.applyModifier(snapshot).get
-      java.util.Arrays.equals(recoveredState.rootHash, snapshot.manifest.rootDigest) shouldBe true
+      java.util.Arrays.equals(recoveredState.rootHash, snapshot.lastHeaders.head.stateRoot) shouldBe true
     }
   }
 

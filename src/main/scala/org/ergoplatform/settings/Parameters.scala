@@ -60,12 +60,17 @@ abstract class Parameters {
     Parameters(newHeight, paramsTable)
   }
 
+  private def padVotes(vs: Array[Byte]): Array[Byte] = {
+    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
+  }
+
+
   def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
     val vs = ownTargets.flatMap{case (paramId, value) =>
       if(value > parametersTable(paramId)) Some(paramId) else
       if(value < parametersTable(paramId)) Some((-paramId).toByte) else None
-    }.take(2).toArray
-    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
+    }.take(ParametersCount).toArray
+    padVotes(vs)
   }
 
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
@@ -78,7 +83,7 @@ abstract class Parameters {
         false
       }
     }.map(_._1)
-    if (vs.length < 3) vs ++ Array.fill(3 - vs.length)(0: Byte) else vs
+    padVotes(vs)
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {

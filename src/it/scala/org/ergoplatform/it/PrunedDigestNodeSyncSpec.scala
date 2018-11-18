@@ -64,8 +64,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
       ))
       val digestNodeInfo = Async.await(digestNode.info)
       digestNodeInfo shouldEqual sampleInfo
-      val digestNodePrunedBlockId = Async.await(digestNode.headerIdsByHeight(targetHeight - blocksToKeep - 1)).head
-      Async.await(digestNode.singleGet(s"/blocks/$digestNodePrunedBlockId")
+      Async.await(digestNode.singleGet(s"/blocks/${blocksToPrune.last}")
         .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)) shouldBe false
     }
 

@@ -68,8 +68,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
       ))
       val prunedNodeInfo = Async.await(prunedNode.info)
       prunedNodeInfo shouldEqual sampleInfo
-      val nodePrunedBlockId = Async.await(prunedNode.headerIdsByHeight(snapshotHeight)).head
-      Async.await(prunedNode.singleGet(s"/blocks/$nodePrunedBlockId")
+      Async.await(prunedNode.singleGet(s"/blocks/${blocksToPrune.last}")
         .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)) shouldBe false
     }
 

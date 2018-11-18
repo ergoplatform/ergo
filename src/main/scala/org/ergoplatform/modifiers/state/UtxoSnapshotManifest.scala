@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.state
 
 import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer

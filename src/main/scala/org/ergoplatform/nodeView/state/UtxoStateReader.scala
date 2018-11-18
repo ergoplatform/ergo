@@ -104,7 +104,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     val serializedProverManifest = serializer.manifestToBytes(proverManifest)
     val manifest = UtxoSnapshotManifest(
       serializedProverManifest, proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), ModifierId !@@ version)
-    println(manifest.chunkRoots.map(_.length))
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     manifest -> chunks
   }

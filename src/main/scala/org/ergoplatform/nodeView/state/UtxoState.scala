@@ -185,7 +185,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             UtxoState.createPersistentProver(
               prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
           }
-          if (!java.util.Arrays.equals(recoveredPersistentProver.digest,manifestRootDigest)) {
+          if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifestRootDigest)) {
             throw new Exception(
               s"Unexpected prover digest after state recovery ${Algos.encode(recoveredPersistentProver.digest)}")
           }

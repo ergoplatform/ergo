@@ -24,9 +24,9 @@ case class UtxoSnapshotManifest(serializedProverManifest: Array[Byte],
 
   override lazy val serializer: Serializer[UtxoSnapshotManifest] = UtxoSnapshotManifestSerializer
 
-  override val sizeOpt: Option[Int] = None
+  override lazy val sizeOpt: Option[Int] = Some(bytes.length)
 
-  override def parentId: ModifierId = ???
+  override def parentId: ModifierId = blockId
 
 }
 

@@ -37,7 +37,8 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};
   // 2. Shut it down, restart with turned off mining and fetch its info to get actual {targetHeight};
-  // 3. Start pruned full node and wait until it gets synced with the first one up to {targetHeight};
+  // 3. Start pruned full node and wait until it gets synced with the first one up to {targetHeight} ensuring
+  //    it does not load full blocks that should be pruned;
   // 4. Fetch pruned node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
   s"Pruned full node synchronization" in {

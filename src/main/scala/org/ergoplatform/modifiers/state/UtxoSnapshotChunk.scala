@@ -26,11 +26,7 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   override def parentId: ModifierId = manifestId
 
-  override val sizeOpt: Option[Int] = None
-
-  def correspondsTo(manifest: UtxoSnapshotManifest): Boolean = {
-    manifest.chunkRoots.exists(java.util.Arrays.equals(_, rootDigest))
-  }
+  override lazy val sizeOpt: Option[Int] = Some(bytes.length)
 
 }
 

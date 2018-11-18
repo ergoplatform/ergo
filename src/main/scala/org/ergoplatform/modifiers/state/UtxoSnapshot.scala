@@ -24,7 +24,7 @@ case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
   override lazy val serializer: Serializer[M] =
     throw new Exception("Serialization for UtxoSnapshot is not (and will not be) implemented")
 
-  override def parentId: ModifierId = ???
+  override def parentId: ModifierId = manifest.blockId
 
 }
 

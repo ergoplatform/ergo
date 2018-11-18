@@ -104,15 +104,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     failFast
       .payload(0L)
       .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, blockchainState.currentParameters)), s"Transaction is trying to create dust: $this")
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
+      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "Box created in future")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
-
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
-
         val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
 
         //todo: reuse the interpreter?
@@ -145,8 +143,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             }
           case Failure(e) => fatal(e.getMessage)
         }
-      }
-      .toTry
+      }.toTry
   }
 
   override type M = ErgoTransaction

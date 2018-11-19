@@ -132,7 +132,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def seed: String = "walletstub"
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-    private val prover = new ErgoProvingInterpreter(seed, 2, parameters)
+    private val prover = ErgoProvingInterpreter(seed, 2, parameters)
     private val trackedAddresses: Seq[P2PKAddress] = prover.dlogPubkeys.map(P2PKAddress.apply)
 
     def receive: Receive = {

@@ -22,7 +22,6 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-  implicit lazy val IRInstance: IRContext = new RuntimeIRContext()
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)
   val settings: ErgoSettings = initSettings
@@ -36,7 +35,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
-  val defaultProver: ErgoProvingInterpreter = new ErgoProvingInterpreter(defaultSeed, 1)
+  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 1)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage

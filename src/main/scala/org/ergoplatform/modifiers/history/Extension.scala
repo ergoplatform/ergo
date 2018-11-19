@@ -117,7 +117,9 @@ object ExtensionSerializer extends Serializer[Extension] {
 
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
     val totalLength = bytes.length
-    // todo check bytes length immediately after voting implementation to prevent DoS
+
+    // todo check bytes length more precisely after voting implementation
+    require(totalLength < 2048)
 
     @tailrec
     def parseSection(pos: Int,

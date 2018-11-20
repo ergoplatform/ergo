@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.Parameters
@@ -18,6 +19,7 @@ import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 

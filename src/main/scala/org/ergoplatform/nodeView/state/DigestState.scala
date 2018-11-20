@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core._
@@ -57,6 +58,7 @@ class DigestState protected(override val version: VersionTag,
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
               .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
             val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+            implicit val verifier: ErgoInterpreter = ErgoInterpreter()
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
               val boxesToSpend = tx.inputs.map(_.boxId).map { id =>

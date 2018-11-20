@@ -6,7 +6,7 @@ import org.ergoplatform.settings.{Constants, Parameters}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
+import sigmastate.interpreter.Interpreter.{ReductionResult, ScriptEnv, VerificationResult}
 
 import scala.util.Try
 
@@ -66,6 +66,7 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)(impl
 }
 
 object ErgoInterpreter {
-  implicit lazy val IRInstance: IRContext = new RuntimeIRContext()
-  val instance = new ErgoInterpreter()
+
+  def apply(maxCost: Height = Parameters.MaxBlockCost): ErgoInterpreter =
+    new ErgoInterpreter(maxCost)(new RuntimeIRContext)
 }

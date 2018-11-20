@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.{ErgoPropertyTest, Stubs}
@@ -42,6 +43,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       tokens,
       boxCandidate.additionalRegisters)
   }
+
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
 
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
@@ -169,24 +172,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     vv <- groupElemGen
   } yield ProveDiffieHellmanTuple(gv, hv, uv, vv)
 
-  property("too long expressions should be rejected") {
-    val propositionGen = for {
-      proveList <- Gen.listOfN(350, proveDiffieHellmanTupleGen)
-    } yield OR(proveList)
-
-    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
-
-    forAll(gen) { case (from, tx) =>
-      tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, emptyStateContext)
-      validity.isSuccess shouldBe false
-      val cause = validity.failed.get.getCause
-      Option(cause) shouldBe defined
-      cause.getMessage should startWith("requirement failed: Too long expression")
-    }
-  }
-
-  property("too costly transaction should be rejected") {
+  ignore("too costly transaction should be rejected") {
     val propositionGen = for {
       proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
     } yield OR(proveList)

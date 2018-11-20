@@ -176,12 +176,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         .map { prover =>
           val manifestRootDigest = lastHeaders.head.stateRoot
           val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
+          val emissionBoxOpt = manifest.emissionBoxIdOpt.flatMap(boxById)
           val newStore = recreateStore()
           val recoveredPersistentProver = {
             val storage: VersionedIODBAVLStorage[Digest32] =
               new VersionedIODBAVLStorage(newStore, UtxoState.nodeParameters)(Algos.hash)
             UtxoState.createPersistentProver(
-              prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
+              prover, storage, idToVersion(manifest.blockId), emissionBoxOpt, recoveredStateContext)
           }
           if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifestRootDigest)) {
             throw new Exception(

@@ -41,11 +41,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       }
   }
 
-  /**
-    *
-    * @param fb - ergo full block
-    * @return emission box from this block transactions
-    */
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
@@ -63,8 +58,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       None
   }
 
-  protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
-    .map(s => ADKey @@ s.data)
+  protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey)) match {
+    case Some(w) if w.data.nonEmpty => Some(ADKey @@ w.data)
+    case _ => None
+  }
 
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
@@ -101,7 +98,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = persistentProver.synchronized {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]
     val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
-    val manifest = UtxoSnapshotManifest(proverManifest, ModifierId !@@ version)
+    val manifest = UtxoSnapshotManifest(proverManifest, ModifierId !@@ version, emissionBoxIdOpt)
     val chunks = proverSubtrees.map(UtxoSnapshotChunk(_, manifest.id))
     manifest -> chunks
   }

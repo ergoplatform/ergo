@@ -1,10 +1,6 @@
 package org.ergoplatform.mining
 
-import java.math.BigInteger
-
 import com.google.common.primitives.{Bytes, Ints, Longs}
-import org.bouncycastle.math.ec.ECPoint
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -146,8 +142,8 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * @param b  - difficulty
     */
   private[mining] def initializeIfNeeded(m: Array[Byte],
-                                 sk: BigInt,
-                                 b: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
+                                         sk: BigInt,
+                                         b: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
     x = randomSecret()
     lastInitMsg = m
     if (!onFlyCalculation(b)) {

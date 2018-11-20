@@ -3,13 +3,13 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.ErgoBox.R4
+import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}

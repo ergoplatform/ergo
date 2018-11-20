@@ -8,7 +8,7 @@ import org.ergoplatform.{MinerPubkey, Outputs}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import sigmastate.Values.{ConcreteCollection, Constant, IntConstant, Value}
+import sigmastate.Values.{ConcreteCollection, IntConstant, Value}
 import sigmastate._
 import sigmastate.serialization.OpCodes
 import sigmastate.utxo.{Append, ByIndex, ExtractScriptBytes, SizeOf}

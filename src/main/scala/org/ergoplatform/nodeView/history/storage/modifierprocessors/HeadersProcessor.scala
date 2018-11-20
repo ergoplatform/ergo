@@ -12,12 +12,11 @@ import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.util._
 
 import scala.annotation.tailrec
 import scala.util.Try

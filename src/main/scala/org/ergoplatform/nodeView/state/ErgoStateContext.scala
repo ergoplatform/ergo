@@ -4,7 +4,6 @@ import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
-import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest

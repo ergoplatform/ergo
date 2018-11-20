@@ -170,7 +170,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private def applySnapshot: ModifierProcessing = {
     case UtxoSnapshot(manifest, chunks, lastHeaders) =>
-      log.info(s"Trying to recover state from snapshot")
+      log.info(s"Trying to recover state from snapshot with rootDigest ${Algos.encode(manifest.rootDigest)}")
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       serializer.combine(manifest.proverManifest -> chunks.map(_.subtree))
         .map { prover =>

@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -11,6 +12,8 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ExpirationSpecification extends ErgoPropertyTest {
   type Height = Long
+
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
 
   def falsify(box: ErgoBox): ErgoBox = {
     ErgoBox(box.value,

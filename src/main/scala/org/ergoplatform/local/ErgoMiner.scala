@@ -12,6 +12,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -176,6 +177,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                          remainingCost: Long,
                          remainingSize: Long,
                          acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter()
     mempoolTxs.headOption match {
       case Some(tx) if remainingCost > ExpectedTxCost && remainingSize > ExpectedTxSize =>
         Try {

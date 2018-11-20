@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.transaction.state.TransactionValidation
@@ -33,7 +34,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   override def validate(tx: ErgoTransaction): Try[Unit] =
     tx.statelessValidity
       .flatMap(_ =>
-        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)
+        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)(ErgoInterpreter())
           .map(_ => Unit))
 
   /**

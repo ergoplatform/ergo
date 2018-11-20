@@ -59,13 +59,7 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
 }
 
 object UtxoSnapshotManifest {
-
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (106: Byte)
-
-  def blockIdToSerializedManifestId(blockId: ModifierId): Array[Byte] = Algos.hash(modifierTypeId +: idToBytes(blockId))
-
-  def blockIdToManifestId(blockId: ModifierId): ModifierId = bytesToId(blockIdToSerializedManifestId(blockId))
-
 }
 
 object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {

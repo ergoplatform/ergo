@@ -37,7 +37,7 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
     headerIdsAtHeight(heightToRemove).headOption
       .flatMap { id =>
         typedModifierById[Header](id).flatMap { h =>
-          val manifestId = UtxoSnapshotManifest.blockIdToManifestId(h.id)
+          val manifestId = UtxoSnapshot.rootDigestToId(h.stateRoot)
           typedModifierById[UtxoSnapshotManifest](manifestId).map { manifest =>
             val chunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
             manifestId -> chunks
@@ -50,10 +50,7 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
       }
   }
 
-  def validate(m: UtxoSnapshot): Try[Unit] = if (historyStorage.contains(m.id)) {
-    Failure(new Exception(s"UtxoSnapshot with id ${m.encodedId} is already in history"))
-  } else {
-    Success(Unit)
-  }
+  // UtxoSnapshot could be generated locally only, so it does not require validation.
+  def validate(m: UtxoSnapshot): Try[Unit] = Success(())
 
 }

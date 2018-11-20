@@ -39,7 +39,7 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
         typedModifierById[Header](id).flatMap { h =>
           val manifestId = UtxoSnapshotManifest.blockIdToManifestId(h.id)
           typedModifierById[UtxoSnapshotManifest](manifestId).map { manifest =>
-            val chunks = manifest.chunkRoots.map(UtxoSnapshotChunk.rootDigestToId)
+            val chunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
             manifestId -> chunks
           }
         }

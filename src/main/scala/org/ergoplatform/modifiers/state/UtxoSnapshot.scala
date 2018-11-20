@@ -2,9 +2,11 @@ package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.util.ModifierId
+import scorex.crypto.authds.ADDigest
+import scorex.util.{ModifierId, bytesToId}
 
 case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
                         chunks: Seq[UtxoSnapshotChunk],
@@ -29,5 +31,11 @@ case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
 }
 
 object UtxoSnapshot {
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
+
+  def rootDigestToSerializedId(rootDigest: ADDigest): Array[Byte] = Algos.hash(rootDigest)
+
+  def rootDigestToId(rootDigest: ADDigest): ModifierId = bytesToId(rootDigestToSerializedId(rootDigest))
+
 }

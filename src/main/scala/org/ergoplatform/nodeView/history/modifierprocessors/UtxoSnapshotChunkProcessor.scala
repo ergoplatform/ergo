@@ -32,7 +32,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
     historyStorage.modifierById(m.manifestId) match {
       case Some(manifest: UtxoSnapshotManifest) =>
         val otherChunks = manifest.chunkRoots
-          .map(r => historyStorage.modifierById(UtxoSnapshotChunk.rootDigestToId(r)))
+          .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
           .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
         lazy val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
         if (otherChunks.lengthCompare(manifest.chunkRoots.size - 1) == 0 &&

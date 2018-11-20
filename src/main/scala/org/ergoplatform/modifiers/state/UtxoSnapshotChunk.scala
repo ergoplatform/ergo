@@ -16,7 +16,7 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
 
-  override def serializedId: Array[Byte] = UtxoSnapshotChunk.rootDigestToSerializedId(rootDigest)
+  override def serializedId: Array[Byte] = UtxoSnapshot.rootDigestToSerializedId(rootDigest)
 
   override type M = UtxoSnapshotChunk
 
@@ -31,13 +31,7 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 }
 
 object UtxoSnapshotChunk {
-
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (107: Byte)
-
-  def rootDigestToSerializedId(rootDigest: ADDigest): Array[Byte] = Algos.hash(rootDigest)
-
-  def rootDigestToId(rootDigest: ADDigest): ModifierId = bytesToId(rootDigestToSerializedId(rootDigest))
-
 }
 
 object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {

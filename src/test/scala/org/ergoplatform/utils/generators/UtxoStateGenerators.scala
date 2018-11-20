@@ -1,7 +1,7 @@
 package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest, UtxoSnapshotManifestSerializer}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Gen
@@ -48,8 +48,7 @@ trait UtxoStateGenerators
   } yield {
     val header = lastHeaders.head.copy(stateRoot = tree.digest)
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
-    val serializedProverManifest = serializer.manifestToBytes(proverManifest)
-    val manifest = UtxoSnapshotManifest(serializedProverManifest,
+    val manifest = UtxoSnapshotManifest(proverManifest,
       proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), lastHeaders.head.id)
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     UtxoSnapshot(manifest, chunks, header +: lastHeaders.tail)
@@ -65,6 +64,6 @@ trait UtxoStateGenerators
     chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(Constants.ModifierIdSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-  } yield UtxoSnapshotManifest(serializer.manifestToBytes(proverManifest), chunkRootHashes.map(ADDigest @@ _), blockId)
+  } yield UtxoSnapshotManifest(proverManifest, chunkRootHashes.map(ADDigest @@ _), blockId)
 
 }

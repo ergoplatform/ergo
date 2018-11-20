@@ -17,6 +17,7 @@ import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 

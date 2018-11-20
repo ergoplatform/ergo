@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
@@ -68,6 +69,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext) = Try {
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter()
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get

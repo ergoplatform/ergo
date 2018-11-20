@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.state
 
-import com.google.common.primitives.{Bytes, Ints}
+import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
@@ -8,14 +8,14 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, ProxyInternalNode}
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverNodes}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
-                                chunkRoots: Seq[ADDigest],
                                 blockId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
@@ -35,6 +35,18 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
   override def serializedId: Array[Byte] = UtxoSnapshot.rootDigestToSerializedId(rootDigest)
 
   override def parentId: ModifierId = blockId
+
+  def chunkRoots: Seq[ADDigest] = {
+    def loop(node: ProverNodes[Digest32]): Seq[ADDigest] = node match {
+      case n: ProxyInternalNode[Digest32] =>
+        Seq(n.leftLabel, n.rightLabel).map(ADDigest !@@ _)
+      case n: InternalProverNode[Digest32] =>
+        loop(n.left) ++ loop(n.right)
+      case _ =>
+        Seq.empty
+    }
+    loop(proverManifest.oldRootAndHeight._1)
+  }
 
   def validate(header: Header): Try[Unit] = {
     failFast
@@ -65,8 +77,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
     val serializedProverManifest = serializer.manifestToBytes(obj.proverManifest)
     idToBytes(obj.blockId) ++
       Ints.toByteArray(serializedProverManifest.length) ++
-      serializedProverManifest ++
-      Bytes.concat(obj.chunkRoots: _*)
+      serializedProverManifest
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotManifest] = Try {
@@ -75,11 +86,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
       bytes.slice(Constants.ModifierIdSize, Constants.ModifierIdSize + 4))
     val proverManifestTry = serializer.manifestFromBytes(
       bytes.slice(Constants.ModifierIdSize + 4, Constants.ModifierIdSize + 4 + proverManifestLen))
-    val chunkRootHashes = bytes.drop(Constants.ModifierIdSize + 4 + proverManifestLen)
-      .grouped(Constants.ModifierIdSize)
-      .map(ADDigest @@ _)
-      .toSeq
-    proverManifestTry.map(UtxoSnapshotManifest(_, chunkRootHashes, blockId))
+    proverManifestTry.map(UtxoSnapshotManifest(_, blockId))
   }.flatten
 
 }

@@ -8,7 +8,7 @@ import org.scalacheck.Gen
 import org.scalatest.Matchers
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
+import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.CoreGenerators
 
@@ -48,8 +48,7 @@ trait UtxoStateGenerators
   } yield {
     val header = lastHeaders.head.copy(stateRoot = tree.digest)
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
-    val manifest = UtxoSnapshotManifest(proverManifest,
-      proverSubtrees.map(ADDigest !@@ _.subtreeTop.label), lastHeaders.head.id)
+    val manifest = UtxoSnapshotManifest(proverManifest, lastHeaders.head.id)
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     UtxoSnapshot(manifest, chunks, header +: lastHeaders.tail)
   }
@@ -60,10 +59,8 @@ trait UtxoStateGenerators
   } yield UtxoSnapshotChunk(stateElement, manifestId)
 
   lazy val randomUtxoSnapshotManifestGen: Gen[UtxoSnapshotManifest] = for {
-    chunksQty <- Gen.chooseNum(1, 100)
-    chunkRootHashes <- Gen.listOfN(chunksQty, genBytes(Constants.ModifierIdSize))
     proverManifest <- proverManifestGen
     blockId <- modifierIdGen
-  } yield UtxoSnapshotManifest(proverManifest, chunkRootHashes.map(ADDigest @@ _), blockId)
+  } yield UtxoSnapshotManifest(proverManifest, blockId)
 
 }

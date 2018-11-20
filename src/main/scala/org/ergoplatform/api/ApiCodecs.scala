@@ -16,7 +16,7 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values.{EvaluatedValue, Value}
-import sigmastate.serialization.ValueSerializer
+import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.{SBoolean, SType}
 
 import scala.util.Try
@@ -87,7 +87,7 @@ trait ApiCodecs {
   }
 
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ValueSerializer.serialize(value).asJson
+    ErgoTreeSerializer.serialize(value).asJson
   }
 
   implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
@@ -104,7 +104,7 @@ trait ApiCodecs {
 
   def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ValueSerializer.deserialize(bytes)))
+      fromThrows(transform(ErgoTreeSerializer.deserialize(bytes)))
     }
   }
 

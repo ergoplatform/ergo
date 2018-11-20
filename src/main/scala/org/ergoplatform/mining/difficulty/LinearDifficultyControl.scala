@@ -39,7 +39,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
       val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
         val start = d.head
         val end = d.last
-        require(end.height - start.height  == epochLength, s"Incorrect heights interval for $d")
+        require(end.height - start.height == epochLength, s"Incorrect heights interval for $d")
         val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
         (end.height, diff)
       }

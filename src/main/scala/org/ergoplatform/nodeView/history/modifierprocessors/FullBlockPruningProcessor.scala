@@ -28,9 +28,12 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     isHeadersChainSynced && minimalFullBlockHeight <= height
   }
 
-  def nearestSnapshotHeight(h: Int): Int = {
-    val snapshotMaxHeight = h - config.blocksToKeep
-    snapshotMaxHeight - (snapshotMaxHeight % config.snapshotCreationInterval)
+  /** Nearest snapshot height node can use for fast syncing.
+    * @param height - height of last block
+    * */
+  def nearestSnapshotHeight(height: Int): Int = {
+    val snapshotMaxHeight = height - config.blocksToKeep
+    snapshotMaxHeight - (snapshotMaxHeight % (config.snapshotCreationInterval * 2))
   }
 
   /** Update minimal full block height and header chain synced flag
@@ -45,7 +48,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
       // just synced with the headers chain in pruned full mode -
       // start from height of the nearest state snapshot available + 1.
       val snapshotHeight = nearestSnapshotHeight(header.height)
-      if (snapshotHeight >= config.snapshotCreationInterval) snapshotHeight + 1 else 0
+      if (snapshotHeight >= config.snapshotCreationInterval * 2) snapshotHeight + 1 else 0
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

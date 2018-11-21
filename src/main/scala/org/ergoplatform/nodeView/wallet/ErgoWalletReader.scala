@@ -19,7 +19,7 @@ import scala.util.Try
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
 
-  private implicit val timeout: Timeout = Timeout(30, TimeUnit.SECONDS)
+  private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
   def balances(chainStatus: ChainStatus): Future[BalancesSnapshot] = {
     (actor ? ErgoWalletActor.ReadBalances(chainStatus)).mapTo[BalancesSnapshot]

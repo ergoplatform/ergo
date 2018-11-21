@@ -55,9 +55,9 @@ object Extension extends ApiCodecs {
 
   val MandatoryFieldKeySize: Int = 1
 
-  val OptionalFieldKeySize: Int = 32
+  val MaxMandatoryFieldValueSize: Int = 32
 
-  val MaxMandatoryFieldValueSize: Int = 64
+  val OptionalFieldKeySize: Int = 32
 
   val MaxOptionalFieldValueSize: Int = 64
 
@@ -119,7 +119,7 @@ object ExtensionSerializer extends Serializer[Extension] {
     val totalLength = bytes.length
 
     // todo check bytes length more precisely after voting implementation
-    require(totalLength < 2048)
+    require(totalLength < 10000)
 
     @tailrec
     def parseSection(pos: Int,

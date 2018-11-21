@@ -8,10 +8,10 @@ import org.ergoplatform.{MinerPubkey, Outputs}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import sigmastate.Values.{ConcreteCollection, IntConstant, Value}
+import sigmastate.Values.{IntConstant, Value}
 import sigmastate._
-import sigmastate.serialization.OpCodes
-import sigmastate.utxo.{Append, ByIndex, ExtractScriptBytes, SizeOf}
+import sigmastate.serialization.ErgoTreeSerializer
+import sigmastate.utxo.{ByIndex, ExtractScriptBytes, SizeOf}
 
 
 object Constants {
@@ -46,8 +46,10 @@ object Constants {
   val LastHeadersInContext = 10
 
   val FeeProposition: Value[SBoolean.type] = {
-    val correctMinerProposition = EQ(ExtractScriptBytes(ByIndex(Outputs, IntConstant(0))),
-      Append(ConcreteCollection(OpCodes.ProveDlogCode, SGroupElement.typeCode), MinerPubkey))
+    val correctMinerProposition = EQ(
+      ExtractScriptBytes(ByIndex(Outputs, IntConstant(0))),
+      ErgoTreeSerializer.serializedPubkeyPropValue(MinerPubkey)
+    )
     val outputsNum = EQ(SizeOf(Outputs), 1)
     AND(correctMinerProposition, outputsNum)
   }

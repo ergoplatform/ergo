@@ -15,8 +15,8 @@ import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{ConcreteCollection, IntConstant, LongConstant}
-import sigmastate.serialization.OpCodes
+import sigmastate.Values.{IntConstant, LongConstant}
+import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.utxo._
 import sigmastate.{SLong, _}
 
@@ -116,7 +116,8 @@ object ErgoState extends ScorexLogging {
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
     val correctMinerProposition = EQ(ExtractScriptBytes(minerOut),
-      Append(ConcreteCollection(OpCodes.ProveDlogCode, SGroupElement.typeCode), MinerPubkey))
+      ErgoTreeSerializer.serializedPubkeyPropValue(MinerPubkey)
+    )
 
     val prop = AND(
       heightIncreased,

@@ -14,9 +14,9 @@ import scala.concurrent.duration._
 
 class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
-  val approxTargetHeight = 25
-  val blocksToKeep: Int = approxTargetHeight / 4
-  val snapshotCreationInterval = 7
+  val approxTargetHeight = 20
+  val blocksToKeep: Int = approxTargetHeight / 5
+  val snapshotCreationInterval = 5
 
   val localVolume = s"$localDataDir/full-node-sync-spec/data"
   val remoteVolume = "/app"
@@ -56,7 +56,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
       val targetHeight = sampleInfo.bestBlockHeightOpt.value
       val targetBlockId = sampleInfo.bestBlockIdOpt.value
       val snapshotMaxHeight = targetHeight - blocksToKeep
-      val snapshotHeight = snapshotMaxHeight - (snapshotMaxHeight % (snapshotCreationInterval * 2))
+      val snapshotHeight = snapshotMaxHeight - (snapshotMaxHeight % snapshotCreationInterval) - snapshotCreationInterval
       val blocksToPrune = Async.await(nodeForSyncing.headers(0, snapshotHeight))
       Async.await(prunedNode.waitFor[Option[String]](
         _.info.map(_.bestBlockIdOpt),

@@ -33,7 +33,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     * */
   def nearestSnapshotHeight(height: Int): Int = {
     val snapshotMaxHeight = height - config.blocksToKeep
-    snapshotMaxHeight - (snapshotMaxHeight % (config.snapshotCreationInterval * 2))
+    snapshotMaxHeight - (snapshotMaxHeight % config.snapshotCreationInterval) - config.snapshotCreationInterval
   }
 
   /** Update minimal full block height and header chain synced flag

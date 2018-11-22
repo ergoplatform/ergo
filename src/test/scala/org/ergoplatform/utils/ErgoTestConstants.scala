@@ -18,7 +18,6 @@ import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.eval.{IRContext, RuntimeIRContext}
 
 import scala.concurrent.duration._
 

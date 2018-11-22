@@ -42,14 +42,11 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
-    val indexes = genIndexes(msg, s.n)
-    val f1 = indexes.map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib), 0: Byte)).sum
-    val f2 = indexes.map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib), 1: Byte)).sum
+    val f = genIndexes(msg, s.n).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
+    val left = s.w.multiply(f.bigInteger).add(s.pk.negate())
+    val right = group.exponentiate(group.generator, s.d.bigInteger)
 
-    val gExp = group.exponentiate(group.generator, (f1 - s.d).mod(q).bigInteger)
-    val pkExp = s.w.multiply(f2.mod(q).bigInteger)
-
-    require(gExp.add(pkExp) == s.pk, "Incorrect points")
+    require(left == right, "Incorrect points")
   }
 
   /**
@@ -152,7 +149,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       val p2 = pkToBytes(genPk(x))
       list = (0 until N).map { i =>
         if (i % 1000000 == 0 && i > 0) log.debug(s"$i generated")
-        genFullElement(m, p1, p2, i)
+        genElement(m, p1, p2, Ints.toByteArray(i))
       }
     }
   }
@@ -166,24 +163,24 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
 
     @tailrec
-    def loop(i: Long, getElement: Int => BigInt): Option[AutolykosSolution] = if (i == endNonce) {
+    def loop(i: Long, getFullElement: Int => BigInt): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (genIndexes(m, nonce).map(i => getElement(i)).sum - sk).mod(q)
+      val d = (x * genIndexes(m, nonce).map(i => getFullElement(i)).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
-        loop(i + 1, getElement)
+        loop(i + 1, getFullElement)
       }
     }
 
     if (onFlyCalculation(b)) {
       val p1 = pkToBytes(genPk(sk))
       val p2 = pkToBytes(genPk(x))
-      loop(startNonce, i => genFullElement(m, p1, p2, i))
+      loop(startNonce, i => genElement(m, p1, p2, Ints.toByteArray(i)))
     } else {
       loop(startNonce, list)
     }
@@ -220,7 +217,6 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     indexes.take(k)
   }.ensuring(_.length == k)
 
-
   /**
     * Generate element for left (orderByte = 0) or for right (orderByte = 1) part
     * of Autolykos equation.
@@ -228,21 +224,8 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   private def genElement(m: Array[Byte],
                          p1: Array[Byte],
                          p2: Array[Byte],
-                         indexBytes: Array[Byte],
-                         orderByte: Byte): BigInt = {
-    hash(Bytes.concat(m, p1, p2, indexBytes, Array(orderByte)))
+                         indexBytes: Array[Byte]): BigInt = {
+    hash(Bytes.concat(m, p1, p2, indexBytes))
   }
-
-  /**
-    * Generate full element of Autolykos equation.
-    */
-  private def genFullElement(m: Array[Byte],
-                             p1: Array[Byte],
-                             p2: Array[Byte],
-                             i: Int): BigInt = {
-    val indexBytes = Ints.toByteArray(i)
-    (genElement(m, p1, p2, indexBytes, 0: Byte) + x * genElement(m, p1, p2, indexBytes, 1: Byte)).mod(q)
-  }
-
 
 }

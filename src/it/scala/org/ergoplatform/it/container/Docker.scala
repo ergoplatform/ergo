@@ -68,7 +68,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def startNodes(nodeConfigs: List[Config], configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
+  def startNodes(nodeConfigs: List[Config],
+                 configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
     val nodes: Try[List[Node]] = nodeConfigs.map(cfg => startNode(cfg, configEnrich)).sequence
     blocking(Thread.sleep(nodeConfigs.size * 5000))
@@ -277,9 +278,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def stopNode(containerId: String): Unit = {
+  def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
-    client.stopContainer(containerId, 10)
+    client.stopContainer(containerId, secondsToWait)
   }
 
   def forceStopNode(containerId: String): Unit = {

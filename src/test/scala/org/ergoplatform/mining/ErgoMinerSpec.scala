@@ -35,15 +35,15 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
-  val defaultAwaitDuration: FiniteDuration = 10.seconds
-  implicit val timeout: Timeout = Timeout(defaultAwaitDuration)
+  implicit private val timeout: Timeout = defaultTimeout
+
   val newBlock: Class[msgType] = classOf[msgType]
   val newBlockDuration: FiniteDuration = 30 seconds
 
@@ -58,9 +58,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
-
-
-  def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
@@ -97,19 +94,19 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     @tailrec
     def loop(toSend: Int): Unit = {
       val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == prop)
+      val height = r.h.bestFullBlockOpt.map(_.header.height).getOrElse(startHeight)
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
       toSpend.take(toSend) foreach { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-        val outputs = (0 until outputsPerTx).map(_ => new ErgoBoxCandidate(boxToSend.value / outputsPerTx, prop))
+        val outputs = (0 until outputsPerTx).map(_ => new ErgoBoxCandidate(boxToSend.value / outputsPerTx, prop, creationHeight = height))
 
         val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
         val tx = prover.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.fullBlockHeight,
-          r.s.rootHash)).get
+          ErgoStateContext(r.h.bestFullBlockOpt.get.header, startDigest)).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }
@@ -140,8 +137,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
     val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionGen(l).sample.get
-    val tx_2 = validTransactionGen(r :+ l.last).sample.get
+    val tx_1 = validTransactionFromBoxes(l)
+    val tx_2 = validTransactionFromBoxes(r :+ l.last)
 
     ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
@@ -224,13 +221,14 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
+    val height = r.h.bestFullBlockOpt.map(_.header.height).getOrElse(startHeight)
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1))
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, creationHeight = height))
     val tx1 = ErgoTransaction(IndexedSeq(input), outputs1)
 
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2))
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, creationHeight = height))
     val tx2 = ErgoTransaction(IndexedSeq(input), outputs2)
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)

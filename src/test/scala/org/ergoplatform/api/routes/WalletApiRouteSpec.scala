@@ -4,17 +4,16 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import io.circe.Json
 import io.circe.syntax._
+import io.circe.{Decoder, Json}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder}
-import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
-import org.scalatest.{FlatSpec, Matchers, TryValues}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import org.scalatest.{FlatSpec, Matchers}
 import sigmastate.Values
 
 import scala.util.Try
@@ -23,8 +22,7 @@ class WalletApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport
-  with TryValues {
+  with FailFastCirceSupport {
 
   val prefix = "/wallet"
 
@@ -35,10 +33,18 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
   val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
+  val scriptSource: String =
+    """
+      |{
+      |    val myPk = PK("tJPvNFE9uEJnhD2bzxqPP9X6c9WXfoRNeAvziCvZdBXnqZsHvwxKVG")
+      |    HEIGHT < 9197 && myPk.isValid
+      |}
+      |""".stripMargin
 
   it should "generate arbitrary transaction" in {
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
@@ -99,6 +105,22 @@ class WalletApiRouteSpec extends FlatSpec
     Post(prefix + "/assets/issue", Seq(assetIssueRequest).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
+    }
+  }
+
+  it should "generate valid P2SAddress form source" in {
+    Post(prefix + "/p2s_address", Json.obj("source" -> scriptSource.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+    }
+  }
+
+  it should "generate valid P2SHAddress form source" in {
+    Post(prefix + "/p2sh_address", Json.obj("source" -> scriptSource.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
     }
   }
 

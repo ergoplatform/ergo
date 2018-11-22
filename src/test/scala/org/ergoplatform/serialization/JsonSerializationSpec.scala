@@ -84,7 +84,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val parsingResult = json.as[AssetIssueRequest]
       parsingResult.isRight shouldBe true
       val restored = parsingResult.right.value
-      restored.address shouldEqual request.address
+      restored.addressOpt shouldEqual request.addressOpt
       restored.amount shouldEqual request.amount
       restored.name shouldEqual request.name
       restored.description shouldEqual request.description
@@ -115,6 +115,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     c.downField("proposition").as[Value[SBoolean.type]] shouldBe Right(b.proposition)
     checkAssets(c.downField("assets"), b.additionalTokens)
     checkRegisters(c.downField("additionalRegisters"), b.additionalRegisters)
+    c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
   }
 
   private def checkAssets(c: ACursor, assets: Seq[(ErgoBox.TokenId, Long)]) = {

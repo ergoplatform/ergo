@@ -4,7 +4,6 @@ import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -69,37 +68,36 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       height: Height) =
-    Try {
-      val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-      val totalCost = transactions.map { tx =>
-        tx.statelessValidity.get
-        val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-          createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-            case Some(box) => box
-            case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
-          }
-        }
-        tx.statefulValidity(boxesToSpend, stateContext, constants.settings.metadata).get
-      }.sum
-
-      if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
-      persistentProver.synchronized {
-
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-        mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-          t.flatMap(_ => {
-            persistentProver.performOneOperation(m)
-          })
-        }.get
-
-        if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-          throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-            s"${Algos.encode(persistentProver.digest)} given")
+                                       currentStateContext: ErgoStateContext) = Try {
+    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val totalCost = transactions.map { tx =>
+      tx.statelessValidity.get
+      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+          case Some(box) => box
+          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
+      tx.statefulValidity(boxesToSpend, currentStateContext, constants.settings.metadata).get
+    }.sum
+
+    if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
+
+    persistentProver.synchronized {
+
+      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
+        t.flatMap(_ => {
+          persistentProver.performOneOperation(m)
+        })
+      }.get
+
+      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
+        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+          s"${Algos.encode(persistentProver.digest)} given")
+      }
     }
+  }
 
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
@@ -109,10 +107,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
       persistentProver.synchronized {
         val inRoot = rootHash
+        val newStateContext = stateContext.appendHeader(fb.header)
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, height).map { _: Unit =>
+        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
           val emissionBox = extractEmissionBox(fb)
-          val newStateContext = stateContext.appendHeader(fb.header)
           val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
           val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
           val proofHash = ADProofs.proofDigest(proofBytes)
@@ -196,7 +194,7 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext(0, p.digest)
+    val defaultStateContext = ErgoStateContext.empty(p.digest)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(

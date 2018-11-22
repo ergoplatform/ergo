@@ -13,13 +13,14 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadBalances, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadBalances, ReadPublicKeys, ReadTrackedAddresses}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
+import scapi.sigma.DLogProtocol
 import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -134,11 +135,12 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
     private val prover = new ErgoProvingInterpreter(seed, 2)
-    private val trackedAddresses: mutable.Buffer[ErgoAddress] =
-      mutable.Buffer(prover.dlogPubkeys: _ *).map(P2PKAddress.apply)
-
+    private val trackedAddresses: Seq[P2PKAddress] = prover.dlogPubkeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
+
+      case ReadPublicKeys(from, until) =>
+        sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
         sender ! BalancesSnapshot(0, WalletActorStub.balance(chainStatus), Map.empty)

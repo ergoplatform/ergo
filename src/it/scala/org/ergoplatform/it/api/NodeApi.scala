@@ -13,12 +13,13 @@ import org.asynchttpclient.Dsl.{get => _get, post => _post}
 import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.util._
+import org.ergoplatform.modifiers.history.Header
 import org.slf4j.{Logger, LoggerFactory}
 import scorex.util.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 trait NodeApi {
 
@@ -96,31 +97,6 @@ trait NodeApi {
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
-  /** Tries to catch the moment when full block is already persisted in history,
-    * but indexes aren't updated yet. */
-  def waitForInconsistentHistory: Future[Unit] = {
-    waitFor[Boolean](_.historyIsInconsistent, bool => bool, 25.millis).map(_ => ())
-  }
-
-  /** To find out whether history is inconsistent at this moment we should:
-    * 1. Fetch current `HistoryInfo`;
-    * 2. Check whether `FullBlock` with `bestHeaderId` from `HistoryInfo` is already available;
-    * 3. Check that `bestFullBlockId` isn't updated yet in `HistoryInfo`;
-    * */
-  def historyIsInconsistent: Future[Boolean] = {
-    for {
-      hiInit <- historyInfo
-      fullBlockPersisted <- singleGet(s"/blocks/${hiInit.bestHeaderId}")
-        .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
-      hi <- historyInfo
-    } yield {
-      fullBlockPersisted &&
-        hi.bestHeaderHeight > hi.bestBlockHeight &&
-        hi.bestBlockId != hi.bestHeaderId &&
-        hiInit == hi
-    }
-  }
-
   def height: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
     val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
@@ -132,9 +108,16 @@ trait NodeApi {
 
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 
-  def historyInfo: Future[HistoryInfo] = get("/info").map(r => ergoJsonAnswerAs[HistoryInfo](r.getResponseBody))
+  def info: Future[NodeInfo] = get("/info").map(r => ergoJsonAnswerAs[NodeInfo](r.getResponseBody))
 
-  def headerIdsByHeight(h: Int): Future[Seq[String]] = get(s"/blocks/at/$h").map(j => ergoJsonAnswerAs[Seq[String]](j.getResponseBody))
+  def headerIdsByHeight(h: Int): Future[Seq[String]] = get(s"/blocks/at/$h")
+    .map(j => ergoJsonAnswerAs[Seq[String]](j.getResponseBody))
+
+  def headerById(id: String): Future[Header] = get(s"/blocks/$id/header")
+    .map(r => ergoJsonAnswerAs[Header](r.getResponseBody))
+
+  def headers(offset: Int, limit: Int): Future[Seq[String]] = get(s"/blocks?offset=$offset&limit=$limit")
+    .map(r => ergoJsonAnswerAs[Seq[String]](r.getResponseBody))
 
   def waitFor[A](f: this.type => Future[A], cond: A => Boolean, retryInterval: FiniteDuration): Future[A] = {
     timer.retryUntil(f(this), cond, retryInterval)
@@ -175,8 +158,9 @@ trait NodeApi {
 
 object NodeApi extends ScorexLogging {
 
-  case class UnexpectedStatusCodeException(request: Request, response: Response) extends Exception(s"Request: ${request.getUrl}\n" +
-    s"Unexpected status code (${response.getStatusCode}): ${response.getResponseBody}")
+  case class UnexpectedStatusCodeException(request: Request, response: Response)
+    extends Exception(s"Request: ${request.getUrl}\n Unexpected status code (${response.getStatusCode}): " +
+      s"${response.getResponseBody}")
 
   case class Peer(address: String, name: String)
 
@@ -189,14 +173,19 @@ object NodeApi extends ScorexLogging {
 
   case class Status(status: String)
 
-  case class HistoryInfo(bestHeaderId: String, bestBlockId: String, bestHeaderHeight: Int, bestBlockHeight: Int)
+  case class NodeInfo(bestHeaderIdOpt: Option[String],
+                      bestBlockIdOpt: Option[String],
+                      bestHeaderHeightOpt: Option[Int],
+                      bestBlockHeightOpt: Option[Int],
+                      stateRootOpt: Option[String])
 
-  private implicit val historyInfoDecoder: Decoder[HistoryInfo] = { c =>
+  implicit val nodeInfoDecoder: Decoder[NodeInfo] = { c =>
     for {
-      bestHeaderId <- c.downField("bestHeaderId").as[String]
-      bestBlockId <- c.downField("bestFullHeaderId").as[String]
-      bestHeaderHeight <- c.downField("headersHeight").as[Int]
-      bestBlockHeight <- c.downField("fullHeight").as[Int]
-    } yield HistoryInfo(bestHeaderId, bestBlockId, bestHeaderHeight, bestBlockHeight)
+      bestHeaderIdOpt <- c.downField("bestHeaderId").as[Option[String]]
+      bestBlockIdOpt <- c.downField("bestFullHeaderId").as[Option[String]]
+      bestHeaderHeightOpt <- c.downField("headersHeight").as[Option[Int]]
+      bestBlockHeightOpt <- c.downField("fullHeight").as[Option[Int]]
+      stateRootOpt <- c.downField("stateRoot").as[Option[String]]
+    } yield NodeInfo(bestHeaderIdOpt, bestBlockIdOpt, bestHeaderHeightOpt, bestBlockHeightOpt, stateRootOpt)
   }
 }

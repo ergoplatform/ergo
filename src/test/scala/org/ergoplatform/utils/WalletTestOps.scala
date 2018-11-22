@@ -3,9 +3,8 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.hash.Digest32
@@ -14,18 +13,10 @@ import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.{SBoolean, SLong}
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
 trait WalletTestOps extends NodeViewBaseOps {
 
   def emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
-
-  override def initSettings: ErgoSettings = {
-    val settings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
-    settings.copy(walletSettings = settings.walletSettings.copy(scanningInterval = 15.millis))
-  }
 
   def withFixture[T](test: WalletFixture => T): T = {
     new WalletFixture(settings, getCurrentView(_).vault).apply(test)
@@ -34,13 +25,13 @@ trait WalletTestOps extends NodeViewBaseOps {
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
   def getTrackedAddresses(implicit w: WalletFixture): Seq[ErgoAddress] =
-    Await.result(w.wallet.trackedAddresses(), awaitDuration)
+    await(w.wallet.trackedAddresses())
 
   def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.confirmedBalances(), awaitDuration)
+    await(w.wallet.confirmedBalances())
 
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
-    Await.result(w.wallet.balancesWithUnconfirmed(), awaitDuration)
+    await(w.wallet.balancesWithUnconfirmed())
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 
@@ -102,8 +93,8 @@ trait WalletTestOps extends NodeViewBaseOps {
     val newEmissionAmount = emissionBox.value - emissionAmount
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
     val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, Seq.empty, emissionRegs)
-    val minerBox = new ErgoBoxCandidate(emissionAmount, script, replaceNewAssetStub(assets, inputs), Map.empty)
+    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, Seq.empty, emissionRegs, creationHeight = startHeight)
+    val minerBox = new ErgoBoxCandidate(emissionAmount, script, replaceNewAssetStub(assets, inputs), Map.empty, creationHeight = startHeight)
     ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))
   }
 
@@ -121,8 +112,8 @@ trait WalletTestOps extends NodeViewBaseOps {
              assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
-    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, replaceNewAssetStub(assets, inputs))
-    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf)) else None
+    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, replaceNewAssetStub(assets, inputs), creationHeight = startHeight)
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }

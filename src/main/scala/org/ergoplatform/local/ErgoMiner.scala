@@ -29,7 +29,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -59,8 +59,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   override def preStart(): Unit = {
     if (secretKeyOpt.isEmpty) {
-      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, UpdateSecret] { v =>
-        UpdateSecret(Await.result(v.vault.firstSecret(), 10.seconds))
+      val callback = self
+      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        v.vault.firstSecret().onComplete(rTry => rTry.foreach(r => callback ! UpdateSecret(r)))
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -90,11 +91,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
-        secretKeyOpt.foreach { sk =>
-          log.info("Starting Mining")
-          isMining = true
-          miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
-          miningThreads.foreach(_ ! candidate)
+        secretKeyOpt match {
+          case Some(sk) =>
+            log.info("Starting Mining")
+            isMining = true
+            miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
+            miningThreads.foreach(_ ! candidate)
+          case None =>
+            log.warn("Got start mining command while secret key is not ready")
         }
       }
     case StartMining if candidateOpt.isEmpty =>

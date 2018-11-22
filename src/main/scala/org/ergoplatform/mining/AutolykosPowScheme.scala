@@ -25,6 +25,9 @@ import scala.util.Try
   */
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
+  // Constant data added to hash function to increase it's calculation time
+  val M: Array[Byte] = Array.fill(2 * 1024)(0: Byte)
+
   private var list: IndexedSeq[BigInt] = IndexedSeq()
   private var x: BigInt = randomSecret()
   private var lastInitMsg: Array[Byte] = Array()
@@ -224,14 +227,13 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   }.ensuring(_.length == k)
 
   /**
-    * Generate element for left (orderByte = 0) or for right (orderByte = 1) part
-    * of Autolykos equation.
+    * Generate element of Autolykos equation.
     */
   private def genElement(m: Array[Byte],
-                         p1: Array[Byte],
-                         p2: Array[Byte],
+                         pk: Array[Byte],
+                         w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(indexBytes, m, p1, p2))
+    hash(Bytes.concat(indexBytes, M, pk, m, w))
   }
 
 }

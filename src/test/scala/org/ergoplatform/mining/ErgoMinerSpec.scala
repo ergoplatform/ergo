@@ -85,7 +85,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
-        val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+        val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
         val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, Constants.FeeProposition, r.s.stateContext.currentHeight)
         val outputs = (1 until desiredSize).map { _ =>

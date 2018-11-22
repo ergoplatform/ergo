@@ -37,7 +37,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                inSkOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
+                inSecretKeyOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
 
@@ -50,15 +50,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val ExpectedTxCost: Int = 10000
   // size of a regular transaction with input and 2 outputs.
   private val ExpectedTxSize: Int = 150
-  // Leave this cost empty when collection transactions to put reward txs
+  // Leave this cost empty when collecting transactions to put reward txs
   private val CostDrift: Int = 50000
-  // Leave this space empty when collection transactions to put reward txs
+  // Leave this space empty when collecting transactions to put reward txs
   private val SizeDrift: Int = 5000
 
-  private var skOpt: Option[DLogProverInput] = inSkOpt
+  private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
   override def preStart(): Unit = {
-    if (skOpt.isEmpty) {
+    if (secretKeyOpt.isEmpty) {
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, UpdateSecret] { v =>
         UpdateSecret(Await.result(v.vault.firstSecret(), 10.seconds))
       }
@@ -79,7 +79,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onUpdateSecret: Receive = {
     case UpdateSecret(s) =>
-      skOpt = Some(s)
+      secretKeyOpt = Some(s)
   }
 
   private def miningStatus: Receive = {
@@ -90,7 +90,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
-        skOpt.foreach { sk =>
+        secretKeyOpt.foreach { sk =>
           log.info("Starting Mining")
           isMining = true
           miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
@@ -144,7 +144,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      skOpt.map(_.publicImage).foreach { minerProp =>
+      secretKeyOpt.map(_.publicImage).foreach { minerProp =>
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) => procCandidateBlock(candidate)
           case Failure(e) => log.warn("Failed to produce candidate block.", e)

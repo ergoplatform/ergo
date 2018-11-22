@@ -38,9 +38,6 @@ trait ValidBlocksGenerators
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
 
-  def noProofInput(id: ErgoBox.BoxId): Input =
-    Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
-
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 

@@ -19,7 +19,6 @@ import scala.concurrent.blocking
 
 trait WalletTestOps extends NodeViewBaseOps {
 
-  def emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
 
   def withFixture[T](test: WalletFixture => T): T = {
@@ -104,7 +103,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     val emissionAmount = settings.emission.emissionAtHeight(height)
     val newEmissionAmount = emissionBox.value - emissionAmount
     val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
-    val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+    val inputs = IndexedSeq(new Input(emissionBox.id, emptyProverResult))
     val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, startHeight, Seq.empty, emissionRegs)
     val minerBox = new ErgoBoxCandidate(emissionAmount, publicKey, startHeight, replaceNewAssetStub(assets, inputs), Map.empty)
     ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))

@@ -156,10 +156,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       log.debug(s"Initialize PoW task by generating list of $N elements")
       val p1 = pkToBytes(genPk(sk))
       val p2 = pkToBytes(genPk(x))
-      list = (0 until N).map { i =>
-        if (i % 1000000 == 0 && i > 0) log.debug(s"$i generated")
-        genElement(m, p1, p2, Ints.toByteArray(i))
-      }
+      list = (0 until N).map ( i => genElement(m, p1, p2, Ints.toByteArray(i)))
     }
   }
 

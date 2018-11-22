@@ -34,7 +34,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
   lazy val noProofGen: Gen[ProverResult] =
-    Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
+    Gen.const(emptyProverResult)
 
   lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)

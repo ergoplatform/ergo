@@ -140,7 +140,7 @@
     is the hash function, miner can only brute-force $2^{k=2^{128}}$ different $seed$ values for $genIndexes$
     to find an appropriate index set.
 
-    Protocol is quite efficient: in additional to payload, block header $\msg$ should
+    Protocol is quite efficient: in addition to payload, block header $\msg$ should
     contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
     (but will contain a lot of leading zeros in case of small target $b$) and a nonce,
     which size might be small enough (say, 8 bytes). Thus for about 100 additional bytes

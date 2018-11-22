@@ -12,7 +12,7 @@ import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
@@ -52,10 +52,9 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
     }
   }
 
-  def validate(m: UtxoSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
-    Failure(new Exception(s"UtxoSnapshotChunk with id ${m.encodedId} is already in history"))
-  } else {
-    Success(Unit)
+  def validate(m: UtxoSnapshotChunk): Try[Unit] = historyStorage.modifierById(m.manifestId) match {
+    case Some(manifest: UtxoSnapshotManifest) => m.validate(manifest)
+    case _ => Failure(new Exception("Header manifest relates to is not found in history"))
   }
 
   private def takeLastHeaders(lastHeaderId: ModifierId, qty: Int): Seq[Header] = {

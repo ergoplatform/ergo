@@ -20,13 +20,9 @@ trait UtxoSnapshotManifestProcessor extends ScorexLogging with ScorexEncoding {
     ProgressInfo(None, Seq.empty, Seq.empty, chunksToRequest)
   }
 
-  def validate(m: UtxoSnapshotManifest): Try[Unit] = if (historyStorage.contains(m.id)) {
-    Failure(new Exception(s"UtxoSnapshotManifest with id ${m.encodedId} is already in history"))
-  } else {
-    historyStorage.modifierById(m.blockId) match {
-      case Some(h: Header) => m.validate(h)
-      case _ => Failure(new Exception("Header manifest relates to is not found in history"))
-    }
+  def validate(m: UtxoSnapshotManifest): Try[Unit] = historyStorage.modifierById(m.blockId) match {
+    case Some(h: Header) => m.validate(h)
+    case _ => Failure(new Exception("Header manifest relates to is not found in history"))
   }
 
 }

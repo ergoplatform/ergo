@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
+import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
@@ -12,7 +13,7 @@ import scorex.util._
 import scala.util.Try
 
 case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
-  extends ErgoPersistentModifier {
+  extends ErgoPersistentModifier with ModifierValidator {
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
 
@@ -27,6 +28,14 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
   override def parentId: ModifierId = manifestId
 
   override lazy val sizeOpt: Option[Int] = Some(bytes.length)
+
+  def validate(manifest: UtxoSnapshotManifest): Try[Unit] = {
+    failFast
+      .demand(manifest.chunkRoots.exists(java.util.Arrays.equals(_, rootDigest)),
+        "Chunk does not correspond to declared manifest")
+      .result
+      .toTry
+  }
 
 }
 

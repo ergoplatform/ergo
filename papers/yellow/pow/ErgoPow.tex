@@ -1,8 +1,5 @@
-\RequirePackage{silence}
-\WarningFilter{remreset}{The remreset package}
-
-\RequirePackage{amsmath}
 \documentclass[]{article}
+\RequirePackage{amsmath}
 
 \usepackage{graphicx}
 %\graphicspath{{./figures/}}
@@ -11,9 +8,19 @@
 \usepackage{hyperref}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\bibliographystyle{plain}
 
-\include{headers}
+\newcommand{\knote}[1]{\textcolor{green}{A: {#1}}}
+\newcommand{\dnote}[1]{\textcolor{red}{D: {#1}}}
+\newcommand{\vk}[1]{\textcolor{blue}{V: {#1}}}
+\newcommand{\lnote}[1]{\textcolor{cyan}{L: {#1}}}
+\newcommand{\Name}{$<Name>$}
+\def\Let#1#2{\State #1 $:=$ #2}
+\def\LetRnd#1#2{\State #1 $\gets$ #2}
 
+\newcommand{\msg}{\mathsf{msg}}
+\newcommand{\pk}{\mathsf{pk}}
+\newcommand{\sk}{\mathsf{sk}}
 
 \begin{document}
     \title{\Name: The Ergo Platform PoW Puzzle}

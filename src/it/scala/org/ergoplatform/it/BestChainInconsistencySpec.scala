@@ -3,7 +3,7 @@ package org.ergoplatform.it
 import java.io.File
 
 import com.typesafe.config.Config
-import org.ergoplatform.it.api.NodeApi.HistoryInfo
+import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 
@@ -24,7 +24,7 @@ class BestChainInconsistencySpec extends FreeSpec with IntegrationSuite {
   dir.mkdirs()
 
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
-    .withFallback(shortDelayConfig)
+    .withFallback(shortMiningDelayConfig)
     .withFallback(offlineGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.head)
 
@@ -35,18 +35,18 @@ class BestChainInconsistencySpec extends FreeSpec with IntegrationSuite {
         val node: Node = docker.startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
         val result = node.waitForHeight(shutdownAtHeight, 100.millis)
           .flatMap { _ =>
-            node.waitFor[HistoryInfo](_.historyInfo, hi => hi.bestHeaderHeight > hi.bestBlockHeight, 25.millis)
+            node.waitFor[NodeInfo](_.info, hi => hi.bestHeaderHeightOpt.get > hi.bestBlockHeightOpt.get, 25.millis)
           }
-          .flatMap { _ =>
+          .map { _ =>
             docker.forceStopNode(node.containerId)
             val restartedNode = docker
               .startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
-            restartedNode.historyInfo
-              .flatMap(hi => restartedNode.waitForHeight(hi.bestBlockHeight + 1, 100.millis))
-              .flatMap(_ => restartedNode.historyInfo)
+            restartedNode.info
+              .flatMap(hi => restartedNode.waitForHeight(hi.bestBlockHeightOpt.get + 1, 100.millis))
+              .flatMap(_ => restartedNode.info)
               .flatMap { hi =>
-                restartedNode.headerIdsByHeight(hi.bestBlockHeight)
-                  .map(_.headOption.value shouldEqual hi.bestBlockId)
+                restartedNode.headerIdsByHeight(hi.bestBlockHeightOpt.get)
+                  .map(_.headOption.value shouldEqual hi.bestBlockIdOpt.get)
               }
               .map(_ => docker.stopNode(restartedNode.containerId))
           }
@@ -55,4 +55,5 @@ class BestChainInconsistencySpec extends FreeSpec with IntegrationSuite {
       }.fold(e => { log.debug(s"Try #$i: Failure(${e.getMessage})"); throw e }, _ => log.debug(s"Try #$i: Success"))
     }
   }
+
 }

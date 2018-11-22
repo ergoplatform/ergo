@@ -15,6 +15,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
 
@@ -27,6 +28,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val stateConstants: StateConstants = StateConstants(None, settings)
   val afterGenesisDigest: ADDigest = settings.chainSettings.monetary.afterGenesisStateDigest
 
+  val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

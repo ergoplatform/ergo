@@ -180,7 +180,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
       ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
-    val inputs = boxesToSpend.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+    val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
     defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, emptyStateContext).getOrElse {
       log.debug("Going to generate a transaction with incorrect proofs")

@@ -45,8 +45,8 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       nonce = 0
 
     case MineBlock =>
-      val lastNonce = nonce + NonceStep
-      powScheme.proveCandidate(candidate, sk, nonce, lastNonce) match {
+      val lastNonceToCheck = nonce + NonceStep
+      powScheme.proveCandidate(candidate, sk, nonce, lastNonceToCheck) match {
         case Some(newBlock) =>
           log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
 
@@ -60,7 +60,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
           sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
           mineCmd()
         case _ =>
-          nonce = lastNonce
+          nonce = lastNonceToCheck
           self ! MineBlock
       }
   }

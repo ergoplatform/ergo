@@ -30,9 +30,7 @@ class TransactionApiRouteSpec extends FlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
-  val input = Input(
-    ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),
-    ProverResult(Array.emptyByteArray, ContextExtension(Map())))
+  val input = Input(ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),emptyProverResult)
 
   val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Values.TrueLeaf)
   val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Values.TrueLeaf,

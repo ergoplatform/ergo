@@ -25,8 +25,8 @@ import scala.util.Try
   */
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
-  // Constant data added to hash function to increase it's calculation time
-  val M: Array[Byte] = Array.fill(2 * 1024)(0: Byte)
+  // Constant data to be added to hash function to increase it's calculation time
+  val M: Array[Byte] = (0 until 64).toArray.flatMap(i => Blake2b256(Ints.toByteArray(i)))
 
   private var list: IndexedSeq[BigInt] = IndexedSeq()
   private var x: BigInt = randomSecret()

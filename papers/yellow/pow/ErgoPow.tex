@@ -16,7 +16,7 @@
 
 
 \begin{document}
-    \title{\Name: The Ergo PoW Puzzle}
+    \title{\Name: The Ergo Platform PoW Puzzle}
 
     \author{Ergo Developers}
 
@@ -24,13 +24,32 @@
     \maketitle
 
 %    \begin{abstract}
-%        This document contains description of concrete PoW protocol, that will be used in Ergo
+%        This document contains the full description of \Name~-- the PoW protocol that is going to be used in Ergo platform.
 %    \end{abstract}
 
 
     \section{Introduction}
 
-    TODO
+    Security of Proof-of-Work blockchains relies on an assumption
+    that multiple miners are trying to produce new blocks by
+    participating in PoW puzzle and the network is secure as soon as the
+    majority of them are honest.
+
+    However in existing PoW networks miners unite in mining pools and
+    this assumption should be reformulated: the network is secure as soon as the
+    majority of pool operators are honest.
+    Unfortunately in existing PoW cryptocurrencies
+    regardless of the PoW algorithm, number of pools controls more then 50\% of
+    computational power is small: 4 pools in Bitcoin, 2 in Ethereum, 3 in ZCash, etc.
+
+    This problem led to the notion of non-outsourceable puzzles~\cite{miller2015nonoutsourceable,daian2017piecework}.
+    These are the puzzles constructed in such a way that if a mining pool outsource the puzzle
+    to miners, with non-negligible probability miner can recover pools private key and steal the reward.
+    However existing solutions have have too large solution size (kilobyte is already
+    on the edge of acceptability for distributed ledger) or very specific and
+    can not be updated without breaking non-outsourceability. Thus the first goal of \Name is non-outsourceability.
+
+    \dnote{add ASIC-resistance}
 
     \section{Ergo PoW puzzle}
 
@@ -132,5 +151,7 @@
 %    implementation of mining process allows to check $10^{6}$ possible solutions per
 %    2 minutes, so we may expect at least $h~10^{15}$ for the real network.
 
+
+    \bibliography{references}
 
 \end{document}

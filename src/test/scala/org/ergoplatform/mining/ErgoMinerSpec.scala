@@ -170,7 +170,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToDoubleSpend.proposition shouldBe defaultMinerSecret.publicImage
 
-    val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)

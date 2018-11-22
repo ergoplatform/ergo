@@ -158,7 +158,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val boxToSpend = txsFromHolder.last.outputs.head
 
-      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
         IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))

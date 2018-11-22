@@ -16,7 +16,6 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.eval.{IRContext, RuntimeIRContext}
 
 import scala.concurrent.duration._
 

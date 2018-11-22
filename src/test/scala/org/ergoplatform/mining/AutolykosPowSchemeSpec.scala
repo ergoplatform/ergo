@@ -15,7 +15,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
       val h = inHeader.copy(nBits = nBits)
       pow.validate(h) shouldBe 'failure
       val sk = randomSecret()
-      val msg = HeaderSerializer.bytesWithoutPow(h)
+      val msg = pow.msgByHeader(h)
       val b = pow.getB(h.nBits)
       pow.initializeIfNeeded(msg, sk, b)
       val newHeader = pow.checkNonces(msg, sk, b, 0, 1000).map(s => h.copy(powSolution = s)).get
@@ -30,7 +30,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
       val h = inHeader.copy(nBits = nBits)
       pow.validate(h) shouldBe 'failure
       val sk = randomSecret()
-      val msg = HeaderSerializer.bytesWithoutPow(h)
+      val msg = pow.msgByHeader(h)
       val b = pow.getB(h.nBits)
       pow.initializeIfNeeded(msg, sk, b)
       val newHeader = pow.checkNonces(msg, sk, b, 0, Int.MaxValue).map(s => h.copy(powSolution = s)).get

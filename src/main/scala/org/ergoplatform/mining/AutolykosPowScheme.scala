@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Algos
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -33,7 +34,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     */
   def validate(header: Header): Try[Unit] = Try {
     val b = getB(header.nBits)
-    val msg = HeaderSerializer.bytesWithoutPow(header)
+    val msg = msgByHeader(header)
     val s = header.powSolution
 
     require(s.d < b || s.d > (q - b), s"Incorrect d=${s.d} for b=$b")
@@ -75,11 +76,16 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null)
-    val msg = HeaderSerializer.bytesWithoutPow(h)
+    val msg = msgByHeader(h)
     val b = getB(nBits)
     initializeIfNeeded(msg, sk, b)
     checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
+
+  /**
+    * Get message we should proof for header `h`
+    */
+  def msgByHeader(h: Header): Array[Byte] = Algos.hash(HeaderSerializer.bytesWithoutPow(h))
 
   /**
     * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
@@ -225,7 +231,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
                          p1: Array[Byte],
                          p2: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(m, p1, p2, indexBytes))
+    hash(Bytes.concat(indexBytes, m, p1, p2))
   }
 
 }

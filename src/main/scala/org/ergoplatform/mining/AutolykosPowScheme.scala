@@ -27,7 +27,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
 
-  // Constant data to be added to hash function to increase it's calculation time
+  /**
+    * Constant data to be added to hash function to increase it's calculation time
+    */
   val M: Array[Byte] = (0 until 256).toArray.flatMap(i => Blake2b512(Ints.toByteArray(i)))
 
   /**
@@ -79,7 +81,8 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       nBits, height, extensionHash, null)
     val msg = msgByHeader(h)
     val b = getB(nBits)
-    checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
+    val x = randomSecret()
+    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
 
   /**
@@ -136,9 +139,12 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     )
   }
 
-  private[mining] def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
+  /**
+    * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
+    * Return AutolykosSolution if there is any valid nonce in this interval.
+    */
+  private[mining] def checkNonces(m: Array[Byte], sk: BigInt, x: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
-    val x: BigInt = randomSecret()
     val p1 = pkToBytes(genPk(sk))
     val p2 = pkToBytes(genPk(x))
 
@@ -160,10 +166,16 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     loop(startNonce)
   }
 
+  /**
+    * Get target `b` from encoded difficulty `nBits`
+    */
   private[mining] def getB(nBits: Long): BigInt = {
     q / RequiredDifficulty.decodeCompactBits(nBits)
   }
 
+  /**
+    * Calculate header fields based on parent header
+    */
   protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)

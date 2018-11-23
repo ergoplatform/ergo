@@ -16,7 +16,8 @@ import scala.math.BigInt
 import scala.util.Try
 
 /**
-  * Autolykos PoW puzzle.
+  * Autolykos PoW puzzle implementation.
+  * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
   * @param k - number of elements in one solution
@@ -28,10 +29,6 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   // Constant data to be added to hash function to increase it's calculation time
   val M: Array[Byte] = (0 until 256).toArray.flatMap(i => Blake2b512(Ints.toByteArray(i)))
-
-  private var list: IndexedSeq[BigInt] = IndexedSeq()
-  private var x: BigInt = randomSecret()
-  private var lastInitMsg: Array[Byte] = Array()
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
@@ -82,7 +79,6 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       nBits, height, extensionHash, null)
     val msg = msgByHeader(h)
     val b = getB(nBits)
-    initializeIfNeeded(msg, sk, b)
     checkNonces(msg, sk, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
   }
 
@@ -140,57 +136,28 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     )
   }
 
-  /**
-    * Initialize the PoW task if it was not initialized yet.
-    * Generate a new random secret `x` and fill `list` with numbers if difficulty is big enough
-    *
-    * @param m  - header bytes without pow
-    * @param sk - secret key
-    * @param b  - difficulty
-    */
-  private[mining] def initializeIfNeeded(m: Array[Byte],
-                                         sk: BigInt,
-                                         b: BigInt): Unit = if (!java.util.Arrays.equals(m, lastInitMsg)) {
-    x = randomSecret()
-    lastInitMsg = m
-    if (!onFlyCalculation(b)) {
-      log.debug(s"Initialize PoW task by generating list of $N elements")
-      val p1 = pkToBytes(genPk(sk))
-      val p2 = pkToBytes(genPk(x))
-      list = (0 until N).map(i => genElement(m, p1, p2, Ints.toByteArray(i)))
-    }
-  }
-
-  /**
-    * Check, that on-fly calculation is more profitable
-    */
-  private def onFlyCalculation(b: BigInt): Boolean = N > (q / b)
-
   private[mining] def checkNonces(m: Array[Byte], sk: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
+    val x: BigInt = randomSecret()
+    val p1 = pkToBytes(genPk(sk))
+    val p2 = pkToBytes(genPk(x))
 
     @tailrec
-    def loop(i: Long, getFullElement: Int => BigInt): Option[AutolykosSolution] = if (i == endNonce) {
+    def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (x * genIndexes(Bytes.concat(m, nonce)).map(i => getFullElement(i)).sum - sk).mod(q)
+      val d = (x * genIndexes(Bytes.concat(m, nonce)).map(i => genElement(m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
-        loop(i + 1, getFullElement)
+        loop(i + 1)
       }
     }
 
-    if (onFlyCalculation(b)) {
-      val p1 = pkToBytes(genPk(sk))
-      val p2 = pkToBytes(genPk(x))
-      loop(startNonce, i => genElement(m, p1, p2, Ints.toByteArray(i)))
-    } else {
-      loop(startNonce, list)
-    }
+    loop(startNonce)
   }
 
   private[mining] def getB(nBits: Long): BigInt = {

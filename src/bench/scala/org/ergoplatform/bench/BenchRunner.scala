@@ -60,8 +60,7 @@ object BenchRunner extends ScorexLogging {
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
-    /**
-      * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
+    /** It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
       * in our case we are considering only locally pre-generated modifiers.
       */
     nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit](adjust)
@@ -81,9 +80,8 @@ object BenchRunner extends ScorexLogging {
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
-    val f2: java.lang.reflect.Field = v.history.asInstanceOf[ToDownloadProcessor].getClass.getDeclaredField("isHeadersChainSyncedVar")
-    f2.setAccessible(true)
-    f2.set(v.history.asInstanceOf[ToDownloadProcessor], true)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true: Boolean)
     ()
   }
 
@@ -104,7 +102,7 @@ object BenchRunner extends ScorexLogging {
       .flatten
       .toVector
 
-    log.error(s"Total modificators ${result.length}")
+    log.error(s"Total modifiers: ${result.length}")
 
     result
   }
@@ -123,7 +121,8 @@ object BenchRunner extends ScorexLogging {
     conn.setConnectTimeout(connectTimeout)
     conn.setReadTimeout(readTimeout)
     conn.setRequestMethod(requestMethod)
-    conn.connect
+    conn.connect()
     conn.getInputStream
   }
+
 }

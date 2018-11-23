@@ -6,10 +6,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Algos
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.{Blake2b256, Blake2b512, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -25,8 +24,10 @@ import scala.util.Try
   */
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
+  assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
+
   // Constant data to be added to hash function to increase it's calculation time
-  val M: Array[Byte] = (0 until 64).toArray.flatMap(i => Blake2b256(Ints.toByteArray(i)))
+  val M: Array[Byte] = (0 until 256).toArray.flatMap(i => Blake2b512(Ints.toByteArray(i)))
 
   private var list: IndexedSeq[BigInt] = IndexedSeq()
   private var x: BigInt = randomSecret()
@@ -46,9 +47,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
-    val f = genIndexes(msg, s.n).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
+    val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
     val left = s.w.multiply(f.bigInteger).add(s.pk.negate())
-    val right = group.exponentiate(group.generator, s.d.bigInteger)
+    val right = group.generator.multiply(s.d.bigInteger)
 
     require(left == right, "Incorrect points")
   }
@@ -88,7 +89,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   /**
     * Get message we should proof for header `h`
     */
-  def msgByHeader(h: Header): Array[Byte] = Algos.hash(HeaderSerializer.bytesWithoutPow(h))
+  def msgByHeader(h: Header): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
 
   /**
     * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
@@ -156,7 +157,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
       log.debug(s"Initialize PoW task by generating list of $N elements")
       val p1 = pkToBytes(genPk(sk))
       val p2 = pkToBytes(genPk(x))
-      list = (0 until N).map ( i => genElement(m, p1, p2, Ints.toByteArray(i)))
+      list = (0 until N).map(i => genElement(m, p1, p2, Ints.toByteArray(i)))
     }
   }
 
@@ -174,7 +175,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (x * genIndexes(m, nonce).map(i => getFullElement(i)).sum - sk).mod(q)
+      val d = (x * genIndexes(Bytes.concat(m, nonce)).map(i => getFullElement(i)).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
@@ -213,14 +214,9 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
     * [0,`N`)
     */
-  private def genIndexes(m: Array[Byte], nonceBytes: Array[Byte]): Seq[Int] = {
-    val seed = Bytes.concat(m, nonceBytes)
-    val hashesRequired = (k.toDouble / 8).ceil.toInt
-    val indexes = (0 until hashesRequired) flatMap { i =>
-      val hash = Blake2b256(Bytes.concat(seed, Ints.toByteArray(i)))
-      hash.grouped(4).map(b => Math.abs(Ints.fromByteArray(b) % N))
-    }
-    indexes.take(k)
+  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
+    val hash = Blake2b512(Bytes.concat(seed))
+    hash.grouped(3).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(0.toByte +: b) % N))
   }.ensuring(_.length == k)
 
   /**

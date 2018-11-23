@@ -14,11 +14,10 @@
 \newcommand{\dnote}[1]{\textcolor{red}{D: {#1}}}
 \newcommand{\vk}[1]{\textcolor{blue}{V: {#1}}}
 \newcommand{\lnote}[1]{\textcolor{cyan}{L: {#1}}}
-\newcommand{\Name}{$<Name>$}
+\newcommand{\Name}{$Autolykos$}
 \def\Let#1#2{\State #1 $:=$ #2}
 \def\LetRnd#1#2{\State #1 $\gets$ #2}
 
-\newcommand{\msg}{\mathsf{msg}}
 \newcommand{\pk}{\mathsf{pk}}
 \newcommand{\sk}{\mathsf{sk}}
 
@@ -60,98 +59,108 @@
 
     \section{Ergo PoW puzzle}
 
-    \subsection{Prerequisites}
     The proposed scheme requires following components:
     \begin{enumerate}
         \item Cyclic group $\mathbb{G}$ of prime order $q$ with fixed generator $g$
-        and identity element $e$. Discrete logarithm problem in $\mathbb{G}$ must be hard
-        \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$
-        \item Hash function $genIndexes$ which returns a list of size $k$
-        with numbers in $0\dots (N-1)$
-        \item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N$ is generated
-        using a hash function $H$
-        \item Number of elements $k$ required in the solution
-        \item Target interval parameter $b$
+        and identity element $e$.
+        Curve 25519 is used for this purposes.
+        \item Number of elements $k=21$ required in the solution.
+        \item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=2^{27}$ is generated
+        using a hash function $H$.
+        \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
+        It is based on Blake2b512 and is described in Alg.\ref{alg:H}.
+        \item Hash function $genIndexes$ which returns a list of size $k$ with numbers in $0\dots (N-1)$.
+        It is based on Blake2b512 and is described in Alg.\ref{alg:genIndexes}.
+        \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
+        \item Constant message $M=(0~until~256).flatMap(Blake2b512)$ that is used to enlarge message size and .
     \end{enumerate}
 
-    \subsection{PoW solving and validation}
-
-    Ergo PoW puzzle is based on one list k-sum problem: miner should find
+    \Name is based on one list k-sum problem: miner should find
     $k$ elements from pre-defined list $R$ of size $N$, such that
-    $\sum_{i} r_{i} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
-    In addition we require, that set of element indexes $I$ is received
+    $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
+    In addition we require, that set of element indexes $J$ is received
     by one-way pseudo-random function $genIndexes$. This prevents miner
     from usage of efficient algorithms, that solves $k-sum$ problem, as
     soon as it might be hard (if possible at all) to find such a seed,
     that $genIndexes(seed)$ will return the desired indexes.
 
-    Thus miner will use a simple brute-force algorithm \ref{alg:prove} to
+    Thus we assume that the only option for miner is to use the simple brute-force algorithm \ref{alg:prove} to
     create a valid block.
 
     \begin{algorithm}[H]
         \caption{Block mining}
         \label{alg:prove}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: latest block header $\msg$, key pair $pk=g^{sk}$
+            \State \textbf{Input}: latest block header $Hdr$, key pair $pk=g^{sk}$
             \State Generate randomly a new key pair $w=g^x$
-            \State Calculate $r_i=H(\msg||pk||w||i||0)+x\cdot H(\msg||pk||w||i||1)$ for $i\in 0\dots (N-1)$,
+            \Let{$m$}{$Blake2b256(Hdr.bytesWithoutPow)$}
             \While{$true$}
-                \State $nonce\leftarrow\mathsf{rand}$
-                \Let{$J$}{$genIndexes(\msg||nonce)$}
-                \Let{$d$}{$J.map(j => r_j).sum - sk$}
+                \LetRnd{$nonce$}{$\mathsf{rand}$}
+                \Let{$J$}{$genIndexes(m||nonce)$}
+                \Let{$d$}{$(\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk).mod(q)$}
                 \If{$d <= b$}
-                \State \Return $(\msg,pk,w,nonce,d)$
+                \State \Return $(m,pk,w,nonce,d)$
                 \EndIf
             \EndWhile
         \end{algorithmic}
     \end{algorithm}
 
     Note that although the mining process utilizes private keys, solution itself
-    only contain private keys. This is the idea of \Name protocol that makes
-    PoW puzzle non-outsourcable. Solution verification may be done by Alg. \ref{alg:verify}.
+    only contain public keys. Solution verification may be done by Alg. \ref{alg:verify}.
 
     \begin{algorithm}[H]
         \caption{Solution verification}
         \label{alg:verify}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: $\msg,pk,w,nonce,d$
+            \State \textbf{Input}: $m,pk,w,nonce,d$
             \State require $d\in\{-b,\dots,0,\dots, b\mod q\}$
             \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
-            \State calculate $J:=genIndexes(\msg||nonce)$
-            \State require $g^{\sum_{j \in J} H(\msg||pk||w||j||0) - d}
-            w^{\sum_{j \in J} H(\msg||w||pk||j||1)} = pk$
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$f$}{$\sum_{j \in J} H(i||M||pk||m||w)$}
+            \State require $w^f - pk = g^d$
         \end{algorithmic}
     \end{algorithm}
 
     \section{Discussion}
 
-    Let's assume $N=10^8$, $k=128$, $q$ size is 32 bytes and current difficulty
-    $h = q / b = 10^{15}$ (regular laptop hashrate on non-optimized Scala implementation is $10^6$).
+    \dnote{TODO}
 
-    Memory-hardness follows from the fact, that a miner should keep list of $N$
-    (which is 3.2 Gb with parameters above) elements in memory to allow fast random access to them.
+%    \Name{} is non-outsourcable, as soon as
+%    mining is not possible without private keys\dnote{because it is the same as Shnorr signatures?}.
 
-    Miner can try to reduce memory requirements by recalculating elements from this list on fly.
-    However if $h$ and $k$ are big enough
-    every element will be touched multiple ($h * k / N = 10^9$ in average) times.
-    Thus, every attempt to generate a solution requires to calculate $genIndexes$ hash and
-    either to get $k$ elements from memory or to recalculate them.
-    Elements recalcuation will require to calculate $2 * k = 256$ hashes $H$,
-    $2 * k = 256$ additions (mod q) and one multiplication (mod q).
-
-    Miner can also try to reduce memory requirements to, for example, 1.6 Gb
-    by keeping only the first half of the list and finding solutions
-    with elements from $0 \dots (N/2)$.
-    However the probability that all indexes are in $0 \dots N/2$ is
-    $2^{-k}=2^{-128}$ and as far as $genIndexes$
-    is the hash function, miner can only brute-force $2^{k=2^{128}}$ different $seed$ values for $genIndexes$
-    to find an appropriate index set.
-
-    Protocol is quite efficient: in addition to payload, block header $\msg$ should
-    contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
-    (but will contain a lot of leading zeros in case of small target $b$) and a nonce,
-    which size might be small enough (say, 8 bytes). Thus for about 100 additional bytes
-    will be added to the block header.
+    %    Mining algorithm \ref{alg:prove} can be optimized, if miner will pre-calculate
+%    hashes $H(i||M||pk||m||w)~\forall~i~\in~[0,N)$ and will get them from memory during seed search.
+%    This strategy become profitable if elements will be used during mining for multiple times,
+%    that is achieved a miner hashrate is higher than $N / k / 120 = 2^{17} H/s$, while moder GPU
+%    hashrate is about $2^{30} H/s$~\cite{gpuHashrate}.
+%
+%    Let's assume $N=10^8$, $k=128$, $q$ size is 32 bytes and current difficulty
+%    $h = q / b = 10^{15}$ (regular laptop hashrate on non-optimized Scala implementation is $10^6$).
+%
+%    Memory-hardness follows from the fact, that a miner should keep list of $N$
+%    (which is 3.2 Gb with parameters above) elements in memory to allow fast random access to them.
+%
+%    Miner can try to reduce memory requirements by recalculating elements from this list on fly.
+%    However if $h$ and $k$ are big enough
+%    every element will be touched multiple ($h * k / N = 10^9$ in average) times.
+%    Thus, every attempt to generate a solution requires to calculate $genIndexes$ hash and
+%    either to get $k$ elements from memory or to recalculate them.
+%    Elements recalcuation will require to calculate $2 * k = 256$ hashes $H$,
+%    $2 * k = 256$ additions (mod q) and one multiplication (mod q).
+%
+%    Miner can also try to reduce memory requirements to, for example, 1.6 Gb
+%    by keeping only the first half of the list and finding solutions
+%    with elements from $0 \dots (N/2)$.
+%    However the probability that all indexes are in $0 \dots N/2$ is
+%    $2^{-k}=2^{-128}$ and as far as $genIndexes$
+%    is the hash function, miner can only brute-force $2^{k=2^{128}}$ different $seed$ values for $genIndexes$
+%    to find an appropriate index set.
+%
+%    Protocol is quite efficient: in addition to payload, block header should
+%    contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
+%    (but will contain a lot of leading zeros in case of small target $b$) and a nonce,
+%    which size might be small enough (say, 8 bytes). Thus for about 100 additional bytes
+%    will be added to the block header.
 
 %    Difficulty $h$ adjusts to the network computational power in such a way,
 %    that correct solutions appears roughly once per 2 minutes. Non-optimized Scala
@@ -160,5 +169,39 @@
 
 
     \bibliography{references}
+
+    \section*{Appendix}
+    \label{appendix}
+
+    Implementation of hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$:
+
+    \begin{algorithm}[H]
+        \caption{Numeric hash}
+        \label{alg:H}
+        \begin{algorithmic}[1]
+            \Function{H}{$input$}
+            \Let{$validRange$}{$(2^{512} / q) \cdot q$}
+            \Let{$hashed$}{$Blake2b512(input)$}
+            \If{$hashed < validRange$}
+            \State \Return $hashed.mod(q)$
+            \Else
+            \State \Return $H(hashed)$
+            \EndIf
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+
+    Implementation of hash function $genIndexes$ which returns a list of size $k$ with numbers in $0\dots (N-1)$:
+
+    \begin{algorithm}[H]
+        \caption{Index generator}
+        \label{alg:genIndexes}
+        \begin{algorithmic}[1]
+            \Function{genIndexes}{$seed$}
+                \Let{$hash$}{$Blake2b512(Bytes.concat(seed))$}
+                \State \Return $hash.grouped(3).take(k).map(_.mod(N))$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
 
 \end{document}

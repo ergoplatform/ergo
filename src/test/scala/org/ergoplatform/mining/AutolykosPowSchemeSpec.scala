@@ -8,8 +8,11 @@ import scorex.testkit.utils.NoShrink
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
+  val k = 21
+  val N = 134217728
+
   property("generate valid solution for small difficulty") {
-    val pow = new AutolykosPowScheme(128, 100000000)
+    val pow = new AutolykosPowScheme(k, N)
     forAll(invalidHeaderGen, Gen.choose(1, 20)) { (inHeader, difficulty) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits)
@@ -24,8 +27,8 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
   }
 
   property("generate valid solution for big difficulty") {
-    val pow = new AutolykosPowScheme(128, 129)
-    forAll(invalidHeaderGen, Gen.choose(130, 1000)) { (inHeader, difficulty) =>
+    val pow = new AutolykosPowScheme(k, k + 1)
+    forAll(invalidHeaderGen, Gen.choose(k + 1, 1000)) { (inHeader, difficulty) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits)
       pow.validate(h) shouldBe 'failure

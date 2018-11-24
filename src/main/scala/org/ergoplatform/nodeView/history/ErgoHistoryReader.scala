@@ -125,36 +125,38 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @param info other's node sync info
+    * @param info other node's sync info
     * @param size max return size
-    * @return Ids of headerss, that node with info should download and apply to synchronize
+    * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
+  override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = {
     if (isEmpty) {
-      info.startingPoints
+      Some(info.startingPoints)
     } else if (info.lastHeaderIds.isEmpty) {
       val heightFrom = Math.min(headersHeight, size - 1)
-      val startId = headerIdsAtHeight(heightFrom).head
-      val startHeader = typedModifierById[Header](startId).get
-      val headers = headerChainBack(size, startHeader, _ => false)
-        .ensuring(_.headers.exists(_.height == 0), "Should always contain genesis header")
-      headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
+      for {
+        startId <- headerIdsAtHeight(heightFrom).headOption
+        startHeader <- typedModifierById[Header](startId)
+      } yield {
+        headerChainBack(size, startHeader, _ => false)
+          .ensuring(_.headers.exists(_.height == 0), "Should always contain genesis header")
+          .headers
+          .flatMap(h => Seq((Header.modifierTypeId, h.id)))
+      }
     } else {
-      val ids = info.lastHeaderIds
-      val lastHeaderInOurBestChain: ModifierId = ids.view.reverse.find(m => isInBestChain(m)).get
-      val theirHeight = heightOf(lastHeaderInOurBestChain).get
-      val heightFrom = Math.min(headersHeight, theirHeight + size)
-      val startId = headerIdsAtHeight(heightFrom).head
-      val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)
-        .headers.map(h => Header.modifierTypeId -> h.id)
-      headerIds
+      for {
+        lastHeaderInOurBestChain <- info.lastHeaderIds.view.reverse.find(isInBestChain)
+        otherNodeHeight <- heightOf(lastHeaderInOurBestChain)
+        startId <- headerIdsAtHeight(Math.min(headersHeight, otherNodeHeight + size)).headOption
+        startHeader <- typedModifierById[Header](startId)
+      } yield {
+        headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)
+          .headers.map(Header.modifierTypeId -> _.id)
+      }
     }
-  }.toOption
+  }
 
   /**
-    *
     * @param header     - header to start
     * @param withFilter - condition to satisfy
     * @return all possible forks, starting from specified header and satisfying withFilter condition

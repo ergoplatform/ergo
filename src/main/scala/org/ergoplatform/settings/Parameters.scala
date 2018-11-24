@@ -21,7 +21,8 @@ abstract class Parameters {
 
   def parametersTable: Map[Byte, Int]
 
-  /** Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs
+  /**
+    * Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs.
     */
   lazy val k: Int = parametersTable(KIncrease)
 
@@ -30,10 +31,14 @@ abstract class Parameters {
     */
   lazy val minValuePerByte: Int = parametersTable(MinValuePerByteIncrease)
 
-  // Max size of transactions section of a block.
+  /**
+    * Max size of transactions section of a block.
+    */
   lazy val maxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
 
-  // Max total computation cost of a block.
+  /**
+    * Max total computation cost of a block.
+    */
   lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
@@ -61,7 +66,7 @@ abstract class Parameters {
   }
 
   private def padVotes(vs: Array[Byte]): Array[Byte] = {
-    val maxVotes = ParametersCount + 1
+    val maxVotes = ParamVotesCount + 1
     if (vs.length < maxVotes) vs ++ Array.fill(maxVotes - vs.length)(0: Byte) else vs
   }
 
@@ -70,7 +75,7 @@ abstract class Parameters {
     val vs = ownTargets.flatMap{case (paramId, value) =>
       if(value > parametersTable(paramId)) Some(paramId) else
       if(value < parametersTable(paramId)) Some((-paramId).toByte) else None
-    }.take(ParametersCount).toArray
+    }.take(ParamVotesCount).toArray
     padVotes(vs)
   }
 
@@ -123,6 +128,13 @@ object Parameters {
   val MinValueMin = 0
   val MinValueMax = 10000000 //0.01 Erg
 
+  lazy val parametersTable: Map[Byte, String] = Map (
+    KIncrease -> "Storage fee coefficient (nanoErgs per byte per storage period of ~4 years) value",
+    MinValuePerByteIncrease -> "Minimum monetary value of a box",
+    MaxBlockSizeIncrease -> "Maximum block size",
+    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block"
+  )
+
   lazy val stepsTable: Map[Byte, Int] = Map (
     KIncrease -> Kstep,
     MinValuePerByteIncrease -> MinValueStep
@@ -138,7 +150,7 @@ object Parameters {
     MinValuePerByteIncrease -> MinValueMax
   )
 
-  val ParametersCount = 2
+  val ParamVotesCount = 2
 
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters {
     override val height: Height = h

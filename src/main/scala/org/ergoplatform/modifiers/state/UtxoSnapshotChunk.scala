@@ -12,7 +12,7 @@ import scorex.util._
 
 import scala.util.Try
 
-case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
+case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], latestManifestId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
@@ -25,7 +25,7 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   lazy val rootDigest: ADDigest = ADDigest !@@ subtree.subtreeTop.label
 
-  override def parentId: ModifierId = manifestId
+  override def parentId: ModifierId = latestManifestId
 
   override lazy val sizeOpt: Option[Int] = Some(bytes.length)
 
@@ -50,7 +50,7 @@ object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
 
   override def toBytes(obj: UtxoSnapshotChunk): Array[Byte] = {
     val serializedSubtree = serializer.subtreeToBytes(obj.subtree)
-    idToBytes(obj.manifestId) ++ serializedSubtree
+    idToBytes(obj.latestManifestId) ++ serializedSubtree
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotChunk] = Try {

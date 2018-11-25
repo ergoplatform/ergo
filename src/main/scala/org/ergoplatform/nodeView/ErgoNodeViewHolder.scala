@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSy
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.settings.ScorexSettings
@@ -63,7 +63,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   private def successfulModifier: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-      if (mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0) {
+      if (mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0 &&
+        settings.nodeSettings.keepLastSnapshots != 0) {
         createStateSnapshot(mod.header)
       }
     case _: SemanticallySuccessfulModifier[_] => // ignore other messages

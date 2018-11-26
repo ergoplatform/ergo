@@ -24,7 +24,7 @@
 \begin{document}
     \title{\Name: The Ergo Platform PoW Puzzle}
 
-    \author{Ergo Developers}
+    \author{Alexander Chepurnoy, Vasily Kharin, Dmitry Meshkov}
 
     \date{\today}
     \maketitle
@@ -38,26 +38,36 @@
 
     Security of Proof-of-Work blockchains relies on an assumption
     that multiple miners are trying to produce new blocks by
-    participating in PoW puzzle and the network is secure as soon as the
-    majority of them are honest.
+    participating in PoW puzzle and the network is secure if the
+    majority of them are honest. However, the reality become much more complicated
+    then the original one-CPU-one-vote idea form the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
 
-    However in existing PoW networks miners unite in mining pools and
-    this assumption should be reformulated: the network is secure as soon as the
-    majority of pool operators are honest.
-    Unfortunately in existing PoW cryptocurrencies
-    regardless of the PoW algorithm, number of pools controls more then 50\% of
-    computational power is small: 4 pools in Bitcoin, 2 in Ethereum, 3 in ZCash, etc.
-
+    The first threat to decentralization came from mining pools -- miners become to unite in mining pools,
+    and regardless of the PoW algorithm number of pools that controls more then 50\% of
+    computational power is usually quite small: 4 pools in Bitcoin, 2 in Ethereum, 3 in ZCash, etc.
     This problem led to the notion of non-outsourceable puzzles~\cite{miller2015nonoutsourceable,daian2017piecework}.
     These are the puzzles constructed in such a way that if a mining pool outsource the puzzle
     to miners, with non-negligible probability miner can recover pools private key and steal the reward.
-    However existing solutions have have too large solution size (kilobyte is already
+    However the existing solutions have too large solution size (kilobyte is already
     on the edge of acceptability for distributed ledger) or very specific and
-    can not be updated without breaking non-outsourceability. Thus the first goal of \Name is non-outsourceability.
+    can not be updated without breaking non-outsourceability.
 
-    \dnote{add ASIC-resistance}
+    The second threat to cryptocurrencies decentralization is that ASIC-equipped miners are
+    able to find PoW solutions orders of magnitude faster and more efficiently
+    than miners equipped with the commodity hardware. In order to remedy the
+    disparity between the ASICs and regular hardware, memory-bound computations
+    where proposed~\cite{dwork2003memory}. In practice the most interesting are
+    asymmetric memory-hard PoW - schemes that requires significantly less memory
+    to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
+    \dnote{may be note, that there are ASICS for equihash and ETH is going to switch to ProgPow}
+
+    In this paper we provide a specification of \Name{} -- PoW puzzle, that is both
+    non-outsourceable and memory-hard. In Section~\ref{puzzle} we provide a full
+    specification of \Name, while in Section~\ref{discussion} we discuss it's
+    properties. Several auxiliary algorithms are moved to~\nameref{appendix}.
 
     \section{Ergo PoW puzzle}
+    \label{puzzle}
 
     The proposed scheme requires following components:
     \begin{enumerate}
@@ -122,6 +132,7 @@
     \end{algorithm}
 
     \section{Discussion}
+    \label{discussion}
 
     \dnote{TODO}
 

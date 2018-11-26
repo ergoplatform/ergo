@@ -87,7 +87,7 @@ trait ToDownloadProcessor extends ScorexLogging {
       if (isPrunedFullMode && lastSnapshotAppliedHeight.isEmpty) {
         // Pruned full node regime with no snapshots applied yet -
         // node should recover state before full blocks application.
-        val snapshotHeight = pruningProcessor.nearestSnapshotHeight(header.height)
+        val snapshotHeight = pruningProcessor.bestSnapshotHeight(header.height)
         val snapshotIdOpt = headerIdsAtHeight(snapshotHeight).headOption
           .flatMap(typedModifierById[Header])
           .map(h => UtxoSnapshot.rootDigestToId(h.stateRoot))

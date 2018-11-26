@@ -29,13 +29,19 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
   }
 
   /**
-    * Nearest snapshot height node can use for fast syncing (penultimate snapshot).
+    * Best snapshot height node can use for fast syncing.
+    * Tries to find snapshot that meets security requirements.
     *
     * @param height - height of last block
     * */
-  def nearestSnapshotHeight(height: Int): Int = {
-    val snapshotMaxHeight = height - config.blocksToKeep
-    snapshotMaxHeight - (snapshotMaxHeight % config.snapshotCreationInterval) - config.snapshotCreationInterval
+  def bestSnapshotHeight(height: Int): Int = {
+    def nearestRelativeTo(h: Int) = h - (h % config.snapshotCreationInterval)
+    val perpetualSnapshotHeight = nearestRelativeTo(nearestRelativeTo(height) - 1)
+    if (height - perpetualSnapshotHeight < config.blocksToKeep) {
+      nearestRelativeTo(perpetualSnapshotHeight - 1)
+    } else {
+      perpetualSnapshotHeight
+    }
   }
 
   /**
@@ -50,7 +56,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     } else if (!config.stateType.requireProofs) {
       // just synced with the headers chain in pruned full mode -
       // start from height of the penultimate state snapshot available + 1.
-      val snapshotHeight = nearestSnapshotHeight(header.height)
+      val snapshotHeight = bestSnapshotHeight(header.height)
       if (snapshotHeight >= config.snapshotCreationInterval * 2) snapshotHeight + 1 else 0
     } else {
       // Start from config.blocksToKeep blocks back

@@ -8,7 +8,7 @@
 \usepackage{hyperref}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\bibliographystyle{plain}
+\bibliographystyle{IEEEtran}
 
 \newcommand{\knote}[1]{\textcolor{green}{A: {#1}}}
 \newcommand{\dnote}[1]{\textcolor{red}{D: {#1}}}
@@ -29,9 +29,9 @@
     \date{\today}
     \maketitle
 
-%    \begin{abstract}
-%        This document contains the full description of \Name~-- the PoW protocol that is going to be used in Ergo platform.
-%    \end{abstract}
+    %    \begin{abstract}
+    %        This document contains the full description of \Name~-- the PoW protocol that is going to be used in Ergo platform.
+    %    \end{abstract}
 
 
     \section{Introduction}
@@ -61,7 +61,8 @@
     to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
     \dnote{may be note, that there are ASICS for equihash and ETH is going to switch to ProgPow}
 
-    In this paper we provide a specification of \Name{} -- PoW puzzle, that is both
+    In this paper we provide a specification of \Name{} -- PoW puzzle, that is
+    going to be used in Ergo platform~\cite{ergo}. It is designed to be both
     non-outsourceable and memory-hard. In Section~\ref{puzzle} we provide a full
     specification of \Name, while in Section~\ref{discussion} we discuss it's
     properties. Several auxiliary algorithms are moved to~\nameref{appendix}.
@@ -75,7 +76,7 @@
         and identity element $e$.
         Curve 25519 is used for this purposes.
         \item Number of elements $k=21$ required in the solution.
-        \item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=2^{27}$ is generated
+        \item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=10^{8}$ is generated
         using a hash function $H$.
         \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
         It is based on Blake2b512 and is described in Alg.\ref{alg:H}.
@@ -94,7 +95,7 @@
     soon as it might be hard (if possible at all) to find such a seed,
     that $genIndexes(seed)$ will return the desired indexes.
 
-    Thus we assume that the only option for miner is to use the simple brute-force algorithm \ref{alg:prove} to
+    Thus we assume that the only option for miner is to use the simple brute-force algorithm~\ref{alg:prove} to
     create a valid block.
 
     \begin{algorithm}[H]
@@ -105,18 +106,18 @@
             \State Generate randomly a new key pair $w=g^x$
             \Let{$m$}{$Blake2b256(Hdr.bytesWithoutPow)$}
             \While{$true$}
-                \LetRnd{$nonce$}{$\mathsf{rand}$}
-                \Let{$J$}{$genIndexes(m||nonce)$}
-                \Let{$d$}{$(\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk).mod(q)$}
-                \If{$d <= b$}
-                \State \Return $(m,pk,w,nonce,d)$
-                \EndIf
+            \LetRnd{$nonce$}{$\mathsf{rand}$}
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$d$}{$(\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk).mod(q)$}
+            \If{$d <= b$}
+            \State \Return $(m,pk,w,nonce,d)$
+            \EndIf
             \EndWhile
         \end{algorithmic}
     \end{algorithm}
 
     Note that although the mining process utilizes private keys, solution itself
-    only contain public keys. Solution verification may be done by Alg. \ref{alg:verify}.
+    only contain public keys. Solution verification may be done by Alg.~\ref{alg:verify}.
 
     \begin{algorithm}[H]
         \caption{Solution verification}
@@ -134,50 +135,60 @@
     \section{Discussion}
     \label{discussion}
 
+    \Name{} mining~\ref{alg:prove} and verification~\ref{alg:verify} algorithms are
+    the same as Schnorr signature algorithm, proving is not possible without access
+    to private key $sk$. Thus solo mining remains the only option for miners,
+    preventing centralization of the network in the hands of pool operators.
+    \dnote{Correct description and links here}
+
+    Mining algorithm~\ref{alg:prove} can be optimized, if miner will pre-calculate
+    hashes $H(i||M||pk||m||w)~\forall~i~\in~[0,N)$ and will store them to memory.
+    Every pre-calculated hash have occupy 32 bytes, so the whole list of $N$ elements
+    will occupy $N \cdot 32 = 3 Gb$.
+    Modern GPU hashrate is about $G = 2^{30} H/s$~\cite{gpuHashrate} and assuming
+    block interval $t=120~s$ every element will be used
+    $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times in average.\dnote{continue, discuss memory-hardness and on-fly calculation}
+
+    \dnote{drawbacks: solution size, 2 exponentiations}
+
+%    that is achieved a miner hashrate is higher than $N / k / 120 = 2^{17} H/s$, while
+
+    %
+    %    Let's assume $N=10^8$, $k=128$, $q$ size is 32 bytes and current difficulty
+    %    $h = q / b = 10^{15}$ (regular laptop hashrate on non-optimized Scala implementation is $10^6$).
+    %
+    %    Memory-hardness follows from the fact, that a miner should keep list of $N$
+    %    (which is 3.2 Gb with parameters above) elements in memory to allow fast random access to them.
+    %
+    %    Miner can try to reduce memory requirements by recalculating elements from this list on fly.
+    %    However if $h$ and $k$ are big enough
+    %    every element will be touched multiple ($h * k / N = 10^9$ in average) times.
+    %    Thus, every attempt to generate a solution requires to calculate $genIndexes$ hash and
+    %    either to get $k$ elements from memory or to recalculate them.
+    %    Elements recalcuation will require to calculate $2 * k = 256$ hashes $H$,
+    %    $2 * k = 256$ additions (mod q) and one multiplication (mod q).
+    %
+    %    Miner can also try to reduce memory requirements to, for example, 1.6 Gb
+    %    by keeping only the first half of the list and finding solutions
+    %    with elements from $0 \dots (N/2)$.
+    %    However the probability that all indexes are in $0 \dots N/2$ is
+    %    $2^{-k}=2^{-128}$ and as far as $genIndexes$
+    %    is the hash function, miner can only brute-force $2^{k=2^{128}}$ different $seed$ values for $genIndexes$
+    %    to find an appropriate index set.
+    %
+    %    Protocol is quite efficient: in addition to payload, block header should
+    %    contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
+    %    (but will contain a lot of leading zeros in case of small target $b$) and a nonce,
+    %    which size might be small enough (say, 8 bytes). Thus for about 100 additional bytes
+    %    will be added to the block header.
+
+    %    Difficulty $h$ adjusts to the network computational power in such a way,
+    %    that correct solutions appears roughly once per 2 minutes. Non-optimized Scala
+    %    implementation of mining process allows to check $10^{6}$ possible solutions per
+    %    2 minutes, so we may expect at least $h~10^{15}$ for the real network.
+
+
     \dnote{TODO}
-
-%    \Name{} is non-outsourcable, as soon as
-%    mining is not possible without private keys\dnote{because it is the same as Shnorr signatures?}.
-
-    %    Mining algorithm \ref{alg:prove} can be optimized, if miner will pre-calculate
-%    hashes $H(i||M||pk||m||w)~\forall~i~\in~[0,N)$ and will get them from memory during seed search.
-%    This strategy become profitable if elements will be used during mining for multiple times,
-%    that is achieved a miner hashrate is higher than $N / k / 120 = 2^{17} H/s$, while moder GPU
-%    hashrate is about $2^{30} H/s$~\cite{gpuHashrate}.
-%
-%    Let's assume $N=10^8$, $k=128$, $q$ size is 32 bytes and current difficulty
-%    $h = q / b = 10^{15}$ (regular laptop hashrate on non-optimized Scala implementation is $10^6$).
-%
-%    Memory-hardness follows from the fact, that a miner should keep list of $N$
-%    (which is 3.2 Gb with parameters above) elements in memory to allow fast random access to them.
-%
-%    Miner can try to reduce memory requirements by recalculating elements from this list on fly.
-%    However if $h$ and $k$ are big enough
-%    every element will be touched multiple ($h * k / N = 10^9$ in average) times.
-%    Thus, every attempt to generate a solution requires to calculate $genIndexes$ hash and
-%    either to get $k$ elements from memory or to recalculate them.
-%    Elements recalcuation will require to calculate $2 * k = 256$ hashes $H$,
-%    $2 * k = 256$ additions (mod q) and one multiplication (mod q).
-%
-%    Miner can also try to reduce memory requirements to, for example, 1.6 Gb
-%    by keeping only the first half of the list and finding solutions
-%    with elements from $0 \dots (N/2)$.
-%    However the probability that all indexes are in $0 \dots N/2$ is
-%    $2^{-k}=2^{-128}$ and as far as $genIndexes$
-%    is the hash function, miner can only brute-force $2^{k=2^{128}}$ different $seed$ values for $genIndexes$
-%    to find an appropriate index set.
-%
-%    Protocol is quite efficient: in addition to payload, block header should
-%    contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
-%    (but will contain a lot of leading zeros in case of small target $b$) and a nonce,
-%    which size might be small enough (say, 8 bytes). Thus for about 100 additional bytes
-%    will be added to the block header.
-
-%    Difficulty $h$ adjusts to the network computational power in such a way,
-%    that correct solutions appears roughly once per 2 minutes. Non-optimized Scala
-%    implementation of mining process allows to check $10^{6}$ possible solutions per
-%    2 minutes, so we may expect at least $h~10^{15}$ for the real network.
-
 
     \bibliography{references}
 
@@ -209,8 +220,8 @@
         \label{alg:genIndexes}
         \begin{algorithmic}[1]
             \Function{genIndexes}{$seed$}
-                \Let{$hash$}{$Blake2b512(Bytes.concat(seed))$}
-                \State \Return $hash.grouped(3).take(k).map(_.mod(N))$
+            \Let{$hash$}{$Blake2b512(Bytes.concat(seed))$}
+            \State \Return $hash.grouped(3).take(k).map(_.mod(N))$
             \EndFunction
         \end{algorithmic}
     \end{algorithm}

@@ -7,7 +7,7 @@ object LaunchParameters extends Parameters(height = 0, parametersTable = Map(
   MinValuePerByteIncrease -> Parameters.MinValuePerByteDefault,
   MaxBlockSizeIncrease -> 512 * 1024,
   MaxBlockCostIncrease -> 1000000
-)) {
+)) with App {
 
   import Parameters._
 
@@ -29,5 +29,6 @@ object LaunchParameters extends Parameters(height = 0, parametersTable = Map(
       """.stripMargin
   }
 
+  println(Int.MaxValue / 2)
   //println(parametersDescription)
 }

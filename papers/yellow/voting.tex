@@ -2,22 +2,42 @@ Many parameters can be changed on-the-fly via miners voting, namely instruction 
 block size limit, storage fee factor, block version, and so on. Voting for the block version~(so for a soft-fork)
 lasts for 32 epochs~(see epoch length below), and requires 90 percent of the miners to vote for the change.
 For less critical changes~(such as block size limit), simple majority is enough. We will further refer to the changes
-of the first kind as of foundational changes, we call the changes of the second kind everyday changes.
+of the first kind as to foundational changes, we call the changes of the second kind as to everyday changes.
 Per block, a miner can vote for two everyday changes and also one foundational change.
 
 To vote "Yes" ("I'm agree on the change proposed"), a miner is publishing identifier of the change directly in a
-block header. To vote "No", a miner is simplry writing zero value in a corresponding byte. To initialize a voting
-procedure, a miner is publishing change identifier in a first block of an epoch.
+block header. To vote "No" (or avoid voting at all, which is the same), a miner is simply writing zero value in
+a corresponding byte (another option is to provide a vote identifier which is not being considered within the epoch).
+To initialize a voting procedure, a miner is publishing change identifier in a first block of an epoch.
 
-
-The value of the change is predefined as $\max(\lceil0.01 \times current\_value\rceil, min\_step)$ with $min\_step$
-being the hard-coded value. In case the proposal fails, the parameters
-remain unchanged.
 
 System constants:
 \begin{itemize}
-\item{} Epoch length = 1024 blocks.
+\item{} Voting epoch length = 1024 blocks.
+\item{} Voting epochs per foundational change = 32
+\item{} Voting epochs before approved foundational change activation = 128
 \end{itemize}
+
+The following table descibes vote identifiers, default value (during launch), possible step, minimum and maximum values.
+If the step is not defined in the table, its value is defined as $\max(\lceil0.01 \times current\_value\rceil, 1)$.
+If minimum value for parameter is not defined, it equals to zero. If maximum value is not defined, it equals to
+1,073,741,823.
+
+All the monetary values in the table (storage fee factor, minimum box value) are in nanoErgs. All the sizes (block etc)
+are given in bytes.
+
+To propose or vote for increasing a parameter, a miner is inluding a parameter identifier ($id$) into a blockheader.
+If miner is for decreasing parameter, the miner is including ($-id$) into a block header.
+
+\begin{tabular}{*{6}{l}}
+Id & Description & Default & Step & Min & Max \\
+\hline
+1 & Storage fee factor (per byte per storage period) & 1250000 & 25000 & 0 & 5000000 \\
+2 & Minimum monetary value of a box & 360 & 10 & 0 & 10000000 \\
+3 & Maximum block size & 524288 & - & - & - \\
+4 & Maximum cumulative computational cost of a block & 1000000 & - & - & - \\
+\end{tabular}
+
 
 \knote{Foundation wallet address change via 90 percent voting?}
 

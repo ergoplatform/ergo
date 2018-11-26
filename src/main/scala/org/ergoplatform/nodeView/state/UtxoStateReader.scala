@@ -52,7 +52,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
               log.info(s"Last possible emission box consumed")
               None
             case _ =>
-              log.warn(s"Emission box not found in block ${fb.encodedId}")
+              log.info(s"Emission box not found in block ${fb.encodedId}")
               boxById(id)
           }
       case _ => // try to find matching emission box among transactions in block.
@@ -60,12 +60,12 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
           .find { tx =>
             tx.outputs.headOption.exists { out =>
               out.proposition == constants.genesisEmissionBox.proposition &&
-                out.value == constants.emission.emissionAtHeight(fb.header.height)
+                out.value == constants.emission.remainingCoinsAfterHeight(fb.header.height)
             }
           }
           .map(_.outputs.head)
           .orElse {
-            log.debug("No emission box: emission should be already finished before this block")
+            log.info("No emission box: emission should be already finished before this block")
             None
           }
     }

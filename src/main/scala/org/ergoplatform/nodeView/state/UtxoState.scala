@@ -238,7 +238,7 @@ object UtxoState {
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes
     val bestVersion = bestVersionKey -> modIdBytes
-    val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
+    val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(_.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
     Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)

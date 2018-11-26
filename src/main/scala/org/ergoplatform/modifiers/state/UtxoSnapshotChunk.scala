@@ -12,7 +12,7 @@ import scorex.util._
 
 import scala.util.Try
 
-case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], latestManifestId: ModifierId)
+case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
@@ -25,14 +25,14 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   lazy val rootDigest: ADDigest = ADDigest !@@ subtree.subtreeTop.label
 
-  override def parentId: ModifierId = latestManifestId
+  override def parentId: ModifierId = manifestId
 
   override lazy val sizeOpt: Option[Int] = Some(bytes.length)
 
   def validate(manifest: UtxoSnapshotManifest): Try[Unit] = {
     failFast
       .demand(manifest.chunkRoots.exists(java.util.Arrays.equals(_, rootDigest)),
-        "Chunk does not correspond to declared manifest")
+        "Chunk does not correspond to manifest")
       .result
       .toTry
   }
@@ -50,7 +50,7 @@ object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
 
   override def toBytes(obj: UtxoSnapshotChunk): Array[Byte] = {
     val serializedSubtree = serializer.subtreeToBytes(obj.subtree)
-    idToBytes(obj.latestManifestId) ++ serializedSubtree
+    idToBytes(obj.manifestId) ++ serializedSubtree
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotChunk] = Try {

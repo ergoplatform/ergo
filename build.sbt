@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15")
     .exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  ("org.scorexfoundation" %% "scorex-core" % scorexVersion)
+  ("org.scorexfoundation" %% "scorex-core" % "nvh-access-6ccfd110-SNAPSHOT")
     .exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "scrypto" % "2.1.5",
   "javax.xml.bind" % "jaxb-api" % "2.+",

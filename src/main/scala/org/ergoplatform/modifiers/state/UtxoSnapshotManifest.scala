@@ -51,7 +51,7 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
   def validate(header: Header): Try[Unit] = {
     failFast
       .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
-      .demandEqualArrays(rootDigest, header.stateRoot, "`rootHash` does not correspond to header's `stateRoot`")
+      .demandEqualArrays(rootDigest, header.stateRoot, "`rootDigest` does not correspond to header's `stateRoot`")
       .result
       .toTry
   }

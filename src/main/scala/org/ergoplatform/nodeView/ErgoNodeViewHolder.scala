@@ -12,7 +12,8 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import scorex.core.consensus.History.ProgressInfo
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallyFailedModification, SemanticallySuccessfulModifier}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -36,10 +37,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
 
-  override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-  }
-
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
     reason.printStackTrace()
@@ -52,33 +49,38 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     minimalState().closeStorage()
   }
 
-  override def receive: Receive =
-    processRemoteModifiers orElse
-      processLocallyGeneratedModifiers orElse
-      processNewTransactions orElse
-      getCurrentInfo orElse
-      getNodeViewChanges orElse
-      successfulModifier orElse
-      unknownMessage
-
-  private def successfulModifier: Receive = {
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-      if (mod.header.height % settings.nodeSettings.snapshotCreationInterval == 0 &&
-        settings.nodeSettings.keepLastSnapshots != 0) {
-        createStateSnapshot(mod.header)
-      }
-    case _: SemanticallySuccessfulModifier[_] => // ignore other messages
+  override protected def applyState(history: ErgoHistory,
+                                    stateToApply: State,
+                                    suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
+                                    progressInfo: ProgressInfo[ErgoPersistentModifier]): UpdateInformation = {
+    val updateInfoSample = UpdateInformation(history, stateToApply, None, None, suffixTrimmed)
+    progressInfo.toApply.foldLeft(updateInfoSample) { case (updateInfo, modToApply) =>
+      updateInfo.failedMod.fold {
+        updateInfo.state.applyModifier(modToApply) match {
+          case Success(stateAfterApply) =>
+            val newHistory = history.reportModifierIsValid(modToApply)
+            context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
+            modToApply match {
+              case block: ErgoFullBlock if block.header.height % settings.nodeSettings.snapshotCreationInterval == 0 &&
+                settings.nodeSettings.keepLastSnapshots != 0 =>
+                createStateSnapshot(block.header, stateAfterApply)
+              case _ => // do nothing.
+            }
+            UpdateInformation(newHistory, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
+          case Failure(e) =>
+            val (newHistory, newProgressInfo) = history.reportModifierIsInvalid(modToApply, progressInfo)
+            context.system.eventStream.publish(SemanticallyFailedModification(modToApply, e))
+            UpdateInformation(newHistory, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
+        }
+      }(_ => updateInfo)
+    }
   }
 
-  private def unknownMessage: Receive = {
-    case other => log.error("Strange input: " + other)
-  }
-
-  private def createStateSnapshot(lastHeader: Header): Unit = {
-    minimalState().getReader match {
-      case r: UtxoStateReader =>
+  private def createStateSnapshot(lastHeader: Header, state: State): Unit = {
+    state match {
+      case utxoReader: UtxoStateReader =>
         log.info(s"Creating state snapshot at height ${lastHeader.height} after header ${lastHeader.encodedId}")
-        val (manifest, chunks) = r.takeSnapshot
+        val (manifest, chunks) = utxoReader.takeSnapshot
         val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
         history().append(snapshot)
       case _ =>

@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "8adeddba-SNAPSHOT"
+val scorexVersion = "44622ac2-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15")
     .exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  ("org.scorexfoundation" %% "scorex-core" % "nvh-access-6ccfd110-SNAPSHOT")
+  ("org.scorexfoundation" %% "scorex-core" % scorexVersion)
     .exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "scrypto" % "2.1.5",
   "javax.xml.bind" % "jaxb-api" % "2.+",

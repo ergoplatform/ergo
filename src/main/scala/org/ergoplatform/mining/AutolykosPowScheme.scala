@@ -30,7 +30,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   /**
     * Constant data to be added to hash function to increase it's calculation time
     */
-  val M: Array[Byte] = (0 until 256).toArray.flatMap(i => Blake2b512(Ints.toByteArray(i)))
+  val M: Array[Byte] = (0 until 2048).toArray.flatMap(i => Longs.toByteArray(i))
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.

@@ -72,7 +72,7 @@
         \item Hash function $genIndexes$ which returns a list of size $k$ with numbers in $0\dots (N-1)$.
         It is based on Blake2b512 and is described in Alg.\ref{alg:genIndexes}.
         \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
-        \item Constant message $M=(0~until~256).flatMap(Blake2b512)$ that is used to enlarge message size and .
+        \item Constant message $M=(0 until 2048).toArray.flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
     \end{enumerate}
 
     \Name is based on one list k-sum problem: miner should find

@@ -15,6 +15,8 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "8adeddba-SNAPSHOT"
+//val sigmaStateVersion = "fix-incomplete-runtimeircontext-3fd0c0d8-SNAPSHOT"
+val sigmaStateVersion = "fix-incomplete-runtimeircontext-9039dfca-SNAPSHOT"
 val sigmaStateVersion = "fix-incomplete-runtimeircontext-3fd0c0d8-SNAPSHOT"
 
 libraryDependencies ++= Seq(

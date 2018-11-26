@@ -20,17 +20,13 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   ("org.scorexfoundation" %% "sigma-state" % "R3-update-20013a49-SNAPSHOT")
-    .exclude("ch.qos.logback", "logback-classic")
-    .exclude("org.scorexfoundation", "scrypto"),
+    .exclude("ch.qos.logback", "logback-classic"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15")
-    .exclude("ch.qos.logback", "logback-classic")
-    .exclude("org.scorexfoundation", "scrypto"),
-  ("org.scorexfoundation" %% "iodb" % "0.3.2")
-    .exclude("org.scorexfoundation", "scrypto"),
+    .exclude("ch.qos.logback", "logback-classic"),
+  "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion)
-    .exclude("ch.qos.logback", "logback-classic")
-    .exclude("org.scorexfoundation", "scrypto"),
+    .exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "scrypto" % "2.1.5",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
@@ -106,7 +102,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest extend (Test))
+configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,

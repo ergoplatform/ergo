@@ -89,7 +89,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         // node should recover state before full blocks application.
         val snapshotHeight = pruningProcessor.nearestSnapshotHeight(header.height)
         val snapshotIdOpt = headerIdsAtHeight(snapshotHeight).headOption
-          .flatMap(id => typedModifierById[Header](id))
+          .flatMap(typedModifierById[Header])
           .map(h => UtxoSnapshot.rootDigestToId(h.stateRoot))
         snapshotIdOpt.map(id => Seq((UtxoSnapshotManifest.modifierTypeId, id))).getOrElse(Seq.empty)
       } else {

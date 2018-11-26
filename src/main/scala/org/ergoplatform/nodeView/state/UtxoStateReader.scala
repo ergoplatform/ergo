@@ -41,21 +41,34 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       }
   }
 
-  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
-    case Some(id) =>
-      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
-          tx.outputs.headOption
-        case Some(_) =>
-          log.info(s"Last possible emission box consumed")
-          None
-        case None =>
-          log.warn(s"Emission box not found in block ${fb.encodedId}")
-          boxById(id)
-      }
-    case None =>
-      log.debug("No emission box: emission should be already finished before this block")
-      None
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    emissionBoxIdOpt match {
+      case Some(id) =>
+        fb.blockTransactions.txs.view.reverse
+          .find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
+            case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
+              tx.outputs.headOption
+            case Some(_) =>
+              log.info(s"Last possible emission box consumed")
+              None
+            case _ =>
+              log.warn(s"Emission box not found in block ${fb.encodedId}")
+              boxById(id)
+          }
+      case _ => // try to find matching emission box among transactions in block.
+        fb.blockTransactions.txs.view.reverse
+          .find { tx =>
+            tx.outputs.headOption.exists { out =>
+              out.proposition == constants.genesisEmissionBox.proposition &&
+                out.value == constants.emission.emissionAtHeight(fb.header.height)
+            }
+          }
+          .map(_.outputs.head)
+          .orElse {
+            log.debug("No emission box: emission should be already finished before this block")
+            None
+          }
+    }
   }
 
   protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey)) match {
@@ -98,7 +111,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = persistentProver.synchronized {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]
     val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
-    val manifest = UtxoSnapshotManifest(proverManifest, ModifierId !@@ version, emissionBoxIdOpt)
+    val manifest = UtxoSnapshotManifest(proverManifest, ModifierId !@@ version)
     val chunks = proverSubtrees.map(UtxoSnapshotChunk(_, manifest.id))
     manifest -> chunks
   }

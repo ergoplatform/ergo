@@ -69,7 +69,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  /** Tries to validate and execute transactions.
+  /**
+    * Tries to validate and execute transactions.
     * @return Result of transactions execution with total cost inside
     * */
   private def execTransactionsTry(transactions: Seq[ErgoTransaction],
@@ -143,7 +144,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
             if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
-              throw new Exception("Storage kept roothash is not equal to the declared one")
+              throw new Exception("Storage kept stateRoot is not equal to the declared one")
             } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
               throw new Exception("Calculated proofHash is not equal to the declared one")
             } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
@@ -176,13 +177,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         .map { prover =>
           val manifestRootDigest = lastHeaders.head.stateRoot
           val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
-          val emissionBoxOpt = manifest.emissionBoxIdOpt.flatMap(boxById)
           val newStore = recreateStore()
           val recoveredPersistentProver = {
             val storage: VersionedIODBAVLStorage[Digest32] =
               new VersionedIODBAVLStorage(newStore, UtxoState.nodeParameters)(Algos.hash)
             UtxoState.createPersistentProver(
-              prover, storage, idToVersion(manifest.blockId), emissionBoxOpt, recoveredStateContext)
+              prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
           }
           if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifestRootDigest)) {
             throw new Exception(

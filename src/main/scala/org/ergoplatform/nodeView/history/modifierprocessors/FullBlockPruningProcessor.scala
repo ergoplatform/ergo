@@ -28,7 +28,9 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     isHeadersChainSynced && minimalFullBlockHeight <= height
   }
 
-  /** Nearest snapshot height node can use for fast syncing (penultimate snapshot).
+  /**
+    * Nearest snapshot height node can use for fast syncing (penultimate snapshot).
+    *
     * @param height - height of last block
     * */
   def nearestSnapshotHeight(height: Int): Int = {
@@ -36,7 +38,8 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     snapshotMaxHeight - (snapshotMaxHeight % config.snapshotCreationInterval) - config.snapshotCreationInterval
   }
 
-  /** Update minimal full block height and header chain synced flag
+  /**
+    * Update minimal full block height and header chain synced flag
     *
     * @param header - header of new best full block
     * @return minimal height to process best full block

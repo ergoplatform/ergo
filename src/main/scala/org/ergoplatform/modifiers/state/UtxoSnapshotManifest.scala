@@ -7,7 +7,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, ProxyInternalNode}
 import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverNodes}
 import scorex.crypto.hash.Digest32
@@ -16,8 +16,7 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.util.Try
 
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
-                                blockId: ModifierId,
-                                emissionBoxIdOpt: Option[ADKey])
+                                blockId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 
   override type M = UtxoSnapshotManifest
@@ -72,8 +71,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
     val serializedProverManifest = serializer.manifestToBytes(obj.proverManifest)
     idToBytes(obj.blockId) ++
       Ints.toByteArray(serializedProverManifest.length) ++
-      serializedProverManifest ++
-      obj.emissionBoxIdOpt.getOrElse(Array.empty)
+      serializedProverManifest
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotManifest] = Try {
@@ -83,12 +81,7 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
     val requiredBytesLen = Constants.ModifierIdSize + 4 + proverManifestLen
     val proverManifestTry = serializer.manifestFromBytes(
       bytes.slice(Constants.ModifierIdSize + 4, requiredBytesLen))
-    val emissionBoxIdOpt: Option[ADKey] = if (bytes.length - requiredBytesLen == Constants.ModifierIdSize) {
-      Some(ADKey @@ bytes.takeRight(Constants.ModifierIdSize))
-    } else {
-      None
-    }
-    proverManifestTry.map(UtxoSnapshotManifest(_, blockId, emissionBoxIdOpt))
+    proverManifestTry.map(UtxoSnapshotManifest(_, blockId))
   }.flatten
 
 }

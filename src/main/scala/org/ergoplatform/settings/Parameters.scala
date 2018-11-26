@@ -128,8 +128,8 @@ object Parameters {
   val MinValueMin = 0
   val MinValueMax = 10000000 //0.01 Erg
 
-  lazy val parametersTable: Map[Byte, String] = Map (
-    KIncrease -> "Storage fee coefficient (nanoErgs per byte per storage period of ~4 years) value",
+  lazy val parametersDescs: Map[Byte, String] = Map (
+    KIncrease -> "Storage fee factor (nanoErgs per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
     MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block"
@@ -191,7 +191,7 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
     ).asJson
 }
 
-object LaunchParameters extends Parameters {
+object LaunchParameters extends Parameters with App {
   import Parameters._
 
   override val height = 0
@@ -202,4 +202,24 @@ object LaunchParameters extends Parameters {
     MaxBlockSizeIncrease -> 512 * 1024,
     MaxBlockCostIncrease -> 1000000
   )
+
+  def parametersDescription: String = {
+    """
+      |\begin{tabular}{*{6}{l}}
+      |Id & Description & Default & Step & Min & Max \\
+      |\hline
+    """.stripMargin +
+      parametersDescs.map { case (id, desc) =>
+        val defaultOpt = parametersTable.get(id)
+        val stepOpt = stepsTable.get(id)
+        val minValue = minValues.get(id)
+        val maxValue = maxValues.get(id)
+        s"$id & $desc & ${defaultOpt.getOrElse("-")} & ${stepOpt.getOrElse("-")} & ${minValue.getOrElse("-")} & ${maxValue.getOrElse("-")} \\\\"
+      }.mkString("\n") +
+      """
+        |\end{tabular}
+      """.stripMargin
+  }
+
+  println(parametersDescription)
 }

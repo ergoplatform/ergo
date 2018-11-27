@@ -18,8 +18,7 @@ object DefaultFakePowScheme extends AutolykosPowScheme(1, 1) {
 
   override def prove(parentOpt: Option[Header],
                      nBits: Long,
-                     stateRoot:
-                     ADDigest,
+                     stateRoot: ADDigest,
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
                      timestamp: Timestamp,

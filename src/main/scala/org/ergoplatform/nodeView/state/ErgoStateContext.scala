@@ -10,6 +10,7 @@ import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 
+import scala.collection.mutable
 import scala.util.{Success, Try}
 
 case class VotingResults(results: Array[(Byte, Int)]) {
@@ -54,8 +55,14 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
-  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = {
+  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = Try {
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
+
+    def checkVotes(votes: Array[Byte]) = {
+      if(votes.distinct.length == votes.length) throw new Error("Double vote")
+      if(votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
+      if(votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
+    }
 
     val extension = fullBlock.extension
     val header = fullBlock.header
@@ -66,23 +73,22 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       throw new Error("Mandatory fields in genesis block")
     }
 
-    if (votingStarts(height)) {
-      val extension = fullBlock.extension
+    checkVotes(header.votes)
 
-      val newVoting = VotingResults(
-        header.votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
-      )
+    if (votingStarts(height)) {
+      val proposedVotes = header.votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
+      val newVoting = VotingResults(proposedVotes)
 
       Parameters.parseExtension(extension.height, extension).map { params =>
         ErgoStateContext(newHeaders, genesisStateDigest, params, newVoting)
       }
     } else {
-      val newVotes = header.votes.filter(_ != Parameters.NoParameter).foldLeft(currentVoting) { case (v, id) =>
-        v.update(id)
-      }
-      Success(ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, newVotes))
+      val newVotes = header.votes.filter(_ != Parameters.NoParameter)
+
+      val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
+      Success(ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, newVotingResults))
     }
-  }
+  }.flatten
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 }

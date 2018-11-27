@@ -39,7 +39,7 @@ trait PowScheme {
       timestamp, extensionRoot, votes).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
-      val extension = Extension(h.id, h.height, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
+      val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }

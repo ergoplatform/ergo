@@ -62,6 +62,17 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       if (votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
     }
 
+    def matchParameters(p1: Parameters, p2: Parameters): Unit = {
+      if (p1.parametersTable.size != p2.parametersTable.size) {
+        throw new Error("Calculated and received parameters differ in size")
+      }
+      p1.parametersTable.foreach { case (k, v) =>
+        if (p2.parametersTable(k) != v) {
+          throw new Error(s"Calculated and received parameters differ in parameter $k")
+        }
+      }
+    }
+
     val extension = fullBlock.extension
     val header = fullBlock.header
     val height = header.height
@@ -77,7 +88,10 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       val proposedVotes = header.votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
       val newVoting = VotingResults(proposedVotes)
 
-      Parameters.parseExtension(extension.height, extension).map { params =>
+      //todo: check parameters
+      Parameters.parseExtension(header.height, extension).flatMap { params =>
+        Try(matchParameters(params, currentParameters)).map(_ => params)
+      }.map { params =>
         ErgoStateContext(newHeaders, genesisStateDigest, params, newVoting)
       }
     } else {

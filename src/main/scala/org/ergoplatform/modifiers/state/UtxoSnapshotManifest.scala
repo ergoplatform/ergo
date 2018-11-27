@@ -13,6 +13,7 @@ import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverNodes}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
@@ -37,15 +38,18 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
   override def parentId: ModifierId = blockId
 
   def chunkRoots: Seq[ADDigest] = {
-    def loop(node: ProverNodes[Digest32]): Seq[ADDigest] = node match {
-      case n: ProxyInternalNode[Digest32] =>
-        Seq(n.leftLabel, n.rightLabel).map(ADDigest !@@ _)
-      case n: InternalProverNode[Digest32] =>
-        loop(n.left) ++ loop(n.right)
-      case _ =>
-        Seq.empty
+    @tailrec
+    def proxyNodes(nodes: Seq[ProverNodes[Digest32]], acc: Seq[ADDigest] = Seq.empty): Seq[ADDigest] = {
+      nodes match {
+        case seq if seq.isEmpty =>
+          acc
+        case (n: ProxyInternalNode[Digest32]) +: tail =>
+          proxyNodes(tail, acc ++ Seq(n.leftLabel, n.rightLabel).map(ADDigest !@@ _))
+        case (n: InternalProverNode[Digest32]) +: tail =>
+          proxyNodes(n.left +: n.right +: tail, acc)
+      }
     }
-    loop(proverManifest.oldRootAndHeight._1)
+    proxyNodes(Seq(proverManifest.oldRootAndHeight._1))
   }
 
   def validate(header: Header): Try[Unit] = {

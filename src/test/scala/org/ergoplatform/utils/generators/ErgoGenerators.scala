@@ -100,7 +100,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     optionalElementsElements <- Gen.mapOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
   } yield {
     val me = mandatoryElements.map(kv => kv._1.head -> kv._2).map(kv => Array(kv._1) -> kv._2)
-    Extension(headerId, height,
+    Extension(headerId,
       me.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)).toSeq,
       optionalElementsElements.take(Extension.MaxOptionalFields).toSeq)
   }

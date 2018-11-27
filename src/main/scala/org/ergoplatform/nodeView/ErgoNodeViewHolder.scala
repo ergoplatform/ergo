@@ -110,7 +110,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
-      case (_, Some(bestFullBlock), _) =>
+      case (_, Some(bestFullBlock), _: DigestState) =>
         // Just update state root hash
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))

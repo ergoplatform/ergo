@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.{ErgoBox, Input}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
@@ -21,7 +21,7 @@ import scorex.testkit.utils.FileUtils
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Try}
+import scala.util.{Random, Success, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -48,6 +48,11 @@ trait ValidBlocksGenerators
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
+
+    val stateCtx = ErgoStateContext.empty(StateConstants(None, settings).emission.settings.afterGenesisStateDigest)
+
+    def validOutputs(tx: ErgoTransaction) = tx.outputs
+      .forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateCtx.currentParameters))
 
     @tailrec
     def loop(stateBoxes: Seq[ErgoBox],
@@ -79,22 +84,22 @@ trait ValidBlocksGenerators
             // disable tokens generation to avoid situation with too many tokens
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd, issueNew)
             tx.statelessValidity match {
-              case Failure(e) =>
-                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
-              case _ =>
+              case Success(_) if validOutputs(tx) =>
                 loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+              case _ =>
+                log.warn(s"Failed to generate valid transaction")
+                loop(stateBoxes, selfBoxes, acc, rnd)
             }
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
             tx.statelessValidity match {
-              case Failure(e) =>
-                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
-              case _ =>
+              case Success(_) if validOutputs(tx) =>
                 ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+              case _ =>
+                log.warn(s"Failed to generate valid transaction")
+                loop(stateBoxes, selfBoxes, acc, rnd)
             }
           }
       }

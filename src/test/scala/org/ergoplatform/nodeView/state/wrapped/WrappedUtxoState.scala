@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._

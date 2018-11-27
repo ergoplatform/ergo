@@ -9,8 +9,6 @@ import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
-
-import scala.collection.mutable
 import scala.util.{Success, Try}
 
 case class VotingResults(results: Array[(Byte, Int)]) {
@@ -58,10 +56,10 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
   def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = Try {
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
 
-    def checkVotes(votes: Array[Byte]) = {
-      if(votes.distinct.length == votes.length) throw new Error("Double vote")
-      if(votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
-      if(votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
+    def checkVotes(votes: Array[Byte]): Unit = {
+      if (votes.distinct.length == votes.length) throw new Error("Double vote")
+      if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
+      if (votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
     }
 
     val extension = fullBlock.extension

@@ -40,7 +40,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.useLastEpochs, chainSettings.epochLength)
 
-
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
@@ -165,14 +164,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatMap(idToBytes).toArray))
   }
 
-
   /**
     * Update header ids to ensure, that this block id and ids of all parent blocks are in the first position of
     * header ids at this height
     */
   private def bestBlockHeaderIdsRow(h: Header, score: Difficulty) = {
     val prevHeight = headersHeight
-    log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
+    log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, ByteArrayWrapper) =
       heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)

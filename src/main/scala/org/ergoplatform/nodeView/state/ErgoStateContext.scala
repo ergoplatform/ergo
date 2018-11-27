@@ -28,7 +28,9 @@ object VotingResults {
   * Additional data required for transactions validation
   *
   * @param lastHeaders        - fixed number of last headers
-  * @param genesisStateDigest - fixed number of last headers
+  * @param genesisStateDigest - genesis state digest (before the very first block)
+  * @param currentParameters  - parameters at the beginning of the current voting epoch
+  * @param currentVoting      - votes for parameters change within the current voting epoch
   */
 case class ErgoStateContext(lastHeaders: Seq[Header],
                             genesisStateDigest: ADDigest,

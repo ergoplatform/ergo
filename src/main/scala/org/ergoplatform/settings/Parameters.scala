@@ -98,6 +98,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
 object Parameters {
 
+  val SoftFork = 120: Byte
+  val SoftForkVotesCollected = 121: Byte
+  val SoftForkStartingHeight = 122: Byte
+  val ActivationHeight = 123: Byte
+
   //A vote for nothing
   val NoParameter = 0: Byte
 
@@ -183,5 +188,3 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
       "maxBlockCost" -> p.maxBlockCost.asJson
     ).asJson
 }
-
-

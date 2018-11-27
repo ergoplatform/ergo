@@ -39,6 +39,24 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
+  def prunedHistoryConfig(blocksToKeep: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.blocksToKeep=$blocksToKeep
+    """.stripMargin
+  )
+
+  def miningDelayConfig(millis: Int): Config = ConfigFactory.parseString(
+    s"""
+      |ergo.node.miningDelay=${millis}ms
+    """.stripMargin
+  )
+
+  def blockIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.chain.blockInterval=${millis}ms
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false
@@ -59,9 +77,11 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
-  val shortDelayConfig: Config = ConfigFactory.parseString(
+  val shortMiningDelayConfig: Config = miningDelayConfig(500)
+
+  val digestStatePeerConfig: Config = ConfigFactory.parseString(
     """
-      |ergo.node.miningDelay=500ms
+      |ergo.node.stateType = "digest"
     """.stripMargin
   )
 

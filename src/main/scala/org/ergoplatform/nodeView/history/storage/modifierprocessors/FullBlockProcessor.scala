@@ -15,7 +15,7 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
-  lazy val VotingEpochLength = chainSettings.votingLength
+  lazy val VotingEpochLength: Int = chainSettings.votingLength
 
   /**
     * Id of header that contains transactions and proofs
@@ -170,5 +170,4 @@ object FullBlockProcessor {
                         blocksToKeep: Int,
                         bestFullChain: Seq[ErgoFullBlock]
                       )
-
 }

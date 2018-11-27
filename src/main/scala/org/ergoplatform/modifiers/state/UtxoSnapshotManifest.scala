@@ -16,6 +16,8 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.annotation.tailrec
 import scala.util.Try
 
+/** Holds general information about sliced state tree.
+  */
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
                                 blockId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {

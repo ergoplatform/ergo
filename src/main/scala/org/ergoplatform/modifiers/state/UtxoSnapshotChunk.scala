@@ -12,6 +12,8 @@ import scorex.util._
 
 import scala.util.Try
 
+/** Holds single subtree of sliced state tree.
+  */
 case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
 

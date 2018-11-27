@@ -8,6 +8,8 @@ import scorex.core.serialization.Serializer
 import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, bytesToId}
 
+/** Holds all required elements to restore consistent state from snapshot.
+  */
 case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
                         chunks: Seq[UtxoSnapshotChunk],
                         lastHeaders: Seq[Header])

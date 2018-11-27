@@ -17,7 +17,6 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
-
 class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
   property("extractEmissionBox() should extract correct box") {

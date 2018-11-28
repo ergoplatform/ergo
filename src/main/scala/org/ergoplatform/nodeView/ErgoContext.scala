@@ -27,7 +27,7 @@ class ErgoContext(val stateContext: ErgoStateContext,
     new ErgoContext(stateContext, transactionContext, newExtension)
 
   override def withTransaction(newSpendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput]): ErgoContext =
-    new ErgoContext(stateContext, transactionContext, extension)
+    new ErgoContext(stateContext, transactionContext.copy(spendingTransaction = newSpendingTransaction), extension)
 }
 
 object ErgoContext {

@@ -162,11 +162,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
         val firstInput = inputsFor(
           requests
-            .foldLeft(Seq.empty[PaymentRequest]) {
-              case (acc, pr: PaymentRequest) => acc :+ pr
-              case (acc, _) => acc
-            }
-            .map(_.value)
+            .collect { case pr: PaymentRequest => pr.value }
             .sum
         ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id

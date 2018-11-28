@@ -53,6 +53,7 @@ class ErgoProvingInterpreter(seed: String,
 
   lazy val dlogPubkeys: IndexedSeq[ProveDlog] = dlogSecrets.map(_.publicImage)
 
+  /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
@@ -78,7 +79,7 @@ class ErgoProvingInterpreter(seed: String,
             if (newTC > maxCost) {
               Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
             } else {
-              Success((Input(unsignedInput.boxId, proverResult) +: ins) -> 0L)
+              Success((Input(unsignedInput.boxId, proverResult) +: ins) -> newTC)
             }
           }
         }

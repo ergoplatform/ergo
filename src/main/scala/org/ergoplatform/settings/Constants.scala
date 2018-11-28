@@ -33,7 +33,7 @@ object Constants {
 
   //For how many blocks a box could be put into the state with no paying.
   //4 years
-  val StoragePeriod: Int = 4 * 365 * 24 * BlocksPerHour
+  val StoragePeriod: Int = 4 * BlocksPerYear
 
   val StorageContractCost: Long = 50
 

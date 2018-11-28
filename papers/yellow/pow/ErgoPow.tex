@@ -36,64 +36,70 @@
 
     \section{Introduction}
 
-    Security of Proof-of-Work blockchains relies on an assumption
-    that multiple miners are trying to produce new blocks by
-    participating in PoW puzzle and the network is secure if the
-    majority of them are honest. However, the reality become much more complicated
-    then the original one-CPU-one-vote idea form the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
+    Security of Proof-of-Work blockchains relies 
+    on multiple miners trying to produce new blocks by
+    participating in PoW puzzle lottery and the network is secure if the
+    majority of them are honest. However, the reality becomes much more complicated
+    than the original one-CPU-one-vote idea form the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
 
-    The first threat to decentralization came from mining pools -- miners become to unite in mining pools,
-    and regardless of the PoW algorithm number of pools that controls more then 50\% of
+    The first threat to decentralization came from mining pools -- miners tend
+    to unite in mining pools.
+    Regardless of the PoW algorithm number of pools controlling more then 50\% of
     computational power is usually quite small: 4 pools in Bitcoin, 2 in Ethereum, 3 in ZCash, etc.
     This problem led to the notion of non-outsourceable puzzles~\cite{miller2015nonoutsourceable,daian2017piecework}.
-    These are the puzzles constructed in such a way that if a mining pool outsource the puzzle
-    to a miner, with a non-negligible probability miner can recover pools private key and steal the reward.
-    However the existing solutions have too large solution size (kilobyte is already
-    on the edge of acceptability for distributed ledger) or very specific and
-    can not be updated without breaking non-outsourceability.
+    These are the puzzles constructed in such a way that if a mining pool outsources the puzzle
+    to a miner, miner can recover pool's private key and steal the reward with a non-negligible probability.
+    However the existing solutions either have too large solution size (kilobyte is already
+    on the edge of acceptability for distributed ledgers) or very specific and
+    can not be modified or extended in any way without breaking non-outsourceability.
 
     The second threat to cryptocurrencies decentralization is that ASIC-equipped miners are
     able to find PoW solutions orders of magnitude faster and more efficiently
-    than miners equipped with the commodity hardware. In order to remedy the
+    than miners equipped with the commodity hardware. In order to reduce the
     disparity between the ASICs and regular hardware, memory-bound computations
-    where proposed~\cite{dwork2003memory}. In practice the most interesting are
-    asymmetric memory-hard PoW - schemes that requires significantly less memory
+    where proposed~\cite{dwork2003memory}. The most interesting practical
+    examples are two
+    asymmetric memory-hard PoW schemes which require significantly less memory
     to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
-    Despite the fact that ASICs for both of them already exists~\cite{ETHAsics,EquihashAsics},
-    they remain the only used asymmetric memory-hard PoW algorithms.
+    Despite the fact that ASICs already exist for both of them~\cite{ETHAsics,EquihashAsics},
+    they remain the only asymmetric memory-hard PoW algorithms in use.
 
-    In this paper we propose \Name{} -- a new asymmetric memory-hard non-outsourceable PoW puzzle.
+    In this paper we propose \Name{} --- new asymmetric memory-hard non-outsourceable PoW puzzle.
     In Section~\ref{puzzle} we provide a full
-    specification of \Name, while in Section~\ref{discussion} we discuss it's
-    properties. Several auxiliary algorithms are moved to~\nameref{appendix}.
+    specification of \Name, while in Section~\ref{discussion} we discuss its
+    properties. Few auxiliary algorithms are placed in~\nameref{appendix}.
 
     \section{Ergo PoW puzzle}
     \label{puzzle}
 
     The proposed scheme requires following components:
     \begin{enumerate}
-        \item Cyclic group $\mathbb{G}$ of prime order $q$ with fixed generator $g$
-        and identity element $e$.
-        Curve 25519 is used for this purposes.
-        \item Number of elements $k=21$ required in the solution.
-        \item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=10^{8}$ is generated
-        using a hash function $H$.
+        \item Cyclic group $\mathbb{G}$ of prime order~$q$ with fixed generator~$g$
+        and identity element~$e$.
+        Curve 25519 group is used for this purposes.
+        \item Number of elements $k$ required in the solution. Value $k=21$ is used in
+            implementation.
+        \item Number $N$ of elements in the list
+            $R\subset\mathbb{Z}/q\mathbb{Z}$ to be stored in miner's memory.
+            Value $N=10^8$ is used in implementation.
+        %\item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=10^{8}$ is generated
+        %using a hash function $H$.
         \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
-        It is based on Blake2b512 and is described in Alg.\ref{alg:H}.
-        \item Hash function $genIndexes$ which returns a list of size $k$ with numbers in $0\dots (N-1)$.
+        Particular implementation is based on Blake2b512 and is described in Alg.\ref{alg:H}.
+        \item Hash function $genIndexes$ which returns a list of numbers from
+            $0\dots(N-1)$ of size $k$.
         It is based on Blake2b512 and is described in Alg.\ref{alg:genIndexes}.
         \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
-        \item Constant message $M=(0~until~2048).flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
+        \item Constant message $M=[0,\dots,2048].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
     \end{enumerate}
 
-    \Name{} is based on one list k-sum problem: miner should find
+    \Name{} is based on one list $k$-sum problem: miner should find
     $k$ elements from the pre-defined list $R$ of size $N$, such that
     $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
-    In addition we require, that set of element indexes $J$ is received
-    by one-way pseudo-random function $genIndexes$. This prevents miner
-    from usage of efficient algorithms, that solves $k-sum$ problem, as
-    soon as it might be hard (if possible at all) to find such a seed,
-    that $genIndexes(seed)$ will return the desired indexes.
+    In addition we require set of element indexes $J$ to be obtained
+    by one-way pseudo-random function $genIndexes$. This prevents optimizations as
+    soon as it is hard to find such a seed,
+    that $genIndexes(seed)$ returns the desired indexes.
 
     Thus we assume that the only option for miner is to use the simple brute-force algorithm~\ref{alg:prove} to
     create a valid block.
@@ -102,13 +108,13 @@
         \caption{Block mining}
         \label{alg:prove}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: latest block header $Hdr$, key pair $pk=g^{sk}$
+            \State \textbf{Input}: latest block header $hdr$, key pair $pk=g^{sk}$
             \State Generate randomly a new key pair $w=g^x$
-            \Let{$m$}{$Blake2b256(Hdr.bytesWithoutPow)$}
+            \Let{$m$}{$Blake2b256(hdr.bytesWithoutPow)$}
             \While{$true$}
             \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$d$}{$(\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk).mod(q)$}
+            \Let{$d$}{$\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk \mod q$}
             \If{$d <= b$}
             \State \Return $(m,pk,w,nonce,d)$
             \EndIf
@@ -117,7 +123,7 @@
     \end{algorithm}
 
     Note that although the mining process utilizes private keys, solution itself
-    only contains public keys. Solution verification may be done by Alg.~\ref{alg:verify}.
+    only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
 
     \begin{algorithm}[H]
         \caption{Solution verification}
@@ -128,33 +134,36 @@
             \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
             \Let{$J$}{$genIndexes(m||nonce)$}
             \Let{$f$}{$\sum_{j \in J} H(i||M||pk||m||w)$}
-            \State require $w^f - pk = g^d$
+            \State require $w^f = g^dpk$
         \end{algorithmic}
     \end{algorithm}
 
     \section{Discussion}
     \label{discussion}
 
-    \Name{} mining~\ref{alg:prove} and verification~\ref{alg:verify} algorithms are
-    the same as Schnorr signature algorithm, thus proving is not possible without access
-    to private key $sk$. This fact make pool creation much more complicated (if possible),
-    preventing centralization of the network in the hands of pool operators. \dnote{To Vasily: please fix this paragraph}
+    \Name{} mining~\ref{alg:prove} and verification~\ref{alg:verify} algorithms
+    are similar to Schnorr signature algorithm. Therefore, efficient solving
+    requires access to private key $sk$ This fact implies that in order to get
+    complete solution work outsourcer needs to pass the secret key to the miner,
+    putting itself at risk of loosing block rewards.
+    This fact discourages formation of centralized pools and centralization of the network in the hands of pool operators.
 
-    Mining algorithm~\ref{alg:prove} can be optimized, if miner will pre-calculate
-    hashes $H(i||M||pk||m||w)~\forall~i~\in~[0,N)$ and will store them to memory.
-    Every pre-calculated hash occupy 32 bytes, so the whole list of $N$ elements
-    will occupy $N \cdot 32 = 3 Gb$, making this optimization memory-hard.
+    Mining algorithm~\ref{alg:prove} can be optimized, if miner pre-calculates
+    hashes\newline $\{H(i||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
+    Every pre-calculated hash occupies 32 bytes, so the whole list of $N$ elements
+    occupies $N \cdot 32 = 3 Gb$, making this optimization memory-hard.
     However, the miner profit will also be significant: assuming GPU hashrate
     $G = 2^{30} H/s$~\cite{gpuHashrate} and block interval $t=120~s$, every element
-    will be used $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times in average. Thus, miner that
-    recalculate hashes every time will calculate $10^4$ more hashes $H$, then
-    memory-hard miner that keep the whole list.
+    will be used $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times on average.
+    Thus, if a miner tries to 
+    recalculate hashes ``on the fly'' instead of storing them, its computational
+    overhead is of the order of $10^4$, which is rather significant value.
 
-    Protocol is quite efficient: in addition to payload, block header should
-    contain 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
-    (but will contain a lot of leading zeros in case of small target $b$) and a
-    8 bytes length nonce. Header verification requires to calculate 1 $genIndexes$
-    hash, $k$ hashes $H$ and perform two exponentiations in the group. Referense
+    Protocol is quite efficient in terms of size: in addition to payload, block header should
+    contain as few as 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
+    (but contains a lot of leading zeros in case of small target $b$) and an
+    8-bytes long nonce. Header verification requires verifier to calculate 1 $genIndexes$
+    hash, $k$ hashes $H$ and perform two exponentiations in the group. Reference
     Scala implementation~\cite{ergoGit} allows to verify block header in 2 milliseconds.
 
     \bibliography{references}

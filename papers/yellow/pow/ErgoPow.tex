@@ -90,7 +90,7 @@
             $0\dots(N-1)$ of size $k$.
         It is based on Blake2b512 and is described in Alg.\ref{alg:genIndexes}.
         \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
-        \item Constant message $M=[0,\dots,2048].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
+        \item Constant message $M=[0,\dots,2047].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
     \end{enumerate}
 
     \Name{} is based on one list $k$-sum problem: miner should find
@@ -143,7 +143,7 @@
 
     \Name{} mining~\ref{alg:prove} and verification~\ref{alg:verify} algorithms
     are similar to Schnorr signature algorithm. Therefore, efficient solving
-    requires access to private key $sk$ This fact implies that in order to get
+    requires access to private key $sk$. This fact implies that in order to get
     complete solution work outsourcer needs to pass the secret key to the miner,
     putting itself at risk of loosing block rewards.
     This fact discourages formation of centralized pools and centralization of the network in the hands of pool operators.

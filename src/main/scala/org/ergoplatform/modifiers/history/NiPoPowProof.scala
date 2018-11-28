@@ -11,9 +11,11 @@ import scala.util.Try
 case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header])
   extends ErgoPersistentModifier with ModifierValidator {
 
+  import NiPoPowProof._
+
   override type M = NiPoPowProof
 
-  override val modifierTypeId: ModifierTypeId = NiPoPowProof.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = TypeId
 
   override val sizeOpt: Option[Int] = None
 
@@ -30,15 +32,16 @@ case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header]
   def validate: Try[Unit] = {
     failFast
       .demand(suffix.lengthCompare(k) == 0, "Invalid suffix length")
-      .demand(prefix.groupBy(NiPoPowProof.levelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
+      .demand(prefix.groupBy(levelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
       .result
       .toTry
   }
+
 }
 
 object NiPoPowProof {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
 
   def levelOf(header: Header): Int = ???
 }

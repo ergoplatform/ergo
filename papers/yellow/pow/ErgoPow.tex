@@ -59,11 +59,11 @@
     where proposed~\cite{dwork2003memory}. In practice the most interesting are
     asymmetric memory-hard PoW - schemes that requires significantly less memory
     to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
-    \dnote{may be note, that there are ASICS for equihash and ETH is going to switch to ProgPow}
+    Despite the fact that ASICs for both of them already exists~\cite{ETHAsics,EquihashAsics},
+    they remain the only used asymmetric memory-hard PoW algorithms.
 
-    In this paper we provide a specification of \Name{} -- PoW puzzle, that is
-    going to be used in Ergo platform~\cite{ergo}. It is designed to be both
-    non-outsourceable and memory-hard. In Section~\ref{puzzle} we provide a full
+    In this paper we propose \Name{} -- a new asymmetric memory-hard non-outsourceable PoW puzzle.
+    In Section~\ref{puzzle} we provide a full
     specification of \Name, while in Section~\ref{discussion} we discuss it's
     properties. Several auxiliary algorithms are moved to~\nameref{appendix}.
 

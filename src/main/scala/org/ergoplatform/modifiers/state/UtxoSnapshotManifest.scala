@@ -9,7 +9,7 @@ import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, ProxyInternalNode}
-import scorex.crypto.authds.avltree.batch.{InternalProverNode, Leaf, ProverNodes}
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -47,6 +47,8 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
           proxyNodes(tail, acc ++ Seq(n.leftLabel, n.rightLabel).map(ADDigest !@@ _))
         case (n: InternalProverNode[Digest32]) +: tail =>
           proxyNodes(n.left +: n.right +: tail, acc)
+        case (_: ProverLeaf[Digest32]) +: tail =>
+          proxyNodes(tail, acc)
         case seq if seq.isEmpty =>
           acc
       }

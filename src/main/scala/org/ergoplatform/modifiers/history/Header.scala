@@ -1,13 +1,11 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives._
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
-import org.bouncycastle.crypto.digests.SHA256Digest
+import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.crypto.Equihash
-import org.ergoplatform.mining.EquihashSolution
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -22,7 +20,7 @@ import scorex.util._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Success, Try}
+import scala.util.Try
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -34,34 +32,15 @@ case class Header(version: Version,
                   nBits: Long, //actually it is unsigned int
                   height: Int,
                   extensionRoot: Digest32,
-                  equihashSolution: EquihashSolution,
+                  powSolution: AutolykosSolution,
                   override val sizeOpt: Option[Int] = None
                  ) extends ErgoPersistentModifier {
 
+  override def serializedId: Array[Version] = Algos.hash(bytes)
 
   override type M = Header
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
-
-  override lazy val id: ModifierId = bytesToId(serializedId)
-
-  lazy val serializedId: Digest32 = {
-    // An implementation of a PoW function which is similar to one used in ZCash.
-    // H(I||V||x_1||x_2||...|x_2^k)
-    val digest = new SHA256Digest()
-    val bytes = HeaderSerializer.bytesWithoutPow(this)
-    digest.update(bytes, 0, bytes.length)
-    Equihash.hashSolution(digest, equihashSolution)
-    val h = new Array[Byte](32)
-    digest.doFinal(h, 0)
-
-    val secondDigest = new SHA256Digest()
-    secondDigest.update(h, 0, h.length)
-    val result = new Array[Byte](32)
-    secondDigest.doFinal(result, 0)
-
-    Digest32 @@ result
-  }
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -112,7 +91,7 @@ object Header extends ApiCodecs {
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "extensionHash" -> Algos.encode(h.extensionRoot).asJson,
-      "equihashSolutions" -> Algos.encode(h.equihashSolution.bytes).asJson,
+      "powSolutions" -> h.powSolution.asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
@@ -133,7 +112,7 @@ object Header extends ApiCodecs {
       nBits <- c.downField("nBits").as[Long]
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
-      solutions <- c.downField("equihashSolutions").as[EquihashSolution]
+      solutions <- c.downField("powSolutions").as[AutolykosSolution]
     } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
   }
@@ -160,8 +139,9 @@ object HeaderSerializer extends Serializer[Header] {
         acc
       } else {
         val headLink: ModifierId = links.head
-        val repeating: Byte = links.count(_ == headLink).toByte
-        buildInterlinkBytes(links.drop(repeating), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
+        val repeatingInt = links.count(_ == headLink)
+        val repeating: Byte = repeatingInt.toByte
+        buildInterlinkBytes(links.drop(repeatingInt), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
       }
     }
 
@@ -171,22 +151,15 @@ object HeaderSerializer extends Serializer[Header] {
     Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
   }
 
-  def solutionBytes(h: Header): Array[Byte] = {
-    val equihashSolutionsSize = Chars.toByteArray(h.equihashSolution.byteLength.toChar)
-    val equihashSolutionsBytes = h.equihashSolution.bytes
-
-    Bytes.concat(equihashSolutionsSize, equihashSolutionsBytes)
-  }
-
   def bytesWithoutInterlinks(h: Header): Array[Byte] =
     Bytes.concat(
       bytesWithoutInterlinksAndPow(h),
       Chars.toByteArray(0),
-      solutionBytes(h)
+      h.powSolution.bytes
     )
 
   override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutPow(h), solutionBytes(h))
+    Bytes.concat(bytesWithoutPow(h), h.powSolution.bytes)
 
   @SuppressWarnings(Array("TryGet"))
   override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
@@ -202,7 +175,7 @@ object HeaderSerializer extends Serializer[Header] {
 
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
-      val repeatN: Int = bytes.slice(index, index + 1).head
+      val repeatN: Int = 0xff & bytes(index)
       require(repeatN > 0)
       val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
       val links: Seq[ModifierId] = Array.fill(repeatN)(link)
@@ -214,12 +187,11 @@ object HeaderSerializer extends Serializer[Header] {
     val interlinksSize = Chars.fromByteArray(bytes.slice(178, 180))
     val interlinks = parseInterlinks(180, 180 + interlinksSize, Seq.empty)
 
-    val equihashSolutionsBytesSize = Chars.fromByteArray(bytes.slice(180 + interlinksSize, 182 + interlinksSize))
-    val equihashSolutionsBytes = bytes.slice(182 + interlinksSize, 182 + interlinksSize + equihashSolutionsBytesSize)
+    val powSolutionsBytes = bytes.slice(180 + interlinksSize, bytes.length)
 
-    EquihashSolutionsSerializer.parseBytes(equihashSolutionsBytes) map { equihashSolution =>
+    AutolykosSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, equihashSolution, Some(bytes.length))
+        nBits, height, extensionHash, powSolution, Some(bytes.length))
     }
   }.flatten
 }

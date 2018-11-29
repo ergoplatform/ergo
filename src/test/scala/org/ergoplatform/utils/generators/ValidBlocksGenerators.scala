@@ -7,12 +7,12 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, Input}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -22,7 +22,7 @@ import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Random, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -37,9 +37,6 @@ trait ValidBlocksGenerators
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
-
-  def noProofInput(id: ErgoBox.BoxId): Input =
-    Input(id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
@@ -66,12 +63,12 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.additionalRegisters(R4).value.asInstanceOf[Long].toInt
-          val rewards = ErgoMiner.createCoinbase(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, settings.emission)
-          val outs = rewards.outputs
+          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, settings.emission)
+          val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
           val newSelfBoxes = selfBoxes ++ outs.filter(b => !isEmissionBox(b))
-          loop(remainedBoxes, newSelfBoxes, rewards +: acc, rnd)
+          loop(remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
 
         case _ =>
           if (currentSize < sizeLimit - 2 * averageSize) {
@@ -128,7 +125,7 @@ trait ValidBlocksGenerators
     val num = 1 + rnd.nextInt(10)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
-    val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == Constants.TrueLeaf)
+    val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == Values.TrueLeaf)
     val boxes = if (anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
 
     validTransactionsFromBoxes(num, boxes, rnd)._1
@@ -171,6 +168,6 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = defaultExtension
 
     DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension).get
+      transactions, time, extension, defaultMinerSecretNumber).get
   }
 }

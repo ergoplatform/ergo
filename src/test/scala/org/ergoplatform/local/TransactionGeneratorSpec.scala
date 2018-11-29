@@ -57,16 +57,13 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1.second)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-    val wallet: ErgoWalletReader = r.w
-    val address: P2PKAddress = await(wallet.randomPublicKey())
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(address.script)
+      Some(defaultMinerSecret)
     )
     minerRef ! StartMining
 

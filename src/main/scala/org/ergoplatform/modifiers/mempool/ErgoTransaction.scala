@@ -21,7 +21,6 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -42,7 +41,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     with ModifierValidator
     with ScorexLogging {
 
-  override val serializedId: Array[Byte] = Blake2b256.hash(messageToSign)
+  override val serializedId: Array[Byte] = Algos.hash(messageToSign)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
@@ -219,7 +218,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, assets, registers, creationHeight = creationHeight), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition, creationHeight, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

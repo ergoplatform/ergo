@@ -40,8 +40,7 @@ case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header]
   }
 
   def isBetterThan(that: NiPoPowProof): Boolean = {
-    val lcaOpt = lowestCommonAncestor(prefix, that.prefix)
-    val (thisDivergingChain, thatDivergingChain) = lcaOpt
+    val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(prefix, that.prefix)
       .map(h => prefix.filter(_.height > h.height) -> that.prefix.filter(_.height > h.height))
       .getOrElse(prefix -> that.prefix)
     bestArg(thisDivergingChain, m) > bestArg(thatDivergingChain, m)

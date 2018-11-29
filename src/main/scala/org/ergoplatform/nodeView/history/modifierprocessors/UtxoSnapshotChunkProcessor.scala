@@ -25,6 +25,9 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   protected val LastSnapshotAppliedHeightKey: ByteArrayWrapper =
     ByteArrayWrapper(Array.fill(Constants.HashLength)(UtxoSnapshot.modifierTypeId))
 
+  protected val PendingChunksQtyKey: ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("pending-chunks".getBytes("UTF-8")))
+
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)]
 
   protected def lastSnapshotAppliedHeight: Option[Int] = historyStorage.getIndex(LastSnapshotAppliedHeightKey)
@@ -35,33 +38,54 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
       case r if r.data.nonEmpty =>
         historyStorage.modifierById(bytesToId(r.data))
           .fold[Option[UtxoSnapshotManifest]](None) {
-            case m: UtxoSnapshotManifest => Some(m)
-            case _ => throw new Error("Wrong history index")
-          }
+          case m: UtxoSnapshotManifest => Some(m)
+          case _ => throw new Error("Wrong history index")
+        }
       case _ =>
         None
     }
   }
 
+  protected def pendingChunksQty: Int = historyStorage.getIndex(PendingChunksQtyKey)
+    .map(w => Ints.fromByteArray(w.data))
+    .getOrElse(0)
+
   def process(m: UtxoSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     pendingManifestOpt match {
       case Some(manifest: UtxoSnapshotManifest) =>
-        val otherChunks = manifest.chunkRoots
-          .map(r => historyStorage.modifierById(UtxoSnapshot.rootDigestToId(r)))
-          .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
         lazy val lastHeaders = takeLastHeaders(manifest.blockId, Constants.LastHeadersInContext)
-        if (otherChunks.lengthCompare(manifest.chunkRoots.size - 1) == 0 && lastHeaders.nonEmpty) {
+        val pendingChunks = pendingChunksQty
+        if (pendingChunks == 1 && lastHeaders.nonEmpty) {
           // Time to apply snapshot
-          val snapshot = UtxoSnapshot(manifest, otherChunks :+ m, lastHeaders)
-          val snapshotHeight = lastHeaders.head.height
-          val indexesToInsert = Seq(
-            LastSnapshotAppliedHeightKey -> ByteArrayWrapper(Ints.toByteArray(snapshotHeight)),
-            PendingManifestIdKey -> ByteArrayWrapper(Array.empty)
-          )
-          historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, Seq.empty)
-          ProgressInfo(None, Seq.empty, Seq(snapshot), toDownload(lastHeaders.head))
+          val requiredChunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
+          val otherChunks = requiredChunks
+            .map(historyStorage.modifierById)
+            .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }
+          if (otherChunks.lengthCompare(requiredChunks.size - 1) == 0) {
+            val snapshot = UtxoSnapshot(manifest, otherChunks :+ m, lastHeaders)
+            val snapshotHeight = lastHeaders.head.height
+            val indexesToInsert = Seq(
+              LastSnapshotAppliedHeightKey -> ByteArrayWrapper(Ints.toByteArray(snapshotHeight)),
+              PendingChunksQtyKey -> ByteArrayWrapper(Ints.toByteArray(0)),
+              PendingManifestIdKey -> ByteArrayWrapper(Array.empty),
+            )
+            historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, Seq.empty)
+            ProgressInfo(None, Seq.empty, Seq(snapshot), toDownload(lastHeaders.head))
+          } else {
+            log.warn(s"${requiredChunks.size - otherChunks.size} chunks are missed. Trying to request them again.")
+            val chunksToRequest = requiredChunks
+              .filterNot(_ == m.id)
+              .diff(otherChunks.map(_.id))
+              .map(UtxoSnapshotChunk.modifierTypeId -> _)
+            val indexesToInsert = Seq(PendingChunksQtyKey -> ByteArrayWrapper(Ints.toByteArray(chunksToRequest.size)))
+            historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, Seq.empty)
+            ProgressInfo(None, Seq.empty, Seq.empty, chunksToRequest)
+          }
         } else {
-          historyStorage.insertObjects(Seq(m))
+          val indexesToInsert = Seq(
+            PendingChunksQtyKey -> ByteArrayWrapper(Ints.toByteArray(Math.max(0, pendingChunks - 1)))
+          )
+          historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, Seq(m))
           emptyProgressInfo
         }
       case _ =>

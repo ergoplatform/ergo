@@ -156,15 +156,16 @@
     $G = 2^{30} H/s$~\cite{gpuHashrate} and block interval $t=120~s$, every element
     will be used $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times on average.
     Thus, if a miner tries to 
-    recalculate hashes ``on the fly'' instead of storing them, its computational
-    overhead is of the order of $10^4$, which is rather significant value.
+    recalculate hashes ``on the fly'' instead of storing them, the number of
+    calls of $H$ grows $10^4$ times, which is rather significant value.
 
     Protocol is quite efficient in terms of size: in addition to payload, block header should
     contain as few as 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
     (but contains a lot of leading zeros in case of small target $b$) and an
     8-bytes long nonce. Header verification requires verifier to calculate 1 $genIndexes$
     hash, $k$ hashes $H$ and perform two exponentiations in the group. Reference
-    Scala implementation~\cite{ergoGit} allows to verify block header in 2 milliseconds.
+    Scala implementation~\cite{ergoGit} allows to verify block header in 2
+    milliseconds on Intel Core i5-7200U, 2.5GHz.
 
     \bibliography{references}
 

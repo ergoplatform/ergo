@@ -48,8 +48,8 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
     val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
-    val left = s.w.multiply(f.bigInteger).add(s.pk.negate())
-    val right = group.generator.multiply(s.d.bigInteger)
+    val left = s.w.multiply(f.bigInteger)
+    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
     require(left == right, "Incorrect points")
   }

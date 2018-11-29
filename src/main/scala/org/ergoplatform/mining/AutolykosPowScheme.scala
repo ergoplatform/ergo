@@ -26,6 +26,7 @@ import scala.util.Try
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
   assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
+  assert(N >= 256 * 256 * 256, "N is not fitting into 3 byte unsigned integer")
 
   /**
     * Constant data to be added to hash function to increase it's calculation time

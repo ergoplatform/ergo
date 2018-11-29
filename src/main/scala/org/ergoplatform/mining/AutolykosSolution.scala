@@ -21,8 +21,6 @@ import scala.util.Try
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
 case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt) extends BytesSerializable {
-  assert(!pk.isInfinity && !w.isInfinity, s"Infinity points are not allowed ${pk.isInfinity}, ${w.isInfinity}")
-
   override type M = AutolykosSolution
 
   val encodedPk: Array[Byte] = pkToBytes(pk)

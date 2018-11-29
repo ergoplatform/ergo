@@ -38,9 +38,9 @@
 
     Security of Proof-of-Work blockchains relies 
     on multiple miners trying to produce new blocks by
-    participating in PoW puzzle lottery and the network is secure if the
+    participating in PoW puzzle lottery, and the network is secure if the
     majority of them are honest. However, the reality becomes much more complicated
-    than the original one-CPU-one-vote idea form the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
+    than the original one-CPU-one-vote idea from the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
 
     The first threat to decentralization came from mining pools -- miners tend
     to unite in mining pools.
@@ -57,7 +57,7 @@
     able to find PoW solutions orders of magnitude faster and more efficiently
     than miners equipped with the commodity hardware. In order to reduce the
     disparity between the ASICs and regular hardware, memory-bound computations
-    where proposed~\cite{dwork2003memory}. The most interesting practical
+    where proposed in~\cite{dwork2003memory}. The most interesting practical
     examples are two
     asymmetric memory-hard PoW schemes which require significantly less memory
     to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
@@ -96,7 +96,7 @@
     \Name{} is based on one list $k$-sum problem: miner should find
     $k$ elements from the pre-defined list $R$ of size $N$, such that
     $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
-    In addition we require set of element indexes $J$ to be obtained
+    In addition, we require set of element indexes $J$ to be obtained
     by one-way pseudo-random function $genIndexes$. This prevents optimizations as
     soon as it is hard to find such a seed,
     that $genIndexes(seed)$ returns the desired indexes.
@@ -114,8 +114,8 @@
             \While{$true$}
             \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$d$}{$\sum_{j \in J}{H(i||M||pk||m||w)} \cdot x - sk \mod q$}
-            \If{$d <= b$}
+            \Let{$d$}{$\sum_{j \in J}{H(j||M||pk||m||w)} \cdot x - sk \mod q$}
+            \If{$d \le b$}
             \State \Return $(m,pk,w,nonce,d)$
             \EndIf
             \EndWhile
@@ -133,7 +133,7 @@
             \State require $d\in\{-b,\dots,0,\dots, b\mod q\}$
             \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$f$}{$\sum_{j \in J} H(i||M||pk||m||w)$}
+            \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
             \State require $w^f = g^dpk$
         \end{algorithmic}
     \end{algorithm}
@@ -149,7 +149,7 @@
     This fact discourages formation of centralized pools and centralization of the network in the hands of pool operators.
 
     Mining algorithm~\ref{alg:prove} can be optimized, if miner pre-calculates
-    hashes\newline $\{H(i||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
+    hashes\newline $\{H(j||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
     Every pre-calculated hash occupies 32 bytes, so the whole list of $N$ elements
     occupies $N \cdot 32 = 3 Gb$, making this optimization memory-hard.
     However, the miner profit will also be significant: assuming GPU hashrate

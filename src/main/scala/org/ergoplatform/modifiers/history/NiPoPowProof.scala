@@ -28,16 +28,23 @@ case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header]
 
   override def parentId: ModifierId = ???
 
-  def maxLevel: Int = prefix.map(maxLevelOf).max
-
-  def headersOfLevel(l: Int): Seq[Header] = prefix.filter(maxLevelOf(_) == l)
+  def headersOfLevel(l: Int): Seq[Header] = prefix.filter(maxLevelOf(_) >= l)
 
   def validate: Try[Unit] = {
     failFast
       .demand(suffix.lengthCompare(k) == 0, "Invalid suffix length")
-      .demand(prefix.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
+      .demand(prefix.tail.forall(_.interlinks.headOption.contains(prefix.head.id)), "Chain is not anchored")
+      .demand(prefix.tail.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
       .result
       .toTry
+  }
+
+  def isBetterThan(that: NiPoPowProof): Boolean = {
+    val lcaOpt = lowestCommonAncestor(prefix, that.prefix)
+    val (thisDivergingChain, thatDivergingChain) = lcaOpt
+      .map(h => prefix.filter(_.height > h.height) -> that.prefix.filter(_.height > h.height))
+      .getOrElse(prefix -> that.prefix)
+    bestArg(thisDivergingChain, m) > bestArg(thatDivergingChain, m)
   }
 
 }
@@ -47,11 +54,39 @@ object NiPoPowProof {
   val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
 
   def maxLevelOf(header: Header): Int = {
-    def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
-    val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-    val realTarget = header.powSolution.d
-    val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
-    level.toInt
+    if (!header.isGenesis) {
+      def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val realTarget = header.powSolution.d
+      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      level.toInt
+    } else {
+      Int.MaxValue
+    }
+  }
+
+  def bestArg(chain: Seq[Header], m: Int): Int = {
+    def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] = {
+      if (level == 0) {
+        loop(level + 1, acc :+ (0, chain.size)) // Supposing each header is at least of level 0.
+      } else {
+        val args = chain.filter(maxLevelOf(_) >= level)
+        if (args.lengthCompare(m) >= 0) loop(level + 1, acc :+ (level, args.size)) else acc
+      }
+    }
+    loop(level = 0).map { case (lvl, size) => scala.math.pow(2, lvl) * size }.max.toInt
+  }
+
+  def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
+    def lcaIndex(startIdx: Int): Int = {
+      if (leftChain.lengthCompare(startIdx) >= 0 && rightChain.lengthCompare(startIdx) >= 0 &&
+        leftChain(startIdx) == rightChain(startIdx)) {
+        lcaIndex(startIdx + 1)
+      } else {
+        startIdx - 1
+      }
+    }
+    if (leftChain.headOption.exists(h => rightChain.headOption.contains(h))) Some(leftChain(lcaIndex(1))) else None
   }
 
 }
@@ -59,8 +94,8 @@ object NiPoPowProof {
 object NiPoPowProofSerializer extends Serializer[NiPoPowProof] {
 
   override def toBytes(obj: NiPoPowProof): Array[Byte] = {
-    def serializeChain(headers: Seq[Header]) = Ints.toByteArray(headers.size) ++
-      Bytes.concat(headers.map(h => Ints.toByteArray(h.bytes.length) ++ h.bytes): _*)
+    def serializeChain(chain: Seq[Header]) = Ints.toByteArray(chain.size) ++
+      Bytes.concat(chain.map(h => Ints.toByteArray(h.bytes.length) ++ h.bytes): _*)
     Bytes.concat(
       Ints.toByteArray(obj.k),
       Ints.toByteArray(obj.m),

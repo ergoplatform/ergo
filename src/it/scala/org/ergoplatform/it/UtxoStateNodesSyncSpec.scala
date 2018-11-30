@@ -23,11 +23,11 @@ class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
   s"Utxo state nodes synchronisation ($blocksQty blocks)" in {
     val result = for {
       initHeight <- Future.traverse(nodes)(_.height).map(_.max)
-      reachedHeight <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty)).map(_.max)
-      headers <- Future.traverse(nodes)(_.headerIdsByHeight(reachedHeight + blocksQty - forkDepth))
+      _ <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))
+      headers <- Future.traverse(nodes)(_.headerIdsByHeight(initHeight + blocksQty - forkDepth))
     } yield {
-      log.debug(s"Headers at height ${reachedHeight + blocksQty - forkDepth}: ${headers.mkString(",")}")
-      val headerIdsAtSameHeight = headers.map(_.head)
+      log.info(s"Headers at height ${initHeight + blocksQty - forkDepth}: ${headers.mkString(",")}")
+      val headerIdsAtSameHeight = headers.flatten
       val sample = headerIdsAtSameHeight.head
       headerIdsAtSameHeight should contain only sample
     }

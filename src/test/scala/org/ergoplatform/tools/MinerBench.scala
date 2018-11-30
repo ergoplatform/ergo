@@ -1,27 +1,27 @@
 package org.ergoplatform.tools
 
-import com.google.common.primitives.{Bytes, Ints}
+import com.google.common.primitives.Bytes
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining._
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.utils.ErgoTestHelpers
-import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash}
+import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
 import scala.annotation.tailrec
 
 object MinerBench extends App with ErgoTestHelpers {
 
   validationBench()
-//  numericHashBench()
+  //  numericHashBench()
 
   def numericHashBench(): Unit = {
     val Steps = 100000000
 
-    def numericHash(input0: Array[Byte], hf: CryptographicHash[_], validRange: BigInt): Unit = {
+    def numericHash(input0: Array[Byte], hf: CryptographicHash[_ <: Digest], validRange: BigInt): Unit = {
       @tailrec
-       def hash(input: Array[Byte]): BigInt = {
-        val hashed = Blake2b512(input)
+      def hash(input: Array[Byte]): BigInt = {
+        val hashed = hf.apply(input)
         val bi = BigInt(BigIntegers.fromUnsignedByteArray(hashed))
         if (bi < validRange) {
           bi.mod(q)
@@ -59,7 +59,7 @@ object MinerBench extends App with ErgoTestHelpers {
   }
 
   def validationBench() {
-    val pow = new AutolykosPowScheme(16, 26)
+    val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
     val sk = randomSecret()
     val difficulty = 1000
     val fb = invalidErgoFullBlockGen.sample.get
@@ -75,11 +75,12 @@ object MinerBench extends App with ErgoTestHelpers {
     val newHeader = pow.proveCandidate(candidate, sk).get.header
 
     val Steps = 10000
+
+    (0 until Steps / 10) foreach (_ => pow.validate(newHeader))
+
     val st = System.currentTimeMillis()
 
-    (0 until Steps) foreach { _ =>
-      pow.validate(newHeader)
-    }
+    (0 until Steps) foreach (_ => pow.validate(newHeader))
 
     println(s"M = ${pow.M.length / 1024} Kb:${(System.currentTimeMillis() - st).toDouble / Steps} ms")
   }

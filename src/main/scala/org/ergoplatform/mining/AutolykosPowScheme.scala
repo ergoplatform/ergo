@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Blake2b512, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -25,7 +25,7 @@ import scala.util.Try
   */
 class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
-  assert(k <= 16, "k > 16 is not allowed due to genIndexes function")
+  assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
   assert(n < 32, "n >= 32 is not allowed")
 
   /**
@@ -36,7 +36,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Constant data to be added to hash function to increase it's calculation time
     */
-  val M: Array[Byte] = (0 until 2048).toArray.flatMap(i => Longs.toByteArray(i))
+  val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
@@ -200,7 +200,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * [0,`N`)
     */
   private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    Blake2b512(seed).grouped(4).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(b) % N))
+    val hash = Blake2b256(seed)
+    val extendedHash = Bytes.concat(hash, hash.take(3))
+    (0 until k).map { i =>
+      Math.abs(Ints.fromByteArray(extendedHash.slice(i, i + 4))) % N
+    }
   }.ensuring(_.length == k)
 
   /**

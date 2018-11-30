@@ -177,8 +177,8 @@
         \label{alg:H}
         \begin{algorithmic}[1]
             \Function{H}{$input$}
-            \Let{$validRange$}{$(2^{512} / q) \cdot q$}
-            \Let{$hashed$}{$Blake2b512(input)$}
+            \Let{$validRange$}{$(2^{256} / q) \cdot q$}
+            \Let{$hashed$}{$Blake2b256(input)$}
             \If{$hashed < validRange$}
             \State \Return $hashed.mod(q)$
             \Else

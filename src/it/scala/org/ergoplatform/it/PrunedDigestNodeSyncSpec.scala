@@ -35,7 +35,8 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};
   // 2. Shut it down, restart with turned off mining and fetch its info to get actual {targetHeight};
-  // 3. Start digest node and wait until it gets synced with the first one up to {targetHeight};
+  // 3. Start digest node and wait until it gets synced with the first one up to {targetHeight} ensuring
+  //    it does not load full block that should be pruned;
   // 4. Fetch digest node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
   "Pruned digest node synchronization" in {
@@ -50,16 +51,20 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
       Async.await(nodeForSyncing.waitForHeight(approxTargetHeight))
       val sampleInfo = Async.await(nodeForSyncing.info)
       val digestNode = docker.startNode(digestConfig).get
+      val targetHeight = sampleInfo.bestBlockHeightOpt.value
       val targetBlockId = sampleInfo.bestBlockIdOpt.value
+      val blocksToPrune = Async.await(nodeForSyncing.headers(0, targetHeight - blocksToKeep - 3))
       Async.await(digestNode.waitFor[Option[String]](
         _.info.map(_.bestBlockIdOpt),
-        blockIdOpt => blockIdOpt.contains(targetBlockId),
-        500.millis
+        blockIdOpt => {
+          blockIdOpt.foreach(blocksToPrune should not contain _)
+          blockIdOpt.contains(targetBlockId)
+        },
+        50.millis
       ))
       val digestNodeInfo = Async.await(digestNode.info)
       digestNodeInfo shouldEqual sampleInfo
-      val digestNodePrunedBlockId = Async.await(digestNode.headerIdsByHeight(0)).head
-      Async.await(digestNode.singleGet(s"/blocks/$digestNodePrunedBlockId")
+      Async.await(digestNode.singleGet(s"/blocks/${blocksToPrune.last}")
         .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)) shouldBe false
     }
 

@@ -12,8 +12,8 @@ import scala.annotation.tailrec
 
 object MinerBench extends App with ErgoTestHelpers {
 
-//  validationBench()
-  numericHashBench()
+  validationBench()
+//  numericHashBench()
 
   def numericHashBench(): Unit = {
     val Steps = 100000000
@@ -59,7 +59,7 @@ object MinerBench extends App with ErgoTestHelpers {
   }
 
   def validationBench() {
-    val pow = new AutolykosPowScheme(21, 10000000)
+    val pow = new AutolykosPowScheme(16, 26)
     val sk = randomSecret()
     val difficulty = 1000
     val fb = invalidErgoFullBlockGen.sample.get

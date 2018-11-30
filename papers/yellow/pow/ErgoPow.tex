@@ -81,9 +81,7 @@
             implementation.
         \item Number $N$ of elements in the list
             $R\subset\mathbb{Z}/q\mathbb{Z}$ to be stored in miner's memory.
-            Value $N=10^8$ is used in implementation.
-        %\item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=10^{8}$ is generated
-        %using a hash function $H$.
+            Value $N=2^{26}$ is used in implementation.
         \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
         Particular implementation is based on Blake2b512 and is described in Alg.\ref{alg:H}.
         \item Hash function $genIndexes$ which returns a list of numbers from
@@ -151,10 +149,10 @@
     Mining algorithm~\ref{alg:prove} can be optimized, if miner pre-calculates
     hashes\newline $\{H(j||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
     Every pre-calculated hash occupies 32 bytes, so the whole list of $N$ elements
-    occupies $N \cdot 32 = 3 Gb$, making this optimization memory-hard.
+    occupies $N \cdot 32 = 2 Gb$, making this optimization memory-hard.
     However, the miner profit will also be significant: assuming GPU hashrate
     $G = 2^{30} H/s$~\cite{gpuHashrate} and block interval $t=120~s$, every element
-    will be used $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times on average.
+    will be used $(G / N) \cdot k \cdot t = 3 \cdot 10^4$ times on average.
     Thus, if a miner tries to 
     recalculate hashes ``on the fly'' instead of storing them, the number of
     calls of $H$ grows $10^4$ times, which is rather significant value.

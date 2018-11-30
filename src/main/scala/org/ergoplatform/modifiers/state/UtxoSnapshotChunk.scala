@@ -6,10 +6,12 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.util._
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 /** Holds single subtree of sliced state tree.
@@ -35,8 +37,37 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
     failFast
       .demand(manifest.chunkRoots.exists(java.util.Arrays.equals(_, rootDigest)),
         "Chunk does not correspond to manifest")
+      .demand(validSubtree, "Invalid subtree")
       .result
       .toTry
+  }
+
+  /** Checks that each tree branch ends with ProverLeaf.
+    */
+  private def validSubtree: Boolean = {
+    def isLeaf(n: ProverNodes[Digest32]): Boolean = n match {
+      case _: ProverLeaf[Digest32] => true
+      case _ => false
+    }
+    def nonEmpty(n: InternalProverNode[Digest32]): Boolean = Option(n.left).flatMap(_ => Option(n.right)).nonEmpty
+    @tailrec
+    def validTree(nodes: Seq[ProverNodes[Digest32]], validity: Boolean = true): Boolean = {
+      nodes match {
+        case (n: InternalProverNode[Digest32]) +: tail if nonEmpty(n) =>
+          validTree(n.left +: n.right +: tail, validity)
+        case (n: InternalProverNode[Digest32]) +: tail if Option(n.left).nonEmpty && isLeaf(n.left) =>
+          validTree(n.left +: tail, validity)
+        case (n: InternalProverNode[Digest32]) +: tail if Option(n.right).nonEmpty && isLeaf(n.right) =>
+          validTree(n.right +: tail, validity)
+        case (_: InternalProverNode[Digest32]) +: _ =>
+          validTree(Seq.empty, validity = false)
+        case (_: ProverLeaf[Digest32]) +: tail =>
+          validTree(tail, validity)
+        case seq if seq.isEmpty =>
+          validity
+      }
+    }
+    validTree(Seq(subtree.subtreeTop))
   }
 
 }

@@ -15,8 +15,8 @@ lazy val commonSettings = Seq(
 )
 
 //val scorexVersion = "8adeddba-SNAPSHOT"
-val scorexVersion = "new-serialization-bdf88d2c-SNAPSHOT"
-val sigmaStateVersion = "new-serialization-a574625b-SNAPSHOT"
+val scorexVersion = "84cd247b-SNAPSHOT"
+val sigmaStateVersion = "new-serialization-3cadfe06-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",

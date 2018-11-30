@@ -32,9 +32,9 @@ object AutolykosPowSchemeReader extends PowSchemeReader[AutolykosPowScheme] {
   val schemeName = "autolykos"
 
   def read(config: Config, path: String): AutolykosPowScheme = {
-    val N = config.as[Int](s"$path.N")
+    val n = config.as[Int](s"$path.n")
     val k = config.as[Int](s"$path.k")
-    new AutolykosPowScheme(k, N)
+    new AutolykosPowScheme(k, n)
   }
 }
 

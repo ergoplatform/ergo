@@ -21,11 +21,17 @@ import scala.util.Try
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
   * @param k - number of elements in one solution
-  * @param N - list size
+  * @param n - power of number of elements in a list
   */
-class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
+class AutolykosPowScheme(k: Int, n: Int) extends ScorexLogging {
 
   assert(k <= 16, "k > 16 is not allowed due to genIndexes function")
+  assert(n < 32, "n >= 32 is not allowed")
+
+  /**
+    * Total number of elements
+    */
+  private val N: Int = Math.pow(2, n).toInt
 
   /**
     * Constant data to be added to hash function to increase it's calculation time

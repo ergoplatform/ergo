@@ -8,7 +8,7 @@ import scorex.testkit.utils.NoShrink
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
-  val k = 21
+  val k = 16
   val N = 100000000
 
   property("generated solution should be valid") {

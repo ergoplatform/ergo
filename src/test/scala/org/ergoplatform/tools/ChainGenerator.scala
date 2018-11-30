@@ -26,9 +26,7 @@ import scala.util.Random
   */
 object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelpers with ScorexLogging {
 
-  val n: Int = 26
-  val k: Int = 16
-  val pow = new AutolykosPowScheme(k, n)
+  val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)

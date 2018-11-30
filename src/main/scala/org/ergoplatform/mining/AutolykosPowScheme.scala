@@ -23,7 +23,7 @@ import scala.util.Try
   * @param k - number of elements in one solution
   * @param n - power of number of elements in a list
   */
-class AutolykosPowScheme(k: Int, n: Int) extends ScorexLogging {
+class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   assert(k <= 16, "k > 16 is not allowed due to genIndexes function")
   assert(n < 32, "n >= 32 is not allowed")

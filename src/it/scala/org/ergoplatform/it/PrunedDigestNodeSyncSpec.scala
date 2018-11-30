@@ -45,27 +45,32 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
     val result = Async.async {
       Async.await(minerNode.waitForHeight(approxTargetHeight, 1.second))
+      log.info(s"Wait for height $approxTargetHeight - DONE")
       docker.stopNode(minerNode.containerId, secondsToWait = 0)
       val nodeForSyncing = docker.startNode(
         minerConfig.withFallback(nonGeneratingPeerConfig), specialVolumeOpt = Some((localVolume, remoteVolume))).get
       Async.await(nodeForSyncing.waitForHeight(approxTargetHeight))
+      log.info(s"Wait for height $approxTargetHeight on restarted node - DONE")
       val sampleInfo = Async.await(nodeForSyncing.info)
+      log.info(s"Get sample info - DONE")
       val digestNode = docker.startNode(digestConfig).get
       val targetHeight = sampleInfo.bestBlockHeightOpt.value
       val targetBlockId = sampleInfo.bestBlockIdOpt.value
       val blocksToPrune = Async.await(nodeForSyncing.headers(0, targetHeight - blocksToKeep - 1))
+      log.info(s"Get headers to be pruned - DONE")
       Async.await(digestNode.waitFor[Option[String]](
-        _.info.map(_.bestBlockIdOpt),
-        blockIdOpt => {
-          blockIdOpt.foreach(blocksToPrune should not contain _)
-          blockIdOpt.contains(targetBlockId)
+        _.info.map(_.bestHeaderIdOpt),
+        headerIdOpt => {
+          headerIdOpt.foreach(blocksToPrune should not contain _)
+          headerIdOpt.contains(targetBlockId)
         },
         50.millis
       ))
+      log.info(s"Wait for target block $targetBlockId - DONE")
       val digestNodeInfo = Async.await(digestNode.info)
+      log.info(s"Wait for digest node info - DONE")
       digestNodeInfo shouldEqual sampleInfo
-      val digestNodePrunedBlockId = Async.await(digestNode.headerIdsByHeight(targetHeight - blocksToKeep - 1)).head
-      Async.await(digestNode.singleGet(s"/blocks/$digestNodePrunedBlockId")
+      Async.await(digestNode.singleGet(s"/blocks/${blocksToPrune.last}")
         .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)) shouldBe false
     }
 

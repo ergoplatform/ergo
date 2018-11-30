@@ -167,7 +167,7 @@ trait ValidBlocksGenerators
     val time = timeOpt.getOrElse(timeProvider.time())
     val extension: ExtensionCandidate = defaultExtension
 
-    DefaultFakePowScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
+    powScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, defaultMinerSecretNumber).get
   }
 }

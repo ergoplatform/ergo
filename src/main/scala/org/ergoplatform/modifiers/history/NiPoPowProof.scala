@@ -11,7 +11,11 @@ import scorex.util.ModifierId
 
 import scala.util.Try
 
-case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header])
+case class NiPoPowProof(m: Int,
+                        k: Int,
+                        prefix: Seq[Header],
+                        suffix: Seq[Header],
+                        sizeOpt: Option[Int] = None)
   extends ErgoPersistentModifier with ModifierValidator {
 
   import NiPoPowProof._
@@ -19,8 +23,6 @@ case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header]
   override type M = NiPoPowProof
 
   override val modifierTypeId: ModifierTypeId = TypeId
-
-  override val sizeOpt: Option[Int] = None
 
   override def serializedId: Array[Byte] = Algos.hash(bytes)
 
@@ -33,8 +35,8 @@ case class NiPoPowProof(m: Int, k: Int, prefix: Seq[Header], suffix: Seq[Header]
   def validate: Try[Unit] = {
     failFast
       .demand(suffix.lengthCompare(k) == 0, "Invalid suffix length")
-      .demand(prefix.tail.forall(_.interlinks.headOption.contains(prefix.head.id)), "Chain is not anchored")
       .demand(prefix.tail.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
+      .demand(prefix.tail.forall(_.interlinks.headOption.contains(prefix.head.id)), "Chain is not anchored")
       .result
       .toTry
   }
@@ -125,7 +127,7 @@ object NiPoPowProofSerializer extends Serializer[NiPoPowProof] {
       }._1
     val prefixTry: Try[List[Header]] = prefixTryList.sequence
     val suffixTry: Try[List[Header]] = suffixTryList.sequence
-    prefixTry.flatMap(prefix => suffixTry.map(suffix => NiPoPowProof(k, m, prefix, suffix)))
+    prefixTry.flatMap(prefix => suffixTry.map(suffix => NiPoPowProof(k, m, prefix, suffix, Some(bytes.length))))
   }.flatten
 
 }

@@ -3,9 +3,9 @@ package org.ergoplatform.utils.generators
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -21,12 +21,12 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
 import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.interpreter.ProverResult
 import sigmastate.{SBoolean, _}
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
+trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
 
   lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
   lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
@@ -157,6 +157,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     powSolution,
     None
   )
+
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen
@@ -164,6 +165,14 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
+
+  lazy val validNiPoPowProofGen: Gen[NiPoPowProof] = for {
+    m <- Gen.chooseNum(50, 100)
+    k <- Gen.chooseNum(1, 10)
+  } yield {
+    val (prefix, suffix) = genHeaderChain(m + 1 + k).headers.splitAt(m + 1)
+    NiPoPowProof(m, k, prefix, suffix)
+  }
 
   /** Random long from 1 to maximum - 1
     *

@@ -25,8 +25,7 @@ import scala.util.Try
   */
 class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
 
-  assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
-  assert(N <= 256 * 256 * 256, "N is not fitting into 3 byte unsigned integer")
+  assert(k <= 16, "k > 16 is not allowed due to genIndexes function")
 
   /**
     * Constant data to be added to hash function to increase it's calculation time
@@ -195,8 +194,7 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * [0,`N`)
     */
   private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b512(Bytes.concat(seed))
-    hash.grouped(3).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(0.toByte +: b) % N))
+    Blake2b512(seed).grouped(4).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(b) % N))
   }.ensuring(_.length == k)
 
   /**

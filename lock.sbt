@@ -16,13 +16,13 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.sksamuel.scapegoat" % "scalac-scapegoat-plugin_2.12" % "1.3.3",
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
   "com.typesafe" % "config" % "1.3.3",
-  "com.typesafe" % "ssl-config-core_2.12" % "0.2.4",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.16",
+  "com.typesafe" % "ssl-config-core_2.12" % "0.3.6",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.18",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.5",
-  "com.typesafe.akka" % "akka-protobuf_2.12" % "2.5.16",
-  "com.typesafe.akka" % "akka-stream_2.12" % "2.5.16",
+  "com.typesafe.akka" % "akka-protobuf_2.12" % "2.5.18",
+  "com.typesafe.akka" % "akka-stream_2.12" % "2.5.18",
   "com.typesafe.scala-logging" % "scala-logging_2.12" % "3.9.0",
   "commons-io" % "commons-io" % "2.5",
   "commons-net" % "commons-net" % "3.6",
@@ -66,10 +66,10 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "8adeddba-SNAPSHOT",
-  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
+  "org.scorexfoundation" % "scorex-core_2.12" % "new-serialization-95fc089b-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.2-new-serialization-SNAPSHOT",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
-  "org.scorexfoundation" % "sigma-state_2.12" % "fix-incomplete-runtimeircontext-3fd0c0d8-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "new-serialization-a574625b-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.11.0",
   "org.typelevel" % "cats-core_2.12" % "1.0.1",
@@ -79,4 +79,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 39bfa249493a0aa09a77894e35133c008f874ec3
+// LIBRARY_DEPENDENCIES_HASH f01e9c41fb2a01c743c188a6ffa60fb51eded88b

@@ -1,26 +1,20 @@
 package org.ergoplatform.modifiers.mempool
 
-import com.google.common.primitives.Bytes
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.crypto.hash.Digest32
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
-
-import scala.util.Try
 
 // TODO is not used for now
 case class TransactionIdsForHeader(serializedIds: Seq[Array[Byte]]) extends MempoolModifier {
   override val modifierTypeId: ModifierTypeId = TransactionIdsForHeader.modifierTypeId
 
   override lazy val id: ModifierId = bytesToId(Algos.hash(scorex.core.utils.concatFixLengthBytes(serializedIds)))
-
-  override type M = TransactionIdsForHeader
-
-  override lazy val serializer: Serializer[TransactionIdsForHeader] = TransactionIdsForHeaderSerializer
 
   lazy val rootHash: Digest32 = BlockTransactions.rootHash(serializedIds)
 }
@@ -36,19 +30,25 @@ object TransactionIdsForHeader {
     Map(
       "ids" -> t.serializedIds.map(Algos.encode)
     ).asJson
-
 }
 
-object TransactionIdsForHeaderSerializer extends Serializer[TransactionIdsForHeader] {
+object TransactionIdsForHeaderSerializer extends ScorexSerializer[TransactionIdsForHeader] {
 
   val fixedSize: Int = NodeViewModifier.ModifierIdSize
 
-  override def toBytes(obj: TransactionIdsForHeader): Array[Byte] =
-    Bytes.concat(obj.serializedIds: _*).ensuring(_.length % fixedSize == 0)
+  override def serialize(obj: TransactionIdsForHeader, w: Writer): Unit = {
+    obj.serializedIds.ensuring(_.length % fixedSize == 0)
+    w.putInt(obj.serializedIds.size)
+    obj.serializedIds.foreach{ id =>
+      w.putBytes(id)
+    }
+  }
 
-  override def parseBytes(bytes: Array[Byte]): Try[TransactionIdsForHeader] = Try {
-    require(bytes.length % fixedSize == 0)
-    val ids = Range(0, bytes.length, fixedSize).map { i => bytes.slice(i, i + fixedSize) }
+  override def parse(r: Reader): TransactionIdsForHeader = {
+    val length = r.getInt()
+    val ids = (1 to length).map { _ =>
+      r.getBytes(fixedSize)
+    }
     TransactionIdsForHeader(ids)
   }
 }

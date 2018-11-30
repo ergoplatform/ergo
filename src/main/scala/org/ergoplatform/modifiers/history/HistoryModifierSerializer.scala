@@ -1,34 +1,42 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.{Failure, Try}
+object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier] {
 
-object HistoryModifierSerializer extends Serializer[ErgoPersistentModifier] {
-  override def toBytes(obj: ErgoPersistentModifier): Array[Byte] = obj match {
-    case m: Header =>
-      Header.modifierTypeId +: HeaderSerializer.toBytes(m)
-    case m: ADProofs =>
-      ADProofs.modifierTypeId +: ADProofSerializer.toBytes(m)
-    case m: BlockTransactions =>
-      BlockTransactions.modifierTypeId +: BlockTransactionsSerializer.toBytes(m)
-    case m: Extension =>
-      Extension.modifierTypeId +: ExtensionSerializer.toBytes(m)
-    case m =>
-      throw new Error(s"Serialization for unknown modifier: $m")
+  override def serialize(obj: ErgoPersistentModifier, w: Writer): Unit = {
+    obj match {
+      case m: Header =>
+        w.put(Header.modifierTypeId)
+        HeaderSerializer.serialize(m, w)
+      case m: ADProofs =>
+        w.put(ADProofs.modifierTypeId)
+        ADProofSerializer.serialize(m, w)
+      case m: BlockTransactions =>
+        w.put(BlockTransactions.modifierTypeId)
+        BlockTransactionsSerializer.serialize(m, w)
+      case m: Extension =>
+        w.put(Extension.modifierTypeId)
+        ExtensionSerializer.serialize(m, w)
+      case m =>
+        throw new Error(s"Serialization for unknown modifier: $m")
+    }
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoPersistentModifier] = Try(bytes.head).flatMap {
-    case Header.`modifierTypeId` =>
-      HeaderSerializer.parseBytes(bytes.tail)
-    case ADProofs.`modifierTypeId` =>
-      ADProofSerializer.parseBytes(bytes.tail)
-    case BlockTransactions.`modifierTypeId` =>
-      BlockTransactionsSerializer.parseBytes(bytes.tail)
-    case Extension.`modifierTypeId` =>
-      ExtensionSerializer.parseBytes(bytes.tail)
-    case m =>
-      Failure(new Error(s"Deserialization for unknown type byte: $m"))
+  override def parse(r: Reader): ErgoPersistentModifier = {
+    r.getByte() match {
+      case Header.`modifierTypeId` =>
+        HeaderSerializer.parse(r)
+      case ADProofs.`modifierTypeId` =>
+        ADProofSerializer.parse(r)
+      case BlockTransactions.`modifierTypeId` =>
+        BlockTransactionsSerializer.parse(r)
+      case Extension.`modifierTypeId` =>
+        ExtensionSerializer.parse(r)
+      case m =>
+        throw new Error(s"Deserialization for unknown type byte: $m")
+    }
   }
 }

@@ -1,13 +1,13 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
-import scorex.core.serialization.Serializer
-import scorex.core.utils.ScorexEncoding
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.validation.ModifierValidator
+import scorex.core.utils.ScorexEncoding
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.annotation.tailrec
@@ -26,13 +26,9 @@ case class PoPoWProof(m: Byte,
 
   override def parentId: ModifierId = ???
 
-  override def serializedId: Array[Byte] = Algos.hash(bytes)
+  override def serializedId: Array[Byte] = Algos.hash(new PoPoWProofSerializer(powScheme).toBytes(this))
 
   override lazy val id: ModifierId = bytesToId(serializedId)
-
-  override type M = PoPoWProof
-
-  override lazy val serializer: Serializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
 
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???
@@ -117,61 +113,54 @@ class PoPoWProofUtils(powScheme: AutolykosPowScheme) extends ScorexEncoding with
   }
 }
 
-@SuppressWarnings(Array("TraversableHead"))
-class PoPoWProofSerializer(powScheme: AutolykosPowScheme) extends Serializer[PoPoWProof] {
-  override def toBytes(obj: PoPoWProof): Array[Byte] = {
-    val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
-      val bytes = HeaderSerializer.bytesWithoutInterlinks(h)
-      Bytes.concat(Shorts.toByteArray(bytes.length.toShort), bytes)
-    })
-    val innerchainBytes = scorex.core.utils.concatBytes(obj.innerchain.map { h =>
-      val bytes = h.bytes
-      Bytes.concat(Shorts.toByteArray(bytes.length.toShort), bytes)
-    })
-    Bytes.concat(Array(obj.m, obj.k, obj.i),
-      Shorts.toByteArray(obj.suffix.head.bytes.length.toShort),
-      obj.suffix.head.bytes,
-      suffixTailBytes,
-      Shorts.toByteArray(obj.innerchain.length.toShort),
-      innerchainBytes)
+class PoPoWProofSerializer(powScheme: AutolykosPowScheme) extends ScorexSerializer[PoPoWProof] {
+
+  override def serialize(obj: PoPoWProof, w: Writer): Unit = {
+    w.put(obj.m)
+    w.put(obj.k)
+    w.put(obj.i)
+    HeaderSerializer.serialize(obj.suffix.head)
+    val suffixTail = obj.suffix.tail
+    suffixTail.foreach { h =>
+      HeaderSerializer.serializeWithoutInterlinks(h, w)
+    }
+    w.putUShort(obj.innerchain.size)
+    obj.innerchain.foreach { h =>
+      HeaderSerializer.serialize(h, w)
+    }
   }
 
-  @SuppressWarnings(Array("TryGet"))
-  override def parseBytes(bytes: Array[Byte]): Try[PoPoWProof] = Try {
-    val m = bytes.head
-    val k = bytes(1)
-    val i = bytes(2)
-    val headSuffixLength = Shorts.fromByteArray(bytes.slice(3, 5))
-    require(headSuffixLength > 0)
-    val headSuffix = HeaderSerializer.parseBytes(bytes.slice(5, 5 + headSuffixLength)).get
+  override def parse(r: Reader): PoPoWProof = {
+    val startPosition = r.position
+    val m = r.getByte()
+    val k = r.getByte()
+    val i = r.getByte()
+    val siffixHead = HeaderSerializer.parse(r)
 
-    def parseSuffixes(index: Int, acc: Seq[Header]): (Int, Seq[Header]) = {
+    def parseSuffixes(acc: Seq[Header]): Seq[Header] = {
       if (acc.lengthCompare(k.toInt) == 0)  {
-        (index, acc.reverse)
+        acc.reverse
       } else {
-        val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        require(l > 0)
-        val headerWithoutInterlinks = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
+        val headerWithoutInterlinks = HeaderSerializer.parse(r)
         val interlinks = new PoPoWProofUtils(powScheme).constructInterlinkVector(acc.head)
-        parseSuffixes(index + 2 + l, headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
+        parseSuffixes(headerWithoutInterlinks.copy(interlinks = interlinks) +: acc)
       }
     }
 
-    val (index, suffix) = parseSuffixes(5 + headSuffixLength, Seq(headSuffix))
-    val innerchainLength = Shorts.fromByteArray(bytes.slice(index, index + 2))
+    val suffix = parseSuffixes(Seq(siffixHead))
+
+    val innerchainLength = r.getUShort()
     require(innerchainLength > 0)
 
     @tailrec
-    def createInnerChain(index: Int, step: Int = 0, chain: Seq[Header] = Seq.empty): Seq[Header] = {
+    def createInnerChain(step: Int = 0, chain: Seq[Header] = Seq.empty): Seq[Header] = {
       if (step < innerchainLength) {
-        val l = Shorts.fromByteArray(bytes.slice(index, index + 2))
-        require(l > 0)
-        val header = HeaderSerializer.parseBytes(bytes.slice(index + 2, index + 2 + l)).get
-        createInnerChain(index + 2 + l, step + 1, chain ++ Seq(header))
+        val header = HeaderSerializer.parse(r)
+        createInnerChain(step + 1, chain ++ Seq(header))
       } else {
         chain
       }
     }
-    PoPoWProof(m, k, i, createInnerChain(index + 2), suffix, Some(bytes.length))(powScheme)
+    PoPoWProof(m, k, i, createInnerChain(), suffix, Some(r.position - startPosition))(powScheme)
   }
 }

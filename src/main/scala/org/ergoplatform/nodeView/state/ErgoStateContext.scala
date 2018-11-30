@@ -4,11 +4,12 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.settings.{LaunchParameters, Parameters, ParametersSerializer}
 import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+
 import scala.util.{Success, Try}
 
 case class VotingResults(results: Array[(Byte, Int)]) {
@@ -34,7 +35,11 @@ object VotingResults {
 case class ErgoStateContext(lastHeaders: Seq[Header],
                             genesisStateDigest: ADDigest,
                             currentParameters: Parameters,
-                            currentVoting: VotingResults)
+                            currentVoting: VotingResults
+                            //,softForkVotingStartingHeight: Int,
+                            //softForkVotesCollected: Int,
+                            //activationHeight: Int
+                           )
   extends BytesSerializable with ScorexEncoding {
 
   // State root hash before the last block
@@ -53,21 +58,19 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
-  /**
-    * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
-    * the latter according to the former.
-    *
-    * @param fullBlock - full block (transactions, extension section, maybe state transformation proofs)
-    * @param votingEpochLength - length of voting epoch (system constant)
-    * @return
-    */
-  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = Try {
+
+  def processExtension(extension: Extension,
+                       votes: Array[Byte],
+                       height: Int,
+                       votingEpochLength: Int): Try[ErgoStateContext] = Try {
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
 
     //Check that votes extracted from block header are correct
     def checkVotes(votes: Array[Byte]): Unit = {
       if (votes.distinct.length == votes.length) throw new Error("Double vote")
       if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
+
+      //votes with id = 121..127 are prohibited
       if (votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
     }
 
@@ -83,33 +86,45 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       }
     }
 
-    val extension = fullBlock.extension
-    val header = fullBlock.header
-    val height = header.height
-
     //genesis block does not contain votes
     //todo: this rule may be reconsidered when moving interlink vector to extension section
     if (height == 0 && extension.mandatoryFields.nonEmpty) {
       throw new Error("Mandatory fields in genesis block")
     }
 
-    checkVotes(header.votes)
-
-    val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
+    checkVotes(votes)
 
     if (votingStarts(height)) {
-      val proposedVotes = header.votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
+      val proposedVotes = votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
       val newVoting = VotingResults(proposedVotes)
 
       Parameters.parseExtension(height, extension).flatMap { params =>
         Try(matchParameters(params, currentParameters)).map(_ => params)
       }.map { params =>
-        ErgoStateContext(newHeaders, genesisStateDigest, params, newVoting)
+        ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)
       }
     } else {
-      val newVotes = header.votes.filter(_ != Parameters.NoParameter)
+      val newVotes = votes.filter(_ != Parameters.NoParameter)
       val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
-      Success(ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, newVotingResults))
+      Success(ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, newVotingResults))
+    }
+  }.flatten
+
+  /**
+    * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
+    * the latter according to the former.
+    *
+    * @param fullBlock         - full block (transactions, extension section, maybe state transformation proofs)
+    * @param votingEpochLength - length of voting epoch (system constant)
+    * @return
+    */
+  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = Try {
+    val header = fullBlock.header
+    val height = header.height
+
+    processExtension(fullBlock.extension, header.votes, height, votingEpochLength).map { sc =>
+      val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
+      sc.copy(lastHeaders = newHeaders)
     }
   }.flatten
 

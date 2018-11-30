@@ -52,7 +52,7 @@ trait ValidBlocksGenerators
     val stateCtx = ErgoStateContext.empty(StateConstants(None, settings).emission.settings.afterGenesisStateDigest)
 
     def validOutputs(tx: ErgoTransaction) = tx.outputs
-      .forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateCtx.currentParameters))
+      .forall(o => o.value >= BoxUtils.minimalErgoAmount(o))
 
     @tailrec
     def loop(stateBoxes: Seq[ErgoBox],

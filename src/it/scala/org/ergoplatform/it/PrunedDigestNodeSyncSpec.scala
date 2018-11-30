@@ -59,10 +59,10 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
       val blocksToPrune = Async.await(nodeForSyncing.headers(0, targetHeight - blocksToKeep - 1))
       log.info(s"Get headers to be pruned - DONE")
       Async.await(digestNode.waitFor[Option[String]](
-        _.info.map(_.bestHeaderIdOpt),
-        headerIdOpt => {
-          headerIdOpt.foreach(blocksToPrune should not contain _)
-          headerIdOpt.contains(targetBlockId)
+        _.info.map(_.bestBlockIdOpt),
+        blockIdOpt => {
+          blockIdOpt.foreach(blocksToPrune should not contain _)
+          blockIdOpt.contains(targetBlockId)
         },
         50.millis
       ))

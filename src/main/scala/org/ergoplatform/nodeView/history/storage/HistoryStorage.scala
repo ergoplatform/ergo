@@ -36,15 +36,15 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
         Some(e)
       case None =>
         objectsStore.get(id).flatMap { bBytes =>
-          HistoryModifierSerializer.parseBytes(bBytes).recoverWith { case e =>
-            log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
-            Failure(e)
-          }.toOption match {
-            case Some(pm) =>
-              log.trace(s"Cache miss for existing modifier $id")
-              modifiersCache.put(id, pm)
-              Some(pm)
-            case None => None
+          try {
+            val pm = HistoryModifierSerializer.parseBytes(bBytes)
+            log.trace(s"Cache miss for existing modifier $id")
+            modifiersCache.put(id, pm)
+            Some(pm)
+          } catch {
+            case e: Throwable =>
+              log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
+              None
           }
         }
     }

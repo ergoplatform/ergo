@@ -68,7 +68,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     persistentProver
       .unauthenticatedLookup(id)
       .map(ErgoBoxSerializer.parseBytes)
-      .flatMap(_.toOption)
   }
 
   def randomBox(): Option[ErgoBox] = persistentProver.synchronized {

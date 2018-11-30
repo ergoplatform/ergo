@@ -1,15 +1,13 @@
 package org.ergoplatform.mining
 
-import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.{BytesSerializable, Serializer}
-
-import scala.util.Try
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Solution of Autolykos PoW puzzle
@@ -20,14 +18,11 @@ import scala.util.Try
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
-case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt) extends BytesSerializable {
+case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt) {
   assert(!pk.isInfinity && !w.isInfinity, s"Infinity points are not allowed ${pk.isInfinity}, ${w.isInfinity}")
-
-  override type M = AutolykosSolution
 
   val encodedPk: Array[Byte] = pkToBytes(pk)
 
-  override def serializer: Serializer[AutolykosSolution] = AutolykosSolutionSerializer
 }
 
 object AutolykosSolution extends ApiCodecs {
@@ -51,22 +46,25 @@ object AutolykosSolution extends ApiCodecs {
   }
 }
 
-object AutolykosSolutionSerializer extends Serializer[AutolykosSolution] {
+object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
-  override def toBytes(obj: AutolykosSolution): Array[Byte] = {
+
+  override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
-    Bytes.concat(pkToBytes(obj.pk), pkToBytes(obj.w), obj.n, Array(dBytes.length.toByte), dBytes)
+    w.putBytes(pkToBytes(obj.pk))
+    w.putBytes(pkToBytes(obj.w))
+    w.putBytes(obj.n)
+    w.putUByte(dBytes.length)
+    w.putBytes(dBytes)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[AutolykosSolution] = Try {
-    val pk = pkFromBytes(bytes.slice(0, PublicKeyLength))
-    val pk2End = 2 * PublicKeyLength
-    val w = pkFromBytes(bytes.slice(PublicKeyLength, pk2End))
-    val nonce = bytes.slice(pk2End, pk2End + 8)
-    val dBytesLength = bytes(pk2End + 8)
-    val d = BigInt(BigIntegers.fromUnsignedByteArray(bytes.slice(pk2End + 9, pk2End + 9 + dBytesLength)))
+  override def parse(r: Reader): AutolykosSolution = {
+    val pk = pkFromBytes(r.getBytes(PublicKeyLength))
+    val w = pkFromBytes(r.getBytes(PublicKeyLength))
+    val nonce = r.getBytes(8)
+    val dBytesLength = r.getUByte()
+    val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))
     AutolykosSolution(pk, w, nonce, d)
   }
-
 }
 

@@ -5,11 +5,12 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
@@ -34,10 +35,6 @@ case class Extension(headerId: ModifierId,
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(mandatoryFields, optionalFields)
-
-  override type M = Extension
-
-  override def serializer: Serializer[Extension] = ExtensionSerializer
 
   override def toString: String = {
     s"Extension(${Algos.encode(headerId)}, " +
@@ -96,49 +93,44 @@ object Extension extends ApiCodecs {
   }
 }
 
-object ExtensionSerializer extends Serializer[Extension] {
-  val Delimiter: Array[Byte] = Array.fill(4)(0: Byte)
+object ExtensionSerializer extends ScorexSerializer[Extension] {
 
-  override def toBytes(obj: Extension): Array[Byte] = {
-    val mandBytes = scorex.core.utils.concatBytes(obj.mandatoryFields.map(f =>
-      Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
-    val optBytes = scorex.core.utils.concatBytes(obj.optionalFields.map(f =>
-      Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
-    if (optBytes.nonEmpty) {
-      Bytes.concat(idToBytes(obj.headerId), mandBytes, Delimiter, optBytes)
-    } else {
-      Bytes.concat(idToBytes(obj.headerId), mandBytes)
+  override def serialize(obj: Extension, w: Writer): Unit = {
+    w.putBytes(idToBytes(obj.headerId))
+
+    w.putUShort(obj.mandatoryFields.size)
+    obj.mandatoryFields.foreach { case (key, value) =>
+      w.putBytes(key)
+      w.putUByte(value.length)
+      w.putBytes(value)
+    }
+
+    w.putUShort(obj.optionalFields.size)
+    obj.optionalFields.foreach { case (key, value) =>
+      w.putBytes(key)
+      w.putUByte(value.length)
+      w.putBytes(value)
     }
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
-    val totalLength = bytes.length
-    // todo check bytes length immediately after voting implementation to prevent DoS
-
-    @tailrec
-    def parseSection(pos: Int,
-                     keySize: Int,
-                     acc: Seq[(Array[Byte], Array[Byte])]): (Seq[(Array[Byte], Array[Byte])], Int) = {
-      if (pos == totalLength) {
-        // deserialization complete
-        (acc.reverse, pos)
-      } else {
-        val key = bytes.slice(pos, pos + keySize)
-        if (keySize == Extension.MandatoryFieldKeySize && java.util.Arrays.equals(key, Delimiter)) {
-          // mandatory fields deserialization complete
-          (acc.reverse, pos + keySize)
-        } else {
-          val length: Byte = bytes(pos + keySize)
-          require(length >= 0, "value size should not be negative")
-          val value = bytes.slice(pos + keySize + 1, pos + keySize + 1 + length)
-          parseSection(pos + keySize + 1 + length, keySize, (key, value) +: acc)
-        }
-      }
+  override def parse(r: Reader): Extension = {
+    val startPosition = r.position
+    val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
+    val mandBytesSize = r.getUShort()
+    val madatoryFields = (1 to mandBytesSize) map {_ =>
+      val key = r.getBytes(Extension.MandatoryFieldKeySize)
+      val size = r.getUShort()
+      val value = r.getBytes(size)
+      (key, value)
     }
 
-    val headerId = bytesToId(bytes.take(32))
-    val (mandatory, newPos) = parseSection(32, Extension.MandatoryFieldKeySize, Seq())
-    val (optional, _) = parseSection(newPos, Extension.OptionalFieldKeySize, Seq())
-    Extension(headerId, mandatory, optional, Some(bytes.length))
+    val optFieldsSize = r.getUShort()
+    val optFields = (1 to optFieldsSize) map { _ =>
+      val key = r.getBytes(Extension.OptionalFieldKeySize)
+      val size = r.getUShort()
+      val value = r.getBytes(size)
+      (key, value)
+    }
+    Extension(headerId, madatoryFields, optFields, Some(r.position - startPosition))
   }
 }

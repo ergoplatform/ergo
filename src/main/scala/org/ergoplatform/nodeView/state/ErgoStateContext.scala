@@ -1,14 +1,12 @@
 package org.ergoplatform.nodeView.state
 
-import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.{BytesSerializable, Serializer}
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
-
-import scala.util.Try
+import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Additional data required for transactions validation
@@ -17,7 +15,7 @@ import scala.util.Try
   * @param genesisStateDigest - fixed number of last headers
   */
 case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
-  extends BytesSerializable with ScorexEncoding {
+  extends ScorexEncoding {
 
   lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
@@ -32,10 +30,6 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
   val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
-
-  override type M = ErgoStateContext
-
-  override def serializer: Serializer[M] = ErgoStateContextSerializer
 
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
@@ -55,24 +49,18 @@ object ErgoStateContext {
   }
 }
 
-object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
+object ErgoStateContextSerializer extends ScorexSerializer[ErgoStateContext] {
 
-  override def toBytes(obj: ErgoStateContext): Array[Byte] = {
-    Bytes.concat(obj.genesisStateDigest,
-      scorex.core.utils.concatBytes(obj.lastHeaders.map(_.bytes)))
+  override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
+    w.putBytes(obj.genesisStateDigest)
+    w.putInt(obj.lastHeaders.size)
+    obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {
-    val genesisDigest = ADDigest @@ bytes.take(33)
-    val length = bytes.length
-
-    def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
-      val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
-      loop(offset + header.bytes.length, header +: acc)
-    } else {
-      acc.reverse
-    }
-
-    ErgoStateContext(loop(offset = 33, Seq.empty), genesisDigest)
+  override def parse(r: Reader): ErgoStateContext = {
+    val genesisDigest = ADDigest @@ r.getBytes(33)
+    val length = r.getInt()
+    val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
+    ErgoStateContext(lastHeaders, genesisDigest)
   }
 }

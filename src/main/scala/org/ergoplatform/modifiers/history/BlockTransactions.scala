@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Ints}
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
@@ -8,13 +8,12 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
-import scorex.core.serialization.Serializer
-import scorex.core.utils.concatBytes
+import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
-import scala.util.{Failure, Success, Try}
 
 case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], override val sizeOpt: Option[Int] = None)
   extends BlockSection
@@ -26,9 +25,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
 
   override def digest: Digest32 = BlockTransactions.transactionsRoot(txs)
 
-  override type M = BlockTransactions
-
-  override lazy val serializer: Serializer[BlockTransactions] = BlockTransactionsSerializer
+  lazy val size = sizeOpt.getOrElse(BlockTransactionsSerializer.serialize(this).size)
 
   override def toString: String = {
     val idStr = Algos.encode(id)
@@ -69,32 +66,23 @@ object BlockTransactions extends ApiCodecs {
   }
 }
 
-object BlockTransactionsSerializer extends Serializer[BlockTransactions] {
-  override def toBytes(obj: BlockTransactions): Array[Byte] = {
-    val txsBytes = concatBytes(obj.txs.map { tx =>
-      val txBytes = ErgoTransactionSerializer.toBytes(tx)
-      Bytes.concat(Ints.toByteArray(txBytes.length), txBytes)
-    })
-    Bytes.concat(idToBytes(obj.headerId), txsBytes)
+object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
+
+  override def serialize(obj: BlockTransactions, w: Writer): Unit = {
+    w.putBytes(idToBytes(obj.headerId))
+    w.putInt(obj.txs.size)
+    obj.txs.foreach { tx =>
+      ErgoTransactionSerializer.serialize(tx, w)
+    }
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[BlockTransactions] = Try {
-    val headerId: ModifierId = bytesToId(bytes.slice(0, Constants.ModifierIdSize))
-
-    def parseTransactions(index: Int, acc: Seq[ErgoTransaction]): BlockTransactions = {
-      if (index == bytes.length) {
-        BlockTransactions(headerId, acc)
-      } else {
-        val txLength = Ints.fromByteArray(bytes.slice(index, index + 4))
-        require(txLength > 0)
-        val tx = ErgoTransactionSerializer.parseBytes(bytes.slice(index + 4, index + 4 + txLength)) match {
-          case Success(parsedTx) => parsedTx
-          case Failure(f) => throw f
-        }
-        parseTransactions(index + 4 + txLength, acc :+ tx)
-      }
+  override def parse(r: Reader): BlockTransactions = {
+    val startPos = r.position
+    val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
+    val size = r.getInt()
+    val txs = (1 to size).map { _ =>
+      ErgoTransactionSerializer.parse(r)
     }
-
-    parseTransactions(Constants.ModifierIdSize, Seq.empty).copy(sizeOpt = Some(bytes.length))
+    BlockTransactions(headerId, txs, Some(r.position - startPos))
   }
 }

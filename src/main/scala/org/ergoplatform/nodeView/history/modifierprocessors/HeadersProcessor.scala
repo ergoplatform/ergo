@@ -26,13 +26,14 @@ import scala.util.Try
   */
 trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
-  private val charsetName = "UTF-8"
+  val powScheme: PowScheme
 
   protected val historyStorage: HistoryStorage
 
   protected val config: NodeConfigurationSettings
 
-  val powScheme: PowScheme
+  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
+    chainSettings.useLastEpochs, chainSettings.epochLength)
 
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
@@ -40,6 +41,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
+
+  private val charsetName = "UTF-8"
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
@@ -52,9 +55,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
-
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs, chainSettings.epochLength)
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 

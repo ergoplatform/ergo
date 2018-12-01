@@ -58,4 +58,12 @@ object Constants {
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+
+  object NiPoPowParams {
+    val m = 30
+    val k = 30
+    val d = 0.45f
+    val k1: Int = k
+  }
+
 }

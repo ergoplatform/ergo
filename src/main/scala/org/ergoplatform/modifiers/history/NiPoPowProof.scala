@@ -28,7 +28,7 @@ case class NiPoPowProof(m: Int,
 
   override def serializer: Serializer[NiPoPowProof] = NiPoPowProofSerializer
 
-  override def parentId: ModifierId = ???
+  override def parentId: ModifierId = prefix.head.id
 
   def headersOfLevel(l: Int): Seq[Header] = prefix.filter(maxLevelOf(_) >= l)
 
@@ -45,7 +45,7 @@ case class NiPoPowProof(m: Int,
     val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(prefix, that.prefix)
       .map(h => prefix.filter(_.height > h.height) -> that.prefix.filter(_.height > h.height))
       .getOrElse(prefix -> that.prefix)
-    bestArg(thisDivergingChain, m) > bestArg(thatDivergingChain, m)
+    bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
   }
 
 }
@@ -56,7 +56,7 @@ object NiPoPowProof {
 
   def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {
-      def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+      def log2(x: Double) = math.log(x) / math.log(2)
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
       val realTarget = header.powSolution.d
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
@@ -66,7 +66,7 @@ object NiPoPowProof {
     }
   }
 
-  def bestArg(chain: Seq[Header], m: Int): Int = {
+  def bestArg(chain: Seq[Header])(m: Int): Int = {
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] = {
       if (level == 0) {
         loop(level + 1, acc :+ (0, chain.size)) // Supposing each header is at least of level 0.
@@ -76,7 +76,7 @@ object NiPoPowProof {
       }
     }
     loop(level = 0).map { case (lvl, size) =>
-      scala.math.pow(2, lvl) * size // 2^µ * |C↑µ|
+      math.pow(2, lvl) * size // 2^µ * |C↑µ|
     }.max.toInt
   }
 
@@ -107,30 +107,56 @@ object NiPoPowProof {
     }
   }
 
-  /** @param chain      - C
-    * @param superChain - C↑µ
-    * @param level      - µ
-    * @param m          - security parameter
-    * */
-  def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(m: Int, d: Float): Boolean = {
-    import scala.math.{min => min}
-    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C[C↑µ[0]:C↑µ[−1]]
-    def checkLocalGoodness(mValues: Seq[Int]): Boolean = {
-      mValues match {
-        case mToTest +: tail
-          if locallyGood(min(superChain.size, mToTest), min(downChain.size, mToTest), level)(d) =>
-          checkLocalGoodness(tail)
-        case seq if seq.nonEmpty =>
+  def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
+    import org.ergoplatform.settings.Constants.NiPoPowParams._
+    superChainQuality(chain, superChain, level)(m, d) && multiLevelQuality(chain, superChain, level)(k1, d)
+  }
+
+  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int)(d: Float): Boolean = {
+    superChainSize > (1 - d) * math.pow(2, -level) * chainSize
+  }
+
+  /** @param chain      - Full chain (C)
+    * @param superChain - Super-chain of level µ (C↑µ)
+    * @param level      - Level of super-chain (µ) */
+  private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(m: Int, d: Float): Boolean = {
+    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C[C↑µ[0]:C↑µ[−1]], or C'↓
+    def checkLocalGoodnessAt(mValue: Int): Boolean = {
+      mValue match {
+        case mToTest if mToTest < chain.size &&
+          locallyGood(math.min(superChain.size, mToTest), math.min(downChain.size, mToTest), level)(d) =>
+          checkLocalGoodnessAt(mToTest + 1)
+        case mToTest if mToTest < chain.size =>
           false
         case _ =>
           true
       }
     }
-    checkLocalGoodness(m until chain.size)
+    checkLocalGoodnessAt(m)
   }
 
-  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int)(d: Float): Boolean = {
-    superChainSize > (1 - d) * scala.math.pow(2, -level) * chainSize
+  private def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(k1: Int, d: Float): Boolean = {
+    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C'↓
+    def checkQualityAt(levelToCheck: Int): Boolean = {
+      levelToCheck match {
+        case lvl if lvl > 0 =>
+          val subChain = downChain.filter(maxLevelOf(_) >= lvl - 1) // C* = C'↓↑µ'−1
+          if (subChain.nonEmpty) {
+            val upperSubChainSize = subChain.count(maxLevelOf(_) >= lvl) // |C*↑µ'|
+            if (upperSubChainSize >= k1 &&
+              !(subChain.count(maxLevelOf(_) >= level) >= (1 - d) * math.pow(2, level - lvl) * upperSubChainSize)) {
+              false
+            } else {
+              checkQualityAt(lvl - 1)
+            }
+          } else {
+            checkQualityAt(lvl - 1)
+          }
+        case _ =>
+          true
+      }
+    }
+    checkQualityAt(level)
   }
 
 }

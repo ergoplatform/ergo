@@ -90,6 +90,21 @@ object NiPoPowProof {
     if (leftChain.headOption.exists(h => rightChain.headOption.contains(h))) Some(leftChain(lcaIndex(1))) else None
   }
 
+  def updateInterlinks(header: Header): Seq[ModifierId] = {
+    if (!header.isGenesis) {
+      val genesis = header.interlinks.head
+      val tail = header.interlinks.tail
+      val prevLevel = maxLevelOf(header)
+      if (prevLevel > 0) {
+        (genesis +: tail.dropRight(prevLevel)) ++ Seq.fill(prevLevel)(header.id)
+      } else {
+        header.interlinks
+      }
+    } else {
+      Seq(header.id)
+    }
+  }
+
 }
 
 object NiPoPowProofSerializer extends Serializer[NiPoPowProof] {

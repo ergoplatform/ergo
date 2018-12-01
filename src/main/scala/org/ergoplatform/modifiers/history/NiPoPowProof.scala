@@ -75,7 +75,9 @@ object NiPoPowProof {
         if (args.lengthCompare(m) >= 0) loop(level + 1, acc :+ (level, args.size)) else acc
       }
     }
-    loop(level = 0).map { case (lvl, size) => scala.math.pow(2, lvl) * size }.max.toInt
+    loop(level = 0).map { case (lvl, size) =>
+      scala.math.pow(2, lvl) * size // 2^µ * |C↑µ|
+    }.max.toInt
   }
 
   def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
@@ -103,6 +105,32 @@ object NiPoPowProof {
     } else {
       Seq(header.id)
     }
+  }
+
+  /** @param chain      - C
+    * @param superChain - C↑µ
+    * @param level      - µ
+    * @param m          - security parameter
+    * */
+  def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(m: Int, d: Float): Boolean = {
+    import scala.math.{min => min}
+    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C[C↑µ[0]:C↑µ[−1]]
+    def checkLocalGoodness(mValues: Seq[Int]): Boolean = {
+      mValues match {
+        case mToTest +: tail
+          if locallyGood(min(superChain.size, mToTest), min(downChain.size, mToTest), level)(d) =>
+          checkLocalGoodness(tail)
+        case seq if seq.nonEmpty =>
+          false
+        case _ =>
+          true
+      }
+    }
+    checkLocalGoodness(m until chain.size)
+  }
+
+  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int)(d: Float): Boolean = {
+    superChainSize > (1 - d) * scala.math.pow(2, -level) * chainSize
   }
 
 }

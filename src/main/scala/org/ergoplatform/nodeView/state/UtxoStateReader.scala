@@ -19,6 +19,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   protected implicit val hf: HF = Algos.hash
 
+  implicit val verifier: ErgoInterpreter
+
   val constants: StateConstants
 
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
@@ -33,9 +35,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   override def validate(tx: ErgoTransaction): Try[Unit] =
     tx.statelessValidity
-      .flatMap(_ =>
-        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)(ErgoInterpreter())
-          .map(_ => Unit))
+      .flatMap {_ =>
+        verifier.IR.resetContext()  // ensure there is no garbage in the IRContext
+        tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)
+          .map(_ => Unit)
+      }
 
   /**
     *

@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
+import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallyFailedModification, SemanticallySuccessfulModifier}
@@ -49,6 +50,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     minimalState().closeStorage()
   }
 
+  /**
+    * Tries to apply state to nodeView if possible.
+    */
   override protected def applyState(history: ErgoHistory,
                                     stateToApply: State,
                                     suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
@@ -73,18 +77,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             UpdateInformation(newHistory, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
         }
       }(_ => updateInfo)
-    }
-  }
-
-  private def createStateSnapshot(lastHeader: Header, state: State): Unit = {
-    state match {
-      case utxoReader: UtxoStateReader =>
-        log.info(s"Creating state snapshot at height ${lastHeader.height} after header ${lastHeader.encodedId}")
-        val (manifest, chunks) = utxoReader.takeSnapshot
-        val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
-        history().append(snapshot)
-      case _ =>
-        log.warn("Attempting to create state snapshot in unsupported state mode")
     }
   }
 
@@ -118,6 +110,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
     Some((history, state, wallet, memPool))
+  }
+
+  private def createStateSnapshot(lastHeader: Header, state: State): Unit = {
+    state match {
+      case utxoReader: UtxoStateReader =>
+        log.info(s"Creating state snapshot at height ${lastHeader.height} after header ${lastHeader.encodedId}")
+        val (manifest, chunks) = utxoReader.takeSnapshot
+        val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
+        self ! LocallyGeneratedModifier(snapshot)
+      case _ =>
+        log.warn("Attempting to create state snapshot in unsupported state mode")
+    }
   }
 
   @SuppressWarnings(Array("AsInstanceOf"))

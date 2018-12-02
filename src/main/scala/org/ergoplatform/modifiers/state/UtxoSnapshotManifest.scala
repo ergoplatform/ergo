@@ -65,24 +65,18 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
       .toTry
   }
 
-  /** Checks that manifest tree consists of correct number of valid proxy nodes.
+  /** Checks that manifest tree consists of valid proxy nodes.
     */
   private def validManifestTree: Boolean = {
     @tailrec
-    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]],
-                        qty: Int = 0, acc: Boolean = true): Boolean = {
+    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]], acc: Boolean = true): Boolean = {
       nodes match {
         case (n: ProxyInternalNode[Digest32]) +: tail =>
-          if (qty < math.pow(2, proverManifest.oldRootAndHeight._2 / 2) &&
-            java.util.Arrays.equals(n.computeLabel, n.label)) {
-            validProxyNodes(tail, qty + 1, acc)
-          } else {
-            false
-          }
+          if (java.util.Arrays.equals(n.computeLabel, n.label)) validProxyNodes(tail, acc) else false
         case (n: InternalProverNode[Digest32]) +: tail =>
-          validProxyNodes(n.left +: n.right +: tail, qty, acc)
+          validProxyNodes(n.left +: n.right +: tail, acc)
         case (_: ProverLeaf[Digest32]) +: tail =>
-          validProxyNodes(tail, qty, acc)
+          validProxyNodes(tail, acc)
         case seq if seq.isEmpty =>
           acc
       }

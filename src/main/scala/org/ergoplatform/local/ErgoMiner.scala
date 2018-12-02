@@ -178,7 +178,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                          remainingCost: Long,
                          remainingSize: Long,
                          acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter()
     mempoolTxs.headOption match {
       case Some(tx) if remainingCost > ExpectedTxCost && remainingSize > ExpectedTxSize =>
         Try {
@@ -186,6 +185,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           require(!idsToExclude.exists(id => tx.inputs.exists(box => java.util.Arrays.equals(box.boxId, id))))
         }.flatMap { _ =>
           // check validity and calculate transaction cost
+          implicit val verifier = state.verifier
+          verifier.IR.resetContext() // ensure there is no garbage in the IRContext
           tx.statefulValidity(tx.inputs.flatMap(i => state.boxById(i.boxId)), state.stateContext)
         } match {
           case Success(costConsumed) if remainingCost > costConsumed && remainingSize > tx.size =>

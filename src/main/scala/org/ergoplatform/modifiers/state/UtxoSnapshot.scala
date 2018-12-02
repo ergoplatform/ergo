@@ -36,8 +36,8 @@ object UtxoSnapshot {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  def rootDigestToSerializedId(rootDigest: ADDigest): Array[Byte] = Algos.hash(rootDigest)
+  def digestToSerializedId(digest: Array[Byte]): Array[Byte] = Algos.hash(digest)
 
-  def rootDigestToId(rootDigest: ADDigest): ModifierId = bytesToId(rootDigestToSerializedId(rootDigest))
+  def digestToId(digest: Array[Byte]): ModifierId = bytesToId(digestToSerializedId(digest))
 
 }

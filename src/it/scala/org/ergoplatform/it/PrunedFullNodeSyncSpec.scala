@@ -79,7 +79,7 @@ class PrunedFullNodeSyncSpec extends FreeSpec with IntegrationSuite {
 
       val prunedSnapshotHeight = maxHeight - (maxHeight % snapshotCreationInterval) -
         (snapshotCreationInterval * keepLastSnapshots)
-      val prunedSnapshotId = UtxoSnapshot.rootDigestToId(Async.await {
+      val prunedSnapshotId = UtxoSnapshot.digestToId(Async.await {
         nodeForSyncing.headerIdsByHeight(prunedSnapshotHeight).flatMap { headers =>
           nodeForSyncing.headerById(headers.head)
         }

@@ -36,10 +36,12 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   protected def pendingManifestOpt: Option[UtxoSnapshotManifest] = {
     historyStorage.getIndex(PendingManifestIdKey).flatMap {
       case r if r.data.nonEmpty =>
-        historyStorage.modifierById(bytesToId(r.data))
-          .fold[Option[UtxoSnapshotManifest]](None) {
-          case m: UtxoSnapshotManifest => Some(m)
-          case _ => throw new Error("Wrong history index")
+        historyStorage.modifierById(bytesToId(r.data)) match {
+          case Some(m: UtxoSnapshotManifest) =>
+            Some(m)
+          case other =>
+            assert(other.isEmpty, "History index is inconsistent")
+            None
         }
       case _ =>
         None
@@ -57,7 +59,7 @@ trait UtxoSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
         val pendingChunks = pendingChunksQty
         if (pendingChunks == 1 && lastHeaders.nonEmpty) {
           // Time to apply snapshot
-          val requiredChunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
+          val requiredChunks = manifest.chunkRoots.map(UtxoSnapshot.digestToId)
           val otherChunks = requiredChunks
             .map(historyStorage.modifierById)
             .collect { case Some(chunk: UtxoSnapshotChunk) => chunk }

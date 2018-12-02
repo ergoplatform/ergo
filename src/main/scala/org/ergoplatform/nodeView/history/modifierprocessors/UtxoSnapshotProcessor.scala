@@ -37,9 +37,9 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
     headerIdsAtHeight(heightToRemove).headOption
       .flatMap { id =>
         typedModifierById[Header](id).flatMap { h =>
-          val manifestId = UtxoSnapshot.rootDigestToId(h.stateRoot)
+          val manifestId = UtxoSnapshot.digestToId(h.stateRoot)
           typedModifierById[UtxoSnapshotManifest](manifestId).map { manifest =>
-            val chunks = manifest.chunkRoots.map(UtxoSnapshot.rootDigestToId)
+            val chunks = manifest.chunkRoots.map(UtxoSnapshot.digestToId)
             manifestId -> chunks
           }
         }

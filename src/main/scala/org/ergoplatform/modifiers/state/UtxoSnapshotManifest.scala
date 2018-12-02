@@ -35,7 +35,7 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
     ADDigest @@ (root.label :+ height.toByte)
   }
 
-  override def serializedId: Array[Byte] = UtxoSnapshot.rootDigestToSerializedId(rootDigest)
+  override def serializedId: Array[Byte] = UtxoSnapshot.digestToSerializedId(rootDigest)
 
   override def parentId: ModifierId = blockId
 

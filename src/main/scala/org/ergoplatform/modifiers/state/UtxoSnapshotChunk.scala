@@ -5,9 +5,8 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
-import scorex.crypto.authds.ADDigest
-import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes}
 import scorex.crypto.hash.Digest32
 import scorex.util._
 
@@ -21,13 +20,13 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   override val modifierTypeId: ModifierTypeId = UtxoSnapshotChunk.modifierTypeId
 
-  override def serializedId: Array[Byte] = UtxoSnapshot.rootDigestToSerializedId(rootDigest)
+  override def serializedId: Array[Byte] = UtxoSnapshot.digestToSerializedId(rootDigest)
 
   override type M = UtxoSnapshotChunk
 
   override lazy val serializer: Serializer[UtxoSnapshotChunk] = UtxoSnapshotChunkSerializer
 
-  lazy val rootDigest: ADDigest = ADDigest !@@ subtree.subtreeTop.label
+  lazy val rootDigest: Digest32 = subtree.subtreeTop.label
 
   override def parentId: ModifierId = manifestId
 

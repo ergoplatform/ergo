@@ -90,7 +90,7 @@ trait ToDownloadProcessor extends ScorexLogging {
         val snapshotHeight = pruningProcessor.bestSnapshotHeight(header.height)
         val snapshotIdOpt = headerIdsAtHeight(snapshotHeight).headOption
           .flatMap(typedModifierById[Header])
-          .map(h => UtxoSnapshot.rootDigestToId(h.stateRoot))
+          .map(h => UtxoSnapshot.digestToId(h.stateRoot))
         snapshotIdOpt.map(id => Seq((UtxoSnapshotManifest.modifierTypeId, id))).getOrElse(Seq.empty)
       } else {
         Seq.empty

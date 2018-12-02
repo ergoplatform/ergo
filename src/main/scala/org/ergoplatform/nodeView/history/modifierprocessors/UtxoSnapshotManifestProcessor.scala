@@ -25,7 +25,7 @@ trait UtxoSnapshotManifestProcessor extends ScorexLogging with ScorexEncoding {
   protected def pendingManifestOpt: Option[UtxoSnapshotManifest]
 
   def process(m: UtxoSnapshotManifest): ProgressInfo[ErgoPersistentModifier] = {
-    val chunksToRequest = m.chunkRoots.map(UtxoSnapshot.rootDigestToId).map(UtxoSnapshotChunk.modifierTypeId -> _)
+    val chunksToRequest = m.chunkRoots.map(UtxoSnapshot.digestToId).map(UtxoSnapshotChunk.modifierTypeId -> _)
     val indexesToInsert = Seq(
       PendingManifestIdKey -> ByteArrayWrapper(idToBytes(m.id)),
       PendingChunksQtyKey -> ByteArrayWrapper(Ints.toByteArray(chunksToRequest.size))

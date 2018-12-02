@@ -69,20 +69,17 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
     def checkVotes(votes: Array[Byte]): Unit = {
       if (votes.distinct.length == votes.length) throw new Error("Double vote")
       if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
-
       //votes with id = 121..127 are prohibited
       if (votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
     }
 
     //Check that calculated parameters are matching ones written in the extension section of the block
-    def matchParameters(p1: Parameters, p2: Parameters): Unit = {
+    def matchParameters(p1: Parameters, p2: Parameters, softForkStarts: Boolean): Unit = {
       if (p1.parametersTable.size != p2.parametersTable.size) {
         throw new Error("Calculated and received parameters differ in size")
       }
       p1.parametersTable.foreach { case (k, v) =>
-        if (p2.parametersTable(k) != v) {
-          throw new Error(s"Calculated and received parameters differ in parameter $k")
-        }
+        if (p2.parametersTable(k) != v) throw new Error(s"Calculated and received parameters differ in parameter $k")
       }
     }
 
@@ -98,8 +95,11 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       val proposedVotes = votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
       val newVoting = VotingResults(proposedVotes)
 
-      Parameters.parseExtension(height, extension).flatMap { params =>
-        Try(matchParameters(params, currentParameters)).map(_ => params)
+      val softForkStarts = votes.contains(Parameters.SoftFork)
+
+      Parameters.parseExtension(height, extension).flatMap { parsedParams =>
+        val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
+        Try(matchParameters(parsedParams, calculatedParams, softForkStarts)).map(_ => calculatedParams)
       }.map { params =>
         ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)
       }

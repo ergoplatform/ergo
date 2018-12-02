@@ -67,14 +67,6 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     if (vs.length < maxVotes) vs ++ Array.fill(maxVotes - vs.length)(0: Byte) else vs
   }
 
-
-  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
-    val vs = ownTargets.flatMap { case (paramId, value) =>
-      if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
-    }.take(ParamVotesCount).toArray
-    padVotes(vs)
-  }
-
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
     val vs = votes.filter { case (paramId, _) =>
       if (paramId > 0) {
@@ -85,6 +77,13 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         false
       }
     }.map(_._1)
+    padVotes(vs)
+  }
+
+  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
+    val vs = ownTargets.flatMap { case (paramId, value) =>
+      if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
+    }.take(ParamVotesCount).toArray
     padVotes(vs)
   }
 

@@ -60,8 +60,34 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
     failFast
       .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
       .demandEqualArrays(rootDigest, header.stateRoot, "`rootDigest` does not correspond to header's `stateRoot`")
+      .demand(validManifestTree, "Manifest tree is invalid")
       .result
       .toTry
+  }
+
+  /** Checks that manifest tree consists of correct number of valid proxy nodes.
+    */
+  private def validManifestTree: Boolean = {
+    @tailrec
+    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]],
+                        qty: Int = 0, acc: Boolean = true): Boolean = {
+      nodes match {
+        case (n: ProxyInternalNode[Digest32]) +: tail =>
+          if (qty < math.pow(2, proverManifest.oldRootAndHeight._2 / 2) &&
+            java.util.Arrays.equals(n.computeLabel, n.label)) {
+            validProxyNodes(tail, qty + 1, acc)
+          } else {
+            false
+          }
+        case (n: InternalProverNode[Digest32]) +: tail =>
+          validProxyNodes(n.left +: n.right +: tail, qty, acc)
+        case (_: ProverLeaf[Digest32]) +: tail =>
+          validProxyNodes(tail, qty, acc)
+        case seq if seq.isEmpty =>
+          acc
+      }
+    }
+    validProxyNodes(Seq(proverManifest.oldRootAndHeight._1))
   }
 
 }

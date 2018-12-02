@@ -172,6 +172,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   property("applyModifier() - valid utxo snapshot") {
     val (us: UtxoState, _) = createUtxoState()
     forAll(validUtxoSnapshotGen) { snapshot =>
+      snapshot.manifest.validate(snapshot.lastHeaders.head) shouldBe 'success
       val recoveredState = us.applyModifier(snapshot).get
       java.util.Arrays.equals(recoveredState.rootHash, snapshot.lastHeaders.head.stateRoot) shouldBe true
     }

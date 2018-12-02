@@ -48,7 +48,7 @@ trait UtxoStateGenerators
   } yield {
     val header = lastHeaders.head.copy(stateRoot = tree.digest)
     val (proverManifest, proverSubtrees) = serializer.slice(tree)
-    val manifest = UtxoSnapshotManifest(proverManifest, lastHeaders.head.id)
+    val manifest = UtxoSnapshotManifest(proverManifest, header.id)
     val chunks = proverSubtrees.map(subtree => UtxoSnapshotChunk(subtree, manifest.id))
     UtxoSnapshot(manifest, chunks, header +: lastHeaders.tail)
   }

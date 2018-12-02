@@ -8,21 +8,23 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
-import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
+import scorex.core.{idToVersion, TransactionsCarryingPersistentNodeViewModifier, VersionTag}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
                        override val version: VersionTag,
                        store: Store,
                        val versionedBoxHolder: VersionedInMemoryBoxHolder,
-                       constants: StateConstants)
-  extends UtxoState(prover, version, store, constants) {
+                       constants: StateConstants,
+                       verifier: ErgoInterpreter)
+  extends UtxoState(prover, version, store, constants, verifier) {
 
   def size: Int = versionedBoxHolder.size
 
@@ -31,7 +33,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
   override def rollbackTo(version: VersionTag): Try[WrappedUtxoState] = super.rollbackTo(version) match {
     case Success(us) =>
       val updHolder = versionedBoxHolder.rollback(Algos.versionToBAW(us.version))
-      Success(new WrappedUtxoState(us.persistentProver, version, us.store, updHolder, constants))
+      Success(new WrappedUtxoState(us.persistentProver, version, us.store, updHolder, constants, verifier))
     case Failure(e) => Failure(e)
   }
 
@@ -46,10 +48,10 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
             Algos.versionToBAW(us.version),
             changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
             changes.toAppend.map(_.box))
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
+          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, verifier))
         case _ =>
           val updHolder = versionedBoxHolder.applyChanges(Algos.versionToBAW(us.version), Seq(), Seq())
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
+          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, verifier))
       }
     case Failure(e) => Failure(e)
   }
@@ -76,6 +78,6 @@ object WrappedUtxoState {
       IndexedSeq(version),
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
 
-    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants)
+    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants, ErgoInterpreter())
   }
 }

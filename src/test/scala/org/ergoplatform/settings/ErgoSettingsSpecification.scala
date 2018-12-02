@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
-  private val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45f)
+  private val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45)
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read(None)
@@ -16,19 +16,19 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
 
   property("should read default settings") {
     val settings = ErgoSettings.read(None)
-    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 10,
+    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 1000,
       mining = false, 1.second, offlineGeneration = false, 200, niPoPowSettings)
   }
 
   property("should read user settings from json file") {
     val settings = ErgoSettings.read(Some("src/test/resources/settings.json"))
-    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 10,
+    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 12,
       mining = false, 1.second, offlineGeneration = false, 200, niPoPowSettings)
   }
 
   property("should read user settings from HOCON file") {
     val settings = ErgoSettings.read(Some("src/test/resources/settings.conf"))
-    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 10,
+    settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 13,
       mining = false, 1.second, offlineGeneration = false, 200, niPoPowSettings)
   }
 

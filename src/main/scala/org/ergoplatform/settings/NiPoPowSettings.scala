@@ -1,3 +1,3 @@
 package org.ergoplatform.settings
 
-case class NiPoPowSettings(m: Int, k: Int, k1: Int, d: Float)
+case class NiPoPowSettings(enabled: Boolean, m: Int, k: Int, k1: Int, d: Double)

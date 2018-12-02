@@ -17,6 +17,8 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   val BlocksInChain = 10
   val BlocksToKeep: Int = BlocksInChain + 1
 
+  val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45)
+
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.headersHeight
     if (historyHeight < height) {
@@ -44,7 +46,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      mining = false, miningDelay, offlineGeneration = false, 200, niPoPowSettings)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

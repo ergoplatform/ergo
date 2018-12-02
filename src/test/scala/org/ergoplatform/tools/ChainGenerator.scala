@@ -26,10 +26,12 @@ import scala.util.Random
   */
 object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelpers with ScorexLogging {
 
-    val N: Int = 10000000
+  val N: Int = 10000000
   val k: Int = 128
   val pow = new AutolykosPowScheme(k, N)
   val blockInterval = 2.minute
+
+  val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
@@ -38,7 +40,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val miningDelay = 1.second
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+    minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, niPoPowSettings)
   val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, settings.chainSettings.monetary)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)

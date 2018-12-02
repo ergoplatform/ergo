@@ -195,9 +195,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
-    val minimalSuffix = 2
+    val niPoPowSettings = NiPoPowSettings(enabled = PoPoWBootstrap, 30, 30, 30, 0.45)
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      mining = false, miningDelay, offlineGeneration = false, 200, niPoPowSettings)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

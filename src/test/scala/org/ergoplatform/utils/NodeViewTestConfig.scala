@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NiPoPowSettings}
 
 import scala.concurrent.duration._
 
@@ -12,6 +12,7 @@ case class NodeViewTestConfig(stateType: StateType,
 
   def toSettings: ErgoSettings = {
     val defaultSettings = ErgoSettings.read(None)
+    val niPoPowSettings = NiPoPowSettings(enabled = popowBootstrap, 30, 30, 30, 0.45)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = DefaultFakePowScheme
@@ -20,7 +21,7 @@ case class NodeViewTestConfig(stateType: StateType,
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,
-        PoPoWBootstrap = popowBootstrap
+        poPowSettings = niPoPowSettings
       )
     )
   }

@@ -34,22 +34,22 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
   }
 
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
-    superChainQuality(chain, superChain, level)(m, d) && multiLevelQuality(chain, superChain, level)(k1, d)
+    superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
   }
 
-  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int)(d: Float): Boolean = {
+  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int): Boolean = {
     superChainSize > (1 - d) * math.pow(2, -level) * chainSize
   }
 
   /** @param chain      - Full chain (C)
     * @param superChain - Super-chain of level µ (C↑µ)
     * @param level      - Level of super-chain (µ) */
-  private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(m: Int, d: Float): Boolean = {
+  private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
     val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C[C↑µ[0]:C↑µ[−1]], or C'↓
     def checkLocalGoodnessAt(mValue: Int): Boolean = {
       mValue match {
         case mToTest if mToTest < chain.size &&
-          locallyGood(math.min(superChain.size, mToTest), math.min(downChain.size, mToTest), level)(d) =>
+          locallyGood(math.min(superChain.size, mToTest), math.min(downChain.size, mToTest), level) =>
           checkLocalGoodnessAt(mToTest + 1)
         case mToTest if mToTest < chain.size =>
           false
@@ -60,7 +60,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
     checkLocalGoodnessAt(m)
   }
 
-  private def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)(k1: Int, d: Float): Boolean = {
+  private def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
     val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C'↓
     def checkQualityAt(levelToCheck: Int): Boolean = {
       levelToCheck match {

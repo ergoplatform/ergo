@@ -78,7 +78,7 @@ class InfoRoutesSpec extends FlatSpec
     val emptyHistory = generateHistory(
       verifyTransactions = settings.nodeSettings.verifyTransactions,
       stateType = settings.nodeSettings.stateType,
-      PoPoWBootstrap = settings.nodeSettings.PoPoWBootstrap,
+      PoPoWBootstrap = settings.nodeSettings.poPowSettings.enabled,
       blocksToKeep = settings.nodeSettings.blocksToKeep
     )
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)

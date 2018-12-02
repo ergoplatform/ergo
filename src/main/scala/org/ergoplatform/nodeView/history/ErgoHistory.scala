@@ -192,7 +192,7 @@ object ErgoHistory extends ScorexLogging {
     val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
     val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
+    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPowSettings.enabled) match {
       case (true, true) =>
         new ErgoHistory with FullBlockSectionProcessor
           with FullPoPoWProofsProcessor {

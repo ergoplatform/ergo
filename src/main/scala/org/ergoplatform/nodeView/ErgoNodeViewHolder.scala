@@ -51,7 +51,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
-    * Tries to apply state to nodeView if possible.
+    * Tries to apply modifier to the state. Checks if snapshot creation needed, triggers it
+    * and publish `SemanticallySuccessfulModifier` in case of successful application.
+    * Marks modifier as invalid and publishes `SemanticallyFailedModification` otherwise.
     */
   override protected def applyState(history: ErgoHistory,
                                     stateToApply: State,
@@ -194,7 +196,8 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 
-/** This class guarantees to its inheritors the creation of correct instance of `ErgoNodeViewHolder`
+/**
+  * This class guarantees to its inheritors the creation of correct instance of `ErgoNodeViewHolder`
   * for the given instance of `StateType`
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]

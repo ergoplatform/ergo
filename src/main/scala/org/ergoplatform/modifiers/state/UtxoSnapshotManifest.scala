@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.state
 
-import com.google.common.primitives.Ints
+import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
@@ -16,7 +16,8 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.annotation.tailrec
 import scala.util.Try
 
-/** Holds general information about sliced state tree.
+/**
+  * Holds general information about sliced state tree.
   */
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
                                 blockId: ModifierId)
@@ -28,7 +29,7 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
 
   override lazy val serializer: Serializer[UtxoSnapshotManifest] = UtxoSnapshotManifestSerializer
 
-  override lazy val sizeOpt: Option[Int] = Some(bytes.length)
+  override lazy val sizeOpt: Option[Int] = None
 
   lazy val rootDigest: ADDigest = {
     val (root, height) = proverManifest.oldRootAndHeight
@@ -65,20 +66,21 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
       .toTry
   }
 
-  /** Checks that manifest tree consists of valid proxy nodes.
+  /**
+    * Checks that manifest tree consists of valid proxy nodes.
     */
   private def validManifestTree: Boolean = {
     @tailrec
-    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]], acc: Boolean = true): Boolean = {
+    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]]): Boolean = {
       nodes match {
         case (n: ProxyInternalNode[Digest32]) +: tail =>
-          if (java.util.Arrays.equals(n.computeLabel, n.label)) validProxyNodes(tail, acc) else false
+          if (java.util.Arrays.equals(n.computeLabel, n.label)) validProxyNodes(tail) else false
         case (n: InternalProverNode[Digest32]) +: tail =>
-          validProxyNodes(n.left +: n.right +: tail, acc)
+          validProxyNodes(n.left +: n.right +: tail)
         case (_: ProverLeaf[Digest32]) +: tail =>
-          validProxyNodes(tail, acc)
+          validProxyNodes(tail)
         case seq if seq.isEmpty =>
-          acc
+          true
       }
     }
     validProxyNodes(Seq(proverManifest.oldRootAndHeight._1))
@@ -97,9 +99,11 @@ object UtxoSnapshotManifestSerializer extends Serializer[UtxoSnapshotManifest] {
 
   override def toBytes(obj: UtxoSnapshotManifest): Array[Byte] = {
     val serializedProverManifest = serializer.manifestToBytes(obj.proverManifest)
-    idToBytes(obj.blockId) ++
-      Ints.toByteArray(serializedProverManifest.length) ++
+    Bytes.concat(
+      idToBytes(obj.blockId),
+      Ints.toByteArray(serializedProverManifest.length),
       serializedProverManifest
+    )
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotManifest] = Try {

@@ -5,10 +5,10 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, bytesToId}
 
-/** Holds all required elements to restore consistent state from snapshot.
+/**
+  * Holds all required elements to restore consistent state from snapshot.
   */
 case class UtxoSnapshot(manifest: UtxoSnapshotManifest,
                         chunks: Seq[UtxoSnapshotChunk],

@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.state
 
+import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
@@ -13,7 +14,8 @@ import scorex.util._
 import scala.annotation.tailrec
 import scala.util.Try
 
-/** Holds single subtree of sliced state tree.
+/**
+  * Holds prover subtree and manifestId it relates to.
   */
 case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF], manifestId: ModifierId)
   extends ErgoPersistentModifier with ModifierValidator {
@@ -30,7 +32,7 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
 
   override def parentId: ModifierId = manifestId
 
-  override lazy val sizeOpt: Option[Int] = Some(bytes.length)
+  override lazy val sizeOpt: Option[Int] = None
 
   def validate(manifest: UtxoSnapshotManifest): Try[Unit] = {
     failFast
@@ -41,29 +43,28 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
       .toTry
   }
 
-  /** Checks that each tree branch ends with ProverLeaf.
+  /**
+    * Checks that each tree branch ends with ProverLeaf.
     */
   private def validSubtree: Boolean = {
-    def isLeaf(n: ProverNodes[Digest32]): Boolean = n match {
-      case _: ProverLeaf[Digest32] => true
-      case _ => false
-    }
     def nonEmpty(n: InternalProverNode[Digest32]): Boolean = Option(n.left).flatMap(_ => Option(n.right)).nonEmpty
     @tailrec
-    def validTree(nodes: Seq[ProverNodes[Digest32]], validity: Boolean = true): Boolean = {
+    def validTree(nodes: Seq[ProverNodes[Digest32]]): Boolean = {
       nodes match {
         case (n: InternalProverNode[Digest32]) +: tail if nonEmpty(n) =>
-          validTree(n.left +: n.right +: tail, validity)
-        case (n: InternalProverNode[Digest32]) +: tail if Option(n.left).nonEmpty && isLeaf(n.left) =>
-          validTree(n.left +: tail, validity)
-        case (n: InternalProverNode[Digest32]) +: tail if Option(n.right).nonEmpty && isLeaf(n.right) =>
-          validTree(n.right +: tail, validity)
+          validTree(n.left +: n.right +: tail)
+        case (n: InternalProverNode[Digest32]) +: tail if Option(n.left).nonEmpty &&
+          n.left.isInstanceOf[ProverLeaf[Digest32]] =>
+          validTree(n.left +: tail)
+        case (n: InternalProverNode[Digest32]) +: tail if Option(n.right).nonEmpty &&
+          n.right.isInstanceOf[ProverLeaf[Digest32]] =>
+          validTree(n.right +: tail)
         case (_: InternalProverNode[Digest32]) +: _ =>
-          validTree(Seq.empty, validity = false)
+          false
         case (_: ProverLeaf[Digest32]) +: tail =>
-          validTree(tail, validity)
+          validTree(tail)
         case seq if seq.isEmpty =>
-          validity
+          true
       }
     }
     validTree(Seq(subtree.subtreeTop))
@@ -82,7 +83,7 @@ object UtxoSnapshotChunkSerializer extends Serializer[UtxoSnapshotChunk] {
 
   override def toBytes(obj: UtxoSnapshotChunk): Array[Byte] = {
     val serializedSubtree = serializer.subtreeToBytes(obj.subtree)
-    idToBytes(obj.manifestId) ++ serializedSubtree
+    Bytes.concat(idToBytes(obj.manifestId), serializedSubtree)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[UtxoSnapshotChunk] = Try {

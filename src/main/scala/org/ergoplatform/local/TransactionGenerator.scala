@@ -6,16 +6,18 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
+import sigmastate.SBoolean
+import sigmastate.Values.Value
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -34,6 +36,7 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
+  private val feeProp: Value[SBoolean.type] = ErgoState.feeProposition(settings.emission.settings.minerRewardDelay)
   private var transactionsPerBlock: Int = 0
   private var currentFullHeight: Int = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()
@@ -81,7 +84,7 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(Constants.FeeProposition), 100000L, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(feeProp), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>

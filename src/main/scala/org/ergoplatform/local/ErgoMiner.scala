@@ -260,9 +260,12 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules): Seq[ErgoTransaction] = {
+
+    val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, Constants.FeeProposition.bytes))
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
     val nextHeight = currentHeight + 1
+    val minerProp = ErgoState.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.proposition
@@ -270,7 +273,10 @@ object ErgoMiner extends ScorexLogging {
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
         currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerPk, currentHeight, Seq.empty, Map())
+
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, currentHeight, Seq.empty,
+        Map(R4 -> LongConstant(nextHeight)))
+
       ErgoTransaction(
         inputs,
         IndexedSeq(newEmissionBox, minerBox)
@@ -280,7 +286,8 @@ object ErgoMiner extends ScorexLogging {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
-      val minerBox = new ErgoBoxCandidate(feeAmount, minerPk, currentHeight, feeAssets, Map())
+      val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, currentHeight, feeAssets,
+        Map(R4 -> LongConstant(currentHeight)))
       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
     } else {
       None

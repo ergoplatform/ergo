@@ -26,7 +26,7 @@ import scala.util.Try
 class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
-  assert(n < 32, "n >= 32 is not allowed")
+  assert(n < 31, "n >= 31 is not allowed")
 
   /**
     * Total number of elements

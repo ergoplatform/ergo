@@ -24,8 +24,6 @@ package object mining {
 
   def randomSecret(): PrivateKey = DLogProverInput.random().w
 
-  def lg(x: Int): Int = (Math.log(x) / Math.log(2)).toInt.ensuring(s => Math.pow(2, s) == x)
-
   def pkToBytes(pk: ECPoint): Array[Byte] = pk.getEncoded(true).ensuring(_.length == PublicKeyLength)
 
   def pkFromBytes(bytes: Array[Byte]): ECPoint = group.curve.decodePoint(bytes)

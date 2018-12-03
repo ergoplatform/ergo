@@ -5,6 +5,7 @@ import org.ergoplatform.settings.{LaunchParameters, Parameters, ParametersSerial
 import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
@@ -130,6 +131,10 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
   def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = Try {
     val header = fullBlock.header
     val height = header.height
+
+    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+      throw new Error(s"Improper block applied: $fullBlock to state context $this")
+    }
 
     processExtension(fullBlock.extension, header.votes, height, votingEpochLength).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)

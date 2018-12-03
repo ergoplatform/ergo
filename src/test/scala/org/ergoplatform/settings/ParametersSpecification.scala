@@ -16,16 +16,32 @@ class ParametersSpecification extends ErgoPropertyTest {
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
   property("simple voting - start - conditions") {
-    val p: Parameters = Parameters(2, Map(KIncrease -> 1000000))
+    val kInit = 1000000
+
+    val p: Parameters = Parameters(2, Map(KIncrease -> kInit))
     val vr: VotingResults = VotingResults.empty
     val esc = ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(KIncrease, NoParameter, NoParameter)
-    esc.processExtension(p, votes, 2, votingEpochLength).isSuccess shouldBe true
+    val esc2 = esc.processExtension(p, votes, 2, votingEpochLength).get
 
     val wrongVotes1 = Array(KIncrease, KIncrease, NoParameter)
     esc.processExtension(p, wrongVotes1, 2, votingEpochLength).isSuccess shouldBe false
 
     val wrongVotes2 = Array(KIncrease, KDecrease, NoParameter)
     esc.processExtension(p, wrongVotes2, 2, votingEpochLength).isSuccess shouldBe false
+
+    val wrongVotes3 = Array(KIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
+    esc.processExtension(p, wrongVotes3, 2, votingEpochLength).isSuccess shouldBe false
+
+    val esc30 = esc2.processExtension(p, Array.fill(3)(NoParameter), 3, votingEpochLength).get
+
+    val esc40 = esc30.processExtension(p, Array.fill(3)(NoParameter), 4, votingEpochLength).get
+    esc40.currentParameters.k shouldBe kInit
+
+    val esc31 = esc2.processExtension(p, votes, 3, votingEpochLength).get
+
+    val p4 = Parameters(4, Map(KIncrease -> (kInit + Parameters.Kstep)))
+    val esc41 = esc31.processExtension(p4, Array.fill(3)(NoParameter), 4, votingEpochLength).get
+    esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }
 }

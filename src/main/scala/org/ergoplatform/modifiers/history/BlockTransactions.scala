@@ -25,7 +25,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
 
   override def digest: Digest32 = BlockTransactions.transactionsRoot(txs)
 
-  lazy val size = sizeOpt.getOrElse(BlockTransactionsSerializer.serialize(this).size)
+  lazy val size = sizeOpt.getOrElse(BlockTransactionsSerializer.toBytes(this).size)
 
   override def toString: String = {
     val idStr = Algos.encode(id)

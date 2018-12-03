@@ -12,7 +12,7 @@ class ObjectsStoreSpecification extends ErgoPropertyTest {
     forAll(defaultHeaderGen) { header =>
       objectsStore.get(header.id) shouldBe None
       objectsStore.put(header)
-      HistoryModifierSerializer.parseBytes(objectsStore.get(header.id).get).get shouldBe header
+      HistoryModifierSerializer.parseBytes(objectsStore.get(header.id).get) shouldBe header
       objectsStore.delete(header.id)
       objectsStore.get(header.id) shouldBe None
     }

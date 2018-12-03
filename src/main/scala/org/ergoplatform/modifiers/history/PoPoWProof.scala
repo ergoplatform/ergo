@@ -119,7 +119,7 @@ class PoPoWProofSerializer(powScheme: AutolykosPowScheme) extends ScorexSerializ
     w.put(obj.m)
     w.put(obj.k)
     w.put(obj.i)
-    HeaderSerializer.serialize(obj.suffix.head)
+    HeaderSerializer.serialize(obj.suffix.head, w)
     val suffixTail = obj.suffix.tail
     suffixTail.foreach { h =>
       HeaderSerializer.serializeWithoutInterlinks(h, w)

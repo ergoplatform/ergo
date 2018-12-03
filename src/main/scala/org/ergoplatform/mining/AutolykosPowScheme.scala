@@ -25,8 +25,8 @@ import scala.util.Try
   */
 class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
-  assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
   assert(n < 31, "n >= 31 is not allowed")
+  assert(k > 4, "n <= 4 is not allowed")
 
   /**
     * Total number of elements
@@ -52,7 +52,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
-    val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
+    val getElement: Int => BigInt = i => genElement(msg, p1, p2, Longs.toByteArray(i))
+    val f = genElements(s.n, getElement).sum.mod(q)
     val left = s.w.multiply(f.bigInteger)
     val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
@@ -153,6 +154,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
     val p1 = pkToBytes(genPk(sk))
     val p2 = pkToBytes(genPk(x))
+    val getElement: Int => BigInt = i => genElement(m, p1, p2, Longs.toByteArray(i))
 
     @tailrec
     def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
@@ -160,7 +162,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (x * genIndexes(Bytes.concat(m, nonce)).map(i => genElement(m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
+      val d = (x * genElements(nonce, getElement).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
@@ -196,25 +198,45 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
-    * [0,`N`)
-    */
-  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b256(seed)
-    val extendedHash = Bytes.concat(hash, hash.take(3))
-    (0 until k).map { i =>
-      Math.abs(Ints.fromByteArray(extendedHash.slice(i, i + 4))) % N
-    }
-  }.ensuring(_.length == k)
-
-  /**
     * Generate element of Autolykos equation.
     */
-  private def genElement(m: Array[Byte],
+  private def genElement(msg: Array[Byte],
                          pk: Array[Byte],
                          w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(indexBytes, M, pk, m, w))
+    hash(Bytes.concat(indexBytes, M, pk, msg, w))
   }
 
+  /**
+    * Generate k elements for concrete nonce.
+    * First 4 elements are chosen deterministic from the nonce.
+    * The rest elements are chosen using xor of last 4 bytes of these elements as a seed,
+    * mixing last 4 bytes of a newly generated element at every step
+    */
+  private def genElements(nonce: Array[Byte],
+                          getElement: Int => BigInt): Seq[BigInt] = {
+    assert(nonce.length == 8)
+    val doubledNonce = Bytes.concat(nonce, nonce)
+    val first4: Seq[BigInt] = (0 until 4) map { i =>
+      getElement(Math.abs(Ints.fromByteArray(doubledNonce.slice(i * 2, i * 2 + 4))) % N)
+    }
+    val seed = first4.map(_.toByteArray.takeRight(4)).reduce((a, b) => xor(a, b))
+
+    @tailrec
+    def elementsGeneration(acc: Seq[BigInt], seed: Array[Byte]): Seq[BigInt] = if (acc.length >= k) {
+      acc
+    } else {
+      val index = Math.abs(Ints.fromByteArray(seed)) % N
+      val element = getElement(index)
+      val nextSeed = xor(element.toByteArray.takeRight(4), seed)
+      elementsGeneration(element +: acc, nextSeed)
+    }
+
+    elementsGeneration(first4, seed)
+  }.ensuring(_.length == k)
+
+
+  private def xor(ha: Array[Byte], hb: Array[Byte]): Array[Byte] = {
+    ha.zip(hb).map(z => (z._1 ^ z._2).toByte)
+  }
 }

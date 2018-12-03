@@ -25,7 +25,7 @@ class NumericHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {
     if (bi < validRange) {
       bi.mod(q)
     } else {
-      log.debug(s"Calculate one more hash for ${encoder.encode(input)} and p=$q")
+      log.trace(s"Calculate one more hash for ${encoder.encode(input)} and p=$q")
       hash(hashed)
     }
   }

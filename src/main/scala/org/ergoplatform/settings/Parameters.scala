@@ -107,16 +107,16 @@ object Parameters {
 
   //Parameter identifiers
   val KIncrease = 1: Byte
-  val KDecrease = -KIncrease
+  val KDecrease = (-KIncrease).toByte
 
   val MinValuePerByteIncrease = 2: Byte
-  val MinValuePerByteDecrease = -MinValuePerByteIncrease
+  val MinValuePerByteDecrease = (-MinValuePerByteIncrease).toByte
 
   val MaxBlockSizeIncrease = 3: Byte
-  val MaxBlockSizeDecrease = -MaxBlockSizeIncrease
+  val MaxBlockSizeDecrease = (-MaxBlockSizeIncrease).toByte
 
   val MaxBlockCostIncrease = 4: Byte
-  val MaxBlockCostDecrease = -MaxBlockCostIncrease
+  val MaxBlockCostDecrease = (-MaxBlockCostIncrease).toByte
 
   val Kdefault = 1250000
   val Kmax = 5000000

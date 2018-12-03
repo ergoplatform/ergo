@@ -21,5 +21,11 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc = ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(KIncrease, NoParameter, NoParameter)
     esc.processExtension(p, votes, 2, votingEpochLength).isSuccess shouldBe true
+
+    val wrongVotes1 = Array(KIncrease, KIncrease, NoParameter)
+    esc.processExtension(p, wrongVotes1, 2, votingEpochLength).isSuccess shouldBe false
+
+    val wrongVotes2 = Array(KIncrease, KDecrease, NoParameter)
+    esc.processExtension(p, wrongVotes2, 2, votingEpochLength).isSuccess shouldBe false
   }
 }

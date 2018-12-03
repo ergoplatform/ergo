@@ -47,11 +47,11 @@ case class UtxoSnapshotChunk(subtree: BatchAVLProverSubtree[Digest32, Algos.HF],
     * Checks that each tree branch ends with ProverLeaf.
     */
   private def validSubtree: Boolean = {
-    def nonEmpty(n: InternalProverNode[Digest32]): Boolean = Option(n.left).flatMap(_ => Option(n.right)).nonEmpty
     @tailrec
     def validTree(nodes: Seq[ProverNodes[Digest32]]): Boolean = {
       nodes match {
-        case (n: InternalProverNode[Digest32]) +: tail if nonEmpty(n) =>
+        case (n: InternalProverNode[Digest32]) +: tail
+          if Option(n.left).flatMap(_ => Option(n.right)).nonEmpty =>
           validTree(n.left +: n.right +: tail)
         case (n: InternalProverNode[Digest32]) +: tail if Option(n.left).nonEmpty &&
           n.left.isInstanceOf[ProverLeaf[Digest32]] =>

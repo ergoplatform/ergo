@@ -71,19 +71,27 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
     */
   private def validManifestTree: Boolean = {
     @tailrec
-    def validProxyNodes(nodes: Seq[ProverNodes[Digest32]]): Boolean = {
+    def validationLoop(nodes: Seq[(ProverNodes[Digest32], Int)], maxHeight: Int = 0): Boolean = {
       nodes match {
-        case (n: ProxyInternalNode[Digest32]) +: tail =>
-          if (java.util.Arrays.equals(n.computeLabel, n.label)) validProxyNodes(tail) else false
-        case (n: InternalProverNode[Digest32]) +: tail =>
-          validProxyNodes(n.left +: n.right +: tail)
-        case (_: ProverLeaf[Digest32]) +: tail =>
-          validProxyNodes(tail)
+        case (n: ProxyInternalNode[Digest32], parentHeight) +: tail =>
+          if (n.isEmpty && java.util.Arrays.equals(n.computeLabel, n.label)) {
+            validationLoop(tail, math.max(maxHeight, parentHeight + 1))
+          } else {
+            false
+          }
+        case (n: InternalProverNode[Digest32], parentHeight) +: tail
+          if Option(n.left).flatMap(_ => Option(n.right)).nonEmpty =>
+          val childHeight = parentHeight + 1
+          validationLoop((n.left, childHeight) +: (n.right, childHeight) +: tail)
+        case (_: ProverLeaf[Digest32], parentHeight) +: tail =>
+          validationLoop(tail, math.max(maxHeight, parentHeight + 1))
         case seq if seq.isEmpty =>
-          true
+          maxHeight >= (proverManifest.oldRootAndHeight._2 / 2)
+        case _ =>
+          false
       }
     }
-    validProxyNodes(Seq(proverManifest.oldRootAndHeight._1))
+    validationLoop(Seq(proverManifest.oldRootAndHeight._1 -> 1))
   }
 
 }

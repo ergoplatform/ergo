@@ -6,7 +6,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.UtxoSnapshot
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -172,7 +172,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   property("applyModifier() - valid utxo snapshot") {
     val (us: UtxoState, _) = createUtxoState()
     forAll(validUtxoSnapshotGen) { snapshot =>
-      snapshot.manifest.validate(snapshot.lastHeaders.head) shouldBe 'success
+      UtxoSnapshotManifestSerializer.parseBytes(snapshot.manifest.bytes).get.validate(snapshot.lastHeaders.head) shouldBe 'success
       val recoveredState = us.applyModifier(snapshot).get
       java.util.Arrays.equals(recoveredState.rootHash, snapshot.lastHeaders.head.stateRoot) shouldBe true
     }

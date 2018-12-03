@@ -176,7 +176,7 @@ object HeaderSerializer extends Serializer[Header] {
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
       val repeatN: Int = 0xff & bytes(index)
-      require(repeatN > 0)
+      require(repeatN != 0)
       val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
       val links: Seq[ModifierId] = Array.fill(repeatN)(link)
       parseInterlinks(index + 33, endIndex, acc ++ links)

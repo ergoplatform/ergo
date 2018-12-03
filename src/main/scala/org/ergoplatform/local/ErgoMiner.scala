@@ -260,7 +260,8 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules): Seq[ErgoTransaction] = {
-    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2.filter(_.proposition == Constants.FeeProposition)
+    val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, Constants.FeeProposition.bytes))
     val nextHeight = currentHeight + 1
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>

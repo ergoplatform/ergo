@@ -60,17 +60,17 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
 
   def processExtension(extension: Extension,
-                       votes: Array[Byte],
+                       headerVotes: Array[Byte],
                        height: Int,
                        votingEpochLength: Int): Try[ErgoStateContext] = Try {
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
 
     //Check that votes extracted from block header are correct
     def checkVotes(votes: Array[Byte]): Unit = {
-      if (votes.distinct.length == votes.length) throw new Error("Double vote")
+      if (votes.distinct.length != votes.length) throw new Error(s"Double vote in ${votes.mkString}")
       if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
       //votes with id = 121..127 are prohibited
-      if (votes.exists(_ > Parameters.SoftFork)) throw new Error("Invalid vote")
+      if (votes.exists(_ > Parameters.SoftFork)) throw new Error(s"Invalid vote in $votes")
     }
 
     //Check that calculated parameters are matching ones written in the extension section of the block
@@ -89,10 +89,12 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
       throw new Error("Mandatory fields in genesis block")
     }
 
+    val votes = headerVotes.filter(_ != Parameters.NoParameter)
+
     checkVotes(votes)
 
     if (votingStarts(height)) {
-      val proposedVotes = votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
+      val proposedVotes = votes.map(id => id -> 1)
       val newVoting = VotingResults(proposedVotes)
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
@@ -104,7 +106,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
         ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)
       }
     } else {
-      val newVotes = votes.filter(_ != Parameters.NoParameter)
+      val newVotes = votes
       val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
       Success(ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, newVotingResults))
     }

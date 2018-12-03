@@ -48,7 +48,9 @@ case class Extension(headerId: ModifierId,
 }
 
 case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
-                              optionalFields: Seq[(Array[Byte], Array[Byte])])
+                              optionalFields: Seq[(Array[Byte], Array[Byte])]) {
+  def toExtension(headerId: ModifierId): Extension = Extension(headerId, mandatoryFields, optionalFields)
+}
 
 object Extension extends ApiCodecs {
 

@@ -132,39 +132,46 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putBytes(h.stateRoot)
     w.putLong(h.timestamp)
     w.putBytes(h.extensionRoot)
-    RequiredDifficulty.serialize(h.nBits)
+    RequiredDifficulty.serialize(h.nBits, w)
     w.putInt(h.height)
   }
 
   def serializeWithoutInterlinks(h: Header, w: Writer): Unit = {
     serializeWithoutInterlinksAndPow(h, w)
-    w.putUShort(0)
+    w.putULong(0)
     serializeSolution(h, w)
   }
 
   def serializeWithoutPow(h: Header, w: Writer): Unit = {
 
     @tailrec
+    @SuppressWarnings(Array("TraversableHead"))
     def serializeInterlink(links: Seq[ModifierId]): Unit= {
-      links match {
-        case Nil =>
-        case headLink :: _ =>
-          val repeating = links.count(_ == headLink)
-          w.putUByte(repeating)
-          w.putBytes(idToBytes(headLink))
-          serializeInterlink(links.drop(repeating))
+      if (links.nonEmpty) {
+        val headLink = links.head
+        val repeating = links.count(_ == headLink)
+        w.putUByte(repeating)
+        w.putBytes(idToBytes(headLink))
+        serializeInterlink(links.drop(repeating))
       }
     }
 
     serializeWithoutInterlinksAndPow(h, w)
 
-    w.putUShort(h.interlinks.size)
+    w.putULong(h.interlinks.size)
     serializeInterlink(h.interlinks)
   }
 
-  def bytesWithoutPow(header: Header): Array[Version] = {
+  def bytesWithoutPow(header: Header): Array[Byte] = {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     serializeWithoutPow(header, w)
+    w.result().toBytes
+  }
+
+
+  def bytesWithoutInterlinks(header: Header): Array[Byte] = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    serializeWithoutInterlinks(header, w)
     w.result().toBytes
   }
 
@@ -177,13 +184,13 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val parentId = bytesToId(r.getBytes(32))
     val ADProofsRoot = Digest32 @@ r.getBytes(32)
     val transactionsRoot = Digest32 @@ r.getBytes(32)
-    val stateRoot = ADDigest @@ r.getBytes(32)
+    val stateRoot = ADDigest @@ r.getBytes(33)
     val timestamp = r.getLong()
     val extensionHash = Digest32 @@ r.getBytes(32)
     val nBits = RequiredDifficulty.parse(r)
     val height = r.getInt()
 
-    val interlinksSize = r.getUShort()
+    val interlinksSize = r.getULong()
 
     @tailrec
     def parseInterlinks(acc: Seq[ModifierId]): Seq[ModifierId] = {

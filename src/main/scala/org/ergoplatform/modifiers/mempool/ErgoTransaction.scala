@@ -4,7 +4,7 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction}
+import org.ergoplatform.ErgoLikeTransaction.FlattenedTransaction
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
@@ -22,6 +22,8 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.serialization.ConstantStore
+import sigmastate.utils.SigmaByteReader
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
@@ -260,11 +262,12 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
 
   override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
-    ErgoLikeTransaction.flattenedTxSerializer.serialize(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
+    val flattenedTx = FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray)
+    ErgoLikeTransaction.FlattenedTransaction.sigmaSerializer.serializeWithGenericWriter(flattenedTx, w)
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val ftx = ErgoLikeTransaction.flattenedTxSerializer.parse(r)
+    val ftx = ErgoLikeTransaction.FlattenedTransaction.sigmaSerializer.parseWithGenericReader(r)
     ErgoTransaction(ftx.inputs, ftx.outputCandidates)
   }
 }

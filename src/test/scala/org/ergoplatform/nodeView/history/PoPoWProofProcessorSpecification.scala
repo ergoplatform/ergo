@@ -168,7 +168,7 @@ class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink 
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
       val serializer = new PoPoWProofSerializer(popowHistory.powScheme)
-      val recovered = serializer.parseBytes(serializer.toBytes(proof)).get
+      val recovered = serializer.parseBytes(serializer.toBytes(proof))
       serializer.toBytes(proof) shouldEqual serializer.toBytes(recovered)
     }
   }

@@ -37,7 +37,7 @@ object TransactionIdsForHeaderSerializer extends ScorexSerializer[TransactionIds
   val fixedSize: Int = NodeViewModifier.ModifierIdSize
 
   override def serialize(obj: TransactionIdsForHeader, w: Writer): Unit = {
-    obj.serializedIds.ensuring(_.length % fixedSize == 0)
+    obj.serializedIds.ensuring(_.forall(_.length == fixedSize))
     w.putInt(obj.serializedIds.size)
     obj.serializedIds.foreach{ id =>
       w.putBytes(id)

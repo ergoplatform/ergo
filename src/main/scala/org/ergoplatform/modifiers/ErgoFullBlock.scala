@@ -33,7 +33,7 @@ case class ErgoFullBlock(header: Header,
 
   override val sizeOpt: Option[Int] = None
 
-  override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
+  lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 }
 
 object ErgoFullBlock extends ApiCodecs {

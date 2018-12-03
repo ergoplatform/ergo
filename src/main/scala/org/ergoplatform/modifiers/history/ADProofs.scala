@@ -28,7 +28,7 @@ case class ADProofs(headerId: ModifierId,
 
   override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
-  lazy val size: Int = sizeOpt.getOrElse(ADProofSerializer.serialize(this).size)
+  lazy val size: Int = sizeOpt.getOrElse(ADProofSerializer.toBytes(this).size)
 
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).

@@ -111,7 +111,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     mandatoryElements <- Gen.listOf(kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
     optionalElementsElements <- Gen.listOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
   } yield Extension(headerId,
-    mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
+    mandatoryElements,
     optionalElementsElements.take(Extension.MaxOptionalFields))
 
 

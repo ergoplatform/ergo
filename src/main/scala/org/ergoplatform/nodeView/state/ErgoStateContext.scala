@@ -10,6 +10,7 @@ import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 
+import scala.collection.mutable
 import scala.util.{Success, Try}
 
 case class VotingResults(results: Array[(Byte, Int)]) {
@@ -65,12 +66,18 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
                        votingEpochLength: Int): Try[ErgoStateContext] = Try {
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
 
-    //Check that votes extracted from block header are correct
+    //Check that non-zero votes extracted from block header are correct
     def checkVotes(votes: Array[Byte]): Unit = {
-      if (votes.distinct.length != votes.length) throw new Error(s"Double vote in ${votes.mkString}")
       if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
       //votes with id = 121..127 are prohibited
       if (votes.exists(_ > Parameters.SoftFork)) throw new Error(s"Invalid vote in $votes")
+
+      val prevVotes = mutable.Buffer[Byte]()
+      votes.foreach{v =>
+        if(prevVotes.contains(v))           throw new Error(s"Double vote in ${votes.mkString}")
+        if(prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+        prevVotes += v
+      }
     }
 
     //Check that calculated parameters are matching ones written in the extension section of the block

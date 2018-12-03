@@ -6,7 +6,7 @@ class NiPoPowProofSpec extends ErgoPropertyTest {
 
   property("headers of level") {
     forAll(validNiPoPowProofGen) { proof =>
-      proof.headersOfLevel(0) shouldEqual proof.prefix
+      proof.prefix.chainOfLevel(0) shouldEqual proof.prefix.chain
     }
   }
 

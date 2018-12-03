@@ -14,7 +14,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
   private val d = settings.d
 
   def prove(chain: Seq[Header]): NiPoPowProof = {
-    assert(chain.lengthCompare(k) >= 0, "Can not prove chain of size < k")
+    assert(chain.lengthCompare(k) >= 0, s"Can not prove chain of size < $k")
     def provePrefix(anchoringPoint: Header, level: Int, acc: Seq[Header] = Seq.empty): Seq[Header] = {
       if (level >= 0) {
         val subChain = chain.dropRight(k)

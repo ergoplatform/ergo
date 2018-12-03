@@ -4,14 +4,10 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.{MinerPubkey, Outputs}
+import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import sigmastate.Values.{ConcreteCollection, IntConstant, Value}
-import sigmastate._
-import sigmastate.serialization.OpCodes
-import sigmastate.utxo.{Append, ByIndex, ExtractScriptBytes, SizeOf}
 
 
 object Constants {
@@ -41,16 +37,11 @@ object Constants {
   val StorageContractCost: Long = 50
 
   val StorageIndexVarId: Byte = Byte.MaxValue
-  
+
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val FeeProposition: Value[SBoolean.type] = {
-    val correctMinerProposition = EQ(ExtractScriptBytes(ByIndex(Outputs, IntConstant(0))),
-      Append(ConcreteCollection(OpCodes.ProveDlogCode, SGroupElement.typeCode), MinerPubkey))
-    val outputsNum = EQ(SizeOf(Outputs), 1)
-    AND(correctMinerProposition, outputsNum)
-  }
+  val DummyPk: ProveDlog = DLogProverInput(BigInt("1").bigInteger).publicImage
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,

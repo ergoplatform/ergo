@@ -6,6 +6,7 @@ import akka.pattern.ask
 import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -78,7 +79,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(Constants.FeeProposition),
+    requests :+ PaymentRequest(Pay2SAddress(ErgoState.feeProposition(ergoSettings.emission.settings.minerRewardDelay)),
       feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), None, None)
   }
 

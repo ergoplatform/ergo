@@ -87,7 +87,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
-        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, Constants.FeeProposition, r.s.stateContext.currentHeight)
+        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, feeProp, r.s.stateContext.currentHeight)
         val outputs = (1 until desiredSize).map { _ =>
           new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
         }

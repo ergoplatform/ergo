@@ -20,4 +20,3 @@ case class ChainSettings(addressPrefix: Byte,
 
 
 
-case class VotingSettings(votingLength: Int)

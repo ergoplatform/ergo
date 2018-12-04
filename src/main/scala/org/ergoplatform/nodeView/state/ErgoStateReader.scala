@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, VotingSettings}
 import scorex.core.transaction.state.StateReader
 import scorex.util.ScorexLogging
 import scorex.crypto.authds.ADDigest
@@ -12,7 +12,7 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
   val store: Store
   val constants: StateConstants
 
-  protected lazy val VotingEpochLength: Int = constants.settings.chainSettings.voting.votingLength
+  protected lazy val votingSettings: VotingSettings = constants.settings.chainSettings.voting
 
   def stateContext: ErgoStateContext = store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
     .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)

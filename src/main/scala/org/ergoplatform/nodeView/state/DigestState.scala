@@ -48,7 +48,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          stateContext.appendFullBlock(fb, VotingEpochLength).flatMap {currentStateContext =>
+          stateContext.appendFullBlock(fb, votingSettings).flatMap {currentStateContext =>
             Try {
               val txs = fb.blockTransactions.txs
 
@@ -132,7 +132,7 @@ class DigestState protected(override val version: VersionTag,
   private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
     val version: VersionTag = idToVersion(fullBlock.header.id)
     val height = fullBlock.header.height
-    stateContext.appendFullBlock(fullBlock, VotingEpochLength).flatMap {newStateContext =>
+    stateContext.appendFullBlock(fullBlock, votingSettings).flatMap {newStateContext =>
       val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
       update(version, fullBlock.header.stateRoot, Seq(cb))
     }

@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, VotingSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -125,7 +125,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendFullBlock(invalidErgoFullBlockGen.sample.get, 1024).get
+      val newSC = us.stateContext.appendFullBlock(invalidErgoFullBlockGen.sample.get, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -148,7 +148,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
       val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
       val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), Extension(header), None)
-      val newSC = us.stateContext.appendFullBlock(fb, 1024).get
+      val newSC = us.stateContext.appendFullBlock(fb, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }

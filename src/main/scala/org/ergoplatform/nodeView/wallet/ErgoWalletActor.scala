@@ -29,7 +29,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
-  private val VotingEpochLength = ergoSettings.chainSettings.voting.votingLength
+  private val votingSettings = ergoSettings.chainSettings.voting
 
   private lazy val seed: String = ergoSettings.walletSettings.seed
 
@@ -133,7 +133,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
     case ScanOnchain(fullBlock) =>
       val txsFound = {
-        stateContext = stateContext.appendFullBlock(fullBlock, VotingEpochLength).get //todo: .get?
+        stateContext = stateContext.appendFullBlock(fullBlock, votingSettings).get //todo: .get?
         fullBlock.transactions.count(tx => scan(tx, Some(height)))
       }
       (1 to txsFound).foreach(_ => self ! Resolve)

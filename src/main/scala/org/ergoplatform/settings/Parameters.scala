@@ -38,6 +38,16 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     */
   lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
+  lazy val softForkStartingHeight   = parametersTable.getOrElse(SoftForkStartingHeight, -1)
+  lazy val softForkVotesCollected   = parametersTable.getOrElse(SoftForkVotesCollected, -1)
+  lazy val softForkActivationHeight = parametersTable.getOrElse(SoftForkActivationHeight, -1)
+
+  def softForkActivated(height: Height) = softForkActivationHeight == height
+
+  def forkUpdate(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
+    ???
+  }
+
   def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
     val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
@@ -100,7 +110,7 @@ object Parameters {
   val SoftFork = 120: Byte
   val SoftForkVotesCollected = 121: Byte
   val SoftForkStartingHeight = 122: Byte
-  val ActivationHeight = 123: Byte
+  val SoftForkActivationHeight = 123: Byte
 
   //A vote for nothing
   val NoParameter = 0: Byte

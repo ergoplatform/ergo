@@ -240,7 +240,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
 
-  val votingSettings = VotingSettings(1024)
+  val votingSettings = VotingSettings(1024, 32, 128)
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     size <- Gen.choose(0, Constants.LastHeadersInContext + 3)

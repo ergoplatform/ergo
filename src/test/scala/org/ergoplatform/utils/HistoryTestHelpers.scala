@@ -48,7 +48,6 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val votingSettings = VotingSettings(8)
     val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, votingSettings,
       DefaultFakePowScheme, settings.chainSettings.monetary)
 

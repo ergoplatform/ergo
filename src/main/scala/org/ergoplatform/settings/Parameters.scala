@@ -132,7 +132,8 @@ object Parameters {
     KIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
-    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block"
+    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
+    SoftFork -> "Soft-fork (increasing version of a block)"
   )
 
   lazy val stepsTable: Map[Byte, Int] = Map(

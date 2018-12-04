@@ -13,7 +13,7 @@ case class ChainSettings(addressPrefix: Byte,
                          blockInterval: FiniteDuration,
                          epochLength: Int,
                          useLastEpochs: Int,
-                         votingSettings: VotingSettings,
+                         voting: VotingSettings,
                          powScheme: PowScheme,
                          monetary: MonetarySettings,
                          genesisId: Option[ModifierId] = None)

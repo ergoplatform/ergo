@@ -24,23 +24,29 @@ class ParametersSpecification extends ErgoPropertyTest {
     val votes = Array(KIncrease, NoParameter, NoParameter)
     val esc2 = esc.processExtension(p, votes, 2, votingEpochLength).get
 
+    //double vote
     val wrongVotes1 = Array(KIncrease, KIncrease, NoParameter)
     esc.processExtension(p, wrongVotes1, 2, votingEpochLength).isSuccess shouldBe false
 
+    //contradictory votes
     val wrongVotes2 = Array(KIncrease, KDecrease, NoParameter)
     esc.processExtension(p, wrongVotes2, 2, votingEpochLength).isSuccess shouldBe false
 
+    //too many votes - only two ordinary changes allowed per epoch
     val wrongVotes3 = Array(KIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
     esc.processExtension(p, wrongVotes3, 2, votingEpochLength).isSuccess shouldBe false
 
+    //no quorum gathered - no parameter change
     val esc30 = esc2.processExtension(p, Array.fill(3)(NoParameter), 3, votingEpochLength).get
-
     val esc40 = esc30.processExtension(p, Array.fill(3)(NoParameter), 4, votingEpochLength).get
     esc40.currentParameters.k shouldBe kInit
 
+    //quorum gathered - parameter change
     val esc31 = esc2.processExtension(p, votes, 3, votingEpochLength).get
-
     val p4 = Parameters(4, Map(KIncrease -> (kInit + Parameters.Kstep)))
+
+    esc31.currentVoting.results.filter(_._1 == KIncrease).head._2 shouldBe 2
+
     val esc41 = esc31.processExtension(p4, Array.fill(3)(NoParameter), 4, votingEpochLength).get
     esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }

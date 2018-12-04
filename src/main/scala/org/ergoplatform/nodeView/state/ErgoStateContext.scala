@@ -67,15 +67,14 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
     def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
 
     //Check that non-zero votes extracted from block header are correct
-    def checkVotes(votes: Array[Byte]): Unit = {
+    def checkVotes(votes: Array[Byte], epochStarts: Boolean): Unit = {
       if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
-      //votes with id = 121..127 are prohibited
-      if (votes.exists(_ > Parameters.SoftFork)) throw new Error(s"Invalid vote in $votes")
 
       val prevVotes = mutable.Buffer[Byte]()
       votes.foreach{v =>
         if(prevVotes.contains(v))           throw new Error(s"Double vote in ${votes.mkString}")
         if(prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+        if(epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
         prevVotes += v
       }
     }
@@ -98,9 +97,11 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
     val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
-    checkVotes(votes)
+    val epochStarts = votingStarts(height)
 
-    if (votingStarts(height)) {
+    checkVotes(votes, epochStarts)
+
+    if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
       val newVoting = VotingResults(proposedVotes)
 

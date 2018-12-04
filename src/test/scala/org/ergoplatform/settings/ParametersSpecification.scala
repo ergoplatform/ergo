@@ -11,9 +11,10 @@ class ParametersSpecification extends ErgoPropertyTest {
   import Parameters._
 
   private val headerId = scorex.util.bytesToId(Array.fill(32)(0: Byte))
+
   private val votingEpochLength = 2
 
-  override val votingSettings = VotingSettings(votingEpochLength)
+  override val votingSettings = VotingSettings(votingEpochLength, 2, 2)
 
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 

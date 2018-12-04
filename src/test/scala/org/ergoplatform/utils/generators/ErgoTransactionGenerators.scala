@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingResults}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{Constants, VotingSettings}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
@@ -249,7 +249,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     headers match {
       case s :: tail => tail.
-        foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingResults.empty)) { case (c, h) =>
+        foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty)) { case (c, h) =>
           c.appendFullBlock(s, votingSettings).get
         }
       case _ => ErgoStateContext.empty(stateRoot)

@@ -25,6 +25,15 @@ object VotingResults {
   val empty = VotingResults(Array.empty)
 }
 
+case class VotingData(currentVoting: VotingResults,
+                      softForkVotingStartingHeight: Int = 0,
+                      softForkVotesCollected: Int = 0,
+                      activationHeight: Int = 0)
+
+object VotingData {
+  val empty = VotingData(VotingResults.empty)
+}
+
 /**
   * Additional data required for transactions validation
   *
@@ -36,11 +45,10 @@ object VotingResults {
 case class ErgoStateContext(lastHeaders: Seq[Header],
                             genesisStateDigest: ADDigest,
                             currentParameters: Parameters,
-                            currentVoting: VotingResults,
-                            softForkVotingStartingHeight: Int = 0,
-                            softForkVotesCollected: Int = 0,
-                            activationHeight: Int = 0)
+                            votingData: VotingData)
   extends BytesSerializable with ScorexEncoding {
+
+  lazy val currentVoting = votingData.currentVoting
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -104,7 +112,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
     if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
-      val newVoting = VotingResults(proposedVotes)
+      val newVoting = VotingData(VotingResults(proposedVotes))
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
 
@@ -117,7 +125,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
     } else {
       val newVotes = votes
       val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
-      Success(ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, newVotingResults))
+      Success(ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, VotingData(newVotingResults)))
     }
   }.flatten
 
@@ -126,7 +134,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
     * the latter according to the former.
     *
     * @param fullBlock         - full block (transactions, extension section, maybe state transformation proofs)
-    * @param votingEpochLength - length of voting epoch (system constant)
+    * @param votingSettings    - chain-wide voting settings
     * @return
     */
   def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
@@ -148,7 +156,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
 object ErgoStateContext {
   def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingResults.empty)
+    ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
   }
 }
 
@@ -202,7 +210,7 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
     ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
       val lastHeaders = loop(startPos = 37, 37 + length, Seq.empty)
-      ErgoStateContext(lastHeaders, genesisDigest, params, votes)
+      ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))
     }
   }.flatten
 }

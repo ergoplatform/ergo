@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.modifiers.history.Extension
-import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingResults}
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData, VotingResults}
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
 
@@ -21,7 +21,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     val kInit = 1000000
 
     val p: Parameters = Parameters(2, Map(KIncrease -> kInit))
-    val vr: VotingResults = VotingResults.empty
+    val vr: VotingData = VotingData.empty
     val esc = ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(KIncrease, NoParameter, NoParameter)
     val esc2 = esc.processExtension(p, votes, 2, votingSettings).get

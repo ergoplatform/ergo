@@ -48,8 +48,9 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, epochLength, useLastEpochs, DefaultFakePowScheme,
-      settings.chainSettings.monetary)
+    val votingSettings = VotingSettings(8)
+    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, votingSettings,
+      DefaultFakePowScheme, settings.chainSettings.monetary)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,

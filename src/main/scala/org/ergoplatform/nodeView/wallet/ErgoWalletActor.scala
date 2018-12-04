@@ -29,7 +29,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
-  private val VotingEpochLength = ergoSettings.chainSettings.votingLength
+  private val VotingEpochLength = ergoSettings.chainSettings.votingSettings.votingLength
 
   private lazy val seed: String = ergoSettings.walletSettings.seed
 

@@ -12,7 +12,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = 0
 
-  private lazy val VotingEpochLength = chainSettings.votingLength
+  private lazy val VotingEpochLength = chainSettings.votingSettings.votingLength
 
   def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)

@@ -37,11 +37,10 @@ object VotingResults {
 case class ErgoStateContext(lastHeaders: Seq[Header],
                             genesisStateDigest: ADDigest,
                             currentParameters: Parameters,
-                            currentVoting: VotingResults
-                            //,softForkVotingStartingHeight: Int,
-                            //softForkVotesCollected: Int,
-                            //activationHeight: Int
-                           )
+                            currentVoting: VotingResults,
+                            softForkVotingStartingHeight: Int = 0,
+                            softForkVotesCollected: Int = 0,
+                            activationHeight: Int = 0)
   extends BytesSerializable with ScorexEncoding {
 
   // State root hash before the last block

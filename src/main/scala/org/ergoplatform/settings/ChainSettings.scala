@@ -11,9 +11,13 @@ import scala.concurrent.duration.FiniteDuration
   */
 case class ChainSettings(addressPrefix: Byte,
                          blockInterval: FiniteDuration,
-                         votingLength: Int,
                          epochLength: Int,
                          useLastEpochs: Int,
+                         votingSettings: VotingSettings,
                          powScheme: PowScheme,
                          monetary: MonetarySettings,
                          genesisId: Option[ModifierId] = None)
+
+
+
+case class VotingSettings(votingLength: Int)

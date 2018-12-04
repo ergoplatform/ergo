@@ -12,7 +12,7 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
   val store: Store
   val constants: StateConstants
 
-  protected lazy val VotingEpochLength: Int = constants.settings.chainSettings.votingLength
+  protected lazy val VotingEpochLength: Int = constants.settings.chainSettings.votingSettings.votingLength
 
   def stateContext: ErgoStateContext = store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
     .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)

@@ -42,7 +42,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
-  private lazy val VotingEpochLength = ergoSettings.chainSettings.votingLength
+  private lazy val VotingEpochLength = ergoSettings.chainSettings.votingSettings.votingLength
 
   //shared mutable state
   private var isMining = false

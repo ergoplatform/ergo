@@ -15,7 +15,7 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
-  lazy val VotingEpochLength: Int = chainSettings.votingSettings.votingLength
+  lazy val VotingEpochLength: Int = chainSettings.voting.votingLength
 
   /**
     * Id of header that contains transactions and proofs

@@ -36,6 +36,10 @@ class ParametersSpecification extends ErgoPropertyTest {
     val wrongVotes3 = Array(KIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
     esc.processExtension(p, wrongVotes3, 2, votingEpochLength).isSuccess shouldBe false
 
+    //too many votes - a vote proposed on non-existing parameter
+    val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
+    esc.processExtension(p, wrongVotes4, 2, votingEpochLength).isSuccess shouldBe false
+
     //no quorum gathered - no parameter change
     val esc30 = esc2.processExtension(p, Array.fill(3)(NoParameter), 3, votingEpochLength).get
     val esc40 = esc30.processExtension(p, Array.fill(3)(NoParameter), 4, votingEpochLength).get

@@ -4,7 +4,8 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
@@ -24,7 +25,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
-      new WrappedDigestState(digestState, wus, settings)
+      new WrappedDigestState(digestState, wus, settings, ErgoInterpreter())
     }
   }
 

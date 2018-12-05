@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
@@ -42,6 +43,8 @@ object Constants {
   val LastHeadersInContext = 10
 
   val DummyPk: ProveDlog = DLogProverInput(BigInt("1").bigInteger).publicImage
+
+  val HeightRegister: NonMandatoryRegisterId = R4
 
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,

@@ -32,7 +32,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("collect reward from transaction fees only") {
     val bh = boxesHolderGen.sample.get
     val us = createUtxoState(bh)
-    val height = ErgoHistory.GenesisHeight
+    val height = us.stateContext.currentHeight
     val blockTx = validTransactionFromBoxes(bh.boxes.take(10).values.toIndexedSeq, outputsProposition = feeProp)
 
     val txs = ErgoMiner.collectRewards(None, height, Seq(blockTx), defaultMinerPk, settings.emission)

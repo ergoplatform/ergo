@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, R4}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -271,11 +271,11 @@ object ErgoMiner extends ScorexLogging {
       val prop = emissionBox.proposition
       val emissionAmount = emission.emissionAtHeight(nextHeight)
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
-        currentHeight, Seq(), Map(R4 -> LongConstant(nextHeight)))
+        currentHeight, Seq(), Map(Constants.HeightRegister -> LongConstant(nextHeight)))
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
       val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, currentHeight, Seq.empty,
-        Map(R4 -> LongConstant(nextHeight)))
+        Map(Constants.HeightRegister -> LongConstant(nextHeight)))
 
       ErgoTransaction(
         inputs,
@@ -287,7 +287,7 @@ object ErgoMiner extends ScorexLogging {
       val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, currentHeight, feeAssets,
-        Map(R4 -> LongConstant(currentHeight)))
+        Map(Constants.HeightRegister -> LongConstant(nextHeight)))
       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
     } else {
       None

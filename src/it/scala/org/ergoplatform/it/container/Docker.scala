@@ -278,6 +278,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
+  def stopNode(node: Node, secondsToWait: Int): Unit = stopNode(node.containerId, secondsToWait)
+
   def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.stopContainer(containerId, secondsToWait)

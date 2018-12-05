@@ -25,7 +25,8 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: Store,
-                            ergoSettings: ErgoSettings)
+                            ergoSettings: ErgoSettings,
+                            val verifier: ErgoInterpreter)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
@@ -58,7 +59,6 @@ class DigestState protected(override val version: VersionTag,
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
               .get.map(v => ErgoBoxSerializer.parseBytes(v))
             val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
-            implicit val verifier: ErgoInterpreter = ErgoInterpreter()
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
               val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
@@ -67,7 +67,8 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, currentStateContext).get
+              verifier.IR.resetContext() // ensure there is no garbage in the IRContext
+              tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
             if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
 
@@ -120,7 +121,7 @@ class DigestState protected(override val version: VersionTag,
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, ergoSettings)
+      new DigestState(version, rootHash, store, ergoSettings, verifier)
     }
   }
 
@@ -145,7 +146,7 @@ class DigestState protected(override val version: VersionTag,
     store.update(wrappedVersion,
       toRemove = Seq.empty,
       toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)) ++ additionalData)
-    new DigestState(newVersion, newRootHash, store, ergoSettings)
+    new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
   }
 
   // DigestState is not initialized yet. Waiting for first full block to apply without checks
@@ -160,14 +161,14 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              settings: ErgoSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = settings.nodeSettings.keepVersions)
-
+    val verifier = ErgoInterpreter()
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, settings)
+          new DigestState(version, rootHash, store, settings, verifier)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings)
+          new DigestState(inVersion, rootHash, store, settings, verifier)
             .update(version, rootHash, Seq()).get //sync store
         }
         state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
@@ -176,7 +177,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case (None, None) =>
         val version = bytesToVersion(store.lastVersionID.get.data)
         val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, settings)
+        new DigestState(version, ADDigest @@ rootHash, store, settings, verifier)
       case _ => ???
     }
   }.recoverWith { case e =>

@@ -53,7 +53,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default, MemoryPoolSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

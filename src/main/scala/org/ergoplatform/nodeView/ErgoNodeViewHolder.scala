@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.{ErgoMempoolActor, ErgoMempoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -18,7 +18,7 @@ import scorex.crypto.authds.ADDigest
 import scala.util.Try
 
 
-abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
+abstract class ErgoNodeViewHolder[S <: ErgoState[S]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
   extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
 
@@ -26,11 +26,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
 
-  override type MS = State
+  override type State = S
   override type SI = ErgoSyncInfo
-  override type HIS = ErgoHistory
-  override type VL = ErgoWallet
-  override type MP = ErgoMemPool
+  override type History = ErgoHistory
+  override type Vault = ErgoWallet
+  override type MPool = ErgoMempoolReader
 
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
@@ -58,7 +58,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
 
-    val memPool = ErgoMemPool.empty
+    val memPool = ErgoMempoolActor.empty(settings.memoryPoolSettings)
 
     (history, state, wallet, memPool)
   }
@@ -73,7 +73,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
-    val memPool = ErgoMemPool.empty
+    val memPool = ErgoMemPool.empty(settings.memoryPoolSettings)
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
     Some((history, state, wallet, memPool))

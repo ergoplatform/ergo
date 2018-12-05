@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.settings.MemoryPoolSettings
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._
@@ -47,7 +48,7 @@ object ErgoMemPoolBenchmark
 
   private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
                     txsInIncomeOrder: Seq[ErgoTransaction]) = {
-    val pool = ErgoMemPool.empty
+    val pool = ErgoMemPool.empty(MemoryPoolSettings.default)
     val futures = txsByWaitingGroups.map(group => {
       pool.waitForAll(group)
     })

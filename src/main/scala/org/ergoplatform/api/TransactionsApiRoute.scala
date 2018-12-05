@@ -7,7 +7,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.ErgoMempoolReader
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -22,10 +22,10 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     getUnconfirmedTransactionsR ~ sendTransactionR
   }
 
-  private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
+  private def getMemPool: Future[ErgoMempoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.unconfirmed.values.toSeq.slice(offset, offset + limit).map(_.asJson).asJson
+    p.unconfirmedTransactions.slice(offset, offset + limit).toSeq.map(_.asJson).asJson
   }
 
   def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>

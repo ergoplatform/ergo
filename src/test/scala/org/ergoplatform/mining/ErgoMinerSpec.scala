@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMempoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -64,7 +64,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-    val pool: ErgoMemPoolReader = r.m
+    val pool: ErgoMempoolReader = r.m
     val wallet: ErgoWalletReader = r.w
 
     val minerRef: ActorRef = ErgoMinerRef(
@@ -169,13 +169,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
     expectNoMessage(1 seconds)
 
-    r.m.unconfirmed.size shouldBe 2
+    r.m.unconfirmedTransactions.size shouldBe 2
 
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
 
-    r.m.unconfirmed.size shouldBe 0
+    r.m.unconfirmedTransactions.size shouldBe 0
 
     val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)

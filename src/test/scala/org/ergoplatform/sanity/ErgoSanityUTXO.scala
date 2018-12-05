@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, MemoryPoolSettings}
 import org.scalacheck.Gen
 import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, Outgoing}
@@ -47,7 +47,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val pool = ErgoMemPool.empty
+    val pool = ErgoMemPool.empty(MemoryPoolSettings.default)
     implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)

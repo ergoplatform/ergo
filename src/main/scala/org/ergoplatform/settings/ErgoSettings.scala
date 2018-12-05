@@ -18,7 +18,8 @@ case class ErgoSettings(directory: String,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
-                        cacheSettings: CacheSettings) {
+                        cacheSettings: CacheSettings,
+                        memoryPoolSettings: MemoryPoolSettings) {
   lazy val metadata = Metadata(chainSettings.addressPrefix)
   lazy val emission = new EmissionRules(chainSettings.monetary)
 }
@@ -43,6 +44,7 @@ object ErgoSettings extends ScorexLogging
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
+    val mempoolSettings = config.as[MemoryPoolSettings](s"$configPath.mempool")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
@@ -51,7 +53,8 @@ object ErgoSettings extends ScorexLogging
     }
 
     consistentSettings(
-      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings)
+      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings,
+                   cacheSettings, mempoolSettings)
     )
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.nodeView.ErgoReadersHolder._
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.ErgoMempoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.NodeViewHolder.ReceivableMessages._
@@ -21,7 +21,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
 
   var historyReaderOpt: Option[ErgoHistoryReader] = None
   var stateReaderOpt: Option[ErgoStateReader] = None
-  var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
+  var mempoolReaderOpt: Option[ErgoMempoolReader] = None
   var walletReaderOpt: Option[ErgoWalletReader] = None
 
   @SuppressWarnings(Array("IsInstanceOf"))
@@ -32,7 +32,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case ChangedState(reader: ErgoStateReader@unchecked) if reader.isInstanceOf[ErgoStateReader] =>
       stateReaderOpt = Some(reader)
 
-    case ChangedMempool(reader: ErgoMemPoolReader@unchecked) if reader.isInstanceOf[ErgoMemPoolReader] =>
+    case ChangedMempool(reader: ErgoMempoolReader@unchecked) if reader.isInstanceOf[ErgoMempoolReader] =>
       mempoolReaderOpt = Some(reader)
 
     case ChangedVault(reader: ErgoWalletReader@unchecked) if reader.isInstanceOf[ErgoWalletReader] =>
@@ -61,7 +61,7 @@ object ErgoReadersHolder {
 
   case object GetReaders
 
-  case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMemPoolReader, w: ErgoWalletReader)
+  case class Readers(h: ErgoHistoryReader, s: ErgoStateReader, m: ErgoMempoolReader, w: ErgoWalletReader)
 
 }
 

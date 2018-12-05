@@ -53,7 +53,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val txs: Seq[ErgoTransaction] = chain.head.transactions
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).get
+  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(MemoryPoolSettings.default).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
 
 
@@ -207,7 +207,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, CacheSettings.default, MemoryPoolSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

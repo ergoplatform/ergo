@@ -55,11 +55,12 @@ object ErgoState extends ScorexLogging {
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
-  /**
-    * @param txs - sequence of transactions
+  /** Ordered sequence of operations on UTXO set from this sequence of transactions.
+    * - if some box was created and later spend in this sequence - it is not included in the result at all
+    * - if box was first spend and created after that - it is in both toInsert and toRemove
+    *
+    * @param txs sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
-    *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove
     */
   def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val (toRemove, toInsert) = boxChanges(txs)
@@ -68,12 +69,13 @@ object ErgoState extends ScorexLogging {
     StateChanges(toRemoveChanges, toInsertChanges)
   }
 
-  /**
+  /** Modifications from `txs` - sequence of ids to remove, and sequence of ErgoBoxes to create.
+    * - if some box was created and later spend in this sequence - it is not included in the result at all
+    * - if box was first spend and created after that - it is in both toInsert and toRemove,
+    * - and an error will be thrown further during tree modification
+    *
     * @param txs - sequence of transactions
     * @return modifications from `txs` - sequence of ids to remove, and sequence of ErgoBoxes to create.
-    *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove,
-    *         and an error will be thrown further during tree modification
     */
   def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
     val toInsert: mutable.HashMap[ModifierId, ErgoBox] = mutable.HashMap.empty
@@ -91,7 +93,9 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
-  /**
+  /** Genesis box that contains all the coins in the system, protected by the script,
+    * that allows to take part of them every block.
+    *
     * @param emission - emission curve
     * @return Genesis box that contains all the coins in the system, protected by the script,
     *         that allows to take part of them every block.

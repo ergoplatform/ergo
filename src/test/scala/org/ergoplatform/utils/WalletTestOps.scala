@@ -8,6 +8,8 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
+import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.emission.EmissionRules
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
@@ -96,17 +98,15 @@ trait WalletTestOps extends NodeViewBaseOps {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
-  def makeGenesisTx(publicKey: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
-    //ErgoMiner.createCoinbase(Some(genesisEmissionBox), 0, Seq.empty, script, emission)
-    val emissionBox = genesisEmissionBox
-    val height = ErgoHistory.GenesisHeight
-    val emissionAmount = settings.emission.emissionAtHeight(height)
-    val newEmissionAmount = emissionBox.value - emissionAmount
-    val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
-    val inputs = IndexedSeq(new Input(emissionBox.id, emptyProverResult))
-    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, startHeight, Seq.empty, emissionRegs)
-    val minerBox = new ErgoBoxCandidate(emissionAmount, publicKey, startHeight, replaceNewAssetStub(assets, inputs), Map.empty)
-    ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))
+  def makeGenesisTx(publicKey: ProveDlog, assetsIn: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+    val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
+    val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
+    ErgoMiner.collectRewards(Some(genesisEmissionBox),
+      ErgoHistory.EmptyHistoryHeight,
+      Seq.empty,
+      publicKey,
+      settings.emission,
+      assets).head
   }
 
   def makeSpendingTx(boxesToSpend: Seq[ErgoBox],

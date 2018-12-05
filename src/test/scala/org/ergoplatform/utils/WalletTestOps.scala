@@ -135,7 +135,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
-  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
   def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

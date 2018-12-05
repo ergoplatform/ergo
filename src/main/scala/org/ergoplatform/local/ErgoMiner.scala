@@ -260,7 +260,7 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules,
-                     asset: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
+                     assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
     val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
@@ -275,7 +275,7 @@ object ErgoMiner extends ScorexLogging {
         currentHeight, Seq(), Map(Constants.HeightRegister -> LongConstant(nextHeight)))
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, currentHeight, Seq.empty,
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, currentHeight, assets,
         Map(Constants.HeightRegister -> LongConstant(nextHeight)))
 
       ErgoTransaction(

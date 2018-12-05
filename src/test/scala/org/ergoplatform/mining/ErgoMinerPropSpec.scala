@@ -4,7 +4,6 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.nodeView.state.ErgoState.rewardOutputScript
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
@@ -12,7 +11,7 @@ import org.scalacheck.Gen
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 
   val delta: Int = settings.emission.settings.minerRewardDelay
-  val expectedBytes: Array[Byte] = rewardOutputScript(delta, defaultMinerPk).bytes.dropRight(PublicKeyLength)
+  val expectedBytes: Array[Byte] = ErgoState.rewardOutputScript(delta, defaultMinerPk).bytes.dropRight(PublicKeyLength)
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1

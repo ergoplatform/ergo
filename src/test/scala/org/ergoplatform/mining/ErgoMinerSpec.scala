@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.state.ErgoState.rewardOutputScript
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -26,7 +27,6 @@ import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
@@ -168,7 +168,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.proposition shouldBe defaultMinerSecret.publicImage
+    boxToDoubleSpend.propositionBytes shouldBe rewardOutputScript(settings.emission.settings.minerRewardDelay, defaultMinerPk).bytes.dropRight(PublicKeyLength) ++ defaultMinerPk.pkBytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
-import org.ergoplatform.nodeView.state.BoxHolder
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
@@ -116,7 +116,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,
                                 issueNew: Boolean = true,
-                                outputsProposition: Value[SBoolean.type] = TrueLeaf): ErgoTransaction = {
+                                outputsProposition: Value[SBoolean.type] = TrueLeaf,
+                                stateCtxOpt: Option[ErgoStateContext] = None): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -182,10 +183,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, emptyStateContext).getOrElse {
-      log.debug("Going to generate a transaction with incorrect proofs")
-      new ErgoTransaction(inputs, newBoxes)
-    }
+
+    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, stateCtxOpt.getOrElse(emptyStateContext))
+      .getOrElse {
+        log.debug("Going to generate a transaction with incorrect proofs")
+        new ErgoTransaction(inputs, newBoxes)
+      }
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {

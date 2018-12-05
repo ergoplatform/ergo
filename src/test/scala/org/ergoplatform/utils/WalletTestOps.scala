@@ -67,7 +67,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def boxesAvailable(tx: ErgoTransaction, script: Value[SBoolean.type]): Seq[ErgoBox] = {
-    tx.outputs.filter(_.proposition == script)
+    tx.outputs.filter(_.propositionBytes.containsSlice(script.bytes))
   }
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {

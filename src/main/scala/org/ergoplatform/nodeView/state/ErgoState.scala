@@ -167,7 +167,7 @@ object ErgoState extends ScorexLogging {
     * Required script of the box, that collects mining rewards
     */
   def rewardOutputScript(delta: Int, minerPk: ProveDlog): Value[SBoolean.type] = {
-    AND(GE(Height, Plus(ExtractRegisterAs[SInt.type](Self, R4).get, delta)), minerPk)
+    AND(GE(Height, Plus(ExtractRegisterAs[SLong.type](Self, R4).get, LongConstant(delta))), minerPk)
   }
 
   /**

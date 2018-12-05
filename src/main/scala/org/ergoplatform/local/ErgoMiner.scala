@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -248,7 +248,7 @@ object ErgoMiner extends ScorexLogging {
     emissionBoxOpt foreach { emissionBox =>
       assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
     }
-    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, txs, minerPk, emissionRules)
+    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, txs, minerPk, emissionRules, Seq.empty)
   }
 
   /**
@@ -259,7 +259,8 @@ object ErgoMiner extends ScorexLogging {
                      currentHeight: Int,
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
-                     emission: EmissionRules): Seq[ErgoTransaction] = {
+                     emission: EmissionRules,
+                     asset: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
     val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2

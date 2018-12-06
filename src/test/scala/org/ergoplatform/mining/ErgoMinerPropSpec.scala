@@ -7,11 +7,25 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
+import scapi.sigma.DLogProtocol.ProveDlog
 
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 
   val delta: Int = settings.emission.settings.minerRewardDelay
-  val expectedBytes: Array[Byte] = ErgoState.rewardOutputScript(delta, defaultMinerPk).bytes.dropRight(PublicKeyLength)
+  val expectedBytes: Array[Byte] = ErgoState.rewardOutputScriptStartBytes(delta)
+
+  property("rewardOutputScriptStartBytes correct serialization") {
+    def checkBytes(d: Int) = {
+      val bytes = ErgoState.rewardOutputScript(d, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
+      bytes shouldEqual ErgoState.rewardOutputScriptStartBytes(d)
+    }
+
+    forAll { d: Int =>
+      checkBytes(d)
+    }
+    checkBytes(720)
+    checkBytes(delta)
+  }
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1

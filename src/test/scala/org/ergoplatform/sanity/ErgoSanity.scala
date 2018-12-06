@@ -53,14 +53,15 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
 
-    DefaultFakePowScheme.prove(
+    powScheme.prove(
       history.bestHeaderOpt,
       Constants.InitialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
-      Digest32 @@ Array.fill(HashLength)(0.toByte)
+      Digest32 @@ Array.fill(HashLength)(0.toByte),
+      defaultMinerSecretNumber
     ).get
   }
 

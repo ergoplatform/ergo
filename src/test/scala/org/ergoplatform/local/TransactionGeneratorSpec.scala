@@ -1,16 +1,12 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import org.ergoplatform.P2PKAddress
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
@@ -18,7 +14,6 @@ import org.scalatest.FlatSpec
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with WalletTestOps {
 
@@ -57,16 +52,13 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1.second)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-    val wallet: ErgoWalletReader = r.w
-    val address: P2PKAddress = await(wallet.randomPublicKey())
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(address.script)
+      Some(defaultMinerSecret)
     )
     minerRef ! StartMining
 

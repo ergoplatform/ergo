@@ -43,9 +43,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   val parameters: Parameters = LaunchParameters
   private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber, parameters)
 
+  // TODO probably it is incorrect to initialize in such way!!!
+  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), votingSettings)
   private def height = stateContext.currentHeight
-  // TODO looks like incorrect to initialize in such a way
-  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte))
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
@@ -147,7 +147,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         }
       }
       // TODO state context rollback needed. Subtask at https://github.com/ergoplatform/ergo/issues/529
-      stateContext = stateContext.copy(lastHeaders = stateContext.lastHeaders.filter(_.height <= heightTo))
+      stateContext = stateContext.updateHeaders(stateContext.lastHeaders.filter(_.height <= heightTo))
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {

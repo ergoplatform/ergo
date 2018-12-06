@@ -42,10 +42,11 @@ object VotingData {
   * @param currentParameters  - parameters at the beginning of the current voting epoch
   * @param currentVoting      - votes for parameters change within the current voting epoch
   */
-case class ErgoStateContext(lastHeaders: Seq[Header],
-                            genesisStateDigest: ADDigest,
-                            currentParameters: Parameters,
-                            votingData: VotingData)
+class ErgoStateContext(val lastHeaders: Seq[Header],
+                       val genesisStateDigest: ADDigest,
+                       val currentParameters: Parameters,
+                       val votingData: VotingData)
+                      (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
   lazy val currentVoting = votingData.currentVoting
@@ -64,7 +65,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
   override type M = ErgoStateContext
 
-  override def serializer: Serializer[M] = ErgoStateContextSerializer
+  override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
 
   //Check that non-zero votes extracted from block header are correct
   protected def checkVotes(votes: Array[Byte], epochStarts: Boolean): Unit = {
@@ -120,12 +121,12 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
         val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
-        ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)
+        new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
       }
     } else {
       val newVotes = votes
       val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
-      Success(ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, VotingData(newVotingResults)))
+      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, VotingData(newVotingResults))(votingSettings))
     }
   }.flatten
 
@@ -147,20 +148,29 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
     processExtension(fullBlock.extension, header.votes, height, votingSettings).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
-      sc.copy(lastHeaders = newHeaders)
+      updateHeaders(newHeaders)
     }
   }.flatten
+
+  def updateHeaders(newHeaders: Seq[Header]): ErgoStateContext = {
+    new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings)
+  }
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 }
 
 object ErgoStateContext {
-  def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
+  def empty(constants: StateConstants): ErgoStateContext = {
+    implicit val votingSettings = constants.votingSettings
+    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
+  }
+
+  def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))(votingSettings)
   }
 }
 
-object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Serializer[ErgoStateContext] {
 
   override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
     val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
@@ -210,7 +220,7 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
     ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
       val lastHeaders = loop(startPos = 37, 37 + length, Seq.empty)
-      ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))
+      new ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))(votingSettings)
     }
   }.flatten
 }

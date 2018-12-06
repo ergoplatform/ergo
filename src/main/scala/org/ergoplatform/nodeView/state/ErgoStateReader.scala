@@ -15,10 +15,10 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
   protected lazy val votingSettings: VotingSettings = constants.settings.chainSettings.voting
 
   def stateContext: ErgoStateContext = store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
-    .flatMap(b => ErgoStateContextSerializer.parseBytes(b.data).toOption)
+    .flatMap(b => ErgoStateContextSerializer(votingSettings).parseBytes(b.data).toOption)
     .getOrElse {
       log.warn("Unable to parse state context, situation is only valid on empty state")
-      ErgoStateContext.empty(constants.emission.settings.afterGenesisStateDigest)
+      ErgoStateContext.empty(constants)
     }
 }
 

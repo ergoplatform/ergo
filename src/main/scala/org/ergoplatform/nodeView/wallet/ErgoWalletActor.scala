@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -20,13 +21,12 @@ import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{immutable, mutable}
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Random, Success, Try}
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: immutable.Map[ModifierId, Long])
 
-class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging {
+class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging with ScorexEncoding {
 
   import ErgoWalletActor._
 
@@ -58,8 +58,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)
-  private def resolveUncertainty(): Unit = {
-    registry.nextUncertain().foreach { uncertainBox =>
+  private def resolveUncertainty(): Boolean = {
+    registry.nextUncertain().exists { uncertainBox =>
       val box = uncertainBox.box
 
       val testingTx = UnsignedErgoLikeTransaction(
@@ -77,7 +77,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           log.debug(s"Uncertain box is mine! $uncertainBox")
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case Failure(_) =>
-        //todo: remove after some time? remove spent after some time?
+          log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
+            s"${uncertainBox.creationHeight} while current height is ${stateContext.currentHeight}")
+          //todo: remove after some time? remove spent after some time?
+          false
       }
     }
   }
@@ -124,10 +127,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case Resolve =>
-      resolveUncertainty()
-      //todo: use non-default executor?
-      if (registry.uncertainExists) {
-        context.system.scheduler.scheduleOnce(scanningInterval)(self ! Resolve)
+      if (resolveUncertainty()) {
+        // Try again, if the resolving was successful
+        self ! Resolve
       }
 
     case ScanOnchain(fullBlock) =>
@@ -135,7 +137,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         stateContext = stateContext.appendHeader(fullBlock.header)
         fullBlock.transactions.count(tx => scan(tx, Some(height)))
       }
-      (1 to txsFound).foreach(_ => self ! Resolve)
+      (0 to txsFound).foreach(_ => self ! Resolve)
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>

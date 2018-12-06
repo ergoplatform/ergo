@@ -7,10 +7,10 @@ import scorex.util.{ScorexEncoding, ScorexLogging}
 import scala.annotation.tailrec
 
 /**
-  * One way cryptographic hash function, that produces numbers in [0,q) range.
-  * Calculates Blake2b256 hash of a provided input and checks, whether result is
+  * One way cryptographic hash function that produces numbers in [0,q) range.
+  * It calculates Blake2b256 hash of a provided input and checks, where the result is
   * in range from 0 to a maximum number divisible by q without remainder.
-  * If yes return the result mod q, otherwise make one more iteration using hash as an input.
+  * If yes, it returns the result mod q, otherwise make one more iteration using hash as an input.
   * This is done to ensure uniform distribution of the resulting numbers.
   */
 class NumericHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {

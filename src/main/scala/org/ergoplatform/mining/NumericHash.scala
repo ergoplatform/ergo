@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import org.bouncycastle.util.BigIntegers
-import scorex.crypto.hash.{Blake2b256, Blake2b512}
+import scorex.crypto.hash.Blake2b256
 import scorex.util.{ScorexEncoding, ScorexLogging}
 
 import scala.annotation.tailrec

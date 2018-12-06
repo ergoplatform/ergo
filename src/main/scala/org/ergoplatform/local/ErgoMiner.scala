@@ -237,7 +237,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 object ErgoMiner extends ScorexLogging {
 
   /**
-    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * Generate from 0 to 2 transaction collecting rewards from fee boxes in block transactions `txs` and
     * emission box from `state`
     */
   def collectRewards(state: UtxoStateReader,
@@ -252,7 +252,7 @@ object ErgoMiner extends ScorexLogging {
   }
 
   /**
-    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * Generate from 0 to 2 transaction that collecting rewards from fee boxes in block transactions `txs` and
     * emission box `emissionBoxOpt`
     */
   def collectRewards(emissionBoxOpt: Option[ErgoBox],

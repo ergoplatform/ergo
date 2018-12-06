@@ -49,14 +49,14 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     us.applyModifier(validFullBlock(None, us, blockTx +: txs)) shouldBe 'success
   }
 
-  ignore("should not be able to spend recent fee boxes") {
+  property("should not be able to spend recent fee boxes") {
 
     val delta = 1
     val feeProposition = ErgoState.feeProposition(delta)
 
     val bh = boxesHolderGen.sample.get
     var us = createUtxoState(bh)
-    val height = ErgoHistory.GenesisHeight
+    val height = ErgoHistory.EmptyHistoryHeight
 
     val emissionRules = new EmissionRules(
       MonetarySettings(
@@ -66,26 +66,28 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     )
 
     val blockTx = validTransactionFromBoxes(bh.boxes.take(5).values.toIndexedSeq, outputsProposition = feeProposition)
-    val txs = ErgoMiner.collectRewards(None, height, Seq(blockTx), defaultMinerPk, emissionRules)
+    val txs = ErgoMiner.collectRewards(None, height, Seq(blockTx), defaultMinerPk, emissionRules) // 2
     val block = validFullBlock(None, us, blockTx +: txs)
 
     us = us.applyModifier(block).get
 
-    val blockTx2 = validTransactionFromBoxes(bh.boxes.slice(10, 20).values.toIndexedSeq, outputsProposition = feeProposition)
-    val txs2 = ErgoMiner.collectRewards(None, height + 1, Seq(blockTx2), defaultMinerPk, emissionRules)
-    val block2 = validFullBlock(Some(block.header), us, blockTx2 +: txs2)
+    val blockTx2 = validTransactionFromBoxes(
+      bh.boxes.slice(10, 20).values.toIndexedSeq, outputsProposition = feeProposition)
+    val block2 = validFullBlock(Some(block.header), us, IndexedSeq(blockTx2))
 
-    val earlySpendingTx = validTransactionFromBoxes(txs.head.outputs)
+    val earlySpendingTx = validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
 
-    val invalidBlock2 = validFullBlock(Some(block.header), us, earlySpendingTx +: blockTx2 +: txs2)
+    val invalidBlock2 = validFullBlock(Some(block.header), us, IndexedSeq(earlySpendingTx, blockTx2))
 
     us.applyModifier(invalidBlock2) shouldBe 'failure
 
     us = us.applyModifier(block2).get
 
-    val blockTx3 = validTransactionFromBoxes(bh.boxes.slice(20, 30).values.toIndexedSeq, outputsProposition = feeProposition)
-    val txs3 = ErgoMiner.collectRewards(None, height + 2, Seq(blockTx3), defaultMinerPk, emissionRules)
-    val block3 = validFullBlock(Some(block2.header), us, earlySpendingTx +: blockTx3 +: txs3)
+    val earlySpendingTx2 = validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
+
+    val blockTx3 = validTransactionFromBoxes(
+      bh.boxes.slice(20, 30).values.toIndexedSeq, outputsProposition = feeProposition)
+    val block3 = validFullBlock(Some(block2.header), us, IndexedSeq(earlySpendingTx2, blockTx3))
 
     us.applyModifier(block3) shouldBe 'success
   }

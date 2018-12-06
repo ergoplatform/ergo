@@ -2,15 +2,14 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import sigmastate.lang.Terms._
 import org.ergoplatform._
-import org.ergoplatform.mining.PublicKeyLength
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.mining.{PublicKeyLength, group}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
@@ -18,7 +17,6 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{IntConstant, LongConstant, Value}
-import sigmastate.lang.SigmaCompiler
 import sigmastate.utxo._
 import sigmastate.{SLong, _}
 
@@ -103,7 +101,7 @@ object ErgoState extends ScorexLogging {
 
     val rewardOut = ByIndex(Outputs, IntConstant(0))
     val minerOut = ByIndex(Outputs, IntConstant(1))
-    val expectedBytes = rewardOutputScript(s.minerRewardDelay, Constants.DummyPk).bytes.dropRight(PublicKeyLength)
+    val expectedBytes = rewardOutputScriptStartBytes(s.minerRewardDelay)
 
     val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
     val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
@@ -185,13 +183,23 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
+    * Starting bytes for rewardOutputScript
+    */
+  def rewardOutputScriptStartBytes(delta: Int): Array[Byte] = delta match {
+    case -1000 => Algos.decode("9683020192a39ae4c6a7040505cf0fcd07").get
+    case 720 => Algos.decode("9683020192a39ae4c6a7040505a00bcd07").get
+    case _ => rewardOutputScript(delta, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
+  }
+
+  /**
     * Proposition, that allows to send coins to a box, that is protected by the following proposition:
     * prove dlog of miners public key and height is at least `delta` blocks bigger then the current one
     *
     * TODO it is possible to use creation height instead of R4, but there is no easy access to in in a script
     */
   def feeProposition(delta: Int = 720): Value[SBoolean.type] = {
-    val expectedBytes = rewardOutputScript(delta, Constants.DummyPk).bytes.dropRight(PublicKeyLength)
+    val expectedBytes = rewardOutputScriptStartBytes(delta)
+
     val out = ByIndex(Outputs, IntConstant(0))
 
     AND(

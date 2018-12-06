@@ -20,9 +20,10 @@ object FeeSimulator extends App {
   val k2 = DLogProverInput.random().publicImage
 
   val input = Input(ADKey @@ Random.randomBytes(32), ProverResult(Random.randomBytes(65), ContextExtension(Map())))
+  val creationHeight: Int = 100000
 
-  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
-  val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2)
+  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
+  val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2, creationHeight)
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2), None)
   val stdSize = simpleTx.outputs.map(_.bytes.length).sum / simpleTx.outputs.length

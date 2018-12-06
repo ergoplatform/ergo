@@ -1,7 +1,5 @@
 package org.ergoplatform.mining
 
-import java.io.File
-
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
@@ -14,28 +12,23 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
 import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
-import scorex.util.ModifierId
-import sigmastate.SBoolean
-import sigmastate.Values.{TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -62,11 +55,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
     val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.Dlog) * 2).toInt
-    val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1",
-      settings.walletSettings.dlogSecretsNumber)
-    val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -77,14 +66,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
-    val address: P2PKAddress = await(wallet.randomPublicKey())
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(prop)
+      Some(defaultMinerSecret)
     )
     minerRef ! StartMining
 
@@ -93,25 +81,31 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend = r.h.bestFullBlockOpt.get.transactions.flatMap(_.outputs).filter(_.proposition == prop)
-      val height = r.h.bestFullBlockOpt.map(_.header.height).getOrElse(startHeight)
+      val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
-      toSpend.take(toSend) foreach { boxToSend =>
-        val inputs = IndexedSeq(Input(boxToSend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+      val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
+        val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
-        val outputs = (0 until outputsPerTx).map(_ => new ErgoBoxCandidate(boxToSend.value / outputsPerTx, prop, creationHeight = height))
-
-        val unsignedTx = new UnsignedErgoTransaction(inputs, outputs)
-        val tx = prover.sign(
+        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, feeProp, r.s.stateContext.currentHeight)
+        val outputs = (1 until desiredSize).map { _ =>
+          new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
+        }
+        val unsignedTx = new UnsignedErgoTransaction(inputs, feeBox +: outputs)
+        defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.bestFullBlockOpt.get.header, startDigest)).get
-
-        nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
+          r.s.stateContext).get
       }
+
+      // put txs in mempool altogether to speedup test
+      await(nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        v.pool.put(txs)
+      })
+
       if (toSend > toSpend.size) {
-        Thread.sleep(1000)
+        // wait for the next block
+        testProbe.expectMsgClass(newBlockDuration, newBlock)
         loop(toSend - toSpend.size)
       }
     }
@@ -144,55 +138,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  it should "create own coinbase transaction, if there is already a transaction, that spends emission box" in
-    new TestKit(ActorSystem()) {
-      val tmpDir: File = createTempDir
-
-      val testProbe = new TestProbe(system)
-      system.eventStream.subscribe(testProbe.ref, classOf[SemanticallySuccessfulModifier[_]])
-      system.eventStream.subscribe(testProbe.ref, classOf[SuccessfulTransaction[_]])
-
-      val defaultSettings: ErgoSettings = ErgoSettings.read(None).copy(directory = tmpDir.getAbsolutePath)
-
-      val nodeSettings: NodeConfigurationSettings = defaultSettings.nodeSettings.copy(mining = true,
-        stateType = StateType.Utxo,
-        miningDelay = defaultAwaitDuration,
-        offlineGeneration = true,
-        verifyTransactions = true)
-      val chainSettings: ChainSettings = defaultSettings.chainSettings.copy(blockInterval = 2.seconds)
-      val ergoSettings: ErgoSettings = defaultSettings.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
-      val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
-      val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-
-      val minerRef: ActorRef = ErgoMinerRef(
-        ergoSettings,
-        nodeViewHolderRef,
-        readersHolderRef,
-        timeProvider,
-        Some(DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage))
-      expectNoMessage(1 second)
-      val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
-
-      val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-
-      val tx: ErgoTransaction = ErgoMiner.createCoinbase(r.s.asInstanceOf[UtxoStateReader], Seq.empty, prop1, ergoSettings.emission)
-      r.s.asInstanceOf[UtxoStateReader].validate(tx) shouldBe 'success
-
-      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-      testProbe.expectMsgType[SuccessfulTransaction[ErgoTransaction]]
-      r.m.size shouldBe 1
-
-      minerRef ! StartMining
-
-      testProbe.expectMsgClass(newBlockDuration, classOf[SemanticallySuccessfulModifier[_]])
-
-      val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(None, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
-      val txIds: Seq[ModifierId] = blocks.flatMap(_.blockTransactions.txs.map(_.id))
-      //Make sure that this tx wasn't mined
-      txIds.contains(tx.id) shouldBe false
-      system.terminate()
-    }
-
   it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -206,10 +151,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       nodeViewHolderRef,
       readersHolderRef,
       timeProvider,
-      Some(TrueLeaf)
+      Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
-    val r: Readers = Await.result((readersHolderRef ? GetReaders).mapTo[Readers], 10 seconds)
+    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     val history: ErgoHistoryReader = r.h
     val startBlock: Option[Header] = history.bestHeaderOpt
@@ -221,15 +166,17 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
-    val height = r.h.bestFullBlockOpt.map(_.header.height).getOrElse(startHeight)
-    val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    val input = Input(boxToDoubleSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    boxToDoubleSpend.propositionBytes shouldBe ErgoState.rewardOutputScript(settings.emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, creationHeight = height))
-    val tx1 = ErgoTransaction(IndexedSeq(input), outputs1)
+    val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, creationHeight = height))
-    val tx2 = ErgoTransaction(IndexedSeq(input), outputs2)
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
+    val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
+    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

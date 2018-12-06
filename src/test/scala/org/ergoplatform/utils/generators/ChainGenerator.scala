@@ -5,11 +5,12 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
@@ -57,7 +58,8 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyDigest32,
       EmptyDigest32,
       prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
-      extensionHash
+      extensionHash,
+      defaultMinerSecretNumber
     ).get
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
@@ -79,8 +81,8 @@ trait ChainGenerator extends ErgoTestConstants {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val minimalEmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Seq(), Map())
-    val outputs = IndexedSeq(ErgoBox(minimalEmount, Constants.TrueLeaf, creationHeight = startHeight))
+    val minimalEmount = BoxUtils.minimalErgoAmountSimulated(Values.TrueLeaf, Seq(), Map())
+    val outputs = IndexedSeq(ErgoBox(minimalEmount, Values.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 
@@ -101,7 +103,8 @@ trait ChainGenerator extends ErgoTestConstants {
       emptyProofs,
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      extension
+      extension,
+      defaultMinerSecretNumber
     ).get
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

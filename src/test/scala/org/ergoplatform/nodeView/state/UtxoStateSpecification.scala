@@ -6,11 +6,12 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
+import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -44,8 +45,8 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState()
-    var height: Int = 0
-    forAll(invalidHeaderGen) { header =>
+    var height: Int = ErgoHistory.GenesisHeight
+    forAll(defaultHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
       bh = t._2
@@ -64,10 +65,10 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     var bh = BoxHolder(Seq(genesisEmissionBox))
     var us = createUtxoState(bh)
 
-    var height: Int = 0
+    var height: Int = ErgoHistory.GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = invalidHeaderGen.sample.value
+      val header = defaultHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1
       bh = t._2
@@ -112,7 +113,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - simple case") {
-    val header = invalidHeaderGen.sample.get
+    val header = defaultHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -131,16 +132,16 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
-    val header = invalidHeaderGen.sample.get
+    val header = defaultHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
 
       val boxToSpend = txsFromHolder.last.outputs.head
 
-      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -157,32 +158,15 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val boxToSpend = txsFromHolder.last.outputs.head
 
-      val spendingTxInput = Input(boxToSpend.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder
 
       val us = createUtxoState(bh)
       us.proofsForTransactions(txs).isSuccess shouldBe false
-    }
-  }
-
-
-  property("applyModifier() for real genesis state") {
-    var (us: UtxoState, bh) = createUtxoState()
-    var height = 0
-    forAll(invalidHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh, new Random(12))
-      val txs = t._1
-      bh = t._2
-      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
-      val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
-      us = us.applyModifier(fb).get
-      height = height + 1
     }
   }
 

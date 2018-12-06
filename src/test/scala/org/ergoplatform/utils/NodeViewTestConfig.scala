@@ -14,7 +14,7 @@ case class NodeViewTestConfig(stateType: StateType,
     val defaultSettings = ErgoSettings.read(None)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
-        powScheme = DefaultFakePowScheme
+        powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)
       ),
       walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(

@@ -83,7 +83,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
       if (nodeInfo.genesisBlockIdOpt.isEmpty) {
-        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption)
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,

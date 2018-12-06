@@ -42,8 +42,6 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val HeightRegister: NonMandatoryRegisterId = R4
-
   val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,

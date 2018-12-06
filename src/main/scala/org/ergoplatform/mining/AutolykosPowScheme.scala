@@ -16,7 +16,7 @@ import scala.math.BigInt
 import scala.util.Try
 
 /**
-  * Autolykos PoW puzzle implementation.
+  * Autolykos PoW puzzle scheme reference implementation.
   * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
@@ -46,7 +46,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    require(s.d < b || s.d > (q - b), s"Incorrect d=${s.d} for b=$b")
+    require(s.d < b || s.d > (q - b), s"Incorrect d = ${s.d} for b = $b")
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 

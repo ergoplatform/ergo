@@ -237,7 +237,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 object ErgoMiner extends ScorexLogging {
 
   /**
-    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * Generate from 0 to 2 transaction collecting rewards from fee boxes in block transactions `txs` and
     * emission box from `state`
     */
   def collectRewards(state: UtxoStateReader,
@@ -252,7 +252,7 @@ object ErgoMiner extends ScorexLogging {
   }
 
   /**
-    * Generate from 0 to 2 transaction, that collect rewards from fee boxes in block transactions `txs` and
+    * Generate from 0 to 2 transaction that collecting rewards from fee boxes in block transactions `txs` and
     * emission box `emissionBoxOpt`
     */
   def collectRewards(emissionBoxOpt: Option[ErgoBox],
@@ -260,7 +260,7 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules,
-                     asset: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
+                     assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
     val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
@@ -275,7 +275,7 @@ object ErgoMiner extends ScorexLogging {
         nextHeight, Seq(), Map())
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, Seq.empty, Map())
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets, Map())
 
       ErgoTransaction(
         inputs,

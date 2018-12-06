@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
@@ -17,9 +17,9 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{IntConstant, LongConstant, Value}
+import sigmastate._
 import sigmastate.lang.Terms._
 import sigmastate.utxo._
-import sigmastate.{SLong, _}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -37,7 +37,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  def closeStorage: Unit = {
+  def closeStorage(): Unit = {
     log.warn("Closing state's store.")
     store.close()
   }

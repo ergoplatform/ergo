@@ -136,6 +136,21 @@
         \end{algorithmic}
     \end{algorithm}
 
+    \section{Security and Non-Outsourceability}
+    First, notice that in Algorithm~\ref{alg:prove} we refer to construction
+    $f(m,nonce,pk,w)=\sum_{j\in genIndexes(m||nonce)} H(j||M||pk||w)$ as a hash
+    function. Public key plays a role of commitment. Therefore, the pair
+    $(pk,d)$ is a Schnorr signature with a public key $w$ over the message
+    $(m,nonce)$ with a hash function $f$. The puzzle consists in trying
+    different nonces and keys in order for signature to satisfy
+    $d\in\{-b,\dots,0,\dots,b\}$. Security follows from the security of Schnor
+    signatures, and outsourcing the puzzle is equivalent to outsourcing the
+    signature (or parts of signature creation routine). The only difference from
+    conventional setup is the design of function $f$. It must be constructed in such
+    a way that efficient massive evaluations with different nonces require
+    allocating large amount of memory (benefitting from data reuse), whereas
+    single evaluation on verifier's side can be done ``on fly''.
+
     \section{Discussion}
     \label{discussion}
 

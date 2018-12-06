@@ -203,7 +203,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val hash = Blake2b256(seed)
     val extendedHash = Bytes.concat(hash, hash.take(3))
     (0 until k).map { i =>
-      Math.abs(Ints.fromByteArray(extendedHash.slice(i, i + 4))) % N
+      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
     }
   }.ensuring(_.length == k)
 

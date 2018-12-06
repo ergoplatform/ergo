@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -195,7 +195,10 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext.empty(p.digest)
+
+    implicit val vs = constants.votingSettings
+
+    val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData(VotingResults.empty))
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(

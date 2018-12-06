@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import sigmastate.lang.Terms._
 import org.ergoplatform._
 import org.ergoplatform.mining.PublicKeyLength
 import org.ergoplatform.mining.emission.EmissionRules
@@ -18,7 +17,6 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{IntConstant, LongConstant, Value}
-import sigmastate.lang.SigmaCompiler
 import sigmastate.utxo._
 import sigmastate.{SLong, _}
 
@@ -38,7 +36,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  def closeStorage: Unit = {
+  def closeStorage(): Unit = {
     log.warn("Closing state's store.")
     store.close()
   }

@@ -1,13 +1,13 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Bytes, Shorts}
-import org.ergoplatform.mining.PowScheme
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.core.validation.ModifierValidator
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.annotation.tailrec
@@ -18,7 +18,8 @@ case class PoPoWProof(m: Byte,
                       i: Byte,
                       innerchain: Seq[Header],
                       suffix: Seq[Header],
-                      override val sizeOpt: Option[Int] = None)(implicit powScheme: PowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
+                      override val sizeOpt: Option[Int] = None)
+                     (implicit powScheme: AutolykosPowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
   with ErgoPersistentModifier {
 
   override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
@@ -43,7 +44,7 @@ object PoPoWProof {
 }
 
 @SuppressWarnings(Array("TraversableHead", "CollectionIndexOnNonIndexedSeq"))
-class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with ModifierValidator{
+class PoPoWProofUtils(powScheme: AutolykosPowScheme) extends ScorexEncoding with ModifierValidator{
 
   //todo: complete validation, no PoW validation, linking structure validation, genesis validation
   def validate(proof: PoPoWProof): Try[Unit] = {
@@ -117,7 +118,7 @@ class PoPoWProofUtils(powScheme: PowScheme) extends ScorexEncoding with Modifier
 }
 
 @SuppressWarnings(Array("TraversableHead"))
-class PoPoWProofSerializer(powScheme: PowScheme) extends Serializer[PoPoWProof] {
+class PoPoWProofSerializer(powScheme: AutolykosPowScheme) extends Serializer[PoPoWProof] {
   override def toBytes(obj: PoPoWProof): Array[Byte] = {
     val suffixTailBytes = scorex.core.utils.concatBytes(obj.suffix.tail.map { h =>
       val bytes = HeaderSerializer.bytesWithoutInterlinks(h)

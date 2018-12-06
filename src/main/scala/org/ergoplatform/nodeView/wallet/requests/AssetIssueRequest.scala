@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate}
 import scorex.core.transaction.box.Box.Amount
 
 /**

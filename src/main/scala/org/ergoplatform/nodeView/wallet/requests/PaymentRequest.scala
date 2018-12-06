@@ -2,11 +2,11 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.{ErgoAddress, ErgoBox}
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddress, ErgoBox}
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 

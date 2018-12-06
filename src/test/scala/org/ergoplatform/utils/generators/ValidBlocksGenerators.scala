@@ -59,7 +59,7 @@ trait ValidBlocksGenerators
       stateBoxes.find(isEmissionBox) match {
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
-          val currentHeight: Int = emissionBox.additionalRegisters(Constants.HeightRegister).value.asInstanceOf[Long].toInt
+          val currentHeight: Int = emissionBox.creationHeight.toInt
           val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, settings.emission)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))

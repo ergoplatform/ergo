@@ -111,6 +111,8 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
     val smallerLimit = 2
     val ci0 = history.continuationIds(ErgoSyncInfo(Seq()), smallerLimit).get
+    ci0.length shouldBe smallerLimit
+
     chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Algos.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
@@ -213,7 +215,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val chain = genHeaderChain(BlocksInChain, history)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(-1)
+      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true

@@ -30,7 +30,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history.bestFullBlockOpt.value.header.height shouldBe chain.tail.head.header.height
 
     val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
-    pi.toApply.map(_.asInstanceOf[ErgoFullBlock].header.height) shouldBe Seq(2, 3, 4, 5)
+    val expected = chain.tail.tail
+    pi.toApply.map(_.asInstanceOf[ErgoFullBlock]) shouldBe expected
   }
 
   property("bootstrap from headers and last full blocks") {

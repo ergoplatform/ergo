@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util._
 
 import scala.collection.{immutable, mutable}
 
@@ -39,7 +39,7 @@ class WalletStorage extends ScorexLogging {
   def nextUncertain(): Option[TrackedBox] = {
     uncertainBoxes.from(lastScanned).headOption match {
       case Some(id) =>
-        lastScanned = id
+        lastScanned = bytesToId((BigInt(idToBytes(id)) + 1).toByteArray)
         registry.get(id)
       case None =>
         lastScanned = initialScanValue

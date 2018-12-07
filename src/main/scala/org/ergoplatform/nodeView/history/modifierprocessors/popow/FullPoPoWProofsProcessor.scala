@@ -3,14 +3,13 @@ package org.ergoplatform.nodeView.history.modifierprocessors.popow
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{HistoryModifierSerializer, PoPoWProof, PoPoWProofUtils}
+import org.ergoplatform.modifiers.history.{PoPoWProof, PoPoWProofUtils}
+import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 import org.ergoplatform.nodeView.history.modifierprocessors.HeadersProcessor
+import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
 
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.history.ErgoHistory
-import ErgoHistory.GenesisHeight
-import org.ergoplatform.settings.Algos
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
@@ -52,5 +51,5 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcesso
 
     ProgressInfo(None, toRemove = Seq.empty, toApply = Seq(m.suffix.last), toDownload = Seq.empty)
   }
-}
 
+}

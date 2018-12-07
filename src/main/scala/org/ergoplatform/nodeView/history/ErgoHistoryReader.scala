@@ -136,11 +136,11 @@ trait ErgoHistoryReader
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size - 1)
+      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
-        .ensuring(_.headers.exists(_.height == 0), "Should always contain genesis header")
+        .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
       headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds

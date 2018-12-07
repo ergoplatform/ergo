@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.util.ScorexLogging
 
@@ -11,7 +12,7 @@ import scorex.util.ScorexLogging
 class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends ScorexLogging {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
-  @volatile private[history] var minimalFullBlockHeightVar: Int = 0
+  @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
 
   /** Whether headers chain is synchronized with the network and full blocks could be downloaded.
     * `true` if we estimate, that our chain is synced with the network. Start downloading full blocks after that
@@ -52,12 +53,12 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings) extends Score
     */
   def updateBestFullBlock(header: Header): Int = {
     minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
-      0 // keep all blocks in history
+      ErgoHistory.GenesisHeight // keep all blocks in history
     } else if (!config.stateType.requireProofs) {
       // just synced with the headers chain in pruned full mode -
       // start from height of the penultimate state snapshot available + 1.
       val snapshotHeight = bestSnapshotHeight(header.height)
-      if (snapshotHeight >= config.snapshotCreationInterval * 2) snapshotHeight + 1 else 0
+      if (snapshotHeight >= config.snapshotCreationInterval * 2) snapshotHeight + 1 else ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
       Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

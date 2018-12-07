@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
 import org.ergoplatform.modifiers.state.{UtxoSnapshotChunkSerializer, UtxoSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
-import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
@@ -52,7 +52,13 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoStateContext serialization") {
-    checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
+    val serializer = ErgoStateContextSerializer
+    forAll(ergoStateContextGen) { b: ErgoStateContext =>
+      val recovered = serializer.parseBytes(serializer.toBytes(b)).get
+      serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)
+      b.lastHeaders.length shouldBe recovered.lastHeaders.length
+      b.lastHeaders shouldBe recovered.lastHeaders
+    }
   }
 
   property("Extension serialization") {
@@ -72,7 +78,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtripAndSize(invalidHeaderGen, HeaderSerializer)
+    checkSerializationRoundtripAndSize(defaultHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {

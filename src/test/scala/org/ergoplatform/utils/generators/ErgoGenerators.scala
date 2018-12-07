@@ -1,8 +1,9 @@
 package org.ergoplatform.utils.generators
 
+import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.EquihashSolution
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
@@ -33,7 +34,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
   lazy val noProofGen: Gen[ProverResult] =
-    Gen.const(ProverResult(Array.emptyByteArray, ContextExtension(Map())))
+    Gen.const(emptyProverResult)
 
   lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)
@@ -113,6 +114,23 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
     optionalElementsElements.take(Extension.MaxOptionalFields))
 
+
+  lazy val genECPoint: Gen[ECPoint] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
+
+  lazy val powSolutionGen: Gen[AutolykosSolution] = for {
+    pk <- genECPoint
+    w <- genECPoint
+    n <- genBytes(8)
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
+  } yield AutolykosSolution(pk, w, n, d)
+
+  /**
+    * Header generator with default miner pk in pow solution
+    */
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map{ h =>
+    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+  }
+
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
@@ -121,7 +139,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     transactionsRoot <- digest32Gen
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
-    equihashSolutions <- Gen.listOfN(EquihashSolution.length, Arbitrary.arbitrary[Int])
+    powSolution <- powSolutionGen
     interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
@@ -136,10 +154,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     RequiredDifficulty.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
-    EquihashSolution(equihashSolutions),
+    powSolution,
     None
   )
-
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen

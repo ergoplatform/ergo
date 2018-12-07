@@ -101,6 +101,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        metadata: Metadata): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+
     failFast
       .payload(0L)
       .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
@@ -123,7 +124,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         validation
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
-          .demand(isCostValid, s"Input script verification failed for input #$idx of tx $this: $costTry")
+          .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
           .map(_ + scriptCost)
       }
       .demandSuccess(inputSum, s"Overflow in inputs in $this")

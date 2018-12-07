@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Blake2b512, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -16,21 +16,27 @@ import scala.math.BigInt
 import scala.util.Try
 
 /**
-  * Autolykos PoW puzzle implementation.
+  * Autolykos PoW puzzle scheme reference implementation.
   * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
   * @param k - number of elements in one solution
-  * @param N - list size
+  * @param n - power of number of elements in a list
   */
-class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
+class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
-  assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
+  assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
+  assert(n < 31, "n >= 31 is not allowed")
+
+  /**
+    * Total number of elements
+    */
+  private val N: Int = Math.pow(2, n).toInt
 
   /**
     * Constant data to be added to hash function to increase it's calculation time
     */
-  val M: Array[Byte] = (0 until 2048).toArray.flatMap(i => Longs.toByteArray(i))
+  val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
@@ -40,15 +46,15 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    require(s.d < b || s.d > (q - b), s"Incorrect d=${s.d} for b=$b")
+    require(s.d < b || s.d > (q - b), s"Incorrect d = ${s.d} for b = $b")
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
     val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
-    val left = s.w.multiply(f.bigInteger).add(s.pk.negate())
-    val right = group.generator.multiply(s.d.bigInteger)
+    val left = s.w.multiply(f.bigInteger)
+    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
     require(left == right, "Incorrect points")
   }
@@ -194,8 +200,11 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * [0,`N`)
     */
   private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b512(Bytes.concat(seed))
-    hash.grouped(3).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(0.toByte +: b) % N))
+    val hash = Blake2b256(seed)
+    val extendedHash = Bytes.concat(hash, hash.take(3))
+    (0 until k).map { i =>
+      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
+    }
   }.ensuring(_.length == k)
 
   /**

@@ -26,7 +26,6 @@ import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
@@ -87,7 +86,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
-        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, Constants.FeeProposition, r.s.stateContext.currentHeight)
+        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, feeProp, r.s.stateContext.currentHeight)
         val outputs = (1 until desiredSize).map { _ =>
           new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
         }
@@ -168,7 +167,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.proposition shouldBe defaultMinerSecret.publicImage
+    boxToDoubleSpend.propositionBytes shouldBe ErgoState.rewardOutputScript(settings.emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 

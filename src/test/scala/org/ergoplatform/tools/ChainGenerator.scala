@@ -9,7 +9,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
-import org.ergoplatform.tools.ChainGenerator.pow
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import scorex.util.ScorexLogging
@@ -26,9 +25,7 @@ import scala.util.Random
   */
 object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelpers with ScorexLogging {
 
-  val N: Int = 10000000
-  val k: Int = 128
-  val pow = new AutolykosPowScheme(k, N)
+  val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
   val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45)

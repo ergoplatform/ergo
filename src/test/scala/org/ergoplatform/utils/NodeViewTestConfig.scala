@@ -15,7 +15,7 @@ case class NodeViewTestConfig(stateType: StateType,
     val niPoPowSettings = NiPoPowSettings(enabled = popowBootstrap, 30, 30, 30, 0.45)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
-        powScheme = DefaultFakePowScheme
+        powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)
       ),
       walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(

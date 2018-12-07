@@ -77,20 +77,18 @@
         \item Cyclic group $\mathbb{G}$ of prime order~$q$ with fixed generator~$g$
         and identity element~$e$.
         Curve 25519 group is used for this purposes.
-        \item Number of elements $k$ required in the solution. Value $k=21$ is used in
+        \item Number of elements $k$ required in the solution. Value $k=32$ is used in
             implementation.
         \item Number $N$ of elements in the list
             $R\subset\mathbb{Z}/q\mathbb{Z}$ to be stored in miner's memory.
-            Value $N=10^8$ is used in implementation.
-        %\item List $R$ of numbers in $\mathbb{Z}/q\mathbb{Z}$ of size $N=10^{8}$ is generated
-        %using a hash function $H$.
+            Value $N=2^{26}$ is used in implementation.
         \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
-        Particular implementation is based on Blake2b512 and is described in Alg.\ref{alg:H}.
+        Particular implementation is based on Blake2b256 and is described in Alg.\ref{alg:H}.
         \item Hash function $genIndexes$ which returns a list of numbers from
             $0\dots(N-1)$ of size $k$.
-        It is based on Blake2b512 and is described in Alg.\ref{alg:genIndexes}.
+        It is based on Blake2b256 and is described in Alg.\ref{alg:genIndexes}.
         \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
-        \item Constant message $M=[0,\dots,2047].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
+        \item Constant message $M=[0,\dots,1023].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
     \end{enumerate}
 
     \Name{} is based on one list $k$-sum problem: miner should find
@@ -138,6 +136,26 @@
         \end{algorithmic}
     \end{algorithm}
 
+    \section{Security and Non-Outsourceability}
+    First, notice that in Algorithm~\ref{alg:prove} we refer to construction
+    $f(m,nonce,w,pk)=\sum_{j\in genIndexes(m||nonce)} H(j||M||pk||w)$ as a hash
+    function. Public key plays a role of commitment. Therefore, the pair
+    $(pk,d)$ is a Schnorr signature with a public key $w$ over the message
+    $(m,nonce)$ with a hash function $f$. If one denotes $e$ the corresponding
+    value of $f$, and pass to more common notations:
+    $e=f(m,nonce,w,w^eg^{-d})$. The puzzle consists in trying
+    different nonces and keys in order for signature to satisfy
+    $d\in\{-b,\dots,0,\dots,b\}$. Security follows from the security of Schnor
+    signatures, and outsourcing the puzzle is equivalent to outsourcing the
+    signature (or parts of signature creation routine). The only difference from
+    conventional setup is the design of function $f$. It must be constructed in such
+    a way that efficient massive evaluations with different nonces require
+    allocating large amount of memory (benefitting from data reuse), whereas
+    single evaluation on verifier's side can be done ``on fly''.
+
+    \vk{I would exchange $pk$ and $w$, s.t. $pk$ is exactly public key and $w$
+    is commitment}
+
     \section{Discussion}
     \label{discussion}
 
@@ -151,10 +169,10 @@
     Mining algorithm~\ref{alg:prove} can be optimized, if miner pre-calculates
     hashes\newline $\{H(j||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
     Every pre-calculated hash occupies 32 bytes, so the whole list of $N$ elements
-    occupies $N \cdot 32 = 3 Gb$, making this optimization memory-hard.
+    occupies $N \cdot 32 = 2 Gb$, making this optimization memory-hard.
     However, the miner profit will also be significant: assuming GPU hashrate
     $G = 2^{30} H/s$~\cite{gpuHashrate} and block interval $t=120~s$, every element
-    will be used $(G / N) \cdot k \cdot t = 2.7 \cdot 10^4$ times on average.
+    will be used $(G / N) \cdot k \cdot t = 3 \cdot 10^4$ times on average.
     Thus, if a miner tries to 
     recalculate hashes ``on the fly'' instead of storing them, the number of
     calls of $H$ grows $10^4$ times, which is rather significant value.
@@ -179,8 +197,8 @@
         \label{alg:H}
         \begin{algorithmic}[1]
             \Function{H}{$input$}
-            \Let{$validRange$}{$(2^{512} / q) \cdot q$}
-            \Let{$hashed$}{$Blake2b512(input)$}
+            \Let{$validRange$}{$(2^{256} / q) \cdot q$}
+            \Let{$hashed$}{$Blake2b256(input)$}
             \If{$hashed < validRange$}
             \State \Return $hashed.mod(q)$
             \Else
@@ -197,8 +215,9 @@
         \label{alg:genIndexes}
         \begin{algorithmic}[1]
             \Function{genIndexes}{$seed$}
-            \Let{$hash$}{$Blake2b512(Bytes.concat(seed))$}
-            \State \Return $hash.grouped(3).take(k).map(_.mod(N))$
+            \Let{$hash$}{$Blake2b256(seed)$}
+            \Let{$extendedHash$}{$hash||hash$}
+            \State \Return $(0\dots{k-1}).map(i => extendedHash.slice(i,i+4).mod(N))$
             \EndFunction
         \end{algorithmic}
     \end{algorithm}

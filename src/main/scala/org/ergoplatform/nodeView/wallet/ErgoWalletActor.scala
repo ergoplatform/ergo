@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -20,13 +21,12 @@ import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{immutable, mutable}
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Random, Success, Try}
 
 case class BalancesSnapshot(height: Height, balance: Long, assetBalances: immutable.Map[ModifierId, Long])
 
-class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging {
+class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLogging with ScorexEncoding {
 
   import ErgoWalletActor._
 
@@ -58,8 +58,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
 
   //todo: make resolveUncertainty(boxId, witness)
-  private def resolveUncertainty(): Unit = {
-    registry.nextUncertain().foreach { uncertainBox =>
+  private def resolveUncertainty(idOpt: Option[ModifierId]): Boolean = {
+    (idOpt.flatMap(id => registry.byId(id)) orElse registry.nextUncertain()).exists { uncertainBox =>
       val box = uncertainBox.box
 
       val testingTx = UnsignedErgoLikeTransaction(
@@ -77,16 +77,19 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           log.debug(s"Uncertain box is mine! $uncertainBox")
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case Failure(_) =>
-        //todo: remove after some time? remove spent after some time?
+          log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
+            s"${uncertainBox.creationHeight} while current height is ${stateContext.currentHeight}")
+          //todo: remove after some time? remove spent after some time?
+          false
       }
     }
   }
 
-  private def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+  private def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Seq[TrackedBox] = {
     scanInputs(tx, heightOpt)
     tx.outputCandidates
       .zipWithIndex
-      .count { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) } > 0
+      .flatMap { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, heightOpt) }
   }
 
   private def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
@@ -97,9 +100,14 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   }
 
   private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
-                         tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t)) &&
-      registerBox(TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain))
+                         tx: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
+    if (trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t))) {
+      val tb = TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain)
+      registerBox(tb)
+      Some(tb)
+    } else {
+      None
+    }
   }
 
   private def registerBox(trackedBox: TrackedBox): Boolean = {
@@ -119,23 +127,23 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private def scanLogic: Receive = {
     case ScanOffchain(tx) =>
-      if (scan(tx, None)) {
-        self ! Resolve
+      scan(tx, None).foreach { tb =>
+        self ! Resolve(Some(tb.boxId))
       }
 
-    case Resolve =>
-      resolveUncertainty()
-      //todo: use non-default executor?
-      if (registry.uncertainExists) {
-        context.system.scheduler.scheduleOnce(scanningInterval)(self ! Resolve)
+    case Resolve(idOpt: Option[ModifierId]) =>
+      if (resolveUncertainty(idOpt)) {
+        // If the resolving was successful, try to resolve one more random box
+        self ! Resolve(None)
       }
 
     case ScanOnchain(fullBlock) =>
-      val txsFound = {
-        stateContext = stateContext.appendHeader(fullBlock.header)
-        fullBlock.transactions.count(tx => scan(tx, Some(height)))
+      stateContext = stateContext.appendHeader(fullBlock.header)
+      fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
+        self ! Resolve(Some(tb.boxId))
       }
-      (1 to txsFound).foreach(_ => self ! Resolve)
+      // Try to resolve all just received boxes plus one more random
+      self ! Resolve(None)
 
     //todo: update utxo root hash
     case Rollback(heightTo) =>
@@ -271,7 +279,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
 object ErgoWalletActor {
 
-  private[ErgoWalletActor] case object Resolve
+  private[ErgoWalletActor] case class Resolve(idOpt: Option[ModifierId])
 
   case class WatchFor(address: ErgoAddress)
 

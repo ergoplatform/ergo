@@ -15,6 +15,8 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
+import sigmastate.SBoolean
+import sigmastate.Values.Value
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -27,6 +29,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val coinsTotal: Long = settings.emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
   val afterGenesisDigest: ADDigest = settings.chainSettings.monetary.afterGenesisStateDigest
+  val feeProp: Value[SBoolean.type] = ErgoState.feeProposition(settings.emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
@@ -40,7 +43,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: ECPoint = defaultMinerPk.h
 
-  val powScheme: AutolykosPowScheme = DefaultFakePowScheme
+  lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)

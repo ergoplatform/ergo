@@ -50,7 +50,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, DefaultFakePowScheme,
+    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, powScheme,
       settings.chainSettings.monetary)
 
     val dir = createTempDir

@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "8adeddba-SNAPSHOT"
-val sigmaStateVersion = "fix-incomplete-runtimeircontext-3fd0c0d8-SNAPSHOT"
+val sigmaStateVersion = "sigma-coster-3a4f42ce-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",

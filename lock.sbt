@@ -17,7 +17,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
   "com.typesafe" % "config" % "1.3.3",
   "com.typesafe" % "ssl-config-core_2.12" % "0.2.4",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.18",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.16",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.5",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.5",
@@ -67,9 +67,9 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
   "org.scorexfoundation" % "scorex-core_2.12" % "53207304-SNAPSHOT",
-  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
-  "org.scorexfoundation" % "sigma-state_2.12" % "sigma-coster-e2d1e250-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "sigma-coster-ebb7aa55-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.11.0",
   "org.typelevel" % "cats-core_2.12" % "1.0.1",
@@ -79,4 +79,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 90be2ffdd56bfa853d82aa1e3f417364413dc1eb
+// LIBRARY_DEPENDENCIES_HASH f0e7093a8ea6b5cdd470ee1fa344f8a226fd088e

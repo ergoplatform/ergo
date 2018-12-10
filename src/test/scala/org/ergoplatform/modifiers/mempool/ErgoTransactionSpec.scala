@@ -7,7 +7,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.{ErgoPropertyTest, Stubs}
 import org.scalacheck.Gen
-import scapi.sigma.ProveDiffieHellmanTuple
+import scapi.sigma.ProveDHTuple
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import sigmastate._
@@ -170,7 +170,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     hv <- groupElemGen
     uv <- groupElemGen
     vv <- groupElemGen
-  } yield ProveDiffieHellmanTuple(gv, hv, uv, vv)
+  } yield ProveDHTuple(gv, hv, uv, vv)
 
   ignore("too costly transaction should be rejected") {
     val propositionGen = for {

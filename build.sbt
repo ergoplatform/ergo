@@ -14,9 +14,8 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-//val scorexVersion = "8adeddba-SNAPSHOT"
 val scorexVersion = "23b4358f-SNAPSHOT"
-val sigmaStateVersion = "i316-expose-generic-reader-writer-serializers-victor-e303552c-SNAPSHOT"
+val sigmaStateVersion = "sigma-coster-ebb7aa55-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",

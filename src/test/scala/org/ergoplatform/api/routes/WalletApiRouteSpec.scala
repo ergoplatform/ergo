@@ -42,7 +42,7 @@ class WalletApiRouteSpec extends FlatSpec
     """
       |{
       |    val myPk = PK("tJPvNFE9uEJnhD2bzxqPP9X6c9WXfoRNeAvziCvZdBXnqZsHvwxKVG")
-      |    HEIGHT < 9197 && myPk.isValid
+      |    HEIGHT < 9197 && myPk.isProven
       |}
       |""".stripMargin
 

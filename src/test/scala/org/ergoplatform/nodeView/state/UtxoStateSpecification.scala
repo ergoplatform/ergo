@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifestSerializer}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
@@ -176,22 +177,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       UtxoSnapshotManifestSerializer.parseBytes(snapshot.manifest.bytes).get.validate(snapshot.lastHeaders.head) shouldBe 'success
       val recoveredState = us.applyModifier(snapshot).get
       java.util.Arrays.equals(recoveredState.rootHash, snapshot.lastHeaders.head.stateRoot) shouldBe true
-    }
-  }
-
-  property("applyModifier() for real genesis state") {
-    var (us: UtxoState, bh) = createUtxoState()
-    var height = 0
-    forAll(invalidHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh, new Random(12))
-      val txs = t._1
-      bh = t._2
-      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
-      val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
-      us = us.applyModifier(fb).get
-      height = height + 1
     }
   }
 

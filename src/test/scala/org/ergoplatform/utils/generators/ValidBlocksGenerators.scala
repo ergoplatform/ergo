@@ -32,6 +32,9 @@ trait ValidBlocksGenerators
   def createUtxoState(bh: BoxHolder): UtxoState =
     UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, settings)
 
+  def createUtxoStateWithCustomSettings(bh: BoxHolder, customSettings: ErgoSettings): UtxoState =
+    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, customSettings)
+
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
 

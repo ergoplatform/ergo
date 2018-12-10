@@ -187,7 +187,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   }
 
   private def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
-    requestsToBoxCandidates(requests).map { payTo =>
+    requestsToBoxCandidates(requests).flatMap { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
       require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c)), "Minimal ERG value not met")
@@ -210,7 +210,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           AssetUtils.mergeAssets(boxTokens, acc)
         }
 
-      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets).flatMap { r =>
+      boxSelector.select(registry.unspentBoxesIterator, filterFn, targetBalance, targetAssets).map { r =>
         val inputs = r.boxes.toIndexedSeq
 
         val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
@@ -225,10 +225,13 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext).toOption
+        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext) match {
+          case Failure(e) => Failure(new Exception(s"Failed to sign boxes: $inputs", e))
+          case Success(tx) => Success(tx)
+        }
       } match {
-        case Some(tx) => tx
-        case None => throw new Exception(s"No enough boxes to assemble a transaction for $payTo")
+        case Some(txTry) => txTry
+        case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))
       }
     }
 

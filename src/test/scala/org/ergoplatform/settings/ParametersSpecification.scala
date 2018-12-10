@@ -14,7 +14,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
   private val votingEpochLength = 2
 
-  override val votingSettings = VotingSettings(votingEpochLength, 2, 2)
+  override implicit val votingSettings = VotingSettings(votingEpochLength, 2, 2)
 
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
@@ -23,7 +23,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     val p: Parameters = Parameters(2, Map(KIncrease -> kInit))
     val vr: VotingData = VotingData.empty
-    val esc = ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
+    val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(KIncrease, NoParameter, NoParameter)
     val esc2 = esc.processExtension(p, votes, 2, votingSettings).get
 

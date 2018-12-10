@@ -240,8 +240,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
 
-  val votingSettings = VotingSettings(1024, 32, 128)
-
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
     stateRoot <- stateRootGen
@@ -249,10 +247,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     headers match {
       case s :: tail => tail.
-        foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty)) { case (c, h) =>
+        foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty)) { case (c, h) =>
           c.appendFullBlock(s, votingSettings).get
         }
-      case _ => ErgoStateContext.empty(stateRoot)
+      case _ => ErgoStateContext.empty(stateRoot, votingSettings)
     }
   }
 }

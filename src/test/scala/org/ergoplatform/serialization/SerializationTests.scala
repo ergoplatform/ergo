@@ -51,7 +51,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoStateContext serialization") {
-    checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
+    checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer(votingSettings))
   }
 
   property("Extension serialization") {

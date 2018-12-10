@@ -105,7 +105,12 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          ErgoStateContext(r.h.bestFullBlockOpt.map(_.header).toSeq, startDigest, parameters, VotingData.empty)).get
+          new ErgoStateContext(
+            r.h.bestFullBlockOpt.map(_.header).toSeq,
+            startDigest,
+            parameters,
+            VotingData.empty)
+        ).get
 
         nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       }

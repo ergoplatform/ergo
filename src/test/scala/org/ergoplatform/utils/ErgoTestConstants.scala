@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -28,7 +28,10 @@ trait ErgoTestConstants extends ScorexLogging {
   val stateConstants: StateConstants = StateConstants(None, settings)
   val afterGenesisDigest: ADDigest = settings.chainSettings.monetary.afterGenesisStateDigest
 
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest)
+
+  implicit val votingSettings = VotingSettings(1024, 32, 128)
+  
+  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest, votingSettings)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)

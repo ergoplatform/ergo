@@ -49,14 +49,14 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
-  lazy val votingEpochLength = votingSettings.votingLength
+  lazy val votingEpochLength: Int = votingSettings.votingLength
 
   def votingStarts(height: Int): Boolean = height % votingEpochLength == 0 && height > 0
 
   lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
 
-  lazy val currentVoting = votingData.currentVoting
+  lazy val currentVoting: VotingResults = votingData.currentVoting
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -117,6 +117,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
 
+
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
@@ -148,7 +149,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     processExtension(fullBlock.extension, header.votes, height).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
-      updateHeaders(newHeaders)
+      sc.updateHeaders(newHeaders)
     }
   }.flatten
 
@@ -161,7 +162,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
 object ErgoStateContext {
   def empty(constants: StateConstants): ErgoStateContext = {
-    implicit val votingSettings = constants.votingSettings
+    implicit val votingSettings: VotingSettings = constants.votingSettings
     new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
   }
 

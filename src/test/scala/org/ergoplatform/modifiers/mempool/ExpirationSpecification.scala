@@ -16,11 +16,11 @@ class ExpirationSpecification extends ErgoPropertyTest {
   def falsify(box: ErgoBox): ErgoBox = {
     ErgoBox(box.value,
       Values.FalseLeaf,
+      box.creationHeight,
       box.additionalTokens,
       box.additionalRegisters,
       transactionId = box.transactionId,
-      boxId = box.index,
-      creationHeight = box.creationHeight)
+      boxId = box.index)
   }
 
   def constructTest(from: ErgoBox,
@@ -92,7 +92,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   property("script changed spending w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
-      val out = new ErgoBoxCandidate(from.value, Values.TrueLeaf, from.additionalTokens, creationHeight = from.creationHeight + 1)
+      val out = new ErgoBoxCandidate(from.value, Values.TrueLeaf, from.creationHeight + 1, from.additionalTokens)
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
     }
   }
@@ -100,7 +100,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("script changed tokens w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
       whenever(from.additionalTokens.nonEmpty) {
-        val out = new ErgoBoxCandidate(from.value, from.proposition, Seq(), creationHeight = from.creationHeight + 1)
+        val out = new ErgoBoxCandidate(from.value, from.proposition, from.creationHeight + 1, Seq())
         constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
       }
     }

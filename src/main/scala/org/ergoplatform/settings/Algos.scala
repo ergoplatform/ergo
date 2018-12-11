@@ -1,13 +1,12 @@
 package org.ergoplatform.settings
 
 import io.iohk.iodb.ByteArrayWrapper
-import scorex.core.VersionTag
-import scorex.core.versionToBytes
-import scorex.util._
 import scorex.core.utils.ScorexEncoding
+import scorex.core.{VersionTag, versionToBytes}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util._
 
 import scala.util.Try
 

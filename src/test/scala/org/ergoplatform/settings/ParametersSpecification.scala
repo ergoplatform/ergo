@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.modifiers.history.Extension
-import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData, VotingResults}
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
 
@@ -25,36 +25,36 @@ class ParametersSpecification extends ErgoPropertyTest {
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(KIncrease, NoParameter, NoParameter)
-    val esc2 = esc.processExtension(p, votes, 2, votingSettings).get
+    val esc2 = esc.processExtension(p, votes, 2).get
 
     //double vote
     val wrongVotes1 = Array(KIncrease, KIncrease, NoParameter)
-    esc.processExtension(p, wrongVotes1, 2, votingSettings).isSuccess shouldBe false
+    esc.processExtension(p, wrongVotes1, 2).isSuccess shouldBe false
 
     //contradictory votes
     val wrongVotes2 = Array(KIncrease, KDecrease, NoParameter)
-    esc.processExtension(p, wrongVotes2, 2, votingSettings).isSuccess shouldBe false
+    esc.processExtension(p, wrongVotes2, 2).isSuccess shouldBe false
 
     //too many votes - only two ordinary changes allowed per epoch
     val wrongVotes3 = Array(KIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
-    esc.processExtension(p, wrongVotes3, 2, votingSettings).isSuccess shouldBe false
+    esc.processExtension(p, wrongVotes3, 2).isSuccess shouldBe false
 
     //too many votes - a vote proposed on non-existing parameter
     val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
-    esc.processExtension(p, wrongVotes4, 2, votingSettings).isSuccess shouldBe false
+    esc.processExtension(p, wrongVotes4, 2).isSuccess shouldBe false
 
     //no quorum gathered - no parameter change
-    val esc30 = esc2.processExtension(p, Array.fill(3)(NoParameter), 3, votingSettings).get
-    val esc40 = esc30.processExtension(p, Array.fill(3)(NoParameter), 4, votingSettings).get
+    val esc30 = esc2.processExtension(p, Array.fill(3)(NoParameter), 3).get
+    val esc40 = esc30.processExtension(p, Array.fill(3)(NoParameter), 4).get
     esc40.currentParameters.k shouldBe kInit
 
     //quorum gathered - parameter change
-    val esc31 = esc2.processExtension(p, votes, 3, votingSettings).get
+    val esc31 = esc2.processExtension(p, votes, 3).get
     val p4 = Parameters(4, Map(KIncrease -> (kInit + Parameters.Kstep)))
 
     esc31.currentVoting.results.filter(_._1 == KIncrease).head._2 shouldBe 2
 
-    val esc41 = esc31.processExtension(p4, Array.fill(3)(NoParameter), 4, votingSettings).get
+    val esc41 = esc31.processExtension(p4, Array.fill(3)(NoParameter), 4).get
     esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }
 }

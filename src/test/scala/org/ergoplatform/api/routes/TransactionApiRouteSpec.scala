@@ -15,8 +15,6 @@ import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
 import sigmastate.Values
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-
 import scala.concurrent.duration._
 
 class TransactionApiRouteSpec extends FlatSpec

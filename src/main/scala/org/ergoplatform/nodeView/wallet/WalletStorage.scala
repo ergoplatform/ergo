@@ -50,15 +50,18 @@ class WalletStorage extends ScorexLogging {
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
   private def put(trackedBox: TrackedBox): Option[TrackedBox] = {
-    if (trackedBox.certainty == Uncertain) uncertainBoxes += trackedBox.boxId
-    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) unspentBoxes += trackedBox.boxId
+    if (trackedBox.certainty == Uncertain) {
+      uncertainBoxes += trackedBox.boxId
+    } else if (trackedBox.spendingStatus == Unspent) {
+      unspentBoxes += trackedBox.boxId
+    }
     registry.put(trackedBox.boxId, trackedBox)
   }
 
   private def remove(boxId: ModifierId): Option[TrackedBox] = {
-    registry.remove(boxId).map { trackedBox: TrackedBox =>
-      if (trackedBox.certainty == Uncertain) uncertainBoxes -= trackedBox.boxId
-      if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) unspentBoxes -= trackedBox.boxId
+    registry.remove(boxId).map { trackedBox =>
+      if (trackedBox.certainty == Uncertain) uncertainBoxes.remove(boxId)
+      if (trackedBox.spendingStatus == Unspent) unspentBoxes.remove(boxId)
       trackedBox
     }
   }

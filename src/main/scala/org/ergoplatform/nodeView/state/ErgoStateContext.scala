@@ -40,7 +40,7 @@ object VotingData {
   * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
-  * @param votingData      - votes for parameters change within the current voting epoch
+  * @param votingData         - votes for parameters change within the current voting epoch
   */
 class ErgoStateContext(val lastHeaders: Seq[Header],
                        val genesisStateDigest: ADDigest,
@@ -86,19 +86,19 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
+  //Check that calculated parameters are matching ones written in the extension section of the block
+  private def matchParameters(p1: Parameters, p2: Parameters): Unit = {
+    if (p1.parametersTable.size != p2.parametersTable.size) {
+      throw new Error("Calculated and received parameters differ in size")
+    }
+    p1.parametersTable.foreach { case (k, v) =>
+      if (p2.parametersTable(k) != v) throw new Error(s"Calculated and received parameters differ in parameter $k")
+    }
+  }
+
   def processExtension(extension: Extension,
                        headerVotes: Array[Byte],
                        height: Int): Try[ErgoStateContext] = Try {
-
-    //Check that calculated parameters are matching ones written in the extension section of the block
-    def matchParameters(p1: Parameters, p2: Parameters): Unit = {
-      if (p1.parametersTable.size != p2.parametersTable.size) {
-        throw new Error("Calculated and received parameters differ in size")
-      }
-      p1.parametersTable.foreach { case (k, v) =>
-        if (p2.parametersTable(k) != v) throw new Error(s"Calculated and received parameters differ in parameter $k")
-      }
-    }
 
     //genesis block does not contain votes
     //todo: this rule may be reconsidered when moving interlink vector to extension section
@@ -109,6 +109,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
     val epochStarts = votingStarts(height)
+
     checkVotes(votes, epochStarts)
 
     if (epochStarts) {
@@ -116,7 +117,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val newVoting = VotingData(VotingResults(proposedVotes))
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
-
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
@@ -135,8 +135,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
     *
-    * @param fullBlock         - full block (transactions, extension section, maybe state transformation proofs)
-    * @param votingSettings    - chain-wide voting settings
+    * @param fullBlock      - full block (transactions, extension section, maybe state transformation proofs)
+    * @param votingSettings - chain-wide voting settings
     * @return
     */
   def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
@@ -223,4 +223,5 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
       new ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))(votingSettings)
     }
   }.flatten
+
 }

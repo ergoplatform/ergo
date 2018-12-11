@@ -3,8 +3,6 @@ package org.ergoplatform.nodeView.state
 import com.google.common.primitives.Ints
 import org.ergoplatform.settings._
 import com.google.common.primitives.Bytes
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
@@ -12,7 +10,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
-
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
@@ -43,7 +40,7 @@ object VotingData {
   * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
-  * @param currentVoting      - votes for parameters change within the current voting epoch
+  * @param votingData      - votes for parameters change within the current voting epoch
   */
 class ErgoStateContext(val lastHeaders: Seq[Header],
                        val genesisStateDigest: ADDigest,
@@ -51,6 +48,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
+
+  lazy val votingEpochLength = votingSettings.votingLength
+
+  def votingStarts(height: Int): Boolean = height % votingEpochLength == 0 && height > 0
 
   lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
@@ -87,12 +88,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def processExtension(extension: Extension,
                        headerVotes: Array[Byte],
-                       height: Int,
-                       votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
-
-    val votingEpochLength = votingSettings.votingLength
-
-    def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
+                       height: Int): Try[ErgoStateContext] = Try {
 
     //Check that calculated parameters are matching ones written in the extension section of the block
     def matchParameters(p1: Parameters, p2: Parameters): Unit = {
@@ -113,7 +109,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
     val epochStarts = votingStarts(height)
-
     checkVotes(votes, epochStarts)
 
     if (epochStarts) {
@@ -151,7 +146,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 
-    processExtension(fullBlock.extension, header.votes, height, votingSettings).map { sc =>
+    processExtension(fullBlock.extension, header.votes, height).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
       updateHeaders(newHeaders)
     }

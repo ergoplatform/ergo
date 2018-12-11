@@ -2,7 +2,6 @@ package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
@@ -11,14 +10,13 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.{ErgoBox, Input}
+import org.ergoplatform.ErgoBox
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 import sigmastate.Values
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Random, Try}
@@ -165,8 +163,9 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.getOrElse(timeProvider.time())
     val extension: ExtensionCandidate = defaultExtension
+    val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, defaultMinerSecretNumber).get
+      transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 }

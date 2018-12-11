@@ -15,7 +15,7 @@ case class CandidateBlock(parentOpt: Option[Header],
                           transactions: Seq[ErgoTransaction],
                           timestamp: Timestamp,
                           extension: ExtensionCandidate,
-                          votes: Seq[Byte]) {
+                          votes: Array[Byte]) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
 }

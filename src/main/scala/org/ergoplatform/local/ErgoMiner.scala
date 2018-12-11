@@ -17,14 +17,12 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import sigmastate.Values.LongConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec

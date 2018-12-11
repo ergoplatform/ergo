@@ -14,7 +14,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
   private val votingEpochLength = 2
 
-  override implicit val votingSettings = VotingSettings(votingEpochLength, 2, 2)
+  override implicit val votingSettings: VotingSettings = VotingSettings(votingEpochLength, 2, 2)
 
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
@@ -57,4 +57,5 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc41 = esc31.processExtension(p4, Array.fill(3)(NoParameter), 4).get
     esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }
+
 }

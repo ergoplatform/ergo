@@ -147,9 +147,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val header = fullBlock.header
     val height = header.height
 
-    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-      throw new Error(s"Improper block applied: $fullBlock to state context $this")
-    }
+//    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+//      throw new Error(s"Improper block applied: $fullBlock to state context $this")
+//    }
 
     processExtension(fullBlock.extension, header.votes, height, votingSettings).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
@@ -223,7 +223,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
 
     ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
-      val lastHeaders = loop(startPos = 37, 37 + length, Seq.empty)
+      val lastHeaders = loop(offset = 37, Seq.empty)
       new ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))(votingSettings)
     }
   }.flatten

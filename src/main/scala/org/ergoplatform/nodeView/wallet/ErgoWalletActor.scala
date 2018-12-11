@@ -141,7 +141,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
-      stateContext = stateContext.appendHeader(fullBlock.header, votingSettings)
+      stateContext = stateContext.appendFullBlock(fullBlock, votingSettings).get //todo .get
       fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
         self ! Resolve(Some(tb.boxId))
       }

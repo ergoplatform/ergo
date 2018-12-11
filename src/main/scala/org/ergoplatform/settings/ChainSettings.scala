@@ -1,6 +1,5 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.mining.{AutolykosPowScheme, PowScheme}
 import scorex.util.ModifierId
 
 import scala.concurrent.duration.FiniteDuration

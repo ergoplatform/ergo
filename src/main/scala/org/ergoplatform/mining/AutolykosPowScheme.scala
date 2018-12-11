@@ -78,13 +78,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             transactionsRoot: Digest32,
             timestamp: Timestamp,
             extensionHash: Digest32,
+            votes: Array[Byte],
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null)
+      nBits, height, extensionHash, null, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
@@ -107,6 +108,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate,
+                 votes: Array[Byte],
                  sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
@@ -116,7 +118,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
     prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot, sk, minNonce, maxNonce).map { h =>
+      timestamp, extensionRoot, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
       val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
@@ -139,6 +141,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       candidateBlock.transactions,
       candidateBlock.timestamp,
       candidateBlock.extension,
+      candidateBlock.votes,
       sk,
       minNonce,
       maxNonce

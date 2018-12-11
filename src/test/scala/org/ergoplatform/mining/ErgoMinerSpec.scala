@@ -27,6 +27,8 @@ import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import sigmastate.SBoolean
+import sigmastate.Values.Value
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
@@ -105,6 +107,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
             parameters,
             VotingData.empty)
         ).get
+      }
 
       // put txs in mempool altogether to speedup test
       await(nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>

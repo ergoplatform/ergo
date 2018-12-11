@@ -6,6 +6,7 @@ import org.ergoplatform.settings.{Constants, Parameters}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.interpreter.Interpreter.VerificationResult
+
 import scala.util.Try
 
 

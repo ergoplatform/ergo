@@ -3,20 +3,20 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.PowScheme
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.util._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.util._
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -32,7 +32,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val config: NodeConfigurationSettings
 
-  val powScheme: PowScheme
+  val powScheme: AutolykosPowScheme
 
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
@@ -64,12 +64,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * @return height of best header
     */
-  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
-    * @return height of best header with transacions and proofs
+    * @return height of best header with all block sections
     */
-  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -351,7 +351,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
-        .validate(powScheme.verify(header)) {
+        .validate(powScheme.validate(header).isSuccess) {
           fatal(s"Wrong proof-of-work solution for $header")
         }
         .validateSemantics(isSemanticallyValid(header.parentId)) {
@@ -361,7 +361,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
         .validateNot(historyStorage.contains(header.id)) {
-          error("Header is already in history")
+          error(s"Header ${header.id} is already in history")
         }
         .result
     }

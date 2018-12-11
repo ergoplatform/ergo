@@ -3,6 +3,9 @@ package org.ergoplatform.nodeView.state
 import com.google.common.primitives.Ints
 import org.ergoplatform.settings._
 import com.google.common.primitives.Bytes
+import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -49,6 +52,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
+  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
+
   lazy val currentVoting = votingData.currentVoting
 
   // State root hash before the last block
@@ -60,8 +66,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
-  val currentHeight: Int = lastHeaderOpt.map(_.height).getOrElse(0)
+  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
 
@@ -197,10 +202,9 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
     val genesisDigest = ADDigest @@ bytes.take(33)
     val length = Ints.fromByteArray(bytes.slice(33, 37))
 
-    def loop(startPos: Int, finishPos: Int, acc: Seq[Header]): Seq[Header] = if (startPos < length) {
-      // todo use only required bytes when header size will be fixed after https://github.com/ergoplatform/ergo/issues/452
-      val header = HeaderSerializer.parseBytes(bytes.slice(startPos, finishPos)).get
-      loop(startPos + header.bytes.length, finishPos, header +: acc)
+    def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
+      val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
+      loop(offset + header.bytes.length, header +: acc)
     } else {
       acc.reverse
     }

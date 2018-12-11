@@ -15,7 +15,7 @@ object BoxUtils {
                                  tokens: Seq[(TokenId, Long)] = Seq(),
                                  additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                                  parameters: Parameters): Long = {
-    val candidateMock = new ErgoBoxCandidate(Long.MaxValue, script, tokens, additionalRegisters, creationHeight = Int.MaxValue)
+    val candidateMock = new ErgoBoxCandidate(value = Long.MaxValue, script, creationHeight = Int.MaxValue, tokens, additionalRegisters)
     val mockId = ModifierId @@ Algos.encode(scorex.util.Random.randomBytes(32))
     minimalErgoAmount(candidateMock.toBox(mockId, 1), parameters)
   }

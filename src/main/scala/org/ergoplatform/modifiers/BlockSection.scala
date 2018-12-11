@@ -2,8 +2,8 @@ package org.ergoplatform.modifiers
 
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
-import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 /**
   * An interface for Ergo block section which contains corresponding header id and a digest of its payload.

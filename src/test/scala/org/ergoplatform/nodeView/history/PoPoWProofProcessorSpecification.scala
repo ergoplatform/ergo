@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.mining.{DefaultFakePowScheme, FakePowScheme}
+import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
@@ -19,8 +19,8 @@ class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink 
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  val history: ErgoHistory = genHistory()
-  val chain: HeaderChain = genHeaderChain(headers =>
+  lazy val history: ErgoHistory = genHistory()
+  lazy val chain: HeaderChain = genHeaderChain(headers =>
     headers.drop(MaxK).count(h => powScheme.realDifficulty(h) > Constants.InitialDifficulty * 2) > MaxM,
     history.bestHeaderOpt,
     defaultDifficultyControl

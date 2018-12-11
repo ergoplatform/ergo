@@ -1,8 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Bytes
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.settings.Algos

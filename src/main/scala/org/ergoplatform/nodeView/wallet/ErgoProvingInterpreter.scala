@@ -6,12 +6,11 @@ import java.util
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import scapi.sigma.SigmaProtocolPrivateInput
 import scorex.crypto.hash.Blake2b256
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 

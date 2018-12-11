@@ -201,7 +201,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
     val chainSettings =
-      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, votingSettings, DefaultFakePowScheme, monetarySettings)
+      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, votingSettings, powScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
@@ -213,7 +213,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
 
-    DefaultFakePowScheme.prove(
+    powScheme.prove(
       history.bestHeaderOpt,
       Constants.InitialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
@@ -221,7 +221,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
-      Array.fill(3)(0: Byte)
+      Array.fill(3)(0: Byte),
+      defaultMinerSecretNumber
     ).value
   }
 }

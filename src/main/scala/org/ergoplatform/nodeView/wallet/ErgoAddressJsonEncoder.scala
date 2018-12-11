@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.wallet
 
 import io.circe.syntax._
 import io.circe.{Decoder, DecodingFailure, Encoder}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 
 import scala.util.{Failure, Success}
 

@@ -173,24 +173,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     }
   }
 
-  property("applyModifier() for real genesis state") {
-    var (us: UtxoState, bh) = createUtxoState()
-    var height = ErgoHistory.EmptyHistoryHeight
-
-    forAll(invalidHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh, new Random(12))
-      val txs = t._1
-      println(txs.head.outputCandidates.map(_.creationHeight).mkString(":"))
-      bh = t._2
-      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
-      val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
-      us = us.applyModifier(fb).get
-      height = height + 1
-    }
-  }
-
   property("applyModifier() - valid full block") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh)

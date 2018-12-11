@@ -58,10 +58,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
     val desiredSize: Int = ((parameters.maxBlockCost / Cost.Dlog) * 2).toInt
-    val outputsPerTx = desiredSize
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    private val prover = new ErgoProvingInterpreter("test1", settings.walletSettings.dlogSecretsNumber, parameters)
-    val prop: Value[SBoolean.type] = prover.dlogPubkeys.head
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -101,11 +98,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           unsignedTx,
           IndexedSeq(boxToSend),
           ergoSettings.metadata,
-          new ErgoStateContext(
-            r.h.bestFullBlockOpt.map(_.header).toSeq,
-            startDigest,
-            parameters,
-            VotingData.empty)
+          r.s.stateContext
         ).get
       }
 

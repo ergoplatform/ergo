@@ -17,8 +17,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings._
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -27,8 +26,6 @@ import scapi.sigma.DLogProtocol
 import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.SBoolean
-import sigmastate.Values.Value
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec

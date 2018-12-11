@@ -9,13 +9,13 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
-import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
+import scorex.util.{ScorexLogging, idToBytes}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 
@@ -88,13 +88,13 @@ class TransactionGenerator(viewHolder: ActorRef,
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
-          Some(PaymentRequest(randProposition, randAmount, None, None))
+          Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance), None, None))
         case i if i < 95 && balances.assetBalances.nonEmpty =>
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
           val minimalErgoAmount = approximateBoxSize * Parameters.MinValuePerByte
-          Algos.decode(tokenToSpend._1).map { id =>
+          Try(idToBytes(tokenToSpend._1)).map { id =>
             PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
           }.toOption
         case _ =>

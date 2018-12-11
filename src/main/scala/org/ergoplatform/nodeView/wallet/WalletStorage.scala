@@ -33,7 +33,7 @@ class WalletStorage extends ScorexLogging {
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
   private var lastScanned: ModifierId = initialScanValue
 
-  def unspentBoxesIterator: Iterator[TrackedBox] =
+  def unspentCertainBoxesIterator: Iterator[TrackedBox] =
     unspentBoxes.iterator.flatMap(id => registry.get(id))
 
   def nextUncertain(): Option[TrackedBox] = {
@@ -51,14 +51,14 @@ class WalletStorage extends ScorexLogging {
 
   private def put(trackedBox: TrackedBox): Option[TrackedBox] = {
     if (trackedBox.certainty == Uncertain) uncertainBoxes += trackedBox.boxId
-    if (trackedBox.spendingStatus == Unspent) unspentBoxes += trackedBox.boxId
+    if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) unspentBoxes += trackedBox.boxId
     registry.put(trackedBox.boxId, trackedBox)
   }
 
   private def remove(boxId: ModifierId): Option[TrackedBox] = {
     registry.remove(boxId).map { trackedBox: TrackedBox =>
       if (trackedBox.certainty == Uncertain) uncertainBoxes -= trackedBox.boxId
-      if (trackedBox.spendingStatus == Unspent) unspentBoxes -= trackedBox.boxId
+      if (trackedBox.spendingStatus == Unspent && trackedBox.certainty == Certain) unspentBoxes -= trackedBox.boxId
       trackedBox
     }
   }

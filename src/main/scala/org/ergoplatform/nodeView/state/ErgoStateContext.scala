@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import com.google.common.primitives.Ints
 import org.ergoplatform.settings._
 import com.google.common.primitives.Bytes
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
@@ -10,6 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
@@ -112,14 +114,22 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     checkVotes(votes, epochStarts)
 
+    def checkForkStart(height: Height): Unit = {
+      if (height <= currentParameters.softForkActivationHeight.getOrElse(-1)) {
+        throw new Error("Previous fork has not been activated yet")
+      }
+    }
+
     if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
       val newVoting = VotingData(VotingResults(proposedVotes))
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
 
+      if (softForkStarts) checkForkStart(height)
+
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-        val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
+        val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingEpochLength)
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)

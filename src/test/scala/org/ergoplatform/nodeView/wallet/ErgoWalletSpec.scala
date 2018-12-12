@@ -15,9 +15,10 @@ import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
 import scala.async.Async
-import scala.concurrent.blocking
+import scala.concurrent.{Await, blocking}
 import scala.util.Random
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
@@ -647,12 +648,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
         ErgoAddressEncoder(0: Byte).fromProposition(pubKey).get, totalAvailableAmount, None, None)
       val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
 
-      Async.async {
+      val result = Async.async {
         val uncertainTxTry = Async.await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
         uncertainTxTry shouldBe 'failure
         uncertainTxTry.failed.get.getMessage.startsWith("No enough boxes to assemble a transaction") shouldBe true
         Async.await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
       }
+
+      Await.result(result, 15.seconds)
     }
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils._
@@ -14,8 +14,10 @@ import scorex.util.idToBytes
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
+import scala.async.Async
 import scala.concurrent.blocking
 import scala.util.Random
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
@@ -614,6 +616,41 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       toAssetMap(tx2.outputs.head.additionalTokens) shouldBe toAssetMap(assetToSpend2)
       tx2.outputs(1).value shouldBe 1
       toAssetMap(tx2.outputs(1).additionalTokens) shouldBe toAssetMap(assetToReturn)
+    }
+  }
+
+  property("only certain and unspent boxes is used for transaction generation") {
+    withFixture { implicit w =>
+      val pubKey = getPublicKeys.head.script
+      val genesisBlock = makeGenesisBlock(pubKey)
+      val uncertainAmount = 1000999
+      val modifiedBlock = {
+        val prop = ErgoState.rewardOutputScript(100, pubKey)
+        val txToModify = genesisBlock.blockTransactions.txs.last
+        val txWithUncertainOutput = txToModify
+          .copy(outputCandidates = IndexedSeq(new ErgoBoxCandidate(uncertainAmount, prop, 1)))
+        genesisBlock.copy(
+          blockTransactions = genesisBlock.blockTransactions.copy(
+            txs = genesisBlock.blockTransactions.txs :+ txWithUncertainOutput
+          )
+        )
+      }
+      val initialBoxes = boxesAvailable(modifiedBlock, pubKey)
+      val totalAvailableAmount = initialBoxes.map(_.value).sum
+      val certainAmount = totalAvailableAmount - uncertainAmount
+
+      wallet.scanPersistent(modifiedBlock)
+
+      blocking(Thread.sleep(100))
+
+      val requestWithTotalAmount = PaymentRequest(
+        ErgoAddressEncoder(0: Byte).fromProposition(pubKey).get, totalAvailableAmount, None, None)
+      val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
+
+      Async.async {
+        Async.await(wallet.generateTransaction(Seq(requestWithTotalAmount))) shouldBe 'failure
+        Async.await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
+      }
     }
   }
 

@@ -620,11 +620,11 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("only certain + unspent boxes is used for transaction generation") {
+  property("only unspent certain boxes is used for transaction generation") {
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.script
       val genesisBlock = makeGenesisBlock(pubKey)
-      val uncertainAmount = 1000999
+      val uncertainAmount = 2000000
       val modifiedBlock = {
         val prop = ErgoState.rewardOutputScript(100, pubKey)
         val txToModify = genesisBlock.blockTransactions.txs.last

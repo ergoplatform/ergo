@@ -619,7 +619,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("only certain and unspent boxes is used for transaction generation") {
+  property("only certain + unspent boxes is used for transaction generation") {
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.script
       val genesisBlock = makeGenesisBlock(pubKey)
@@ -648,7 +648,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
 
       Async.async {
-        Async.await(wallet.generateTransaction(Seq(requestWithTotalAmount))) shouldBe 'failure
+        val uncertainTxTry = Async.await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
+        uncertainTxTry shouldBe 'failure
+        uncertainTxTry.failed.get.getMessage.startsWith("No enough boxes to assemble a transaction") shouldBe true
         Async.await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
       }
     }

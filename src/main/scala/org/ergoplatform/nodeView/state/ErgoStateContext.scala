@@ -129,7 +129,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       if (softForkStarts) checkForkStart(height)
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-        val calculatedParams = currentParameters.update(height, currentVoting.results, votingEpochLength)
+        val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingSettings)
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)

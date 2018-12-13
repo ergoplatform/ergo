@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -40,7 +40,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
-  private lazy val VotingEpochLength = ergoSettings.chainSettings.voting.votingLength
+  private lazy val votingSettings = ergoSettings.chainSettings.voting
+  private lazy val votingEpochLength = votingSettings.votingLength
 
   //shared mutable state
   private var isMining = false
@@ -231,14 +232,16 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       // todo fill with interlinks and other useful values after nodes update
       val (extensionCandidate, votes: Array[Byte]) = bestHeaderOpt.map { header =>
         val newHeight = header.height + 1
-        if (newHeight % VotingEpochLength == 0 && newHeight > 0) {
+        if (newHeight % votingEpochLength == 0 && newHeight > 0) {
+
+          //todo: soft fork flag instead of false
           val newParams = sc.currentParameters
-            .update(newHeight, sc.currentVoting.results, VotingEpochLength)
+            .update(newHeight, false, sc.currentVoting.results, votingSettings)
           val vs = newParams.suggestVotes(ergoSettings.votingTargets)
           newParams.toExtensionCandidate(optionalFields) -> vs
         } else {
-          val votes = sc.currentParameters.vote(ergoSettings.votingTargets, sc.currentVoting.results)
-          emptyExtensionCandidate -> votes
+          val vs = sc.currentParameters.vote(ergoSettings.votingTargets, sc.currentVoting.results)
+          emptyExtensionCandidate -> vs
         }
       }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))
 

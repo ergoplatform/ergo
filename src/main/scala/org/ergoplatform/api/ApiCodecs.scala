@@ -3,13 +3,14 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
+import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiEncoderOption.Detalization
+import org.ergoplatform.mining.{pkFromBytes, pkToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
-import scorex.util.ModifierId
 import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
@@ -48,6 +49,17 @@ trait ApiCodecs {
   implicit val bytesEncoder: Encoder[Array[Byte]] = Algos.encode(_).asJson
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
+
+  implicit val ecPointDecoder: Decoder[ECPoint] = { implicit cursor =>
+    for {
+      str <- cursor.as[String]
+      bytes <- fromTry(Algos.decode(str))
+    } yield pkFromBytes(bytes)
+  }
+
+  implicit val ecPointEncoder: Encoder[ECPoint] = { point:ECPoint =>
+      pkToBytes(point).asJson
+  }
 
   implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>
     Algos.encode(in.toArray).asJson

@@ -7,7 +7,6 @@ import akka.actor.{ActorRef, ActorSystem}
 import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.bench.protocol.Start
-import org.ergoplatform.mining.EquihashPowScheme
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header

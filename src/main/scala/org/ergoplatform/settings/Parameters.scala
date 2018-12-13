@@ -40,7 +40,6 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
-  lazy val softForkActivationHeight: Option[Height] = parametersTable.get(SoftForkActivationHeight)
 
   lazy val blockVersion = parametersTable(BlockVersion)
 
@@ -60,11 +59,13 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
     var table = parametersTable
 
+    def activationHeight(startingHeight: Height) =
+      startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
+
     //new voting
     if(softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) {
       table = table
         .updated(SoftForkStartingHeight, height)
-        .updated(SoftForkActivationHeight, height + (votingEpochs + activationEpochs) * votingEpochLength)
         .updated(SoftForkVotesCollected, 0)
         .updated(SoftFork, 1)
     }
@@ -91,7 +92,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
       //unsuccessful voting
       if (votes <= votingEpochLength * votingEpochs * 9 / 10) {
-        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected).-(SoftForkActivationHeight)
+        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected)
       }
     }
 
@@ -103,7 +104,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
       val votes = parametersTable(SoftForkVotesCollected)
 
       if (votes > votingEpochLength * votingEpochs * 9 / 10) {
-        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected).-(SoftForkActivationHeight)
+        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected)
         table = table.updated(BlockVersion, table(BlockVersion) + 1)
       }
     }
@@ -175,7 +176,6 @@ object Parameters {
   val SoftFork = 120: Byte
   val SoftForkVotesCollected = 121: Byte
   val SoftForkStartingHeight = 122: Byte
-  val SoftForkActivationHeight = 123: Byte
   val BlockVersion = 124: Byte
 
   //A vote for nothing

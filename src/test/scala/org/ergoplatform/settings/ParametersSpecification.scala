@@ -72,8 +72,8 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(SoftFork, NoParameter, NoParameter)
     val h2 = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte, height = 2)
-    val esc2 = esc.processExtension(p, h2).get
 
+    val esc2 = esc.processExtension(p, h2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
 
   }

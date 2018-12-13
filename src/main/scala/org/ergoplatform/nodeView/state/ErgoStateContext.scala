@@ -117,7 +117,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     checkVotes(votes, epochStarts)
 
     def checkForkStart(height: Height): Unit = {
-      if (height <= currentParameters.softForkActivationHeight.getOrElse(-1)) {
+      if (currentParameters.softForkStartingHeight.nonEmpty) {
         throw new Error("Previous fork has not been activated yet")
       }
     }

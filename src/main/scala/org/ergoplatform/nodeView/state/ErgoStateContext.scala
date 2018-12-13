@@ -99,10 +99,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def processExtension(extension: Extension,
-                       header: Header,
-                       height: Int): Try[ErgoStateContext] = Try {
+                       header: Header): Try[ErgoStateContext] = Try {
 
     val headerVotes: Array[Byte] = header.votes
+    val height = header.height
 
     //genesis block does not contain votes
     //todo: this rule may be reconsidered when moving interlink vector to extension section
@@ -164,7 +164,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 
-    processExtension(fullBlock.extension, header, height).map { sc =>
+    processExtension(fullBlock.extension, header).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
       sc.updateHeaders(newHeaders)
     }

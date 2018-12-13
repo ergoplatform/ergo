@@ -166,11 +166,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
 object Parameters {
 
-  val BlockVersion = 120: Byte
-  val SoftFork = 121: Byte
-  val SoftForkVotesCollected = 122: Byte
-  val SoftForkStartingHeight = 123: Byte
-  val SoftForkActivationHeight = 124: Byte
+  val SoftFork = 120: Byte
+  val SoftForkVotesCollected = 121: Byte
+  val SoftForkStartingHeight = 122: Byte
+  val SoftForkActivationHeight = 123: Byte
+  val BlockVersion = 124: Byte
 
   //A vote for nothing
   val NoParameter = 0: Byte

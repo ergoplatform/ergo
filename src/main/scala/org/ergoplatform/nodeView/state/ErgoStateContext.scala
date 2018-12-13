@@ -91,7 +91,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   //Check that calculated parameters are matching ones written in the extension section of the block
   private def matchParameters(p1: Parameters, p2: Parameters): Unit = {
     if (p1.parametersTable.size != p2.parametersTable.size) {
-      throw new Error("Calculated and received parameters differ in size")
+      throw new Error(s"Parameters differ in size, p1 = $p1, p2 = $p2")
     }
     p1.parametersTable.foreach { case (k, v) =>
       if (p2.parametersTable(k) != v) throw new Error(s"Calculated and received parameters differ in parameter $k")
@@ -164,7 +164,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 
-    processExtension(fullBlock.extension, header.votes, height).map { sc =>
+    processExtension(fullBlock.extension, header, height).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
       sc.updateHeaders(newHeaders)
     }

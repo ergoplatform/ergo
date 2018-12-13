@@ -61,7 +61,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     var table = parametersTable
 
     //new voting
-    if(softForkStartingHeight.isEmpty && height % votingEpochLength == 0) {
+    if(softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) {
       table = table
         .updated(SoftForkStartingHeight, height)
         .updated(SoftForkActivationHeight, height + (votingEpochs + activationEpochs) * votingEpochLength)

@@ -15,7 +15,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
@@ -156,53 +156,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     miningThreads.foreach(_ ! c)
   }
 
-  /**
-    * Return subsequence of valid non-conflicting transactions from `mempoolTxs`
-    * with total cost, that does not exceeds `remainingCost`
-    * total size, that does not exceeds `remainingSize`
-    * and that does not try to spend any of `idsToExclude`
-    */
-  @tailrec
-  private def collectTxs(minerPk: ProveDlog,
-                         MaxBlockCost: Long,
-                         MaxBlockSize: Long,
-                         state: UtxoStateReader,
-                         mempoolTxs: Iterable[ErgoTransaction],
-                         acc: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
-    mempoolTxs.headOption match {
-      case Some(tx) =>
-        // check validity and calculate transaction cost
-        state.validateWithCost(tx) match {
-          case Success(costConsumed) =>
-            val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
-            val feeTx = ErgoMiner.collectRewards(None, state.stateContext.currentHeight, newTxs.map(_._1),
-              minerPk, ergoSettings.emission, Seq.empty)
-              .flatMap { tx =>
-                state.validateWithCost(tx) match {
-                  case Success(cost) => Some((tx, cost))
-                  case _ => None
-                }
-              }
-            val noConflict = fixTxsConflicts(feeTx ++ newTxs)
-
-            if (noConflict.map(_._2).sum >= MaxBlockCost) {
-              // total block cost with `tx`, exceeds block cost limit
-              acc.map(_._1)
-            } else if (noConflict.map(_._1.size).sum >= MaxBlockSize) {
-              // total block size with `tx`, exceeds block size limit
-              acc.map(_._1)
-            } else {
-              collectTxs(minerPk, MaxBlockCost, MaxBlockSize, state, mempoolTxs.tail, noConflict)
-            }
-          case _ =>
-            collectTxs(minerPk, MaxBlockCost, MaxBlockSize, state, mempoolTxs.tail, acc)
-        }
-      case _ =>
-        // mempool is empty
-        acc.map(_._1)
-    }
-  }
-
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
@@ -212,10 +165,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTx = ErgoMiner.collectRewards(state, Seq(), minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
 
-    val txs = collectTxs(minerPk,
+    val txs = ErgoMiner.collectTxs(minerPk,
       Parameters.MaxBlockCost,
       Parameters.MaxBlockSize,
       state,
+      state.stateContext,
       pool.unconfirmed.values,
       emissionTx)
 
@@ -238,6 +192,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  //TODO move ErgoMiner to mining pakage and make `collectTxs` and `fixTxsConflicts` private[mining]
 
   /**
     * Generate from 0 to 2 transaction collecting rewards from fee boxes in block transactions `txs` and
@@ -297,6 +253,68 @@ object ErgoMiner extends ScorexLogging {
       None
     }
     Seq(emissionTxOpt, feeTxOpt).flatten
+  }
+
+
+  /**
+    * Return subsequence of valid non-conflicting transactions from `mempoolTxs`
+    * with total cost, that does not exceeds `remainingCost`
+    * total size, that does not exceeds `remainingSize`
+    * and that does not try to spend any of `idsToExclude`
+    *
+    */
+  def collectTxs(minerPk: ProveDlog,
+                 MaxBlockCost: Long,
+                 MaxBlockSize: Long,
+                 us: UtxoStateReader,
+                 upcomingContext: ErgoStateContext,
+                 mempoolTxsIn: Iterable[ErgoTransaction],
+                 acc: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+    @tailrec
+    def loop(mempoolTxs: Iterable[ErgoTransaction],
+             acc: Seq[(ErgoTransaction, Long)],
+             lastFeeTx: Option[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+      lazy val current = (acc ++ lastFeeTx).map(_._1)
+
+      mempoolTxs.headOption match {
+        case Some(tx) =>
+          // check validity and calculate transaction cost
+          us.validateWithCost(tx) match {
+            case Success(costConsumed) =>
+              val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
+              val newBoxes = newTxs.flatMap(_._1.outputs)
+              val feeTxWithCost = ErgoMiner.collectRewards(None, us.stateContext.currentHeight, newTxs.map(_._1), minerPk,
+                us.constants.emission, Seq.empty).flatMap { feeTx =>
+                val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => b.id sameElements i.boxId))
+                feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
+                  case Success(cost) => Some(feeTx -> cost)
+                  case Failure(e) =>
+                    log.warn("Tx collecting fees is incorrect", e)
+                    None
+                }
+              }
+
+              val blockTxs: Seq[(ErgoTransaction, Long)] = feeTxWithCost ++ newTxs
+
+              if (blockTxs.map(_._2).sum >= MaxBlockCost) {
+                // total block cost with `tx`, exceeds block cost limit
+                current
+              } else if (blockTxs.map(_._1.size).sum >= MaxBlockSize) {
+                // total block size with `tx`, exceeds block size limit
+                current
+              } else {
+                loop(mempoolTxs.tail, newTxs, feeTxWithCost.headOption)
+              }
+            case _ =>
+              loop(mempoolTxs.tail, acc, lastFeeTx)
+          }
+        case _ =>
+          // mempool is empty
+          current
+      }
+    }
+
+    loop(mempoolTxsIn, Seq(), None)
   }
 
   def fixTxsConflicts(txs: Seq[(ErgoTransaction, Long)]): Seq[(ErgoTransaction, Long)] = {

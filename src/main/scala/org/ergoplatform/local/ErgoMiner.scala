@@ -188,7 +188,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             if (noConflict.map(_._2).sum >= MaxBlockCost) {
               // total block cost with `tx`, exceeds block cost limit
               acc.map(_._1)
-            } else if(noConflict.map(_._1.size).sum  >= MaxBlockSize) {
+            } else if (noConflict.map(_._1.size).sum >= MaxBlockSize) {
               // total block size with `tx`, exceeds block size limit
               acc.map(_._1)
             } else {
@@ -266,8 +266,10 @@ object ErgoMiner extends ScorexLogging {
                      assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
     val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
+    val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
+      .filter(b => !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val nextHeight = currentHeight + 1
     val minerProp = ErgoState.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 

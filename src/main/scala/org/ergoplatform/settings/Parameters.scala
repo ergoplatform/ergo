@@ -43,9 +43,16 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val softForkActivationHeight: Option[Height] = parametersTable.get(SoftForkActivationHeight)
 
 
+  def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
+    val table1 = updateFork(height, parametersTable, forkVote, votingSettings)
+    val table2 = updateParams(table1, epochVotes, votingSettings.votingLength)
+    Parameters(height, table2)
+  }
+
   def updateFork(height: Height,
+                 parametersTable: Map[Byte, Int],
                  forkVote: Boolean,
-                 votingSettings: VotingSettings): Parameters = {
+                 votingSettings: VotingSettings): Map[Byte, Int] = {
     lazy val votingEpochLength = votingSettings.votingLength
     lazy val votingEpochs = votingSettings.softForkEpochs
     lazy val activationEpochs = votingSettings.activationEpochs
@@ -99,15 +106,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         table = table.updated(BlockVersion, table(BlockVersion) + 1)
       }
     }
-
-    Parameters(height, table)
+    table
   }
 
   //Update non-fork parameters
-  def update(newHeight: Height,
-             epochVotes: Seq[(Byte, Int)],
-             votingEpochLength: Int): Parameters = {
-    val paramsTable = epochVotes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
+  def updateParams(parametersTable: Map[Byte, Int],
+                   epochVotes: Seq[(Byte, Int)],
+                   votingEpochLength: Int): Map[Byte, Int] = {
+    epochVotes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
 
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
@@ -128,7 +134,6 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         table
       }
     }
-    Parameters(newHeight, paramsTable)
   }
 
   private def padVotes(vs: Array[Byte]): Array[Byte] = {

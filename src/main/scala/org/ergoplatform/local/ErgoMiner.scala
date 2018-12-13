@@ -233,7 +233,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         val newHeight = header.height + 1
         if (newHeight % VotingEpochLength == 0 && newHeight > 0) {
           val newParams = sc.currentParameters
-            .update(newHeight, false, sc.currentVoting.results, VotingEpochLength)
+            .update(newHeight, sc.currentVoting.results, VotingEpochLength)
           val vs = newParams.suggestVotes(ergoSettings.votingTargets)
           newParams.toExtensionCandidate(optionalFields) -> vs
         } else {

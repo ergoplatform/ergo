@@ -45,9 +45,9 @@ class ParametersSpecification extends ErgoPropertyTest {
     val hw3 = defaultHeaderGen.sample.get.copy(votes = wrongVotes3, version = 0: Byte)
     esc.processExtension(p, hw3).isSuccess shouldBe false
 
-    //too many votes - a vote proposed on non-existing parameter
+    //a vote proposed on non-existing parameter
     val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
-    val hw4 = defaultHeaderGen.sample.get.copy(votes = wrongVotes4, version = 0: Byte)
+    val hw4 = defaultHeaderGen.sample.get.copy(votes = wrongVotes4, version = 0: Byte, height = 2)
     esc.processExtension(p, hw4).isSuccess shouldBe false
 
     //no quorum gathered - no parameter change
@@ -62,17 +62,19 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     esc31.currentVoting.results.filter(_._1 == KIncrease).head._2 shouldBe 2
 
-    val esc41 = esc31.processExtension(p4, he).get
+    val esc41 = esc31.processExtension(p4, he.copy(height = 4)).get
     esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }
 
   property("soft fork") {
-    val p: Parameters = Parameters(2, Map(BlockVersion -> 0))
+    val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(SoftFork, NoParameter, NoParameter)
-    val h = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte)
-    val esc2 = esc.processExtension(p, h).get
+    val h2 = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte, height = 2)
+    val esc2 = esc.processExtension(p, h2).get
+
+    esc2.currentParameters.softForkStartingHeight.get shouldBe 2
 
   }
 

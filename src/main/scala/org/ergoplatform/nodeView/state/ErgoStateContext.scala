@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
@@ -18,6 +19,9 @@ import scala.util.Try
 case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
   extends BytesSerializable with ScorexEncoding {
 
+  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
+
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
     lastHeaders(1).stateRoot
@@ -27,8 +31,7 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
-  val currentHeight: Int = lastHeaderOpt.map(_.height).getOrElse(0)
+  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
 
@@ -64,7 +67,6 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
     val length = bytes.length
 
     def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
-      // todo use only required bytes when header size will be fixed after https://github.com/ergoplatform/ergo/issues/452
       val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
       loop(offset + header.bytes.length, header +: acc)
     } else {

@@ -99,8 +99,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def processExtension(extension: Extension,
-                       headerVotes: Array[Byte],
+                       header: Header,
                        height: Int): Try[ErgoStateContext] = Try {
+
+    val headerVotes: Array[Byte] = header.votes
 
     //genesis block does not contain votes
     //todo: this rule may be reconsidered when moving interlink vector to extension section
@@ -130,6 +132,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingSettings)
+
+        if (currentParameters.blockVersion != header.version) {
+          throw new Error("Versions in header and parameters section are different")
+        }
+
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)

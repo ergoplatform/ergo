@@ -42,6 +42,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
   lazy val softForkActivationHeight: Option[Height] = parametersTable.get(SoftForkActivationHeight)
 
+  lazy val blockVersion = parametersTable(BlockVersion)
 
   def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
     val table1 = updateFork(height, parametersTable, forkVote, votingSettings)

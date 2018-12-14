@@ -268,7 +268,7 @@ object ErgoMiner extends ScorexLogging {
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
-                 acc: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+                 startTransactions: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
              acc: Seq[(ErgoTransaction, Long)],
@@ -318,7 +318,7 @@ object ErgoMiner extends ScorexLogging {
       }
     }
 
-    loop(mempoolTxsIn, Seq(), None)
+    loop(mempoolTxsIn, startTransactions, None)
   }
 
   def fixTxsConflicts(txs: Seq[(ErgoTransaction, Long)]): Seq[(ErgoTransaction, Long)] = {

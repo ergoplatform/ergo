@@ -15,17 +15,20 @@ class CrawlerActor(c: CrawlerConfig) extends Actor with ScorexLogging {
   override def receive: Receive = {
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
       val height = mod.header.height
-      if (height % 100 == 0) {
-        logger.error(s"GOT ${height} modifiers")
-      }
+      if (height % 100 == 0) logger.info(s"Got $height modifiers")
       if (mod.header.height >= c.threshold) {
         log.error("Got enough modifiers.")
-        log.warn("Shutting Down")
+        log.warn("Exiting benchmark..")
         System.exit(0)
       }
   }
+
 }
 
 object CrawlerActor {
-  def apply(cc: CrawlerConfig)(implicit ac: ActorSystem): ActorRef = ac.actorOf(Props.apply(classOf[CrawlerActor], cc))
+
+  def apply(cc: CrawlerConfig)(implicit ac: ActorSystem): ActorRef = {
+    ac.actorOf(Props.apply(classOf[CrawlerActor], cc))
+  }
+
 }

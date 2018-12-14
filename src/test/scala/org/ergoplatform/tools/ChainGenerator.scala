@@ -87,7 +87,6 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     }
   }
 
-
   /**
     * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
     * first apply headers chain, and apply full blocks only after that

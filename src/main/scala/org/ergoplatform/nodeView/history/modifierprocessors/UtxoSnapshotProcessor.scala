@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotChunk, UtxoSnapshotManifest}
+import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifest}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.core.consensus.History.ProgressInfo
@@ -10,10 +10,11 @@ import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Try}
 
-/** Contains all functions for locally generated state snapshot processing.
-  * */
+/**
+  * Contains all functions for locally generated state snapshot processing.
+  */
 trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val config: NodeConfigurationSettings
@@ -34,8 +35,8 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
   def pruneOldSnapshots(newHeight: Int): Unit = {
     assert(newHeight % config.snapshotCreationInterval == 0, "Trying to prune snapshots at wrong height.")
     val heightToRemove = newHeight - config.snapshotCreationInterval * config.keepLastSnapshots
-    headerIdsAtHeight(heightToRemove).headOption
-      .flatMap { id =>
+    val outdatedIds = headerIdsAtHeight(heightToRemove)
+      .map { id =>
         typedModifierById[Header](id).flatMap { h =>
           val manifestId = UtxoSnapshot.digestToId(h.stateRoot)
           typedModifierById[UtxoSnapshotManifest](manifestId).map { manifest =>
@@ -44,10 +45,12 @@ trait UtxoSnapshotProcessor extends ScorexLogging with ScorexEncoding {
           }
         }
       }
-      .fold(()) { case (manifest, chunks) =>
-        log.info(s"Removing old snapshot $manifest")
-        historyStorage.remove(chunks :+ manifest)
+      .collect { case Some(value) => value }
+      .foldLeft(Seq.empty[ModifierId]) { case (acc, (manifest, chunks)) =>
+        acc ++ chunks :+ manifest
       }
+    log.info(s"Removing old snapshot $manifest")
+    historyStorage.remove(outdatedIds)
   }
 
   // UtxoSnapshot could be generated locally only, so it does not require validation.

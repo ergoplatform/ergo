@@ -163,7 +163,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTx = ErgoMiner.collectRewards(state, Seq(), minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
 
     val txs = ErgoMiner.collectTxs(minerPk,
       Parameters.MaxBlockCost,
@@ -171,7 +171,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       state,
       state.stateContext,
       pool.unconfirmed.values,
-      emissionTx)
+      emissionTxOpt.toSeq)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       val timestamp = timeProvider.time()
@@ -195,19 +195,18 @@ object ErgoMiner extends ScorexLogging {
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
-  /**
-    * Generate from 0 to 2 transaction collecting rewards from fee boxes in block transactions `txs` and
-    * emission box from `state`
-    */
-  def collectRewards(state: UtxoStateReader,
-                     txs: Seq[ErgoTransaction],
-                     minerPk: ProveDlog,
-                     emissionRules: EmissionRules): Seq[ErgoTransaction] = {
-    val emissionBoxOpt = state.emissionBoxOpt
-    emissionBoxOpt foreach { emissionBox =>
-      assert(state.boxById(emissionBox.id).isDefined, s"Emission box ${Algos.encode(emissionBox.id)} missed")
-    }
-    collectRewards(emissionBoxOpt, state.stateContext.currentHeight, txs, minerPk, emissionRules, Seq.empty)
+  def collectEmission(state: UtxoStateReader,
+                      minerPk: ProveDlog,
+                      emission: EmissionRules): Option[ErgoTransaction] = {
+    collectRewards(state.emissionBoxOpt, state.stateContext.currentHeight, Seq.empty, minerPk, emission, Seq.empty).headOption
+  }
+
+
+  def collectFees(currentHeight: Int,
+                  txs: Seq[ErgoTransaction],
+                  minerPk: ProveDlog,
+                  emission: EmissionRules): Option[ErgoTransaction] = {
+    collectRewards(None, currentHeight, txs, minerPk, emission, Seq.empty).headOption
   }
 
   /**
@@ -284,8 +283,7 @@ object ErgoMiner extends ScorexLogging {
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
 
-              ErgoMiner.collectRewards(None, us.stateContext.currentHeight, newTxs.map(_._1), minerPk,
-                us.constants.emission, Seq.empty).lastOption match {
+              ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, us.constants.emission) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                   feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {

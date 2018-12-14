@@ -44,7 +44,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val blockVersion = parametersTable(BlockVersion)
 
   def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
-    val table1 = updateFork(height, parametersTable, forkVote, votingSettings)
+    val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings.votingLength)
     Parameters(height, table2)
   }
@@ -52,6 +52,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   def updateFork(height: Height,
                  parametersTable: Map[Byte, Int],
                  forkVote: Boolean,
+                 epochVotes: Seq[(Byte, Int)],
                  votingSettings: VotingSettings): Map[Byte, Int] = {
     lazy val votingEpochLength = votingSettings.votingLength
     lazy val votingEpochs = votingSettings.softForkEpochs
@@ -67,16 +68,16 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
       table = table
         .updated(SoftForkStartingHeight, height)
         .updated(SoftForkVotesCollected, 0)
-        .updated(SoftFork, 1)
     }
+
+    lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
 
     //new epoch in voting
     if(softForkStartingHeight.nonEmpty
         && height % votingEpochLength == 0
         && height < softForkStartingHeight.get + votingEpochLength * votingEpochs) {
       table = table
-        .updated(SoftForkVotesCollected, parametersTable(SoftForkVotesCollected) + parametersTable(SoftFork))
-        .updated(SoftFork, if(forkVote) 1 else 0)
+        .updated(SoftForkVotesCollected, parametersTable(SoftForkVotesCollected) + votesInPrevEpoch)
     }
 
     //counting
@@ -84,15 +85,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
       && height % votingEpochLength == 0
       && height == softForkStartingHeight.get + votingEpochLength * votingEpochs) {
 
-      val votes = parametersTable(SoftFork) + parametersTable(SoftForkVotesCollected)
+      val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
 
       table = table
         .updated(SoftForkVotesCollected, votes)
-        .updated(SoftFork, 0)
 
       //unsuccessful voting
       if (votes <= votingEpochLength * votingEpochs * 9 / 10) {
-        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
       }
     }
 
@@ -104,7 +104,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
       val votes = parametersTable(SoftForkVotesCollected)
 
       if (votes > votingEpochLength * votingEpochs * 9 / 10) {
-        table = table.-(SoftFork).-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
         table = table.updated(BlockVersion, table(BlockVersion) + 1)
       }
     }
@@ -115,7 +115,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   def updateParams(parametersTable: Map[Byte, Int],
                    epochVotes: Seq[(Byte, Int)],
                    votingEpochLength: Int): Map[Byte, Int] = {
-    epochVotes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
+    epochVotes.filter(_._1 < Parameters.SoftFork).foldLeft(parametersTable) { case (table, (paramId, count)) =>
 
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
@@ -176,7 +176,7 @@ object Parameters {
   val SoftFork = 120: Byte
   val SoftForkVotesCollected = 121: Byte
   val SoftForkStartingHeight = 122: Byte
-  val BlockVersion = 124: Byte
+  val BlockVersion = 123: Byte
 
   //A vote for nothing
   val NoParameter = 0: Byte

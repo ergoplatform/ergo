@@ -94,7 +94,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       throw new Error(s"Parameters differ in size, p1 = $p1, p2 = $p2")
     }
     p1.parametersTable.foreach { case (k, v) =>
-      if (p2.parametersTable(k) != v) throw new Error(s"Calculated and received parameters differ in parameter $k")
+      val v2 = p2.parametersTable(k)
+      if (v2 != v) {
+        throw new Error(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+      }
     }
   }
 
@@ -128,7 +131,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       val softForkStarts = votes.contains(Parameters.SoftFork)
 
-      if (softForkStarts) checkForkStart(height)
+      //todo: fix
+//      if (softForkStarts) checkForkStart(height)
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingSettings)

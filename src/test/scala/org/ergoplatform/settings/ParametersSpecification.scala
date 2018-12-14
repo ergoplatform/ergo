@@ -66,16 +66,26 @@ class ParametersSpecification extends ErgoPropertyTest {
     esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
   }
 
-  property("soft fork") {
+  property("soft fork - w. activation") {
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(SoftFork, NoParameter, NoParameter)
     val h2 = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte, height = 2)
 
-    val esc2 = esc.processExtension(p, h2).get
+    val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion ->0))
+    val esc2 = esc.processExtension(expectedParameters2, h2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
 
+    val h3 = h2.copy(height = 3)
+    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion ->0))
+    val esc3 = esc2.processExtension(expectedParameters3, h3).get
+    esc3.currentParameters.softForkStartingHeight.get shouldBe 2
+
+    val h4 = h3.copy(height = 4)
+    val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion ->0))
+    val esc4 = esc3.processExtension(expectedParameters4, h4).get
+    esc4.currentParameters.softForkStartingHeight.get shouldBe 2
   }
 
 }

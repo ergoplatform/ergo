@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
+import org.bouncycastle.math.ec.ECPoint
+import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution}
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
@@ -13,7 +15,7 @@ import scala.util.Try
 /**
   * Additional data required for transactions validation
   *
-  * @param lastHeaders - fixed number of last headers
+  * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - fixed number of last headers
   */
 case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
@@ -39,6 +41,15 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
 
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
+  }
+
+  def upcoming(minerPk: ECPoint, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
+    val (parentId, version, interlinks, height) =
+      AutolykosPowScheme.derivedHeaderFields(lastHeaderOpt, powScheme)
+    val upcomingHeader = Header(version, parentId, interlinks, null, null, null, timestamp, nBits, height, null,
+      AutolykosSolution(minerPk, null, null, null))
+
+    appendHeader(upcomingHeader)
   }
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders)"

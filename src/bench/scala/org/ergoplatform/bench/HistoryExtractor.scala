@@ -15,7 +15,7 @@ object HistoryExtractor extends ScorexLogging {
   def main(args: Array[String]): Unit = {
 
     lazy val cfgPath: Option[String] = args.headOption
-    lazy val outputFile: String = args.lift(1).getOrElse("output.dat")
+    lazy val outputFile: String = args.lift(1).getOrElse("blocks.dat")
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
     lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -36,4 +36,5 @@ object HistoryExtractor extends ScorexLogging {
     }
     os.close()
   }
+
 }

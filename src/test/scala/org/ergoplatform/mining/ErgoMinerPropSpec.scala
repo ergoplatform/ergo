@@ -80,8 +80,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  property("should collect transactions with correct cost and size") {
-    def check(maxCost: Long, maxSize: Int): Unit = {
+  property("should only collect valid transactions") {
+    def checkCollectTxs(maxCost: Long, maxSize: Int, withTokens: Boolean): Unit = {
 
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
@@ -89,7 +89,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val usClone = createUtxoState(bh)
       val feeProposition = ErgoState.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
-      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProposition))
+      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
       val head = txsWithFees.head
 
       usClone.applyModifier(validFullBlock(None, us, bh, rnd)).get
@@ -117,10 +117,13 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     }
 
     // transactions reach computation cost block limit
-    check(100000L, Int.MaxValue)
+    checkCollectTxs(100000L, Int.MaxValue, withTokens = false)
 
     // transactions reach block size limit
-    check(Long.MaxValue, 4096)
+    checkCollectTxs(Long.MaxValue, 4096, withTokens = false)
+
+    // too many tokens in fees
+    checkCollectTxs(Long.MaxValue, Int.MaxValue, withTokens = true)
 
   }
 
@@ -190,4 +193,5 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       feeTx.outputs.head.propositionBytes shouldEqual expectedBytes ++ defaultMinerPk.pkBytes
     }
   }
+
 }

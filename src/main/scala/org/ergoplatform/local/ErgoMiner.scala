@@ -193,7 +193,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
-  //TODO move ErgoMiner to mining pakage and make `collectTxs` and `fixTxsConflicts` private[mining]
+  //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
   /**
     * Generate from 0 to 2 transaction collecting rewards from fee boxes in block transactions `txs` and
@@ -283,28 +283,34 @@ object ErgoMiner extends ScorexLogging {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
-              val feeTxWithCost = ErgoMiner.collectRewards(None, us.stateContext.currentHeight, newTxs.map(_._1), minerPk,
-                us.constants.emission, Seq.empty).flatMap { feeTx =>
-                val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => b.id sameElements i.boxId))
-                feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
-                  case Success(cost) => Some(feeTx -> cost)
-                  case Failure(e) =>
-                    log.warn("Tx collecting fees is incorrect", e)
-                    None
-                }
+
+              ErgoMiner.collectRewards(None, us.stateContext.currentHeight, newTxs.map(_._1), minerPk,
+                us.constants.emission, Seq.empty).lastOption match {
+                case Some(feeTx) =>
+                  val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
+                  feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
+                    case Success(cost) =>
+                      val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
+
+                      if (blockTxs.map(_._2).sum >= MaxBlockCost) {
+                        // total block cost with `tx`, exceeds block cost limit
+                        current
+                      } else if (blockTxs.map(_._1.size).sum >= MaxBlockSize) {
+                        // total block size with `tx`, exceeds block size limit
+                        current
+                      } else {
+                        loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost))
+                      }
+                    case Failure(e) =>
+                      // fee collecting tx become invalid
+                      current
+                  }
+
+                case None =>
+                  log.warn(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  current
               }
 
-              val blockTxs: Seq[(ErgoTransaction, Long)] = feeTxWithCost ++ newTxs
-
-              if (blockTxs.map(_._2).sum >= MaxBlockCost) {
-                // total block cost with `tx`, exceeds block cost limit
-                current
-              } else if (blockTxs.map(_._1.size).sum >= MaxBlockSize) {
-                // total block size with `tx`, exceeds block size limit
-                current
-              } else {
-                loop(mempoolTxs.tail, newTxs, feeTxWithCost.headOption)
-              }
             case _ =>
               loop(mempoolTxs.tail, acc, lastFeeTx)
           }

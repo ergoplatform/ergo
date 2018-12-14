@@ -6,7 +6,6 @@ import java.net.URL
 import akka.actor.{ActorRef, ActorSystem}
 import javax.net.ssl.HttpsURLConnection
 import org.ergoplatform.bench.misc.ModifierWriter
-import org.ergoplatform.bench.protocol.Start
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
@@ -14,13 +13,14 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
 import scorex.util.ScorexLogging
+
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -79,37 +79,36 @@ object BenchRunner extends ScorexLogging {
     val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
-    val f2: java.lang.reflect.Field = v.history.asInstanceOf[ToDownloadProcessor].getClass.getDeclaredField("isHeadersChainSyncedVar")
-    f2.setAccessible(true)
-    f2.set(v.history.asInstanceOf[ToDownloadProcessor], true)
+    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true: Boolean)
     ()
   }
 
   private def readModifiers(fileName: String, threshold: Int): Vector[ErgoPersistentModifier] = {
     var counter = 0
-    var headers = 0
+    var headersQty = 0
     log.info("Start reading modifiers from data file.")
     val is = getUrlInputStream(fileName)
     val result = Stream
-      .continually{
+      .continually {
         counter += 1
-        if (counter % 100 == 0) { log.error(s"Already read $counter blocks.")}
-        val mod = ModifierWriter.read(is)
-        if (mod.exists(_.modifierTypeId == Header.modifierTypeId)) { headers += 1}
+        if (counter % 100 == 0) log.info(s"Already read $headersQty blocks.")
+        val mod: Option[ErgoPersistentModifier] = ModifierWriter.read(is)
+        if (mod.exists(_.modifierTypeId == Header.modifierTypeId)) headersQty += 1
         mod
       }
-      .takeWhile(m => (headers <= threshold) && m.isDefined)
+      .takeWhile(m => (headersQty <= threshold) && m.isDefined)
       .flatten
       .toVector
 
-    log.error(s"Total modificators ${result.length}")
+    log.info(s"Total modifiers: ${result.length}")
 
     result
   }
 
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ErgoPersistentModifier]): Unit = {
-    benchRef ! Start
+    benchRef ! BenchActor.Start
     modifiers.foreach { m => nodeRef ! LocallyGeneratedModifier(m) }
   }
 
@@ -122,7 +121,8 @@ object BenchRunner extends ScorexLogging {
     conn.setConnectTimeout(connectTimeout)
     conn.setReadTimeout(readTimeout)
     conn.setRequestMethod(requestMethod)
-    conn.connect
+    conn.connect()
     conn.getInputStream
   }
+
 }

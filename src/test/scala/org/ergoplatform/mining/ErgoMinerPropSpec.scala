@@ -34,8 +34,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     us.emissionBoxOpt should not be None
     val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
 
-    val incorrectTxs = ErgoMiner.collectRewards(us, Seq(), proveDlogGen.sample.get, us.constants.emission)
-    val txs = ErgoMiner.collectRewards(us, Seq(), defaultMinerPk, us.constants.emission)
+    val incorrectTxs = ErgoMiner.collectEmission(us, proveDlogGen.sample.get, us.constants.emission).toSeq
+    val txs = ErgoMiner.collectEmission(us, defaultMinerPk, us.constants.emission).toSeq
 
     txs.size shouldBe 1
     val emissionTx = txs.head
@@ -53,8 +53,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val height = us.stateContext.currentHeight
     val blockTx = validTransactionFromBoxes(bh.boxes.take(10).values.toIndexedSeq, outputsProposition = feeProp)
 
-    val txs = ErgoMiner.collectRewards(None, height, Seq(blockTx), defaultMinerPk, settings.emission)
-    val incorrect = ErgoMiner.collectRewards(None, height, Seq(blockTx), proveDlogGen.sample.get, settings.emission)
+    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, settings.emission).toSeq
+    val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, settings.emission).toSeq
     txs.length shouldBe 1
     val feeTx = txs.head
     feeTx.outputs.length shouldBe 1
@@ -145,7 +145,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     )
 
     val blockTx = validTransactionFromBoxes(bh.boxes.take(5).values.toIndexedSeq, outputsProposition = feeProposition)
-    val txs = ErgoMiner.collectRewards(None, height, Seq(blockTx), defaultMinerPk, emissionRules) // 2
+    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, emissionRules).toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
     us = us.applyModifier(block).get

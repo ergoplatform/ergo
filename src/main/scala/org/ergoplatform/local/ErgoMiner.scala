@@ -6,9 +6,9 @@ import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -269,6 +269,10 @@ object ErgoMiner extends ScorexLogging {
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
                  startTransactions: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+    def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
+      blockTxs.map(_._2).sum < MaxBlockCost && blockTxs.map(_._1.size).sum < MaxBlockSize
+    }
+
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
              acc: Seq[(ErgoTransaction, Long)],
@@ -290,14 +294,10 @@ object ErgoMiner extends ScorexLogging {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
 
-                      if (blockTxs.map(_._2).sum >= MaxBlockCost) {
-                        // total block cost with `tx`, exceeds block cost limit
-                        current
-                      } else if (blockTxs.map(_._1.size).sum >= MaxBlockSize) {
-                        // total block size with `tx`, exceeds block size limit
-                        current
-                      } else {
+                      if (correctLimits(blockTxs)) {
                         loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost))
+                      } else {
+                        current
                       }
                     case Failure(e) =>
                       // fee collecting tx become invalid
@@ -305,8 +305,13 @@ object ErgoMiner extends ScorexLogging {
                   }
 
                 case None =>
-                  log.warn(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                  current
+                  log.debug(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  val blockTxs: Seq[(ErgoTransaction, Long)] = newTxs ++ lastFeeTx.toSeq
+                  if (correctLimits(blockTxs)) {
+                    loop(mempoolTxs.tail, blockTxs, lastFeeTx)
+                  } else {
+                    current
+                  }
               }
 
             case _ =>

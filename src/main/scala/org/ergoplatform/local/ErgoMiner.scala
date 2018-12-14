@@ -6,9 +6,9 @@ import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -161,6 +161,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               pool: ErgoMemPoolReader,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
+    val timestamp = timeProvider.time()
+    val nBits: Long = bestHeaderOpt
+      .map(parent => history.requiredDifficultyAfter(parent))
+      .map(d => RequiredDifficulty.encodeCompactBits(d))
+      .getOrElse(Constants.InitialNBits)
+    // todo fill with interlinks and other useful values
+    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
+
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, ergoSettings.chainSettings.powScheme)
 
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
@@ -169,20 +178,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       Parameters.MaxBlockCost,
       Parameters.MaxBlockSize,
       state,
-      state.stateContext,
+      upcomingContext,
       pool.unconfirmed.values,
       emissionTxOpt.toSeq)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      val timestamp = timeProvider.time()
-      val nBits: Long = bestHeaderOpt
-        .map(parent => history.requiredDifficultyAfter(parent))
-        .map(d => RequiredDifficulty.encodeCompactBits(d))
-        .getOrElse(Constants.InitialNBits)
-
-      // todo fill with interlinks and other useful values after nodes update
-      val extensionCandidate = ExtensionCandidate(Seq(), Seq())
-
       CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate)
     }
   }.flatten

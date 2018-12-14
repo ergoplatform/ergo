@@ -32,7 +32,7 @@ case class NiPoPowProofPrefix(m: Int,
 
   def validate: Try[Unit] = {
     failFast
-      .demand(chain.tail.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), "Invalid prefix length")
+      .demand(chain.tail.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), s"Invalid prefix length\n${chain.tail.groupBy(maxLevelOf).map(x => x._1 -> x._2.map(_.height))}")
       .demand(chain.tail.forall(_.interlinks.headOption.contains(chain.head.id)), "Chain is not anchored")
       .result
       .toTry

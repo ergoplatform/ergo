@@ -297,4 +297,5 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
+
 }

@@ -18,7 +18,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
     def provePrefix(anchoringPoint: Header, level: Int, acc: Seq[Header] = Seq.empty): Seq[Header] = {
       if (level >= 0) {
         val subChain = chain.dropRight(k)
-          .filter(h => maxLevelOf(h) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
+          .filter(h => maxLevelOf(h) == level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
         if (goodSuperChain(chain, subChain, level)) {
           provePrefix(subChain(subChain.size - m), level - 1, acc ++ subChain)
         } else {

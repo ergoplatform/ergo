@@ -6,6 +6,8 @@ import scorex.core.serialization.Serializer
 import scorex.core.validation.ModifierValidator
 import scorex.util.ModifierId
 
+import scala.util.Try
+
 case class NiPoPowProof(prefix: NiPoPowProofPrefix, suffix: NiPoPowProofSuffix)
   extends ErgoPersistentModifier with ModifierValidator {
 
@@ -21,6 +23,8 @@ case class NiPoPowProof(prefix: NiPoPowProofPrefix, suffix: NiPoPowProofSuffix)
     throw new Exception("Serialization for NiPoPowProof is not supported")
 
   override def parentId: ModifierId = prefix.parentId
+
+  def validate: Try[Unit] = prefix.validate.flatMap(_ => suffix.validate)
 
 }
 

@@ -137,7 +137,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingSettings)
 
-        if (currentParameters.blockVersion != header.version) {
+        if (calculatedParams.blockVersion != header.version) {
           throw new Error("Versions in header and parameters section are different")
         }
 

@@ -62,11 +62,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
     def activationHeight(startingHeight: Height) =
       startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
-
+    
     //successful voting - cleaning after activation
     if(softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
-      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs +1)) {
+      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)) {
 
       val votes = parametersTable(SoftForkVotesCollected)
 
@@ -76,7 +76,8 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     }
 
     //new voting
-    if(softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) {
+    if((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
+       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote)) {
       table = table
         .updated(SoftForkStartingHeight, height)
         .updated(SoftForkVotesCollected, 0)
@@ -119,6 +120,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         table = table.updated(BlockVersion, table(BlockVersion) + 1)
       }
     }
+
     table
   }
 

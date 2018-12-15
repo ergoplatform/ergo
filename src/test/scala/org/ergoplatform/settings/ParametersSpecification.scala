@@ -71,6 +71,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     val vr: VotingData = VotingData.empty
     val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(SoftFork, NoParameter, NoParameter)
+    val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
     val h2 = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte, height = 2)
 
     val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion ->0))
@@ -112,6 +113,10 @@ class ParametersSpecification extends ErgoPropertyTest {
     val h14 = h13.copy(height = 14)
     val expectedParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 14, SoftForkVotesCollected -> 0, BlockVersion -> 1))
     val esc14 = esc13.processExtension(expectedParameters14, h14).get
+
+    val h14e = h13.copy(height = 14, votes = emptyVotes)
+    val expectedParameters14e = Parameters(14, Map(BlockVersion -> 1))
+    val esc14e = esc13.processExtension(expectedParameters14e, h14e).get
   }
 
 }

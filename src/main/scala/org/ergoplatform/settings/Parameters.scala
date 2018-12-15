@@ -62,7 +62,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
     def activationHeight(startingHeight: Height) =
       startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
-    
+
     //successful voting - cleaning after activation
     if(softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0

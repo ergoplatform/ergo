@@ -101,6 +101,17 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
+  protected def checkForkVote(height: Height): Unit = {
+    if (currentParameters.softForkStartingHeight.nonEmpty) {
+      val startingHeight = currentParameters.softForkStartingHeight.get
+      val finishingHeight = startingHeight + votingSettings.votingLength * votingSettings.softForkEpochs
+      val afterActivationHeight = finishingHeight + votingSettings.votingLength * (votingSettings.activationEpochs + 1)
+      if (height >= finishingHeight && height < afterActivationHeight) {
+        throw new Error(s"Voting for fork is prohibited at height $height")
+      }
+    }
+  }
+
   def processExtension(extension: Extension,
                        header: Header): Try[ErgoStateContext] = Try {
 
@@ -119,23 +130,16 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     checkVotes(votes, epochStarts)
 
-    def checkForkStart(height: Height): Unit = {
-      if (currentParameters.softForkStartingHeight.nonEmpty) {
-        throw new Error("Previous fork has not been activated yet")
-      }
-    }
+    val forkVote = votes.contains(Parameters.SoftFork)
+
+    if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
       val newVoting = VotingData(VotingResults(proposedVotes))
 
-      val softForkStarts = votes.contains(Parameters.SoftFork)
-
-      //todo: fix
-//      if (softForkStarts) checkForkStart(height)
-
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-        val calculatedParams = currentParameters.update(height, softForkStarts, currentVoting.results, votingSettings)
+        val calculatedParams = currentParameters.update(height, forkVote, currentVoting.results, votingSettings)
 
         if (calculatedParams.blockVersion != header.version) {
           throw new Error("Versions in header and parameters section are different")

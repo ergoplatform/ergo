@@ -106,7 +106,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val startingHeight = currentParameters.softForkStartingHeight.get
       val finishingHeight = startingHeight + votingSettings.votingLength * votingSettings.softForkEpochs
       val afterActivationHeight = finishingHeight + votingSettings.votingLength * (votingSettings.activationEpochs + 1)
-      if (height >= finishingHeight && height < afterActivationHeight) {
+      val votesCollected = currentParameters.softForkVotesCollected.get
+
+      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && votesCollected <= (finishingHeight - startingHeight)*9/10) ||
+        (height >= finishingHeight && height < afterActivationHeight && votesCollected > (finishingHeight - startingHeight)*9/10)) {
         throw new Error(s"Voting for fork is prohibited at height $height")
       }
     }

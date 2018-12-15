@@ -63,6 +63,9 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     def activationHeight(startingHeight: Height) =
       startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
 
+    lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
+    lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
+
     //successful voting - cleaning after activation
     if(softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
@@ -75,38 +78,33 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
       }
     }
 
-    //new voting
-    if((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
-       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote)) {
-      table = table
-        .updated(SoftForkStartingHeight, height)
-        .updated(SoftForkVotesCollected, 0)
-    }
-
-    lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
-
-    //new epoch in voting
-    if(softForkStartingHeight.nonEmpty
-        && height % votingEpochLength == 0
-        && height < softForkStartingHeight.get + votingEpochLength * votingEpochs) {
-      table = table
-        .updated(SoftForkVotesCollected, parametersTable(SoftForkVotesCollected) + votesInPrevEpoch)
-    }
-
-    //counting
+    //unsuccessful voting - cleaning
     if(softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
-      && height == softForkStartingHeight.get + votingEpochLength * votingEpochs) {
-
-      val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
-
-      table = table
-        .updated(SoftForkVotesCollected, votes)
+      && height == softForkStartingHeight.get + (votingEpochLength * votingEpochs + 1)) {
 
       //unsuccessful voting
       if (votes <= votingEpochLength * votingEpochs * 9 / 10) {
         table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
       }
+    }
+
+    //new voting
+    if((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
+       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
+       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
+    ) {
+      table = table
+        .updated(SoftForkStartingHeight, height)
+        .updated(SoftForkVotesCollected, 0)
+    }
+
+    //new epoch in voting
+    if(softForkStartingHeight.nonEmpty
+        && height % votingEpochLength == 0
+        && height <= softForkStartingHeight.get + votingEpochLength * votingEpochs) {
+      table = table
+        .updated(SoftForkVotesCollected, votes)
     }
 
     //successful voting - activation

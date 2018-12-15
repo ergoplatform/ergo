@@ -95,8 +95,8 @@ class ParametersSpecification extends ErgoPropertyTest {
     val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion ->0))
     val esc6 = esc5.processExtension(expectedParameters6, h6).get
 
-    val fs: Int = esc6.currentParameters.softForkStartingHeight.get + votingSettings.votingLength * (votingSettings.softForkEpochs + votingSettings.activationEpochs)
-    println("h: " + fs)
+    val h6w = h5.copy(height = 6)
+    esc5.processExtension(expectedParameters6, h6w).isSuccess shouldBe false
 
     val esc11 = (7 to 11).foldLeft(esc6){case (esc, i) =>
       val h = h6.copy(height = i)

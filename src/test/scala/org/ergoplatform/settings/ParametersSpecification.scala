@@ -69,23 +69,42 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("soft fork - w. activation") {
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
+    val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val votes = Array(SoftFork, NoParameter, NoParameter)
     val h2 = defaultHeaderGen.sample.get.copy(votes = votes, version = 0: Byte, height = 2)
 
     val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion ->0))
-    val esc2 = esc.processExtension(expectedParameters2, h2).get
+    val esc2 = esc1.processExtension(expectedParameters2, h2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
 
     val h3 = h2.copy(height = 3)
-    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion ->0))
-    val esc3 = esc2.processExtension(expectedParameters3, h3).get
+    val esc3 = esc2.processExtension(expectedParameters2, h3).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
 
     val h4 = h3.copy(height = 4)
     val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion ->0))
     val esc4 = esc3.processExtension(expectedParameters4, h4).get
     esc4.currentParameters.softForkStartingHeight.get shouldBe 2
+    esc4.currentParameters.softForkVotesCollected.get shouldBe 2
+
+    val h5 = h4.copy(height = 5)
+    val esc5 = esc4.processExtension(expectedParameters4, h5).get
+
+    val h6 = h5.copy(height = 6)
+    val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion ->0))
+    val esc6 = esc5.processExtension(expectedParameters6, h6).get
+
+    val esc11 = (7 to 11).foldLeft(esc6){case (esc, i) =>
+      val h = h6.copy(height = i)
+      esc.processExtension(expectedParameters6, h).get
+    }
+
+    val h12 = h6.copy(height = 12)
+    val expectedParameters12 = Parameters(12, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1))
+    val esc12 = esc11.processExtension(expectedParameters12, h12).get
+
+    val fs: Int = esc6.currentParameters.softForkStartingHeight.get + votingSettings.votingLength * (votingSettings.softForkEpochs + votingSettings.activationEpochs)
+    println("h: " + fs)
   }
 
 }

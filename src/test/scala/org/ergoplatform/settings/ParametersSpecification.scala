@@ -151,9 +151,9 @@ class ParametersSpecification extends ErgoPropertyTest {
     val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0))
     val esc8 = esc7.processExtension(expectedParameters8, h8).get
 
-//    val h8e = h7.copy(height = 8, votes = emptyVotes)
-//    val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0))
-//    val esc8e = esc7.processExtension(expectedParameters8e, h8e).get
+    val h8e = h7.copy(height = 8, votes = emptyVotes)
+    val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0))
+    val esc8e = esc7.processExtension(expectedParameters8e, h8e).get
   }
 
 }

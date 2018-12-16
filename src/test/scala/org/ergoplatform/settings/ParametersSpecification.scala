@@ -144,8 +144,14 @@ class ParametersSpecification extends ErgoPropertyTest {
     val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
     val esc6 = esc5.processExtension(expectedParameters6, h6).get
 
+    val h6w = h5.copy(height = 6, votes = forkVote)
+    esc5.processExtension(expectedParameters6, h6w).isFailure shouldBe true
+
     val h7 = h6.copy(height = 7)
     val esc7 = esc6.processExtension(expectedParameters6, h7).get
+
+    val h7w = h6.copy(height = 7, votes = forkVote)
+    esc6.processExtension(expectedParameters6, h7w).isFailure shouldBe true
 
     val h8 = h7.copy(height = 8, votes = forkVote)
     val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0))

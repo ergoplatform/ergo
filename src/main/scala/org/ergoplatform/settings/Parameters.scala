@@ -81,7 +81,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     //unsuccessful voting - cleaning
     if(softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
-      && height == softForkStartingHeight.get + (votingEpochLength * votingEpochs + 1)) {
+      && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1))) {
 
       //unsuccessful voting
       if (votes <= votingEpochLength * votingEpochs * 9 / 10) {

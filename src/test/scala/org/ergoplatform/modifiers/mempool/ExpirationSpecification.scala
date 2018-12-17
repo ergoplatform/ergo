@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.settings.{Constants, VotingSettings}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
@@ -37,7 +37,8 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
     val fb0 = invalidErgoFullBlockGen.sample.get
     val fb = fb0.copy(fb0.header.copy(height = h))
-    val updContext = emptyStateContext.appendFullBlock(fb, votingSettings).get
+    val fakeHeader = fb.header.copy(height = fb.header.height - 1)
+    val updContext = emptyStateContext.updateHeaders(Seq(fakeHeader)).appendFullBlock(fb, votingSettings).get
 
     tx.statelessValidity.isSuccess shouldBe true
     tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity

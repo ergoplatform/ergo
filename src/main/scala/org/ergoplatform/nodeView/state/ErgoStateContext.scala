@@ -108,8 +108,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val afterActivationHeight = finishingHeight + votingSettings.votingLength * (votingSettings.activationEpochs + 1)
       val votesCollected = currentParameters.softForkVotesCollected.get
 
-      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && votesCollected <= (finishingHeight - startingHeight)*9/10) ||
-        (height >= finishingHeight && height < afterActivationHeight && votesCollected > (finishingHeight - startingHeight)*9/10)) {
+      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && votesCollected <= (finishingHeight - startingHeight) * 9 / 10) ||
+        (height >= finishingHeight && height < afterActivationHeight && votesCollected > (finishingHeight - startingHeight) * 9 / 10)) {
         throw new Error(s"Voting for fork is prohibited at height $height")
       }
     }
@@ -171,9 +171,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val header = fullBlock.header
     val height = header.height
 
-    //if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-    //  throw new Error(s"Improper block applied: $fullBlock to state context $this")
-    //}
+    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+      throw new Error(s"Improper block applied: $fullBlock to state context $this")
+    }
 
     processExtension(fullBlock.extension, header).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)

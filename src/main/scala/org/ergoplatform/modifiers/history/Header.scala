@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
+import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
@@ -34,7 +35,7 @@ case class Header(version: Version,
                   extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   override val sizeOpt: Option[Int] = None
-                 ) extends ErgoPersistentModifier {
+                 ) extends PredictedHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(bytes)
 
@@ -49,6 +50,8 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+
+  override val minerPk: ECPoint = powSolution.pk
 
   lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
     (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))

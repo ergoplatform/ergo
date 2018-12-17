@@ -81,7 +81,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, version, interlinks, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt, this)
+    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null)
@@ -146,6 +146,22 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Calculate header fields based on parent header
+    */
+  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
+    val interlinks: Seq[ModifierId] =
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
+
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
+
+    val version = Header.CurrentVersion
+
+    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+
+    (parentId, version, interlinks, height)
+  }
+
+  /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
@@ -199,26 +215,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                          w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
     hash(Bytes.concat(indexBytes, M, pk, m, w))
-  }
-
-}
-
-object AutolykosPowScheme {
-
-  /**
-    * Calculate header fields based on parent header
-    */
-  def derivedHeaderFields(parentOpt: Option[Header], powScheme: AutolykosPowScheme): (ModifierId, Byte, Seq[ModifierId], Int) = {
-    val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(powScheme).constructInterlinkVector(parent)).getOrElse(Seq.empty)
-
-    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
-
-    val version = Header.CurrentVersion
-
-    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
-
-    (parentId, version, interlinks, height)
   }
 
 }

@@ -1,9 +1,9 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.settings.NiPoPowSettings
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RealModifiers}
 
-class NiPoPowProofSpec extends ErgoPropertyTest {
+class NiPoPowProofSpec extends ErgoPropertyTest with RealModifiers {
 
   val algos = new NiPoPowAlgos(NiPoPowSettings(enabled = true, 3, 6, 6, 1.45d))
 
@@ -13,10 +13,9 @@ class NiPoPowProofSpec extends ErgoPropertyTest {
     }
   }
 
-  ignore("prove chain") {
-    val chain = genHeaderChain(10000)
-    val proof = algos.prove(chain.headers)
-
+  property("prove chain") {
+    val headers = takeHeaders(6000)
+    val proof = algos.prove(headers)
     proof.validate shouldBe 'success
   }
 

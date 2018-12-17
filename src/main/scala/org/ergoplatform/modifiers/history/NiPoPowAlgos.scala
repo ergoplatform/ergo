@@ -29,7 +29,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
       }
     }
     val suffix = chain.takeRight(k)
-    val prefix = provePrefix(chain.head, suffix.head.interlinks.size)
+    val prefix = provePrefix(chain.head, suffix.head.interlinks.size - 1)
     NiPoPowProof(m, k, prefix, suffix)
   }
 

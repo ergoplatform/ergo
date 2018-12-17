@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
+import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 
 /**
@@ -36,7 +37,7 @@ object UtxoSnapshot {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
-  def digestToSerializedId(digest: Array[Byte]): Array[Byte] = Algos.hash(digest)
+  def digestToSerializedId(digest: Array[Byte]): Digest32 = Algos.hash(digest)
 
   def digestToId(digest: Array[Byte]): ModifierId = bytesToId(digestToSerializedId(digest))
 

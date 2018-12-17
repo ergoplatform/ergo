@@ -176,8 +176,10 @@ object ErgoState extends ScorexLogging {
   /**
     * Starting bytes for rewardOutputScript
     */
-  def rewardOutputScriptStartBytes(delta: Int): Array[Byte] = {
-    rewardOutputScript(delta, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
+  def rewardOutputScriptStartBytes(delta: Int): Array[Byte] = delta match {
+    //    case -1000 => Algos.decode("9683020192a39ae4c6a7040505cf0fcd07").get
+    //    case 720 => Algos.decode("9683020192a39ae4c6a7040505a00bcd07").get
+    case _ => rewardOutputScript(delta, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
   }
 
   /**

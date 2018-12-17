@@ -15,6 +15,7 @@ import scorex.util.ScorexLogging
 
 object Utils extends ScorexLogging {
 
+  /** Elapsed time of `block` execution in milliseconds */
   def elapsedTimeOf[R](block: => R): Long = {
     val t0 = System.nanoTime()
     block

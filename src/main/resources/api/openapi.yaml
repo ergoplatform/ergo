@@ -536,7 +536,7 @@ components:
           type: object
           required:
           - height
-          - K
+          - storageFeeFactor
           - minValuePerByte
           - maxBlockSize
           - maxBlockCost
@@ -548,7 +548,7 @@ components:
               minimum: 0
               example: 667
               nullable: false
-            K:
+            storageFeeFactor:
               type: integer
               format: int32
               description: Storage fee coefficient (per byte per storage period ~4 years)

@@ -30,7 +30,7 @@ class ErgoInterpreter(params: Parameters)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = params.k * box.bytes.length
+    val maxStorageFee = params.storageFeeFactor * box.bytes.length
 
     (box.value - maxStorageFee <= 0) || {
       output.creationHeight == currentHeight &&

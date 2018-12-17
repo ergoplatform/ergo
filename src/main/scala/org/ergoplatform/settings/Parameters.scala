@@ -21,7 +21,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   /**
     * Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs.
     */
-  lazy val k: Int = parametersTable(KIncrease)
+  lazy val storageFeeFactor: Int = parametersTable(StorageFeeFactorIncrease)
 
   /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
     * parameter.
@@ -193,8 +193,8 @@ object Parameters {
   val NoParameter = 0: Byte
 
   //Parameter identifiers
-  val KIncrease = 1: Byte
-  val KDecrease = (-KIncrease).toByte
+  val StorageFeeFactorIncrease = 1: Byte
+  val StorageFeeFactorDecrease = (-StorageFeeFactorIncrease).toByte
 
   val MinValuePerByteIncrease = 2: Byte
   val MinValuePerByteDecrease = (-MinValuePerByteIncrease).toByte
@@ -205,10 +205,10 @@ object Parameters {
   val MaxBlockCostIncrease = 4: Byte
   val MaxBlockCostDecrease = (-MaxBlockCostIncrease).toByte
 
-  val Kdefault = 1250000
-  val Kmax = 2500000
-  val Kmin = 0
-  val Kstep = 25000
+  val StorageFeeFactorDefault = 1250000
+  val StorageFeeFactorMax = 2500000
+  val StorageFeeFactorMin = 0
+  val StorageFeeFactorStep = 25000
 
   val MinValuePerByteDefault: Int = 30 * 12
   val MinValueStep = 10
@@ -216,7 +216,7 @@ object Parameters {
   val MinValueMax = 10000 //0.00001 Erg
 
   lazy val parametersDescs: Map[Byte, String] = Map(
-    KIncrease -> "Storage fee factor (per byte per storage period)",
+    StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
     MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
@@ -224,19 +224,19 @@ object Parameters {
   )
 
   lazy val stepsTable: Map[Byte, Int] = Map(
-    KIncrease -> Kstep,
+    StorageFeeFactorIncrease -> StorageFeeFactorStep,
     MinValuePerByteIncrease -> MinValueStep
   )
 
   lazy val minValues: Map[Byte, Int] = Map(
-    KIncrease -> Kmin,
+    StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
     MaxBlockSizeIncrease -> 16 * 1024,
     MaxBlockCostIncrease -> 16 * 1024
   )
 
   lazy val maxValues: Map[Byte, Int] = Map(
-    KIncrease -> Kmax,
+    StorageFeeFactorIncrease -> StorageFeeFactorMax,
     MinValuePerByteIncrease -> MinValueMax
   )
 
@@ -271,7 +271,7 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
   implicit val jsonEncoder: Encoder[Parameters] = (p: Parameters) =>
     Map(
       "height" -> p.height.asJson,
-      "K" -> p.k.asJson,
+      "storageFeeFactor" -> p.storageFeeFactor.asJson,
       "minValuePerByte" -> p.minValuePerByte.asJson,
       "maxBlockSize" -> p.maxBlockSize.asJson,
       "maxBlockCost" -> p.maxBlockCost.asJson

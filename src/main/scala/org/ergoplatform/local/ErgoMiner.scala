@@ -263,14 +263,14 @@ object ErgoMiner extends ScorexLogging {
     *
     */
   def collectTxs(minerPk: ProveDlog,
-                 MaxBlockCost: Long,
-                 MaxBlockSize: Long,
+                 maxBlockCost: Long,
+                 maxBlockSize: Long,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
                  startTransactions: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
-      blockTxs.map(_._2).sum < MaxBlockCost && blockTxs.map(_._1.size).sum < MaxBlockSize
+      blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
     }
 
     @tailrec

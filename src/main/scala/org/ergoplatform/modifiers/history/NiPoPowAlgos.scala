@@ -18,7 +18,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
     def provePrefix(anchoringPoint: Header, level: Int, acc: Seq[Header] = Seq.empty): Seq[Header] = {
       if (level >= 0) {
         val subChain = chain.dropRight(k)
-          .filter(h => maxLevelOf(h) == level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
+          .filter(h => maxLevelOf(h) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
         if (goodSuperChain(chain, subChain, level)) {
           provePrefix(subChain(subChain.size - m), level - 1, acc ++ subChain)
         } else {
@@ -37,19 +37,23 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
     superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
   }
 
-  private def locallyGood(chainSize: Int, superChainSize: Int, level: Int): Boolean = {
-    superChainSize > (1 - d) * math.pow(2, -level) * chainSize
+  private def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int): Boolean = {
+    superChainSize > ((1 - d) * math.pow(2, -level) * underlyingChainSize)
   }
 
   /** @param chain      - Full chain (C)
     * @param superChain - Super-chain of level µ (C↑µ)
     * @param level      - Level of super-chain (µ) */
   private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
-    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C[C↑µ[0]:C↑µ[−1]], or C'↓
+    val downChain = chain
+      .filter(h => h.height >= superChain.head.height && h.height <= superChain.last.height) // C[C↑µ[0]:C↑µ[−1]], or C'↓
     def checkLocalGoodnessAt(mValue: Int): Boolean = {
+      val superChainSuffixSize = superChain.takeRight(mValue).size
+      val downChainSuffixSize = downChain.takeRight(mValue).size
       mValue match {
         case mToTest if mToTest < chain.size &&
-          locallyGood(math.min(superChain.size, mToTest), math.min(downChain.size, mToTest), level) =>
+          locallyGood(math.min(superChainSuffixSize, mToTest), math.min(downChainSuffixSize, mToTest), level) &&
+          superChainSuffixSize >= m =>
           checkLocalGoodnessAt(mToTest + 1)
         case mToTest if mToTest < chain.size =>
           false

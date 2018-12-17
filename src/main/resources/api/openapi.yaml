@@ -243,6 +243,7 @@ components:
       - height
       - difficulty
       - parentId
+      - votes
       - size
       properties:
         id:
@@ -287,6 +288,10 @@ components:
           example: 62
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        votes:
+          description: Base16-encoded votes for a soft-fork and parameters
+          type: string
+          example: '000000'
         size:
           description: Size in bytes
           type: integer

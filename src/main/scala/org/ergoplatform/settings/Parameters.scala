@@ -206,7 +206,7 @@ object Parameters {
   val MaxBlockCostDecrease = (-MaxBlockCostIncrease).toByte
 
   val Kdefault = 1250000
-  val Kmax = 5000000
+  val Kmax = 2500000
   val Kmin = 0
   val Kstep = 25000
 

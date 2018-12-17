@@ -23,22 +23,21 @@ If the step is not defined in the table, its value is defined as $\max(\lceil0.0
 If minimum value for parameter is not defined, it equals to zero. If maximum value is not defined, it equals to
 1,073,741,823.
 
-All the monetary values in the table (storage fee factor, minimum box value) are in nanoErgs. All the sizes (block etc)
-are given in bytes.
-
 To propose or vote for increasing a parameter, a miner is inluding a parameter identifier ($id$) into a blockheader.
 If miner is for decreasing parameter, the miner is including ($-id$) into a block header.
 
-\begin{tabular}{*{6}{l}}
+\begin{tabular}{| l | l | l | l | l | l |}
+\hline
 Id & Description & Default & Step & Min & Max \\
 \hline
-1 & Storage fee factor (per byte per storage period) & 1250000 & 25000 & 0 & 5000000 \\
-2 & Minimum monetary value of a box & 360 & 10 & 0 & 10000000 \\
-3 & Maximum block size & 524288 & - & - & - \\
-4 & Maximum cumulative computational cost of a block & 1000000 & - & - & - \\
+\hline
+1 & Storage fee factor  & 1250000 & 25000 & 0 & 5000000 \\
+  &  (in nanoErgs per byte per storage period) & & & & \\
+\hline
+2 & Minimum monetary value of a box (in nanoErgs) & 360 & 10 & 0 & 10000000 \\
+\hline
+3 & Maximum block size (in bytes) & 524288 & - & - & - \\
+\hline
+4 & Maximum computational cost of a block & 1000000 & - & - & - \\
+\hline
 \end{tabular}
-
-
-\knote{Foundation wallet address change via 90 percent voting?}
-
-\knote{Foundation tax change after first years?}

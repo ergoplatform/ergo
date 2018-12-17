@@ -6,10 +6,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, VotingSettings}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -17,7 +15,6 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -253,11 +250,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     headers <- Gen.listOfN(size, invalidErgoFullBlockGen)
   } yield {
     headers match {
-      case s :: tail => tail.
-        foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty)) { case (c, h) =>
-          c.appendFullBlock(s, votingSettings).get
-        }
-      case _ => ErgoStateContext.empty(stateRoot, votingSettings)
+      case _ :: _ =>
+        headers.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
+          val block = b.copy(header = b.header.copy(height = h))
+          c.appendFullBlock(block, votingSettings).get -> (h + 1)
+        }._1
+      case _ =>
+        ErgoStateContext.empty(stateRoot, votingSettings)
     }
   }
 }

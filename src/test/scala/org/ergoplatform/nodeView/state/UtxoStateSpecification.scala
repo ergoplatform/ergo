@@ -113,7 +113,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("applyTransactions() - simple case") {
-    val header = defaultHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -126,7 +125,9 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendFullBlock(invalidErgoFullBlockGen.sample.get, votingSettings).get
+      val wBlock = invalidErgoFullBlockGen.sample.get
+      val block = wBlock.copy(header = wBlock.header.copy(height = 1))
+      val newSC = us.stateContext.appendFullBlock(block, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }

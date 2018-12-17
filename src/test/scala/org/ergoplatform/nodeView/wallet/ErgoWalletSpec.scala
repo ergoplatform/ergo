@@ -3,10 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData, VotingResults}
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.settings.Parameters
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey

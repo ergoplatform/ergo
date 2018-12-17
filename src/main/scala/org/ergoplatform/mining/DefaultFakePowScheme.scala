@@ -26,7 +26,7 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, version, interlinks, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt, this)
+    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
     val pk: ECPoint = genPk(sk)
     val w: ECPoint = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)

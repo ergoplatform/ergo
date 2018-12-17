@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
 import org.bouncycastle.math.ec.ECPoint
-import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution}
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
+import org.ergoplatform.modifiers.history.{Header, HeaderSerializer, PredictedHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
@@ -13,15 +13,31 @@ import scorex.crypto.authds.ADDigest
 import scala.util.Try
 
 /**
+  * State context with predicted header, that contains fields that are possible to predict
+  */
+class UpcomingStateContext(lastHeaders: Seq[Header],
+                           predictedHeader: PredictedHeader,
+                           genesisStateDigest: ADDigest) extends ErgoStateContext(lastHeaders, genesisStateDigest) {
+  override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
+
+  override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
+
+  override val currentHeight: Int = predictedHeader.height
+
+  override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
+}
+
+/**
   * Additional data required for transactions validation
   *
   * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - fixed number of last headers
   */
-case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDigest)
+class ErgoStateContext(val lastHeaders: Seq[Header],
+                       val genesisStateDigest: ADDigest)
   extends BytesSerializable with ScorexEncoding {
 
-  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
 
   // State root hash before the last block
@@ -39,17 +55,19 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
+  def rollback(heightTo: Int): ErgoStateContext = {
+    val oldHeaders = lastHeaders.filter(_.height <= heightTo)
+    ErgoStateContext(oldHeaders, genesisStateDigest)
+  }
+
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
   }
 
   def upcoming(minerPk: ECPoint, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
-    val (parentId, version, interlinks, height) =
-      AutolykosPowScheme.derivedHeaderFields(lastHeaderOpt, powScheme)
-    val upcomingHeader = Header(version, parentId, interlinks, null, null, null, timestamp, nBits, height, null,
-      AutolykosSolution(minerPk, null, null, null))
+    val upcomingHeader = PredictedHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
 
-    appendHeader(upcomingHeader)
+    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest)
   }
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders)"
@@ -58,11 +76,16 @@ case class ErgoStateContext(lastHeaders: Seq[Header], genesisStateDigest: ADDige
 object ErgoStateContext {
 
   def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq(), genesisStateDigest)
+    new ErgoStateContext(Seq(), genesisStateDigest)
   }
 
   def apply(header: Header, genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq(header), genesisStateDigest)
+    new ErgoStateContext(Seq(header), genesisStateDigest)
+  }
+
+  def apply(lastHeaders: Seq[Header],
+            genesisStateDigest: ADDigest): ErgoStateContext = {
+    new ErgoStateContext(lastHeaders, genesisStateDigest)
   }
 }
 

@@ -15,6 +15,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
 
   def prove(chain: Seq[Header]): NiPoPowProof = {
     assert(chain.lengthCompare(k) >= 0, s"Can not prove chain of size < $k")
+    assert(chain.head.isGenesis, "Can not prove not anchored chain")
     def provePrefix(anchoringPoint: Header, level: Int, acc: Seq[Header] = Seq.empty): Seq[Header] = {
       if (level >= 0) {
         val subChain = chain.dropRight(k)
@@ -29,12 +30,12 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
       }
     }
     val suffix = chain.takeRight(k)
-    val prefix = provePrefix(chain.head, suffix.head.interlinks.size - 1)
+    val prefix = provePrefix(chain.head, suffix.head.interlinks.size - 1).distinct.sortBy(_.height)
     NiPoPowProof(m, k, prefix, suffix)
   }
 
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
-    superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
+    superChain.size >= m && superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
   }
 
   private def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int): Boolean = {
@@ -52,8 +53,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
       val downChainSuffixSize = downChain.takeRight(mValue).size
       mValue match {
         case mToTest if mToTest < chain.size &&
-          locallyGood(math.min(superChainSuffixSize, mToTest), math.min(downChainSuffixSize, mToTest), level) &&
-          superChainSuffixSize >= m =>
+          locallyGood(math.min(superChainSuffixSize, mToTest), math.min(downChainSuffixSize, mToTest), level) =>
           checkLocalGoodnessAt(mToTest + 1)
         case mToTest if mToTest < chain.size =>
           false

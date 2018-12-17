@@ -32,7 +32,7 @@ case class NiPoPowProofPrefix(m: Int,
 
   def validate: Try[Unit] = {
     failFast
-      .demand(chain.tail.groupBy(maxLevelOf).forall(_._2.lengthCompare(m) == 0), s"Invalid prefix length")
+      .demand(validPrefix, s"Invalid prefix length")
       .demand(chain.tail.forall(_.interlinks.headOption.contains(chain.head.id)), "Chain is not anchored")
       .result
       .toTry
@@ -43,6 +43,11 @@ case class NiPoPowProofPrefix(m: Int,
       .map(h => chain.filter(_.height > h.height) -> that.chain.filter(_.height > h.height))
       .getOrElse(chain -> that.chain)
     bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
+  }
+
+  private def validPrefix: Boolean = {
+    val levels = chain.tail.map(maxLevelOf)
+    (0 to levels.max).forall(l => chain.count(h => maxLevelOf(h) >= l) >= m)
   }
 
 }

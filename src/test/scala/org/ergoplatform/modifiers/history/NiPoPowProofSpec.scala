@@ -16,6 +16,7 @@ class NiPoPowProofSpec extends ErgoPropertyTest with RealModifiers {
   property("prove chain") {
     val headers = takeHeaders(6000)
     val proof = algos.prove(headers)
+    proof.prefix.chain.size shouldEqual proof.prefix.chain.toSet.size
     proof.validate shouldBe 'success
   }
 

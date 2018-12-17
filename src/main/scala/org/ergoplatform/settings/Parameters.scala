@@ -213,7 +213,7 @@ object Parameters {
   val MinValuePerByteDefault: Int = 30 * 12
   val MinValueStep = 10
   val MinValueMin = 0
-  val MinValueMax = 10000000 //0.01 Erg
+  val MinValueMax = 10000 //0.00001 Erg
 
   lazy val parametersDescs: Map[Byte, String] = Map(
     KIncrease -> "Storage fee factor (per byte per storage period)",

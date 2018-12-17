@@ -23,25 +23,25 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("simple voting - start - conditions") {
     val kInit = 1000000
 
-    val p: Parameters = Parameters(2, Map(KIncrease -> kInit, BlockVersion -> 0))
+    val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
-    val votes = Array(KIncrease, NoParameter, NoParameter)
+    val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
     val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     val esc2 = esc.processExtension(p, h).get
 
     //double vote
-    val wrongVotes1 = Array(KIncrease, KIncrease, NoParameter)
+    val wrongVotes1 = Array(StorageFeeFactorIncrease, StorageFeeFactorIncrease, NoParameter)
     val hw1 = defaultHeaderGen.sample.get.copy(votes = wrongVotes1, version = 0: Byte)
     esc.processExtension(p, hw1).isSuccess shouldBe false
 
     //contradictory votes
-    val wrongVotes2 = Array(KIncrease, KDecrease, NoParameter)
+    val wrongVotes2 = Array(StorageFeeFactorIncrease, StorageFeeFactorDecrease, NoParameter)
     val hw2 = defaultHeaderGen.sample.get.copy(votes = wrongVotes2, version = 0: Byte)
     esc.processExtension(p, hw2).isSuccess shouldBe false
 
     //too many votes - only two ordinary changes allowed per epoch
-    val wrongVotes3 = Array(KIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
+    val wrongVotes3 = Array(StorageFeeFactorIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
     val hw3 = defaultHeaderGen.sample.get.copy(votes = wrongVotes3, version = 0: Byte)
     esc.processExtension(p, hw3).isSuccess shouldBe false
 
@@ -54,15 +54,15 @@ class ParametersSpecification extends ErgoPropertyTest {
     val he = defaultHeaderGen.sample.get.copy(votes = Array.fill(3)(NoParameter), version = 0: Byte)
     val esc30 = esc2.processExtension(p, he).get
     val esc40 = esc30.processExtension(p, he).get
-    esc40.currentParameters.k shouldBe kInit
+    esc40.currentParameters.storageFeeFactor shouldBe kInit
 
     //quorum gathered - parameter change
     val esc31 = esc2.processExtension(p, h.copy(height = 3)).get
-    esc31.currentVoting.results.find(_._1 == KIncrease).get._2 shouldBe 2
+    esc31.currentVoting.results.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 2
 
-    val p4 = Parameters(4, Map(KIncrease -> (kInit + Parameters.Kstep), BlockVersion -> 0))
+    val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0))
     val esc41 = esc31.processExtension(p4, he.copy(height = 4)).get
-    esc41.currentParameters.k shouldBe (kInit + Parameters.Kstep)
+    esc41.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
   }
 
   property("soft fork - w. activation") {

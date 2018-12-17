@@ -10,8 +10,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest

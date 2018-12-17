@@ -230,7 +230,9 @@ object Parameters {
 
   lazy val minValues: Map[Byte, Int] = Map(
     KIncrease -> Kmin,
-    MinValuePerByteIncrease -> MinValueMin
+    MinValuePerByteIncrease -> MinValueMin,
+    MaxBlockSizeIncrease -> 16 * 1024,
+    MaxBlockCostIncrease -> 16 * 1024
   )
 
   lazy val maxValues: Map[Byte, Int] = Map(

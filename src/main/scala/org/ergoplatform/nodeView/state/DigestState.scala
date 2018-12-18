@@ -129,7 +129,6 @@ class DigestState protected(override val version: VersionTag,
 
   private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
     val version: VersionTag = idToVersion(fullBlock.header.id)
-    val height = fullBlock.header.height
     stateContext.appendFullBlock(fullBlock, votingSettings).flatMap { newStateContext =>
       val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
       update(version, fullBlock.header.stateRoot, Seq(cb))

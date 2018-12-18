@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.NodeConfigurationSettings
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 
 /**

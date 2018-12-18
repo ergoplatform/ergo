@@ -44,7 +44,7 @@ trait ValidBlocksGenerators
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
-    val stateCtx = ErgoStateContext.empty(StateConstants(None, settings).emission.settings.afterGenesisStateDigest)
+    val stateCtx = ErgoStateContext.empty(StateConstants(None, settings))
 
     def validOutputs(tx: ErgoTransaction) = tx.outputs
       .forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateCtx.currentParameters))

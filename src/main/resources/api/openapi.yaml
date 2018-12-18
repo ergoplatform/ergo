@@ -1052,26 +1052,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /parameters:
-    get:
-      summary: Get the current network parameters
-      operationId: getParameters
-      tags:
-      - info
-      responses:
-        '200':
-          description: Current blockchain parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NodeInfo'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /transactions:
     post:
       summary: Send an anyone can spend transaction

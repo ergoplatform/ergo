@@ -16,15 +16,16 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
   type PM = ErgoPersistentModifier
 
-  private def genHistory(height: Int = 0, minFullHeight: Option[Int] = Some(0)): (ErgoHistory, Seq[ErgoFullBlock]) = {
+  private def genHistory(blocksNum: Int = 0,
+                         minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
       inHistory.pruningProcessor.minimalFullBlockHeightVar = h
       inHistory.pruningProcessor.isHeadersChainSyncedVar = true
     }
 
-    if (height > 0) {
-      val chain = genChain(height, inHistory)
+    if (blocksNum > 0) {
+      val chain = genChain(blocksNum, inHistory)
       (applyChain(inHistory, chain), chain)
     } else {
       (inHistory, Seq.empty)
@@ -34,7 +35,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
   property("Should generate empty extension on fly") {
     val (history, _) = genHistory()
     val block = genChain(1, history, extension = emptyExtension).head
-    block.extension shouldBe Extension(block.header.id, block.header.height, Seq(), Seq())
+    block.extension shouldBe Extension(block.header.id, Seq(), Seq())
     history.bestFullBlockOpt shouldBe None
     history.append(block.header) shouldBe 'success
     history.contains(block.extension) shouldBe true

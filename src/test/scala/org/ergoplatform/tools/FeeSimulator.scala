@@ -20,21 +20,22 @@ object FeeSimulator extends App {
   val k2 = DLogProverInput.random().publicImage
 
   val input = Input(ADKey @@ Random.randomBytes(32), ProverResult(Random.randomBytes(65), ContextExtension(Map())))
+  val creationHeight: Int = 100000
 
-  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
-  val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2)
+  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
+  val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2, creationHeight)
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2), None)
   val stdSize = simpleTx.outputs.map(_.bytes.length).sum / simpleTx.outputs.length
   val simpleTxSize = simpleTx.bytes.length
   val outputsSize = simpleTx.outputs.map(_.bytes.length).sum
-  lazy val perOutputFee = stdSize * k / CoinsInOneErgo.toDouble
+  lazy val perOutputFee = stdSize * storageFeeFactor / CoinsInOneErgo.toDouble
   val minStdDust = minValuePerByte * stdSize
   val byteFeeBitcoin = 0.00039128734 * CoinsInOneErgo
 
   println("=====================")
   println("Global parameters:")
-  println(s"K: $k")
+  println(s"K: $storageFeeFactor")
   println(s"Output size: $stdSize B")
   println(s"Simple tx size: $simpleTxSize B")
   println(s"Block size: $BlockSize B")
@@ -52,9 +53,9 @@ object FeeSimulator extends App {
   println("=====================")
   println(s"Assume that blocks are full and miner is requiring upfront payment equal to storage fee to move a box")
 
-  println(s"Reward per block: ${BlockSize * k / CoinsInOneErgo.toDouble} Erg")
+  println(s"Reward per block: ${BlockSize * storageFeeFactor / CoinsInOneErgo.toDouble} Erg")
 
-  val minTxFee = k * outputsSize / CoinsInOneErgo.toDouble
+  val minTxFee = storageFeeFactor * outputsSize / CoinsInOneErgo.toDouble
   println(s"Tx fee: $minTxFee")
 
   println(s"Everyday relocation: ${minTxFee * StoragePeriod / BlocksPerDay}")
@@ -78,9 +79,9 @@ object FeeSimulator extends App {
   // Mean lifetime of a box in Bitcoin = 8182 blocks.
   val LBitcoin = 8182
 
-  val meanMinTxFee = outputsSize * k * LBitcoin / StoragePeriod.toDouble
+  val meanMinTxFee = outputsSize * storageFeeFactor * LBitcoin / StoragePeriod.toDouble
 
-  println(s"Reward per block: ${BlockSize * k * LBitcoin / StoragePeriod.toDouble / CoinsInOneErgo.toDouble} Erg")
+  println(s"Reward per block: ${BlockSize * storageFeeFactor * LBitcoin / StoragePeriod.toDouble / CoinsInOneErgo.toDouble} Erg")
 
   println(s"Tx fee: ${meanMinTxFee / CoinsInOneErgo.toDouble}")
 
@@ -91,9 +92,9 @@ object FeeSimulator extends App {
   // Mean lifetime of a box in Ergo = 56,8 days
   val LErgo = LBitcoin * 5
 
-  val meanMinTxFeeE = outputsSize * k * LErgo / StoragePeriod.toDouble
+  val meanMinTxFeeE = outputsSize * storageFeeFactor * LErgo / StoragePeriod.toDouble
 
-  println(s"Reward per block: ${BlockSize * k * LErgo / StoragePeriod.toDouble  / CoinsInOneErgo.toDouble} Erg")
+  println(s"Reward per block: ${BlockSize * storageFeeFactor * LErgo / StoragePeriod.toDouble  / CoinsInOneErgo.toDouble} Erg")
 
   println(s"Tx fee: ${meanMinTxFeeE / CoinsInOneErgo.toDouble}")
 

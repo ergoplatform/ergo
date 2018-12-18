@@ -239,10 +239,11 @@ components:
       - transactionsRoot
       - nBits
       - extensionHash
-      - equihashSolutions
+      - powSolutions
       - height
       - difficulty
       - parentId
+      - votes
       - size
       properties:
         id:
@@ -271,8 +272,8 @@ components:
           example: 19857408
         extensionHash:
           $ref: '#/components/schemas/Digest32'
-        equihashSolutions:
-          description: Base16-encoded equihash solutions
+        powSolutions:
+          description: Base16-encoded Autolykos solutions
           type: string
           example: '000098250001b89e0001ecb60001fd5f00009e6d00013ac400018e0f0001e15e0000abeb000108d9000118890001bc2e0000ae350000bab7000113bc0001f24c00009b550000fd4c0000d0e30001acbe0000e635000102130001311900015aff0000df6800018e4600012c1400013ecb0000e2b10001575f00014b4d0001592a'
         height:
@@ -287,6 +288,10 @@ components:
           example: 62
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        votes:
+          description: Base16-encoded votes for a soft-fork and parameters
+          type: string
+          example: '000000'
         size:
           description: Size in bytes
           type: integer
@@ -536,7 +541,7 @@ components:
           type: object
           required:
           - height
-          - K
+          - storageFeeFactor
           - minValuePerByte
           - maxBlockSize
           - maxBlockCost
@@ -548,7 +553,7 @@ components:
               minimum: 0
               example: 667
               nullable: false
-            K:
+            storageFeeFactor:
               type: integer
               format: int32
               description: Storage fee coefficient (per byte per storage period ~4 years)

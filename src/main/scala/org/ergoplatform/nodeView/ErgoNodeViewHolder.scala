@@ -44,7 +44,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
-    minimalState().closeStorage
+    minimalState().closeStorage()
   }
 
   /**
@@ -107,10 +107,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
-      case (_, None, state) =>
+      case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
-      case (_, Some(bestFullBlock), state: DigestState) =>
+      case (_, Some(bestFullBlock), _: DigestState) =>
         // Just update state root hash
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))

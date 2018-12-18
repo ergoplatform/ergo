@@ -1,9 +1,9 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.mining.PowScheme
 import scorex.util.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
+import org.ergoplatform.mining.AutolykosPowScheme
 
 /**
   * Configuration file for Ergo chain
@@ -11,9 +11,12 @@ import scala.concurrent.duration.FiniteDuration
   */
 case class ChainSettings(addressPrefix: Byte,
                          blockInterval: FiniteDuration,
-                         votingLength: Int,
                          epochLength: Int,
                          useLastEpochs: Int,
-                         powScheme: PowScheme,
+                         voting: VotingSettings,
+                         powScheme: AutolykosPowScheme,
                          monetary: MonetarySettings,
                          genesisId: Option[ModifierId] = None)
+
+
+

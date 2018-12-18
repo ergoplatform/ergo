@@ -21,7 +21,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   /**
     * Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs.
     */
-  lazy val k: Int = parametersTable(KIncrease)
+  lazy val storageFeeFactor: Int = parametersTable(StorageFeeFactorIncrease)
 
   /** To prevent creation of dust which is not profitable to charge storage fee from, we have this min-value per-byte
     * parameter.
@@ -38,8 +38,96 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     */
   lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
 
-  def update(newHeight: Height, votes: Seq[(Byte, Int)], votingEpochLength: Int): Parameters = {
-    val paramsTable = votes.foldLeft(parametersTable) { case (table, (paramId, count)) =>
+  lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
+  lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
+
+  lazy val blockVersion = parametersTable(BlockVersion)
+
+  def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
+    val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
+    val table2 = updateParams(table1, epochVotes, votingSettings.votingLength)
+    Parameters(height, table2)
+  }
+
+  def updateFork(height: Height,
+                 parametersTable: Map[Byte, Int],
+                 forkVote: Boolean,
+                 epochVotes: Seq[(Byte, Int)],
+                 votingSettings: VotingSettings): Map[Byte, Int] = {
+    lazy val votingEpochLength = votingSettings.votingLength
+    lazy val votingEpochs = votingSettings.softForkEpochs
+    lazy val activationEpochs = votingSettings.activationEpochs
+
+    var table = parametersTable
+
+    def activationHeight(startingHeight: Height) =
+      startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
+
+    lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
+    lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
+
+    //successful voting - cleaning after activation
+    if(softForkStartingHeight.nonEmpty
+      && height % votingEpochLength == 0
+      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)) {
+
+      val votes = parametersTable(SoftForkVotesCollected)
+
+      if (votes > votingEpochLength * votingEpochs * 9 / 10) {
+        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+      }
+    }
+
+    //unsuccessful voting - cleaning
+    if(softForkStartingHeight.nonEmpty
+      && height % votingEpochLength == 0
+      && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1))) {
+
+      //unsuccessful voting
+      if (votes <= votingEpochLength * votingEpochs * 9 / 10) {
+        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+      }
+    }
+
+    //new voting
+    if((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
+       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
+       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
+    ) {
+      table = table
+        .updated(SoftForkStartingHeight, height)
+        .updated(SoftForkVotesCollected, 0)
+    }
+
+    //new epoch in voting
+    if(softForkStartingHeight.nonEmpty
+        && height % votingEpochLength == 0
+        && height <= softForkStartingHeight.get + votingEpochLength * votingEpochs) {
+      table = table
+        .updated(SoftForkVotesCollected, votes)
+    }
+
+    //successful voting - activation
+    if(softForkStartingHeight.nonEmpty
+      && height % votingEpochLength == 0
+      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)) {
+
+      val votes = parametersTable(SoftForkVotesCollected)
+
+      if (votes > votingEpochLength * votingEpochs * 9 / 10) {
+        table = table.updated(BlockVersion, table(BlockVersion) + 1)
+      }
+    }
+
+    table
+  }
+
+  //Update non-fork parameters
+  def updateParams(parametersTable: Map[Byte, Int],
+                   epochVotes: Seq[(Byte, Int)],
+                   votingEpochLength: Int): Map[Byte, Int] = {
+    epochVotes.filter(_._1 < Parameters.SoftFork).foldLeft(parametersTable) { case (table, (paramId, count)) =>
+
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
       if (count > votingEpochLength / 2) {
@@ -59,20 +147,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         table
       }
     }
-    Parameters(newHeight, paramsTable)
   }
 
   private def padVotes(vs: Array[Byte]): Array[Byte] = {
     val maxVotes = ParamVotesCount + 1
     if (vs.length < maxVotes) vs ++ Array.fill(maxVotes - vs.length)(0: Byte) else vs
-  }
-
-
-  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
-    val vs = ownTargets.flatMap { case (paramId, value) =>
-      if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
-    }.take(ParamVotesCount).toArray
-    padVotes(vs)
   }
 
   def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
@@ -85,6 +164,13 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
         false
       }
     }.map(_._1)
+    padVotes(vs)
+  }
+
+  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
+    val vs = ownTargets.flatMap { case (paramId, value) =>
+      if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
+    }.take(ParamVotesCount).toArray
     padVotes(vs)
   }
 
@@ -101,53 +187,56 @@ object Parameters {
   val SoftFork = 120: Byte
   val SoftForkVotesCollected = 121: Byte
   val SoftForkStartingHeight = 122: Byte
-  val ActivationHeight = 123: Byte
+  val BlockVersion = 123: Byte
 
   //A vote for nothing
   val NoParameter = 0: Byte
 
   //Parameter identifiers
-  val KIncrease = 1: Byte
-  val KDecrease = -KIncrease
+  val StorageFeeFactorIncrease = 1: Byte
+  val StorageFeeFactorDecrease = (-StorageFeeFactorIncrease).toByte
 
   val MinValuePerByteIncrease = 2: Byte
-  val MinValuePerByteDecrease = -MinValuePerByteIncrease
+  val MinValuePerByteDecrease = (-MinValuePerByteIncrease).toByte
 
   val MaxBlockSizeIncrease = 3: Byte
-  val MaxBlockSizeDecrease = -MaxBlockSizeIncrease
+  val MaxBlockSizeDecrease = (-MaxBlockSizeIncrease).toByte
 
   val MaxBlockCostIncrease = 4: Byte
-  val MaxBlockCostDecrease = -MaxBlockCostIncrease
+  val MaxBlockCostDecrease = (-MaxBlockCostIncrease).toByte
 
-  val Kdefault = 1250000
-  val Kmax = 5000000
-  val Kmin = 0
-  val Kstep = 25000
+  val StorageFeeFactorDefault = 1250000
+  val StorageFeeFactorMax = 2500000
+  val StorageFeeFactorMin = 0
+  val StorageFeeFactorStep = 25000
 
   val MinValuePerByteDefault: Int = 30 * 12
   val MinValueStep = 10
   val MinValueMin = 0
-  val MinValueMax = 10000000 //0.01 Erg
+  val MinValueMax = 10000 //0.00001 Erg
 
   lazy val parametersDescs: Map[Byte, String] = Map(
-    KIncrease -> "Storage fee factor (per byte per storage period)",
+    StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
-    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block"
+    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
+    SoftFork -> "Soft-fork (increasing version of a block)"
   )
 
   lazy val stepsTable: Map[Byte, Int] = Map(
-    KIncrease -> Kstep,
+    StorageFeeFactorIncrease -> StorageFeeFactorStep,
     MinValuePerByteIncrease -> MinValueStep
   )
 
   lazy val minValues: Map[Byte, Int] = Map(
-    KIncrease -> Kmin,
-    MinValuePerByteIncrease -> MinValueMin
+    StorageFeeFactorIncrease -> StorageFeeFactorMin,
+    MinValuePerByteIncrease -> MinValueMin,
+    MaxBlockSizeIncrease -> 16 * 1024,
+    MaxBlockCostIncrease -> 16 * 1024
   )
 
   lazy val maxValues: Map[Byte, Int] = Map(
-    KIncrease -> Kmax,
+    StorageFeeFactorIncrease -> StorageFeeFactorMax,
     MinValuePerByteIncrease -> MinValueMax
   )
 
@@ -182,7 +271,7 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
   implicit val jsonEncoder: Encoder[Parameters] = (p: Parameters) =>
     Map(
       "height" -> p.height.asJson,
-      "K" -> p.k.asJson,
+      "storageFeeFactor" -> p.storageFeeFactor.asJson,
       "minValuePerByte" -> p.minValuePerByte.asJson,
       "maxBlockSize" -> p.maxBlockSize.asJson,
       "maxBlockCost" -> p.maxBlockCost.asJson

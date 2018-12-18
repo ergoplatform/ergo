@@ -2,13 +2,14 @@ package org.ergoplatform.tools
 
 import java.io.File
 
-import org.ergoplatform.mining.{CandidateBlock, EquihashPowScheme}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
+import org.ergoplatform.tools.ChainGenerator.pow
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import scorex.util.ScorexLogging
@@ -25,9 +26,7 @@ import scala.util.Random
   */
 object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelpers with ScorexLogging {
 
-  val n: Char = 96
-  val k: Char = 5
-  val pow = new EquihashPowScheme(n, k)
+  val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
@@ -38,7 +37,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
-  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 256, 8, pow, settings.chainSettings.monetary)
+
+  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, votingSettings, pow, settings.chainSettings.monetary)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
@@ -64,7 +64,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
       val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
       val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
-        txs, time, ExtensionCandidate(Seq(), Seq()), Seq())
+        txs, time, ExtensionCandidate(Seq(), Seq()), Array())
 
       val block = generate(candidate)
       history.append(block.header).get
@@ -80,13 +80,14 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   private def generate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
-    pow.proveBlock(candidate) match {
+    pow.proveCandidate(candidate, defaultMinerSecretNumber) match {
       case Some(fb) => fb
       case _ =>
         val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
         generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
     }
   }
+
 
   /**
     * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we

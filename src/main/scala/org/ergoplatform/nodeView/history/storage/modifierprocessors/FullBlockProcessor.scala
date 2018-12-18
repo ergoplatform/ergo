@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
@@ -15,7 +16,7 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
-  lazy val VotingEpochLength = chainSettings.votingLength
+  lazy val VotingEpochLength: Int = chainSettings.voting.votingLength
 
   /**
     * Id of header that contains transactions and proofs
@@ -128,7 +129,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       s" New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
-        s"with height ${prevBest.map(_.header.height).getOrElse(-1)}"
+        s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
       s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
@@ -170,5 +171,4 @@ object FullBlockProcessor {
                         blocksToKeep: Int,
                         bestFullChain: Seq[ErgoFullBlock]
                       )
-
 }

@@ -38,7 +38,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.scheduler.schedule(10.seconds, 10.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
   }
 
-  var nodeInfo = NodeInfo(
+  private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
     Version.VersionString,
     0,
@@ -55,7 +55,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None
   )
 
-  var parameters: Parameters = LaunchParameters
+  private var parameters: Parameters = LaunchParameters
 
   override def receive: Receive = onConnectedPeers orElse getInfo orElse onMempoolChanged orElse onStateChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
@@ -93,7 +93,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
       if (nodeInfo.genesisBlockIdOpt.isEmpty) {
-        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption)
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,

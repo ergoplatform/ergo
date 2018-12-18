@@ -1,15 +1,18 @@
 package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.settings.{LaunchParameters, Parameters, ParametersSerializer}
+import org.ergoplatform.settings._
 import com.google.common.primitives.Bytes
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 
+import scala.collection.mutable
 import scala.util.{Success, Try}
 
 case class VotingResults(results: Array[(Byte, Int)]) {
@@ -24,19 +27,38 @@ object VotingResults {
   val empty = VotingResults(Array.empty)
 }
 
+case class VotingData(currentVoting: VotingResults,
+                      softForkVotingStartingHeight: Int = 0,
+                      softForkVotesCollected: Int = 0,
+                      activationHeight: Int = 0)
+
+object VotingData {
+  val empty = VotingData(VotingResults.empty)
+}
+
 /**
   * Additional data required for transactions validation
   *
   * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
-  * @param currentVoting      - votes for parameters change within the current voting epoch
+  * @param votingData         - votes for parameters change within the current voting epoch
   */
-case class ErgoStateContext(lastHeaders: Seq[Header],
-                            genesisStateDigest: ADDigest,
-                            currentParameters: Parameters,
-                            currentVoting: VotingResults)
+class ErgoStateContext(val lastHeaders: Seq[Header],
+                       val genesisStateDigest: ADDigest,
+                       val currentParameters: Parameters,
+                       val votingData: VotingData)
+                      (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
+
+  lazy val votingEpochLength: Int = votingSettings.votingLength
+
+  def votingStarts(height: Int): Boolean = height % votingEpochLength == 0 && height > 0
+
+  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
+
+  lazy val currentVoting: VotingResults = votingData.currentVoting
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -47,48 +69,137 @@ case class ErgoStateContext(lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  // TODO it should be -1 by default, see https://github.com/ergoplatform/ergo/issues/546
-  val currentHeight: Int = lastHeaderOpt.map(_.height).getOrElse(0)
+  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
 
-  override def serializer: Serializer[M] = ErgoStateContextSerializer
+  override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
 
-  def appendFullBlock(fullBlock: ErgoFullBlock, votingEpochLength: Int): Try[ErgoStateContext] = {
-    def votingStarts(height: Int) = height % votingEpochLength == 0 && height > 0
+  //Check that non-zero votes extracted from block header are correct
+  protected def checkVotes(votes: Array[Byte], epochStarts: Boolean): Unit = {
+    if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
 
-    val header = fullBlock.header
+    val prevVotes = mutable.Buffer[Byte]()
+    votes.foreach { v =>
+      if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
+      if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+      if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
+      prevVotes += v
+    }
+  }
+
+  //Check that calculated parameters are matching ones written in the extension section of the block
+  private def matchParameters(p1: Parameters, p2: Parameters): Unit = {
+    if (p1.parametersTable.size != p2.parametersTable.size) {
+      throw new Error(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+    }
+    p1.parametersTable.foreach { case (k, v) =>
+      val v2 = p2.parametersTable(k)
+      if (v2 != v) {
+        throw new Error(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+      }
+    }
+  }
+
+  protected def checkForkVote(height: Height): Unit = {
+    if (currentParameters.softForkStartingHeight.nonEmpty) {
+      val startingHeight = currentParameters.softForkStartingHeight.get
+      val finishingHeight = startingHeight + votingSettings.votingLength * votingSettings.softForkEpochs
+      val afterActivationHeight = finishingHeight + votingSettings.votingLength * (votingSettings.activationEpochs + 1)
+      val votesCollected = currentParameters.softForkVotesCollected.get
+
+      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && votesCollected <= (finishingHeight - startingHeight) * 9 / 10) ||
+        (height >= finishingHeight && height < afterActivationHeight && votesCollected > (finishingHeight - startingHeight) * 9 / 10)) {
+        throw new Error(s"Voting for fork is prohibited at height $height")
+      }
+    }
+  }
+
+  def processExtension(extension: Extension,
+                       header: Header): Try[ErgoStateContext] = Try {
+
+    val headerVotes: Array[Byte] = header.votes
     val height = header.height
-    val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
 
-    if (votingStarts(height)) {
-      val extension = fullBlock.extension
+    //genesis block does not contain votes
+    //todo: this rule may be reconsidered when moving interlink vector to extension section
+    if (height == 0 && extension.mandatoryFields.nonEmpty) {
+      throw new Error("Mandatory fields in genesis block")
+    }
 
-      val newVoting = VotingResults(
-        header.votes.filter(_ != Parameters.NoParameter).map(id => id -> 1)
-      )
+    val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
-      Parameters.parseExtension(extension.height, extension).map { params =>
-        ErgoStateContext(newHeaders, genesisStateDigest, params, newVoting)
+    val epochStarts = votingStarts(height)
+
+    checkVotes(votes, epochStarts)
+
+    val forkVote = votes.contains(Parameters.SoftFork)
+
+    if (forkVote) checkForkVote(height)
+
+    if (epochStarts) {
+      val proposedVotes = votes.map(id => id -> 1)
+      val newVoting = VotingData(VotingResults(proposedVotes))
+
+      Parameters.parseExtension(height, extension).flatMap { parsedParams =>
+        val calculatedParams = currentParameters.update(height, forkVote, currentVoting.results, votingSettings)
+
+        if (calculatedParams.blockVersion != header.version) {
+          throw new Error("Versions in header and parameters section are different")
+        }
+
+        Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
+      }.map { params =>
+        new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
       }
     } else {
-      val newVotes = header.votes.filter(_ != Parameters.NoParameter).foldLeft(currentVoting) { case (v, id) =>
-        v.update(id)
-      }
-      Success(ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, newVotes))
+      val newVotes = votes
+      val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
+      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, VotingData(newVotingResults))(votingSettings))
     }
+  }.flatten
+
+  /**
+    * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
+    * the latter according to the former.
+    *
+    * @param fullBlock      - full block (transactions, extension section, maybe state transformation proofs)
+    * @param votingSettings - chain-wide voting settings
+    * @return
+    */
+  def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
+    val header = fullBlock.header
+    val height = header.height
+
+    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+      throw new Error(s"Improper block applied: $fullBlock to state context $this")
+    }
+
+    processExtension(fullBlock.extension, header).map { sc =>
+      val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
+      sc.updateHeaders(newHeaders)
+    }
+  }.flatten
+
+  def updateHeaders(newHeaders: Seq[Header]): ErgoStateContext = {
+    new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings)
   }
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 }
 
 object ErgoStateContext {
-  def empty(genesisStateDigest: ADDigest): ErgoStateContext = {
-    ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingResults.empty)
+  def empty(constants: StateConstants): ErgoStateContext = {
+    implicit val votingSettings: VotingSettings = constants.votingSettings
+    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
+  }
+
+  def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))(votingSettings)
   }
 }
 
-object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Serializer[ErgoStateContext] {
 
   override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
     val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
@@ -115,10 +226,9 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
     val genesisDigest = ADDigest @@ bytes.take(33)
     val length = Ints.fromByteArray(bytes.slice(33, 37))
 
-    def loop(startPos: Int, finishPos: Int, acc: Seq[Header]): Seq[Header] = if (startPos < length) {
-      // todo use only required bytes when header size will be fixed after https://github.com/ergoplatform/ergo/issues/452
-      val header = HeaderSerializer.parseBytes(bytes.slice(startPos, finishPos)).get
-      loop(startPos + header.bytes.length, finishPos, header +: acc)
+    def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
+      val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
+      loop(offset + header.bytes.length, header +: acc)
     } else {
       acc.reverse
     }
@@ -137,8 +247,9 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
     ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
-      val lastHeaders = loop(startPos = 37, 37 + length, Seq.empty)
-      ErgoStateContext(lastHeaders, genesisDigest, params, votes)
+      val lastHeaders = loop(offset = 37, Seq.empty)
+      new ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))(votingSettings)
     }
   }.flatten
+
 }

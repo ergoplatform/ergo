@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingResults}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
@@ -15,7 +15,6 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -36,7 +35,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
-  } yield new ErgoBoxCandidate(value, prop, tokens, ar, creationHeight = h)
+  } yield new ErgoBoxCandidate(value, prop, h, tokens, ar)
 
   def ergoBoxGen(propGen: Gen[Value[SBoolean.type]] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
@@ -48,7 +47,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
-  } yield ErgoBox(value, prop, tokens, ar, transactionId.toModifierId, boxId, h)
+  } yield ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
 
   lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
@@ -115,7 +114,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     */
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,
-                                issueNew: Boolean = true): ErgoTransaction = {
+                                issueNew: Boolean = true,
+                                outputsProposition: Value[SBoolean.type] = TrueLeaf,
+                                stateCtxOpt: Option[ErgoStateContext] = None): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -177,14 +178,16 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, TrueLeaf, normalizedTokens, creationHeight = 0)
+      ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
-    val inputs = boxesToSpend.map(b => Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
+    val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, emptyStateContext).getOrElse {
-      log.debug("Going to generate a transaction with incorrect proofs")
-      new ErgoTransaction(inputs, newBoxes)
-    }
+
+    defaultProver.sign(unsignedTx, boxesToSpend, settings.metadata, stateCtxOpt.getOrElse(emptyStateContext))
+      .getOrElse {
+        log.debug("Going to generate a transaction with incorrect proofs")
+        new ErgoTransaction(inputs, newBoxes)
+      }
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
@@ -210,7 +213,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
-    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq)
+    prop <- propositionGen
+    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
   } yield from.asScala.toIndexedSeq -> tx
 
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)
@@ -234,12 +238,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
-    header <- invalidHeaderGen
+    header <- defaultHeaderGen
     txs <- invalidBlockTransactionsGen
     extension <- extensionGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
-
 
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
@@ -247,11 +250,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     headers <- Gen.listOfN(size, invalidErgoFullBlockGen)
   } yield {
     headers match {
-      case s :: tail => tail.
-        foldLeft(ErgoStateContext(Seq(), startDigest, parameters, VotingResults.empty)) { case (c, h) =>
-          c.appendFullBlock(s, 1024).get
-        }
-      case _ => ErgoStateContext.empty(stateRoot)
+      case _ :: _ =>
+        headers.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
+          val block = b.copy(header = b.header.copy(height = h))
+          c.appendFullBlock(block, votingSettings).get -> (h + 1)
+        }._1
+      case _ =>
+        ErgoStateContext.empty(stateRoot, votingSettings)
     }
   }
 }

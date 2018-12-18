@@ -110,7 +110,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val ctx = new ErgoContext(blockchainState, transactionContext, proverExtension)
 
         //todo: reuse the interpreter?
-        val verifier: ErgoInterpreter = new ErgoInterpreter(blockchainState.currentParameters)
+        val verifier: ErgoInterpreter = ErgoInterpreter(blockchainState.currentParameters)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover { case t => t.printStackTrace() }

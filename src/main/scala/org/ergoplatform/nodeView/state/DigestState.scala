@@ -167,7 +167,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              settings: ErgoSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = settings.nodeSettings.keepVersions)
-    val verifier = ErgoInterpreter()
+    val verifier = ErgoInterpreter(LaunchParameters)
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {

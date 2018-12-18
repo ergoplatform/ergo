@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.{ErgoPropertyTest, Stubs}
 import org.scalacheck.Gen
 import scapi.sigma.ProveDHTuple
@@ -44,7 +45,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.additionalRegisters)
   }
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>

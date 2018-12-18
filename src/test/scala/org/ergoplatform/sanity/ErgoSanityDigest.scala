@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
@@ -24,7 +24,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
-      new WrappedDigestState(digestState, wus, settings, ErgoInterpreter())
+      new WrappedDigestState(digestState, wus, settings, ErgoInterpreter(LaunchParameters))
     }
   }
 

@@ -5,7 +5,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, GetParameters, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -52,10 +52,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     timeProvider.time(),
-    None
-  )
-
-  private var parameters: Parameters = LaunchParameters
+    None,
+    LaunchParameters)
 
   override def receive: Receive = onConnectedPeers orElse getInfo orElse onMempoolChanged orElse onStateChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
@@ -69,14 +67,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
         genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption,
         stateRoot = Some(Algos.encode(s.rootHash)),
-        stateVersion = Some(s.version)
+        stateVersion = Some(s.version),
+        parameters = s.stateContext.currentParameters
       )
-      parameters = s.stateContext.currentParameters
   }
 
   private def getInfo: Receive = {
     case GetNodeInfo => sender() ! nodeInfo
-    case GetParameters => sender() ! parameters
   }
 
   private def onMempoolChanged: Receive = {
@@ -86,7 +83,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
-      parameters = s.stateContext.currentParameters
+      nodeInfo = nodeInfo.copy(parameters = s.stateContext.currentParameters)
   }
 
   private def onHistoryChanged: Receive = {
@@ -119,7 +116,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 object ErgoStatsCollector {
 
   case object GetNodeInfo
-  case object GetParameters
 
   case class NodeInfo(nodeName: String,
                       appVersion: String,
@@ -134,10 +130,12 @@ object ErgoStatsCollector {
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
                       launchTime: Long,
-                      genesisBlockIdOpt: Option[String]) {
-  }
+                      genesisBlockIdOpt: Option[String],
+                      parameters: Parameters)
 
   object NodeInfo extends ApiCodecs {
+    implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
+
     implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
       Map(
         "name" -> ni.nodeName.asJson,
@@ -157,7 +155,8 @@ object ErgoStatsCollector {
         "isMining" -> ni.isMining.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
-        "genesisBlockId" -> ni.genesisBlockIdOpt.asJson
+        "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
+        "parameters" -> ni.parameters.asJson
       ).asJson
   }
 

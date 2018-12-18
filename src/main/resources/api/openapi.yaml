@@ -435,6 +435,7 @@ components:
       - currentTime
       - launchTime
       - genesisBlockId
+      - parameters
       properties:
         name:
           type: string
@@ -536,6 +537,10 @@ components:
           nullable: true
           allOf:
           - $ref: '#/components/schemas/ModifierId'
+        parameters:
+          type: object
+          description: current parameters
+          $ref: '#/components/schemas/Parameters'
 
     Parameters:
           type: object

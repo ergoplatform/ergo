@@ -256,11 +256,11 @@ object ErgoMiner extends ScorexLogging {
 
 
   /**
-    * Return subsequence of valid non-conflicting transactions from `mempoolTxs`
-    * with total cost, that does not exceeds `remainingCost`
-    * total size, that does not exceeds `remainingSize`
-    * and that does not try to spend any of `idsToExclude`
-    *
+    * Collects valid non-conflicting transactions from `mempoolTxsIn`
+    * and adds transaction, that collects fees from them to `minerPk`.
+    * Resulting transactions total cost does not exceeds `maxBlockCost`,
+    * total size does not exceeds `maxBlockSize`,
+    * miner transaction is correct.
     */
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
@@ -277,6 +277,7 @@ object ErgoMiner extends ScorexLogging {
     def loop(mempoolTxs: Iterable[ErgoTransaction],
              acc: Seq[(ErgoTransaction, Long)],
              lastFeeTx: Option[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+      // transactions from mempool and fee txs from the previous step
       lazy val current = (acc ++ lastFeeTx).map(_._1)
 
       mempoolTxs.headOption match {
@@ -300,7 +301,7 @@ object ErgoMiner extends ScorexLogging {
                         current
                       }
                     case Failure(e) =>
-                      // fee collecting tx become invalid
+                      // fee collecting tx is invalid, return current
                       current
                   }
 

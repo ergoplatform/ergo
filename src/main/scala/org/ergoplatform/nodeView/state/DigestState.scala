@@ -48,28 +48,26 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          stateContext.appendFullBlock(fb, votingSettings).flatMap {currentStateContext =>
-            Try {
-              val txs = fb.blockTransactions.txs
+          stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
+            val txs = fb.blockTransactions.txs
+            val declaredHash = fb.header.stateRoot
 
-              val declaredHash = fb.header.stateRoot
-              // Check modifications, returning sequence of old values
-              val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-                .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
-              val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
-              val totalCost = txs.map { tx =>
-                tx.statelessValidity.get
-                val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-                  knownBoxes.get(ByteArrayWrapper(id)) match {
-                    case Some(box) => box
-                    case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
-                  }
+            // Check modifications, returning sequence of old values
+            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
+              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+            val totalCost = txs.map { tx =>
+              tx.statelessValidity.get
+              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+                knownBoxes.get(ByteArrayWrapper(id)) match {
+                  case Some(box) => box
+                  case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
-                tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
-              }.sum
-              if (totalCost > stateContext.currentParameters.maxBlockCost) {
-                throw new Error(s"Transaction cost $totalCost exceeds limit")
               }
+              tx.statefulValidity(boxesToSpend, currentStateContext, ergoSettings.metadata).get
+            }.sum
+            if (totalCost > stateContext.currentParameters.maxBlockCost) {
+              throw new Error(s"Transaction cost $totalCost exceeds limit")
             }
           }
         case None =>
@@ -87,7 +85,7 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
-      this.validate(fb).flatMap {_ =>
+      this.validate(fb).flatMap { _ =>
         update(fb)
       }.recoverWith {
         case e =>
@@ -132,7 +130,7 @@ class DigestState protected(override val version: VersionTag,
   private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
     val version: VersionTag = idToVersion(fullBlock.header.id)
     val height = fullBlock.header.height
-    stateContext.appendFullBlock(fullBlock, votingSettings).flatMap {newStateContext =>
+    stateContext.appendFullBlock(fullBlock, votingSettings).flatMap { newStateContext =>
       val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
       update(version, fullBlock.header.stateRoot, Seq(cb))
     }
@@ -189,4 +187,5 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
     Failure(e)
   }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))
+
 }

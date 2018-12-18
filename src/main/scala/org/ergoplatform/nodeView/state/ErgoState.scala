@@ -116,7 +116,8 @@ object ErgoState extends ScorexLogging {
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), Append(expectedBytes, MinerPubkey)),
+      // todo don't make assumptions on serialization format
+//      EQ(ExtractScriptBytes(minerOut), Append(expectedBytes, MinerPubkey)),
       EQ(Height, SelectField(ExtractCreationInfo(minerOut), 1).asLongValue)
     )
 
@@ -205,7 +206,8 @@ object ErgoState extends ScorexLogging {
 
     AND(
       EQ(Height, SelectField(ExtractCreationInfo(out), 1).asLongValue),
-      EQ(ExtractScriptBytes(out), Append(expectedBytes, MinerPubkey)),
+      // todo don't make assumptions on serialization format
+//      EQ(ExtractScriptBytes(out), Append(expectedBytes, MinerPubkey)),
       EQ(SizeOf(Outputs), 1)
     )
   }

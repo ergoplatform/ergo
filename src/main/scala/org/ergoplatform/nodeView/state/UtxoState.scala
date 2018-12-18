@@ -186,7 +186,7 @@ object UtxoState {
       val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants, ErgoInterpreter())
+    new UtxoState(persistentProver, version, store, constants, ErgoInterpreter(LaunchParameters))
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
@@ -211,6 +211,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, ErgoInterpreter())
+    val interpreter = ErgoInterpreter(defaultStateContext.currentParameters)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, interpreter)
   }
 }

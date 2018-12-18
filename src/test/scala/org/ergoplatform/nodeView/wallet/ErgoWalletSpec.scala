@@ -2,9 +2,11 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
@@ -12,12 +14,13 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.idToBytes
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
+
 import scala.concurrent.blocking
 import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 

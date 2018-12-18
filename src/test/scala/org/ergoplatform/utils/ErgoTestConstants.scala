@@ -23,7 +23,6 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-  implicit lazy val IRInstance: IRContext = new RuntimeIRContext()
   val parameters: Parameters = LaunchParameters
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider

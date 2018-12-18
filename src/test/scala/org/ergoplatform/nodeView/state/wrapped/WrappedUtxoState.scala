@@ -9,13 +9,13 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters}
 import org.ergoplatform.settings.Algos.HF
-import scorex.core.{idToVersion, TransactionsCarryingPersistentNodeViewModifier, VersionTag}
+import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
                        override val version: VersionTag,
@@ -77,6 +77,7 @@ object WrappedUtxoState {
       IndexedSeq(version),
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
 
-    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants, ErgoInterpreter())
+    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh,
+      constants, ErgoInterpreter(LaunchParameters))
   }
 }

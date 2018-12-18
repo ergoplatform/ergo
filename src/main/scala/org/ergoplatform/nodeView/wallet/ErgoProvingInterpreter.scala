@@ -92,6 +92,6 @@ class ErgoProvingInterpreter(seed: String,
 
 object ErgoProvingInterpreter {
 
-  def apply(seed: String, numOfSecrets: Int, maxCost: Long = Parameters.MaxBlockCost): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(seed, numOfSecrets, maxCost)(new RuntimeIRContext)
+  def apply(seed: String, numOfSecrets: Int, params: Parameters): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(seed, numOfSecrets, params)(new RuntimeIRContext)
 }

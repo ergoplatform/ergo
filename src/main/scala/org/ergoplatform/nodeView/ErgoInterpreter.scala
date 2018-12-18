@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.eval.{IRContext, RuntimeIRContext}
@@ -67,6 +67,6 @@ class ErgoInterpreter(params: Parameters)(implicit IR: IRContext)
 
 object ErgoInterpreter {
 
-  def apply(maxCost: Height = Parameters.MaxBlockCost): ErgoInterpreter =
-    new ErgoInterpreter(maxCost)(new RuntimeIRContext)
+  def apply(params: Parameters): ErgoInterpreter =
+    new ErgoInterpreter(params)(new RuntimeIRContext)
 }

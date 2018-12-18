@@ -13,7 +13,8 @@ import scorex.crypto.authds.ADDigest
 import scala.util.Try
 
 /**
-  * State context with predicted header, that contains fields that are possible to predict
+  * State context with predicted header.
+  * The predicted header only contains fields that are possible to predict
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
                            predictedHeader: PredictedHeader,

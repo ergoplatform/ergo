@@ -20,7 +20,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
       if (level >= 0) {
         val subChain = chain.dropRight(k)
           .filter(h => maxLevelOf(h) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
-        if (goodSuperChain(chain, subChain, level)) {
+        if (subChain.size >= m && goodSuperChain(chain, subChain, level)) {
           provePrefix(subChain(subChain.size - m), level - 1, acc ++ subChain)
         } else {
           provePrefix(anchoringPoint, level - 1, acc ++ subChain)
@@ -35,7 +35,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
   }
 
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
-    superChain.size >= m && superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
+    superChainQuality(chain, superChain, level) && multiLevelQuality(chain, superChain, level)
   }
 
   private def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int): Boolean = {
@@ -47,7 +47,7 @@ class NiPoPowAlgos(settings: NiPoPowSettings) {
     * @param level      - Level of super-chain (µ) */
   private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {
     val downChain = chain
-      .filter(h => h.height >= superChain.head.height && h.height <= superChain.last.height) // C[C↑µ[0]:C↑µ[−1]], or C'↓
+      .filter(h => h.height >= superChain.head.height && h.height <= superChain.last.height) // C[C↑µ[0]:C↑µ[−1]] or C'↓
     def checkLocalGoodnessAt(mValue: Int): Boolean = {
       val superChainSuffixSize = superChain.takeRight(mValue).size
       val downChainSuffixSize = downChain.takeRight(mValue).size
@@ -106,14 +106,14 @@ object NiPoPowAlgos {
 
   def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
     def lcaIndex(startIdx: Int): Int = {
-      if (leftChain.lengthCompare(startIdx) >= 0 && rightChain.lengthCompare(startIdx) >= 0 &&
+      if (leftChain.lengthCompare(startIdx) <= 0 && rightChain.lengthCompare(startIdx) <= 0 &&
         leftChain(startIdx) == rightChain(startIdx)) {
         lcaIndex(startIdx + 1)
       } else {
         startIdx - 1
       }
     }
-    if (leftChain.headOption.exists(h => rightChain.headOption.contains(h))) Some(leftChain(lcaIndex(1))) else None
+    if (leftChain.headOption.exists(rightChain.headOption.contains(_))) Some(leftChain(lcaIndex(1))) else None
   }
 
   def updateInterlinks(header: Header): Seq[ModifierId] = {

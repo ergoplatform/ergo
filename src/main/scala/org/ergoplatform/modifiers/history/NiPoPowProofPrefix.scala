@@ -47,7 +47,7 @@ case class NiPoPowProofPrefix(m: Int,
 
   private def validPrefix: Boolean = {
     val levels = chain.tail.map(maxLevelOf)
-    (0 to levels.max).forall(l => chain.count(h => maxLevelOf(h) >= l) >= m)
+    (0 to levels.max).forall(l => chain.count(h => maxLevelOf(h) >= l) >= m) // todo: check max qty overflow as well.
   }
 
 }

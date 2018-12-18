@@ -212,7 +212,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
+  protected def validate(header: Header): Try[Unit] = HeaderValidator.validate(header).toTry
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
@@ -301,7 +301,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator extends ModifierValidator with ScorexEncoding {
+  object HeaderValidator extends ModifierValidator with ScorexEncoding {
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
@@ -316,25 +316,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
-      accumulateErrors
-        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
-          fatal(s"Genesis block should have genesis parent id. $detail")
+    def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] = {
+      failFast
+        .validate(realDifficulty(header) >= header.requiredDifficulty) {
+          fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
         }
-        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
-          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
-            s" got genesis block with id ${Algos.encode(header.id)}")
+        .validate(powScheme.validate(header).isSuccess) {
+          fatal(s"Wrong proof-of-work solution for $header")
         }
-        .validate(bestHeaderIdOpt.isEmpty) {
-          fatal("Trying to append genesis block to non-empty history")
+        .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
+          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
-        .validate(header.height == GenesisHeight) {
-          fatal(s"Height of genesis block $header is incorrect")
-        }
-        .result
     }
 
-    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
+    def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       failFast
         .validate(header.timestamp > parent.timestamp) {
           fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
@@ -360,8 +355,23 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
-        .validateNot(historyStorage.contains(header.id)) {
-          error(s"Header ${header.id} is already in history")
+        .result
+    }
+
+    def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
+      accumulateErrors
+        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
+          fatal(s"Genesis block should have genesis parent id. $detail")
+        }
+        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
+          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
+            s" got genesis block with id ${Algos.encode(header.id)}")
+        }
+        .validate(bestHeaderIdOpt.isEmpty) {
+          fatal("Trying to append genesis block to non-empty history")
+        }
+        .validate(header.height == GenesisHeight) {
+          fatal(s"Height of genesis block $header is incorrect")
         }
         .result
     }

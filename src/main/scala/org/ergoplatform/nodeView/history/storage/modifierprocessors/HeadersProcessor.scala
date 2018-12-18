@@ -329,6 +329,24 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         }
     }
 
+    def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
+      accumulateErrors
+        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
+          fatal(s"Genesis block should have genesis parent id. $detail")
+        }
+        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
+          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
+            s" got genesis block with id ${Algos.encode(header.id)}")
+        }
+        .validate(bestHeaderIdOpt.isEmpty) {
+          fatal("Trying to append genesis block to non-empty history")
+        }
+        .validate(header.height == GenesisHeight) {
+          fatal(s"Height of genesis block $header is incorrect")
+        }
+        .result
+    }
+
     def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       failFast
         .validate(header.timestamp > parent.timestamp) {
@@ -355,23 +373,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
-        .result
-    }
-
-    def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
-      accumulateErrors
-        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
-          fatal(s"Genesis block should have genesis parent id. $detail")
-        }
-        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
-          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
-            s" got genesis block with id ${Algos.encode(header.id)}")
-        }
-        .validate(bestHeaderIdOpt.isEmpty) {
-          fatal("Trying to append genesis block to non-empty history")
-        }
-        .validate(header.height == GenesisHeight) {
-          fatal(s"Height of genesis block $header is incorrect")
+        .validateNot(historyStorage.contains(header.id)) {
+          error(s"Header ${header.id} is already in history")
         }
         .result
     }

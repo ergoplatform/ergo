@@ -12,7 +12,7 @@ trait NiPoPowProofsProcessor extends HeadersProcessor {
 
   protected val config: NodeConfigurationSettings
 
-  protected val algos: NiPoPowAlgos = NiPoPowAlgos(config.poPowSettings)
+  protected val algos: NiPoPowAlgos = new NiPoPowAlgos(config.poPowSettings)
 
   def lastHeaders(count: Int, offset: Int = 0): HeaderChain
 

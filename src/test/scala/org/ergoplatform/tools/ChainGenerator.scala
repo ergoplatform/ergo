@@ -28,7 +28,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val niPoPowSettings = NiPoPowSettings(enabled = false, 30, 30, 30, 0.45)
+  val niPoPowSettings = NiPoPowSettings(enabled = false, 3, 30, 30, 30, 0.45)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))

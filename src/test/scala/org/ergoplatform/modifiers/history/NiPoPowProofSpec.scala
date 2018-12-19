@@ -6,7 +6,7 @@ import org.ergoplatform.utils.{ErgoPropertyTest, RealModifiers}
 class NiPoPowProofSpec extends ErgoPropertyTest with RealModifiers {
 
   val chainLength = 6000
-  val algos = new NiPoPowAlgos(NiPoPowSettings(enabled = true, 3, 6, 6, 0.45d))
+  val algos = new NiPoPowAlgos(NiPoPowSettings(enabled = true, 3, 3, 6, 6, 0.45d))
   lazy val headersChain: Seq[Header] = takeHeaders(chainLength)
 
   property("headers of level") {

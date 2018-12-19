@@ -51,7 +51,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    expectNoMessage(1.second)
+    expectNoMsg(1.second)
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,
@@ -65,19 +65,19 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    val ergoTransferringTx: Boolean = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
         if tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx) => true
-    }
+    }.isInstanceOf[SuccessfulTransaction[_]]
 
-    val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    val tokenTransferringTx: Boolean = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
         if tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx) => true
-    }
+    }.isInstanceOf[SuccessfulTransaction[_]]
 
-    val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    val tokenIssuingTx: Boolean = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
-    }
+    }.isInstanceOf[SuccessfulTransaction[_]]
 
     ergoTransferringTx shouldBe true
     tokenTransferringTx shouldBe true

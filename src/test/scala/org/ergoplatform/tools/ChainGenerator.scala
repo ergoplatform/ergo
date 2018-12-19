@@ -87,7 +87,6 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     }
   }
 
-
   /**
     * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
     * first apply headers chain, and apply full blocks only after that
@@ -99,7 +98,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f).set(0: Int)
+    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
     val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }

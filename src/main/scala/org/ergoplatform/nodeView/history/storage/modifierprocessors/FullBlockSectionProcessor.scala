@@ -71,7 +71,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)

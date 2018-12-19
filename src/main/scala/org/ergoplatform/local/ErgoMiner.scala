@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -236,11 +236,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
           //todo: soft fork flag instead of false
           val newParams = sc.currentParameters
-            .update(newHeight, false, sc.currentVoting.results, votingSettings)
+            .update(newHeight, false, sc.votingData.epochVotes, votingSettings)
           val vs = newParams.suggestVotes(ergoSettings.votingTargets)
           newParams.toExtensionCandidate(optionalFields) -> vs
         } else {
-          val vs = sc.currentParameters.vote(ergoSettings.votingTargets, sc.currentVoting.results)
+          val vs = sc.currentParameters.vote(ergoSettings.votingTargets, sc.votingData.epochVotes)
           emptyExtensionCandidate -> vs
         }
       }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))

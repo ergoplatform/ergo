@@ -139,6 +139,11 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
             .validate(e.optionalFields.map(kv => bytesToId(kv._1)).distinct.length == e.optionalFields.length) {
               fatal(s"Extension ${m.encodedId} contains duplicate optionalFields keys")
             }
+            .validate(header.height > 0 || e.mandatoryFields.nonEmpty) {
+              //genesis block does not contain votes
+              //todo: this rule may be reconsidered when moving interlink vector to extension section
+              fatal("Mandatory fields in genesis block")
+            }
         case _ =>
           // todo some validations of block transactions, including size limit, should go there.
           failFast

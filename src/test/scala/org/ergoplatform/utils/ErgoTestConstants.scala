@@ -50,7 +50,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq((EmptyDigest32, EmptyDigest32)))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq(), Seq())
 
-  val defaultTimeout: Timeout = Timeout(14.seconds)
+  val defaultTimeout: Timeout = Timeout(24.seconds)
   val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second
 
 }

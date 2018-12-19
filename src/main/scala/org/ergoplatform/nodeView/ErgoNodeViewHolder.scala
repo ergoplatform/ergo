@@ -39,7 +39,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   private val snapshotCreatorRefOpt: Option[ActorRef] = {
     if (!settings.nodeSettings.stateType.requireProofs) {
-      Some(actorSystem.actorOf(Props(classOf[SnapshotCreator]), "SnapshotCreator"))
+      Some(actorSystem.actorOf(Props(classOf[SnapshotCreator])))
     } else {
       None
     }

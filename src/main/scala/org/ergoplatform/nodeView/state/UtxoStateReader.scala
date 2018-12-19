@@ -108,12 +108,4 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
-  def takeSnapshot: (UtxoSnapshotManifest, Seq[UtxoSnapshotChunk]) = persistentProver.synchronized {
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]
-    val (proverManifest, proverSubtrees) = serializer.slice(persistentProver.prover())
-    val manifest = UtxoSnapshotManifest(proverManifest, ModifierId !@@ version)
-    val chunks = proverSubtrees.map(UtxoSnapshotChunk(_, manifest.id))
-    manifest -> chunks
-  }
-
 }

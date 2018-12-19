@@ -258,6 +258,14 @@ object UtxoState {
     new UtxoState(persistentProver, version, store, constants, settings)
   }
 
+  def createPersistentProver(dir: File, constants: StateConstants): PersistentBatchAVLProver[Digest32, HF] = {
+    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val bp = new BatchAVLProver[Digest32, HF](keyLength = Constants.HashLength, valueLengthOpt = None)
+    val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, nodeParameters)(Algos.hash)
+    PersistentBatchAVLProver.create(bp, storage)
+      .fold(e => throw new Exception(s"Failed to create PersistentProver: $e"), p => p)
+  }
+
   def createPersistentProver(prover: BatchAVLProver[Digest32, HF],
                              storage: VersionedIODBAVLStorage[Digest32],
                              stateVersion: VersionTag,

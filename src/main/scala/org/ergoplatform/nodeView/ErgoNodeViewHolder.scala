@@ -2,16 +2,15 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
+import org.ergoplatform.local.SnapshotCreator
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallyFailedModification, SemanticallySuccessfulModifier}
@@ -37,6 +36,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
+
+  private val snapshotCreatorRefOpt: Option[ActorRef] = {
+    if (!settings.nodeSettings.stateType.requireProofs) {
+      Some(actorSystem.actorOf(Props(classOf[SnapshotCreator]), "SnapshotCreator"))
+    } else {
+      None
+    }
+  }
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -114,13 +121,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     Some((history, state, wallet, memPool))
   }
 
+  /**
+    * Create copy of BatchAvlProver and send it to SnapshotCreator actor in order
+    * to make snapshot taking process asynchronous if node operates in utxo mode.
+    */
   private def createStateSnapshot(lastHeader: Header, state: State): Unit = {
     state match {
       case utxoReader: UtxoStateReader =>
-        log.info(s"Creating state snapshot at height ${lastHeader.height} after header ${lastHeader.encodedId}")
-        val (manifest, chunks) = utxoReader.takeSnapshot
-        val snapshot = UtxoSnapshot(manifest, chunks, Seq(lastHeader))
-        self ! LocallyGeneratedModifier(snapshot)
+        val dir = ErgoState.stateDir(settings)
+        dir.mkdirs()
+        val prover = UtxoState.createPersistentProver(dir, utxoReader.constants).avlProver
+        snapshotCreatorRefOpt.foreach(_ ! SnapshotCreator.TakeSnapshotOf(prover, lastHeader))
       case _ =>
         log.warn("Attempting to create state snapshot in unsupported state mode")
     }

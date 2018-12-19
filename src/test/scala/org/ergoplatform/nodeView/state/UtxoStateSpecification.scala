@@ -3,18 +3,17 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.local.SnapshotCreator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifestSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.Values
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -225,7 +224,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
     state = state.applyModifier(genesis).get
     state = state.applyModifier(chain1block1).get
 
-    val (manifest, chunks) = state.takeSnapshot
+    val (manifest, chunks) = SnapshotCreator.takeSnapshot(state.persistentProver.avlProver, chain1block1.header)
 
     var (recoveredState, _) = createUtxoState()
 

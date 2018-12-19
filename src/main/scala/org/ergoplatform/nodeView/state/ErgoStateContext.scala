@@ -121,12 +121,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val headerVotes: Array[Byte] = header.votes
     val height = header.height
 
-    //genesis block does not contain votes
-    //todo: this rule may be reconsidered when moving interlink vector to extension section
-    if (height == 0 && extension.mandatoryFields.nonEmpty) {
-      throw new Error("Mandatory fields in genesis block")
-    }
-
     val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
     val epochStarts = votingStarts(height)

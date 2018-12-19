@@ -18,15 +18,15 @@ trait FullNiPoPowProofsProcessor extends NiPoPowProofsProcessor {
 
   private val emptyProgressInfo = ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
 
-  private var proofsTried: Int = 0
+  private var proofsChecked: Int = 0
 
   def proofPrefixById(id: ModifierId): Option[NiPoPowProofPrefix] = historyStorage.get(id)
     .flatMap(NiPoPowProofPrefixSerializer.parseBytes(_).toOption)
 
   def process(m: NiPoPowProof): History.ProgressInfo[ErgoPersistentModifier] = {
-    proofsTried = proofsTried + 1
+    proofsChecked = proofsChecked + 1
     val isBest = bestProofPrefixIdOpt.flatMap(proofPrefixById).forall(m.prefix.isBetterThan)
-    if (isBest && proofsTried >= config.poPowSettings.minProofsToCheck) {
+    if (isBest && proofsChecked >= config.poPowSettings.minProofsToCheck) {
       ???
     } else if (isBest) {
       historyStorage.insert(Algos.idToBAW(m.id), Seq(BestProofPrefixIdKey -> Algos.idToBAW(m.id)), Seq(m))

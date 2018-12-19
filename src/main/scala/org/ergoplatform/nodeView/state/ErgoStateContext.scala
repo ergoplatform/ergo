@@ -15,25 +15,19 @@ import scorex.crypto.authds.ADDigest
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
-case class VotingResults(results: Array[(Byte, Int)]) {
-  def update(voteFor: Byte): VotingResults = {
-    VotingResults(results.map { case (id, votes) =>
+case class VotingData(epochVotes: Array[(Byte, Int)],
+                      softForkVotingStartingHeight: Int = 0,
+                      softForkVotesCollected: Int = 0,
+                      activationHeight: Int = 0) {
+  def update(voteFor: Byte): VotingData = {
+    this.copy(epochVotes = epochVotes.map { case (id, votes) =>
       if (id == voteFor) id -> (votes + 1) else id -> votes
     })
   }
 }
 
-object VotingResults {
-  val empty = VotingResults(Array.empty)
-}
-
-case class VotingData(currentVoting: VotingResults,
-                      softForkVotingStartingHeight: Int = 0,
-                      softForkVotesCollected: Int = 0,
-                      activationHeight: Int = 0)
-
 object VotingData {
-  val empty = VotingData(VotingResults.empty)
+  val empty = VotingData(Array.empty)
 }
 
 /**
@@ -57,8 +51,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
-
-  lazy val currentVoting: VotingResults = votingData.currentVoting
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -133,10 +125,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
-      val newVoting = VotingData(VotingResults(proposedVotes))
+      val newVoting = VotingData(proposedVotes) //todo: fix
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-        val calculatedParams = currentParameters.update(height, forkVote, currentVoting.results, votingSettings)
+        val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
 
         if (calculatedParams.blockVersion != header.version) {
           throw new Error("Versions in header and parameters section are different")
@@ -148,8 +140,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       }
     } else {
       val newVotes = votes
-      val newVotingResults = newVotes.foldLeft(currentVoting) { case (v, id) => v.update(id) }
-      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, VotingData(newVotingResults))(votingSettings))
+      val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
+      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, newVotingResults)(votingSettings))
     }
   }.flatten
 
@@ -185,11 +177,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 object ErgoStateContext {
   def empty(constants: StateConstants): ErgoStateContext = {
     implicit val votingSettings: VotingSettings = constants.votingSettings
-    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))
+    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData.empty)
   }
 
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData(VotingResults.empty))(votingSettings)
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(votingSettings)
   }
 }
 
@@ -197,10 +189,10 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
 
   override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
     val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
-    val votesCount = ctx.currentVoting.results.length.toByte
+    val votesCount = ctx.votingData.epochVotes.length.toByte
 
     val votesBytes = if (votesCount > 0) {
-      ctx.currentVoting.results.map { case (id, cnt) =>
+      ctx.votingData.epochVotes.map { case (id, cnt) =>
         id +: Ints.toByteArray(cnt)
       }.reduce(_ ++ _)
     } else {
@@ -229,20 +221,20 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
 
     val votesCount = bytes(37 + length)
 
-    val (votes: VotingResults, votesLength: Int) = if (votesCount > 0) {
+    val (votes: VotingData, votesLength: Int) = if (votesCount > 0) {
       val vl = votesCount * 5
       val votesBytes = bytes.slice(37 + length + 1, 37 + length + 1 + vl)
-      VotingResults(votesBytes.grouped(5).map { bs =>
+      VotingData(votesBytes.grouped(5).map { bs =>
         bs.head -> Ints.fromByteArray(bs.tail)
       }.toArray) -> vl
     } else {
-      VotingResults.empty -> 0
+      VotingData(Array.empty) -> 0
     }
 
     ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
       //todo: fix
       val lastHeaders = loop(offset = 37, Seq.empty)
-      new ErgoStateContext(lastHeaders, genesisDigest, params, VotingData(votes))(votingSettings)
+      new ErgoStateContext(lastHeaders, genesisDigest, params, votes)(votingSettings)
     }
   }.flatten
 

@@ -58,7 +58,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     //quorum gathered - parameter change
     val esc31 = esc2.processExtension(p, h.copy(height = 3)).get
-    esc31.currentVoting.results.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 2
+    esc31.votingData.epochVotes.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 2
 
     val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0))
     val esc41 = esc31.processExtension(p4, he.copy(height = 4)).get

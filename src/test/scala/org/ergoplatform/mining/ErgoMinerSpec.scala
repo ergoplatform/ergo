@@ -62,7 +62,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    expectNoMessage(1 second)
+    expectNoMsg(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
@@ -154,7 +154,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       timeProvider,
       Some(defaultMinerSecret)
     )
-    expectNoMessage(1 second)
+    expectNoMsg(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     val history: ErgoHistoryReader = r.h
@@ -181,7 +181,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
-    expectNoMessage(1 seconds)
+    expectNoMsg(1 seconds)
 
     r.m.unconfirmed.size shouldBe 2
 

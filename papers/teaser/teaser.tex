@@ -43,29 +43,25 @@
 
     \section{Consensus}
 
-    Consensus protocol of Ergo -- Autolykos -- is based on a well-known Proof-of-Work idea.
+    Consensus protocol of Ergo -- Autolykos -- is based on the well-known Proof-of-Work idea.
     PoW was chosen by several reasons: these protocols are widely studied, have high security guarantees
-    and are friendly for clients since PoW validation is very fast. % and require minimal amount of data
+    and are friendly for light clients.
     However, existing PoW protocols have known drawbacks: ASIC-equipped miners produce blocks
     orders of magnitude faster than regular miners, moreover
     they unite in mining pool and just few pool operators controls the network as a result.
 
-    Autolykos is based on one list k-sum problem, that is similar to the known Equihash PoW~\cite{biryukov2017equihash}.
-    Ergo uses Autolykos with parameters, that require from miners to keep 2 Gb of data in RAM,
-    that reduces the advantage of ASICs over commodity hardware.
-    Such memory-hard protocols are quite popular in cryptocurrencies, while the second property
-    of Autolykos -- non-outsourcability -- is unique and to the best of our knowledge Ergo
-    will be the first cryptocurrency that have it. Autolykos is constructed in such a way
-    that if a mining pool outsources the puzzle to a miner, miner can recover pool's
-    private key and steal the reward.
-    This fact discourages formation of centralized pools and centralization of the
-    network in the hands of pool operators, returning Ergo back to the original
-    one-CPU-one-vote idea from the Bitcoin whitepaper.
+    The general way to reduce the advantage of ASICs is to use memory-hard computations.
+    Autolykos is based on k-sum problem, that is similar to a known memory-hard Equihash PoW~\cite{biryukov2017equihash}.
+    In addition, Autolykos is a variant of a Schnorr signature and thus mining is not possible without the access to private key.
+
+    These two properties prevents the centralization of the
+    network around pool operators and ASIC manufacturers, and returns Ergo back to the original
+    one-CPU-one-vote idea from the Bitcoin whitepaper~\cite{nakamoto2008bitcoin}.
 
     \section{Clients}
 
-    For now, it is almost impossible to use cryptocurrencies without a help of trusted parties.
-    Even if a client just want send some coins, he should download and process gigabytes of
+    It is almost impossible to use existing cryptocurrencies without a help of trusted parties.
+    To receive few coins, a client should download and process gigabytes of
     data to synchronize the network, which may take several weeks even on a high-end hardware,
     not to mention a mobile phones.
     No wonder that most of users prefer to use trusted solutions for wallets, exchanges, block
@@ -76,43 +72,41 @@
     downloading the full chain.
     Ergo block headers supports NiPoPoW~\cite{kiayias2017non} proofs, allowing light clients
     to synchronize the network by downloading less then a megabyte of data.
-    This allows to check, that client is on the best chain, while does not allow
-    him to validate random transactions.
-    To achieve this Ergo use authenticated state~\cite{reyzin2017improving} and client
-    may download a proof that block transactions are correct.
+%    This allows to check, that client is on the best chain, while does not allow
+%    him to validate arbitrary transactions.
+    In addition, Ergo use authenticated state~\cite{reyzin2017improving} and for any transaction
+    included, a client may download a proof of it's correctness.
     Thus, regardless of the blockchain size, a regular user with a smartphone can
     join the network and start using Ergo with the security guaranties of the full node.
 
     \section{Survivability}
 
-    A key aspect of decentralization is the lack of dependence on developers.
+    Long-term survivability is important because of ...
+
+    To survive in a long-term, Ergo prefers well-tested solutions.
+    If there is no appropriate solution for some problem, we perform our own research and
+    the number of peer-reviewed papers from the Ergo team is already quite big:
+    ~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}.
+
+%    A key aspect of decentralization is the lack of dependence on developers.
 %    This requires that at any point of time it should be able to survive without trusted parties.
-    However the environment is not static therefore the network should also be changeable.
+    To be survivable, the network should adopt to changing environment without intervention of trusted
+    parties (like a "core developers" team).
     Ergo voting protocol allows to change a lot of parameters (blocks size, contracts costs and more) via miners voting.
 %    that should reduce probability of hard forks and chain splits.
     For more fundamental changes Ergo is going to follow soft-forkability approach -
-    if 90\% of the network accepts a new feature, an outdated node skips it's validation
-    while continue to validate features known to it.
-%    if a node find out a successful voting for a new version of block being on a previous
-%    version of software, it continues to operate as a correct node, skipping validation of
-%    newly introduced features.
-
-    Long-term survivability also requires secure protocols.
-    Ergo philosophy is to use well-tested solutions, that will remain secure for a long time.
-    If there is no appropriate solution for some problem, we perform our own research and
-    number of peer-reviewed papers from Ergo team is already quite big:
-    ~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}.
+    if an overwhelming majority of the network accepts a new feature, it is activated,
+    however old nodes continue to operate normally just skipping this feature validation.
 
     \section{Economy}
 
     To achieve survivability, Ergo provides economic improvements in addition to the technical ones.
-    Demurrage component plays important role for Ergo stability.
-    If an output was kept untouched in the state for 4 years, miner could collect fee from it
-    proportional to the size of an output.
-    If output value is less the required to pay the fee, this output will be removed from the state.
-    Thus, similar to regular storage services, miners become paid for keeping data.
+    Demurrage component plays important role for Ergo stability:
+    once per 4 years users are enforced to pay a small fee for every byte, kept in the state, and
+    if an output value is less than a required fee to pay, this output will be removed from the state.
 
-    Demurrage component has several important consequences.
+    Thus, demurrage component is similar to regular cloud storage services, however it is new for cryptocurrencies
+    and has several important consequences.
     First, Ergo mining will always be stable, unlike Bitcoin and other PoW currencies, in which
     mining may become unstable after the initial emission~\cite{carlsten2016instability}.
     Second, state size become controllable and predictable, reducing hardware requirements
@@ -137,8 +131,8 @@
     \section{Applicability}
 
     To survive, a blockchain must have a user base.
-    Light clients opens up opportunities for really decentralized applications and offchain protocols.
-    However, they also require useful and safe smart contracts language.
+    DApps and offchain protocols may be implemented in a really decentralized way due to light clients,
+    however they also require useful and safe smart contracts language.
     Ergo smart contracts are based on Bitcoin-like UTXO model, where every output is protected by some script.
     If scripting language is rich enough, it allows to write Turing-complete contracts~\cite{chepurnoy2018self}
     while avoiding ad-hoc solutions for program halting like gas in Ethereum.
@@ -150,6 +144,8 @@
 
 
     \section{Conclusions}
+
+    \dnote{looks like no space for it, but may be useful}
 
 
     \bibliography{references}

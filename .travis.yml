@@ -6,6 +6,7 @@ branches:
     - v2.0
     - master
     - /^\d\.\d+$/
+    - sigma-for-v2
 jdk:
 - oraclejdk9
 scala:

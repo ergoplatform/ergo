@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
-import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer, PredictedHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -9,6 +8,7 @@ import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Try
 
@@ -66,7 +66,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
   }
 
-  def upcoming(minerPk: ECPoint, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
+  def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
     val upcomingHeader = PredictedHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
 
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest)

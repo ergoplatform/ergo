@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.Bytes
 import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer, PredictedHeader}
+import org.ergoplatform.modifiers.history.{Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.{BytesSerializable, Serializer}
@@ -17,7 +17,7 @@ import scala.util.Try
   * The predicted header only contains fields that can be predicted.
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
-                           predictedHeader: PredictedHeader,
+                           predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest) extends ErgoStateContext(lastHeaders, genesisStateDigest) {
   override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
 
@@ -25,8 +25,10 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
 
   override val currentHeight: Int = predictedHeader.height
 
+  override def appendHeader(header: Header): ErgoStateContext = throw new Error("Invalid method call")
+
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
-  
+
 }
 
 /**
@@ -62,7 +64,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
-    val upcomingHeader = PredictedHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
+    val upcomingHeader = PreHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
 
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest)
   }

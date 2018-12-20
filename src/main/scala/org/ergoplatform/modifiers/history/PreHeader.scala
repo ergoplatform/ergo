@@ -8,7 +8,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 /**
   * Only header fields that can be predicted by a miner
   */
-trait PredictedHeader {
+trait PreHeader {
   val version: Version
   val parentId: ModifierId
   val timestamp: Timestamp
@@ -17,15 +17,15 @@ trait PredictedHeader {
   val minerPk: EcPointType
 }
 
-object PredictedHeader {
+object PreHeader {
 
   def apply(lastHeaderOpt: Option[Header],
             pk: EcPointType,
             ts: Long,
             nb: Long,
-            powScheme: AutolykosPowScheme): PredictedHeader = {
+            powScheme: AutolykosPowScheme): PreHeader = {
     val (pId, v, _, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
-    new PredictedHeader {
+    new PreHeader {
       override val version: Version = v
       override val parentId: ModifierId = pId
       override val timestamp: Timestamp = ts

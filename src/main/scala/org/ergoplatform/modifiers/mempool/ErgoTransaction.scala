@@ -104,7 +104,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       .payload(0L)
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), "box created in future")
+      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight),
+        s"box created in future ${outputCandidates.map(_.creationHeight)} vs ${blockchainState.currentHeight}")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)

@@ -24,6 +24,8 @@ case class NiPoPowProof(prefix: NiPoPowProofPrefix, suffix: NiPoPowProofSuffix)
 
   override def parentId: ModifierId = prefix.parentId
 
+  def chain: Seq[Header] = prefix.chain ++ suffix.chain
+
   def validate: Try[Unit] = prefix.validate.flatMap(_ => suffix.validate)
 
 }

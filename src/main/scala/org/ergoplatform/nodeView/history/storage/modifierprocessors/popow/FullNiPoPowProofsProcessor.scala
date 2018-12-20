@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{Header, NiPoPowProof, NiPoPowProofPrefix, NiPoPowProofPrefixSerializer}
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.ModifierId
 
@@ -23,11 +23,22 @@ trait FullNiPoPowProofsProcessor extends NiPoPowProofsProcessor {
   def proofPrefixById(id: ModifierId): Option[NiPoPowProofPrefix] = historyStorage.get(id)
     .flatMap(NiPoPowProofPrefixSerializer.parseBytes(_).toOption)
 
-  def process(m: NiPoPowProof): History.ProgressInfo[ErgoPersistentModifier] = {
+  def process(m: NiPoPowProof): ProgressInfo[ErgoPersistentModifier] = {
     proofsChecked = proofsChecked + 1
     val isBest = bestProofPrefixIdOpt.flatMap(proofPrefixById).forall(m.prefix.isBetterThan)
     if (isBest && proofsChecked >= config.poPowSettings.minProofsToCheck) {
-      ???
+      config.stateType match {
+        case StateType.Utxo =>
+          ???
+        case StateType.Digest =>
+          val bestHeader = m.chain.last
+          val indexesToInsert = m.chain
+            .foldLeft(Seq.empty[(ByteArrayWrapper, ByteArrayWrapper)]) { case (acc, h) =>
+              acc ++ toInsert(h)._1
+            }
+          historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, m.chain)
+          ProgressInfo(None, Seq.empty, Seq(bestHeader), toDownload(bestHeader))
+      }
     } else if (isBest) {
       historyStorage.insert(Algos.idToBAW(m.id), Seq(BestProofPrefixIdKey -> Algos.idToBAW(m.id)), Seq(m))
       emptyProgressInfo

@@ -57,11 +57,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer
 
-  def rollback(heightTo: Int): ErgoStateContext = {
-    val oldHeaders = lastHeaders.filter(_.height <= heightTo)
-    ErgoStateContext(oldHeaders, genesisStateDigest)
-  }
-
   def appendHeader(header: Header): ErgoStateContext = {
     ErgoStateContext(header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1), genesisStateDigest)
   }

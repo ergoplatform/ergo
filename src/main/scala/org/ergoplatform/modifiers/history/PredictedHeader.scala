@@ -1,9 +1,9 @@
 package org.ergoplatform.modifiers.history
 
-import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.mining.AutolykosPowScheme
 import scorex.core.block.Block._
 import scorex.util._
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 /**
   * Only header fields that can be predicted by a miner
@@ -14,13 +14,13 @@ trait PredictedHeader {
   val timestamp: Timestamp
   val nBits: Long
   val height: Int
-  val minerPk: ECPoint
+  val minerPk: EcPointType
 }
 
 object PredictedHeader {
 
   def apply(lastHeaderOpt: Option[Header],
-            pk: ECPoint,
+            pk: EcPointType,
             ts: Long,
             nb: Long,
             powScheme: AutolykosPowScheme): PredictedHeader = {
@@ -31,7 +31,7 @@ object PredictedHeader {
       override val timestamp: Timestamp = ts
       override val nBits: Timestamp = nb
       override val height: Int = h
-      override val minerPk: ECPoint = pk
+      override val minerPk: EcPointType = pk
     }
   }
 

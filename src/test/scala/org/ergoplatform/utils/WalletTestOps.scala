@@ -15,6 +15,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.serialization.ValueSerializer
 import sigmastate.{SBoolean, SLong}
 
 import scala.concurrent.blocking
@@ -62,12 +63,20 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 
-  def boxesAvailable(block: ErgoFullBlock, script: Value[SBoolean.type]): Seq[ErgoBox] = {
-    block.transactions.flatMap(boxesAvailable(_, script))
+  def boxesAvailable(block: ErgoFullBlock, bytes: Array[Byte]): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, bytes))
   }
 
-  def boxesAvailable(tx: ErgoTransaction, script: Value[SBoolean.type]): Seq[ErgoBox] = {
-    tx.outputs.filter(_.propositionBytes.containsSlice(script.bytes))
+  def boxesAvailable(tx: ErgoTransaction, bytes: Array[Byte]): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(bytes))
+  }
+
+  def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, pk))
+  }
+
+  def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(ValueSerializer.serialize(pk.value)))
   }
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {

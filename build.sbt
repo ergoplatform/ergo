@@ -34,9 +34,9 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.+" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "test",
+  "org.asynchttpclient" % "async-http-client" % "2.7.0-SNAPSHOT" % "test",
   "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
 )

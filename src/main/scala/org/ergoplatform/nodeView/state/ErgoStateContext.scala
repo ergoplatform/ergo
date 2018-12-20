@@ -14,7 +14,7 @@ import scala.util.Try
 
 /**
   * State context with predicted header.
-  * The predicted header only contains fields that are possible to predict
+  * The predicted header only contains fields that can be predicted.
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
                            predictedHeader: PredictedHeader,
@@ -26,6 +26,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
   override val currentHeight: Int = predictedHeader.height
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
+  
 }
 
 /**
@@ -72,6 +73,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders)"
+
 }
 
 object ErgoStateContext {
@@ -88,6 +90,7 @@ object ErgoStateContext {
             genesisStateDigest: ADDigest): ErgoStateContext = {
     new ErgoStateContext(lastHeaders, genesisStateDigest)
   }
+
 }
 
 object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
@@ -110,4 +113,5 @@ object ErgoStateContextSerializer extends Serializer[ErgoStateContext] {
 
     ErgoStateContext(loop(offset = 33, Seq.empty), genesisDigest)
   }
+
 }

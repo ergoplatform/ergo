@@ -6,7 +6,7 @@ import scorex.core.block.Block._
 import scorex.util._
 
 /**
-  * Only header fields, that can be predicted by a miner
+  * Only header fields which can be predicted by a miner
   */
 trait PredictedHeader {
   val version: Version

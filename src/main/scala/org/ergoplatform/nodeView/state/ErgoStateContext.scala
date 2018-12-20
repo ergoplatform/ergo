@@ -26,7 +26,6 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
   override val currentHeight: Int = predictedHeader.height
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
-  
 }
 
 /**

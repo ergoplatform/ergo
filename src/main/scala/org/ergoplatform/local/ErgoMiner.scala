@@ -45,7 +45,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
-  // cost of a transaction, that collects emission box
+  // cost of a transaction collecting emission box
   private val EmissionTxCost: Long = 20000
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
@@ -188,6 +188,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }.flatten
 
   def requestCandidate(): Unit = readersHolderRef ! GetReaders
+
 }
 
 
@@ -256,11 +257,11 @@ object ErgoMiner extends ScorexLogging {
 
 
   /**
-    * Collects valid non-conflicting transactions from `mempoolTxsIn`
-    * and adds transaction, that collects fees from them to `minerPk`.
-    * Resulting transactions total cost does not exceeds `maxBlockCost`,
-    * total size does not exceeds `maxBlockSize`,
-    * miner transaction is correct.
+    * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from
+    * them to `minerPk`.
+    *
+    * Resulting transactions total cost does not exceeds `maxBlockCost`, total size does not exceeds `maxBlockSize`,
+    * and the miner's transaction is correct.
     */
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
@@ -337,7 +338,6 @@ object ErgoMiner extends ScorexLogging {
       }
     }._1
   }
-
 
   case object StartMining
 

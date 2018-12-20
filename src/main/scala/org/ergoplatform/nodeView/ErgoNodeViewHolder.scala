@@ -129,6 +129,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     state match {
       case utxoReader: UtxoStateReader =>
         val dir = ErgoState.stateDir(settings)
+        dir.mkdirs()
         val prover = UtxoState.createPersistentProver(dir, utxoReader.constants).avlProver
         snapshotCreatorRefOpt.foreach(_ ! SnapshotCreator.TakeSnapshotOf(prover, lastHeader))
       case _ =>

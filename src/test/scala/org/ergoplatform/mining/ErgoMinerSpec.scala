@@ -52,9 +52,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  ignore should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
+  it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+//    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+    val desiredSize: Int = 50
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)

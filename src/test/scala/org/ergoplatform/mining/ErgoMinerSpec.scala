@@ -125,7 +125,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   }
 
-  ignore should "filter out double spend txs" in {
+  it should "filter out double spend txs" in {
     val tx = validErgoTransactionGen.sample.get._2
     ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
 
@@ -138,7 +138,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
-  ignore should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
+  it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)

@@ -664,13 +664,13 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val p2s = Pay2SAddress(EQ(CalcBlake2b256(preimage), hash))
       val balanceToSpend = randomLong(initialBalance)
       val tx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, p2s.script, randomNewAsset)
-      val assets = assetAmount(boxesAvailable(tx, p2s.script))
+      val assets = assetAmount(boxesAvailable(tx, p2s.script.bytes))
       val block = makeNextBlock(getUtxoState, Seq(tx))
 
       wallet.scanPersistent(block)
       waitForScanning(block)
       val confirmedBalance = getConfirmedBalances
-      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script))
+      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script.bytes))
       confirmedBalance.balance shouldBe 0
       confirmedBalance.assetBalances shouldBe empty
 

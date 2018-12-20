@@ -19,6 +19,7 @@ import scala.util.Try
 class UpcomingStateContext(lastHeaders: Seq[Header],
                            predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest) extends ErgoStateContext(lastHeaders, genesisStateDigest) {
+
   override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
 
   override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)

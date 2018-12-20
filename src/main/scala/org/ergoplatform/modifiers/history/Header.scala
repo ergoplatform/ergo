@@ -17,6 +17,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
@@ -34,7 +35,7 @@ case class Header(version: Version,
                   extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   override val sizeOpt: Option[Int] = None
-                 ) extends ErgoPersistentModifier {
+                 ) extends PreHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(bytes)
 
@@ -49,6 +50,8 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+
+  override val minerPk: EcPointType = powSolution.pk
 
   lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
     (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))

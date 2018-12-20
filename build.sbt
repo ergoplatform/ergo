@@ -36,8 +36,8 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.7.0-SNAPSHOT" % "test",
-  "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
+  "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
+  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
 )
 

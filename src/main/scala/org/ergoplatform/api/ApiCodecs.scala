@@ -87,7 +87,7 @@ trait ApiCodecs {
   }
 
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ErgoTreeSerializer.serialize(value).asJson
+    ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
   }
 
   implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
@@ -104,7 +104,7 @@ trait ApiCodecs {
 
   def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ErgoTreeSerializer.deserialize(bytes)))
+      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
     }
   }
 

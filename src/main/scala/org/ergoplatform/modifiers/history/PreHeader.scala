@@ -14,7 +14,7 @@ trait PreHeader {
   val timestamp: Timestamp
   val nBits: Long
   val height: Int
-  val minerPk: EcPointType
+  def minerPk: EcPointType
 }
 
 object PreHeader {

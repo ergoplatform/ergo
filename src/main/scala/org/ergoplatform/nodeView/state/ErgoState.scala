@@ -16,9 +16,11 @@ import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{IntConstant, LongConstant, Value}
-import sigmastate._
+import sigmastate.SCollection.SByteArray
+import sigmastate.Values.{IntArrayConstant, IntConstant, LongConstant, SigmaPropValue, Value}
+import sigmastate.{Values, _}
 import sigmastate.lang.Terms._
+import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.utxo._
 
 import scala.collection.mutable
@@ -102,7 +104,6 @@ object ErgoState extends ScorexLogging {
 
     val rewardOut = ByIndex(Outputs, IntConstant(0))
     val minerOut = ByIndex(Outputs, IntConstant(1))
-    val expectedBytes = rewardOutputScriptStartBytes(s.minerRewardDelay)
 
     val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
     val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
@@ -115,9 +116,9 @@ object ErgoState extends ScorexLogging {
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
+
     val correctMinerOutput = AND(
-      // todo don't make assumptions on serialization format
-//      EQ(ExtractScriptBytes(minerOut), Append(expectedBytes, MinerPubkey)),
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(s.minerRewardDelay, MinerPubkey)),
       EQ(Height, SelectField(ExtractCreationInfo(minerOut), 1).asLongValue)
     )
 
@@ -164,6 +165,28 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
+    * Byte array value of the serialized reward output script proposition with pk being substituted
+    * with given pk
+    * @param delta
+    * @param minerPkBytesVal - byte array val for pk to substitute in the reward script
+    */
+  def expectedMinerOutScriptBytesVal(delta: Int, minerPkBytesVal: Value[SByteArray]): Value[SByteArray] = {
+    val genericPk = ProveDlog(group.generator)
+    val genericMinerProp = rewardOutputScript(delta, genericPk)
+    val genericMinerPropBytes = ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(genericMinerProp)
+    val expectedGenericMinerProp = AND(
+      GE(Height, Plus(SelectField(ExtractCreationInfo(Self), 1).asLongValue, LongConstant(delta))),
+      genericPk
+    )
+    assert(genericMinerProp == expectedGenericMinerProp, s"reward output script changed, check and update constant position for substitution below")
+    // first segregated constant is delta, so key is second constant
+    val positions = IntArrayConstant(Array[Int](1))
+    val minerPubkeySigmaProp = ProveDlog(DecodePoint(minerPkBytesVal))
+    val newVals = Values.ConcreteCollection(Vector[SigmaPropValue](minerPubkeySigmaProp), SSigmaProp)
+    SubstConstants(genericMinerPropBytes, positions, newVals)
+  }
+
+    /**
     * Required script of the box, that collects mining rewards
     */
   def rewardOutputScript(delta: Int, minerPk: ProveDlog): Value[SBoolean.type] = {
@@ -200,14 +223,10 @@ object ErgoState extends ScorexLogging {
     * TODO it is possible to use creation height instead of R4, but there is no easy access to in in a script
     */
   def feeProposition(delta: Int = 720): Value[SBoolean.type] = {
-    val expectedBytes = rewardOutputScriptStartBytes(delta)
-
     val out = ByIndex(Outputs, IntConstant(0))
-
     AND(
       EQ(Height, SelectField(ExtractCreationInfo(out), 1).asLongValue),
-      // todo don't make assumptions on serialization format
-//      EQ(ExtractScriptBytes(out), Append(expectedBytes, MinerPubkey)),
+      EQ(ExtractScriptBytes(out), expectedMinerOutScriptBytesVal(delta, MinerPubkey)),
       EQ(SizeOf(Outputs), 1)
     )
   }

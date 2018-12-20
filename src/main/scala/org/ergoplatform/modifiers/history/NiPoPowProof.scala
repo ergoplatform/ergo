@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
@@ -38,6 +39,28 @@ object NiPoPowProof {
     val suffix = NiPoPowProofSuffix(k, suffixChain)
     val prefix = NiPoPowProofPrefix(m, prefixChain, suffix.id)
     new NiPoPowProof(prefix, suffix)
+  }
+
+}
+
+object NiPoPowProofSerializer extends Serializer[NiPoPowProof] {
+
+  override def toBytes(obj: NiPoPowProof): Array[Byte] = {
+    Bytes.concat(
+      Ints.toByteArray(obj.prefix.bytes.length),
+      Ints.toByteArray(obj.suffix.bytes.length),
+      obj.prefix.bytes,
+      obj.suffix.bytes
+    )
+  }
+
+  override def parseBytes(bytes: Array[Byte]): Try[NiPoPowProof] = {
+    val prefixLen = Ints.fromByteArray(bytes.take(4))
+    val suffixLen = Ints.fromByteArray(bytes.slice(4, 8))
+    NiPoPowProofPrefixSerializer.parseBytes(bytes.slice(8, prefixLen + 8)).flatMap { prefix =>
+      NiPoPowProofSuffixSerializer.parseBytes(bytes.slice(prefixLen + 8, prefixLen + 8 + suffixLen))
+        .map(NiPoPowProof(prefix, _))
+    }
   }
 
 }

@@ -21,7 +21,7 @@ case class NiPoPowProofSuffix(k: Int,
 
   override def serializedId: Array[Byte] = Algos.hash(bytes)
 
-  override def serializer: Serializer[M] = NiPoPowProofSerializer
+  override def serializer: Serializer[M] = NiPoPowProofSuffixSerializer
 
   override def parentId: ModifierId = chain.head.id
 
@@ -38,7 +38,7 @@ object NiPoPowProofSuffix {
   val TypeId: ModifierTypeId = ModifierTypeId @@ (112: Byte)
 }
 
-object NiPoPowProofSerializer extends Serializer[NiPoPowProofSuffix] {
+object NiPoPowProofSuffixSerializer extends Serializer[NiPoPowProofSuffix] {
 
   override def toBytes(obj: NiPoPowProofSuffix): Array[Byte] = {
     Bytes.concat(

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{Header, NiPoPowProof, NiPoPowProofPrefix, NiPoPowProofPrefixSerializer}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.consensus.History.ProgressInfo
@@ -20,23 +20,24 @@ trait FullNiPoPowProofsProcessor extends NiPoPowProofsProcessor {
 
   private var proofsChecked: Int = 0
 
-  def proofPrefixById(id: ModifierId): Option[NiPoPowProofPrefix] = historyStorage.get(id)
-    .flatMap(NiPoPowProofPrefixSerializer.parseBytes(_).toOption)
+  def proofById(id: ModifierId): Option[NiPoPowProof] = historyStorage.get(id)
+    .flatMap(NiPoPowProofSerializer.parseBytes(_).toOption)
 
   def process(m: NiPoPowProof): ProgressInfo[ErgoPersistentModifier] = {
     proofsChecked = proofsChecked + 1
-    val isBest = bestProofPrefixIdOpt.flatMap(proofPrefixById).forall(m.prefix.isBetterThan)
-    if (isBest && proofsChecked >= config.poPowSettings.minProofsToCheck) {
+    val isBest = bestProofPrefixIdOpt.flatMap(proofById).forall(p => m.prefix.isBetterThan(p.prefix))
+    if (proofsChecked >= config.poPowSettings.minProofsToCheck) {
+      val bestProof = bestProofPrefixIdOpt.flatMap(proofById).getOrElse(m)
       config.stateType match {
         case StateType.Utxo =>
           ???
         case StateType.Digest =>
-          val bestHeader = m.chain.last
-          val indexesToInsert = m.chain
+          val bestHeader = bestProof.chain.last
+          val indexesToInsert = bestProof.chain
             .foldLeft(Seq.empty[(ByteArrayWrapper, ByteArrayWrapper)]) { case (acc, h) =>
               acc ++ toInsert(h)._1
             }
-          historyStorage.insert(Algos.idToBAW(m.id), indexesToInsert, m.chain)
+          historyStorage.insert(Algos.idToBAW(bestHeader.id), indexesToInsert, bestProof.chain)
           ProgressInfo(None, Seq.empty, Seq(bestHeader), toDownload(bestHeader))
       }
     } else if (isBest) {

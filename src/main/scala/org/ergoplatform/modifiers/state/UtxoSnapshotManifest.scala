@@ -62,6 +62,8 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
       .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
       .demandEqualArrays(rootDigest, header.stateRoot, "`rootDigest` does not correspond to header's `stateRoot`")
       .demand(validManifestTree, "Manifest tree is invalid")
+      .demand(proverManifest.keyLength == Constants.HashLength, "Invalid key length declared")
+      .demand(proverManifest.valueLengthOpt.isEmpty, "Invalid value length declared")
       .result
       .toTry
   }

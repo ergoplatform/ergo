@@ -51,7 +51,7 @@ case class Header(version: Version,
 
   lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
 
-  override val minerPk: EcPointType = powSolution.pk
+  override def minerPk: EcPointType = powSolution.pk
 
   lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
     (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))

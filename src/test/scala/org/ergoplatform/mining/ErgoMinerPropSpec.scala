@@ -16,19 +16,6 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
     ErgoState.rewardOutputScript(delta, pk).bytes
 
-  property("rewardOutputScriptStartBytes correct serialization") {
-    def checkBytes(d: Int) = {
-      val bytes = ErgoState.rewardOutputScript(d, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
-      bytes shouldEqual ErgoState.rewardOutputScriptStartBytes(d)
-    }
-
-    forAll { d: Int =>
-      checkBytes(d)
-    }
-    checkBytes(720)
-    checkBytes(delta)
-  }
-
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
     us.emissionBoxOpt should not be None

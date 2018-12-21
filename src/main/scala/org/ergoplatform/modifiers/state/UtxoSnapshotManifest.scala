@@ -17,7 +17,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 /**
-  * Holds general information about sliced state tree.
+  * Holds prover manifest and id of block snapshot relates to.
   */
 case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32, Algos.HF],
                                 blockId: ModifierId)
@@ -61,9 +61,9 @@ case class UtxoSnapshotManifest(proverManifest: BatchAVLProverManifest[Digest32,
     failFast
       .demandEqualIds(blockId, header.id, s"`blockId` does not correspond to $header")
       .demandEqualArrays(rootDigest, header.stateRoot, "`rootDigest` does not correspond to header's `stateRoot`")
-      .demand(validManifestTree, "Manifest tree is invalid")
       .demand(proverManifest.keyLength == Constants.HashLength, "Invalid key length declared")
       .demand(proverManifest.valueLengthOpt.isEmpty, "Invalid value length declared")
+      .demand(validManifestTree, "Manifest tree is invalid")
       .result
       .toTry
   }

@@ -2,25 +2,25 @@ package org.ergoplatform.utils.generators
 
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId, BoxId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
+import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
+import org.ergoplatform.utils.{ErgoTestConstants, BoxUtils}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
-import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.Values.{TrueLeaf, Value, FalseLeaf, EvaluatedValue}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
+import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.{SBoolean, _}
 
 import scala.util.Random

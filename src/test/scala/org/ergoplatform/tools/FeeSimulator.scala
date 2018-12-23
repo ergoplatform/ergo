@@ -2,11 +2,11 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.{ErgoBoxCandidate, Input}
-import scapi.sigma.DLogProtocol.DLogProverInput
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import scorex.utils.Random
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.interpreter.{ProverResult, ContextExtension}
 
 object FeeSimulator extends App {
 

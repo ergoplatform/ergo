@@ -1,8 +1,8 @@
 package org.ergoplatform
 
 import org.bouncycastle.math.ec.ECPoint
-import scapi.sigma.BcDlogFp
-import scapi.sigma.DLogProtocol.DLogProverInput
+import sigmastate.basics.BcDlogFp
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 

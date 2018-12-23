@@ -4,20 +4,20 @@ import akka.util.Timeout
 import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
+import org.ergoplatform.mining.{DefaultFakePowScheme, AutolykosPowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
+import org.ergoplatform.nodeView.state.{ErgoState, StateConstants, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
+import org.ergoplatform.settings.{LaunchParameters, Parameters, VotingSettings, ErgoSettings}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.Value
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.interpreter.{ProverResult, ContextExtension}
 
 import scala.concurrent.duration._
 

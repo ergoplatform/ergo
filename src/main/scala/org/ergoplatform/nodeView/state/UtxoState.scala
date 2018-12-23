@@ -31,8 +31,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: Store,
-                override val constants: StateConstants,
-                override val verifier: ErgoInterpreter)
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
     with UtxoStateReader {
@@ -57,7 +56,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash.data
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants, verifier)
+          new UtxoState(p, version, store, constants)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -70,7 +69,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext) = Try {
-//    implicit val verifier: ErgoInterpreter = ErgoInterpreter()
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
@@ -129,7 +128,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, verifier)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
           stateTry.recoverWith[UtxoState] { case e =>
             log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
@@ -142,7 +141,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       }
 
     case h: Header =>
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, verifier))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
       log.info(s"Unhandled modifier: $a")
@@ -186,7 +185,7 @@ object UtxoState {
       val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants, ErgoInterpreter(LaunchParameters))
+    new UtxoState(persistentProver, version, store, constants)
   }
 
   @SuppressWarnings(Array("OptionGet", "TryGet"))
@@ -211,7 +210,6 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    val interpreter = ErgoInterpreter(defaultStateContext.currentParameters)
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, interpreter)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 }

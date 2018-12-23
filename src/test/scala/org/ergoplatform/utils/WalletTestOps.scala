@@ -4,17 +4,17 @@ import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state.{UtxoState, ErgoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
-import scapi.sigma.DLogProtocol.ProveDlog
 import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import scorex.util.{bytesToId, ModifierId}
+import sigmastate.Values.{TrueLeaf, Value, LongConstant, EvaluatedValue}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.serialization.ValueSerializer
 import sigmastate.{SBoolean, SLong}
 

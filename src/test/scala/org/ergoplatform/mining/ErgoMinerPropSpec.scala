@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scapi.sigma.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 

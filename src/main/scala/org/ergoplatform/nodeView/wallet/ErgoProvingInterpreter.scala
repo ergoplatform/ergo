@@ -9,12 +9,12 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.hash.Blake2b256
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 
 /**

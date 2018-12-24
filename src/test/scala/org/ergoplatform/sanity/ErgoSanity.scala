@@ -44,7 +44,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo,
   //PoPoWBootstrap = false, -1)
 
-  override val memPool: MPool = ErgoMemPool.empty
+  override val memPool: MPool = ErgoMemPool.empty(settings)
 
   //Generators
   override lazy val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen

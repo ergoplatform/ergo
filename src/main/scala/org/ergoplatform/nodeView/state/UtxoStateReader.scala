@@ -16,7 +16,7 @@ import scala.util.{Failure, Try}
 
 trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
 
-  protected implicit val hf = Algos.hash
+  protected implicit val hf: HF = Algos.hash
 
   val constants: StateConstants
 

@@ -19,7 +19,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean,
-                                     keepVersions: Int)
+                                     keepVersions: Int,
+                                     mempoolCapacity: Int)
 
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
@@ -27,14 +28,18 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
     val stateType = stateTypeFromString(cfg.as[String](stateTypeKey), stateTypeKey)
-    NodeConfigurationSettings(stateType,
-                              cfg.as[Boolean](s"$path.verifyTransactions"),
-                              cfg.as[Int](s"$path.blocksToKeep"),
-                              cfg.as[Boolean](s"$path.PoPoWBootstrap"),
-                              cfg.as[Int](s"$path.minimalSuffix"),
-                              cfg.as[Boolean](s"$path.mining"),
-                              cfg.as[FiniteDuration](s"$path.miningDelay"),
-                              cfg.as[Boolean](s"$path.offlineGeneration"),
-                              cfg.as[Int](s"$path.keepVersions"))
+    NodeConfigurationSettings(
+      stateType,
+      cfg.as[Boolean](s"$path.verifyTransactions"),
+      cfg.as[Int](s"$path.blocksToKeep"),
+      cfg.as[Boolean](s"$path.PoPoWBootstrap"),
+      cfg.as[Int](s"$path.minimalSuffix"),
+      cfg.as[Boolean](s"$path.mining"),
+      cfg.as[FiniteDuration](s"$path.miningDelay"),
+      cfg.as[Boolean](s"$path.offlineGeneration"),
+      cfg.as[Int](s"$path.keepVersions"),
+      cfg.as[Int](s"$path.mempoolCapacity")
+    )
   }
+
 }

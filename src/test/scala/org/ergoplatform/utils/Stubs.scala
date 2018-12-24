@@ -53,7 +53,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val txs: Seq[ErgoTransaction] = chain.head.transactions
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).get
+  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
 
 
@@ -197,7 +197,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

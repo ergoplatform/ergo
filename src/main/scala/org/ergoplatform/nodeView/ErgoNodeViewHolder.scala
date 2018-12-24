@@ -14,12 +14,10 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 
-import scala.util.{Failure, Success, Try}
-
+import scala.util.Try
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
@@ -57,7 +55,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction[ErgoTransaction](tx))
-      case (newPool, AppendingOutcome.Blacklisted(e)) =>
+      case (newPool, AppendingOutcome.Invalidated(e)) =>
+        log.debug(s"Transaction $tx invalidated")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
       case (_, AppendingOutcome.Declined) => // do nothing

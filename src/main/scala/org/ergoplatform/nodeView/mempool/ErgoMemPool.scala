@@ -11,15 +11,10 @@ import scala.collection.immutable.TreeMap
 import scala.util.Try
 
 /**
-  * TODO This is simplified implementation of Memory pool.
-  * MemPool should:
-  * - have limited size
-  * - replace transactions with the lowest fee if size limit is reached
-  * - validate transactions when put (is called)
-  * - clean transactions, that become invalid
+  * Memory pool with limited size implementation.
   */
 class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTransaction, Long)],
-                                   blacklisted: TreeMap[ModifierId, Long],
+                                   invalidated: TreeMap[ModifierId, Long],
                                    settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
@@ -37,29 +32,33 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     val newPool = txs.foldLeft(unconfirmed) { case (acc, tx) => acc.updated(tx.id, weighted(tx)) }
-    new ErgoMemPool(newPool, blacklisted, settings)
+    new ErgoMemPool(newPool, invalidated, settings)
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(unconfirmed - tx.id, blacklisted, settings)
+    new ErgoMemPool(unconfirmed - tx.id, invalidated, settings)
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
     val newPool = unconfirmed.filter { case (_, v) =>
       condition(v._1)
     }
-    new ErgoMemPool(newPool, blacklisted, settings)
+    new ErgoMemPool(newPool, invalidated, settings)
+  }
+
+  def invalidate(tx: ErgoTransaction): ErgoMemPool = {
+    new ErgoMemPool(unconfirmed - tx.id, updateInvalidatedWith(tx), settings)
   }
 
   def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, AppendingOutcome) = {
     state match {
       case validator: TransactionValidation[ErgoTransaction@unchecked]
-        if !blacklisted.contains(tx.id) && !unconfirmed.contains(tx.id) &&
+        if !invalidated.contains(tx.id) && !unconfirmed.contains(tx.id) &&
           (unconfirmed.size < settings.nodeSettings.mempoolCapacity ||
           weighted(tx)._2 > unconfirmed.headOption.map(_._2._2).getOrElse(0L)) =>
         validator.validate(tx).fold(
-          new ErgoMemPool(unconfirmed, updateBlacklistWith(tx), settings) -> AppendingOutcome.Blacklisted(_),
-          _ => new ErgoMemPool(updatePoolWith(tx), blacklisted, settings) -> AppendingOutcome.Appended
+          new ErgoMemPool(unconfirmed, updateInvalidatedWith(tx), settings) -> AppendingOutcome.Invalidated(_),
+          _ => new ErgoMemPool(updatePoolWith(tx), invalidated, settings) -> AppendingOutcome.Appended
         )
       case _ =>
         this -> AppendingOutcome.Declined
@@ -83,11 +82,11 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
     }
   }.updated(tx.id, weighted(tx))
 
-  private def updateBlacklistWith(tx: ErgoTransaction) = {
-    if (blacklisted.size >= blacklistCapacity) {
-      blacklisted - blacklisted.firstKey
+  private def updateInvalidatedWith(tx: ErgoTransaction) = {
+    if (invalidated.size >= blacklistCapacity) {
+      invalidated - invalidated.firstKey
     } else {
-      blacklisted
+      invalidated
     }
   }.updated(tx.id, System.currentTimeMillis())
 
@@ -100,7 +99,7 @@ object ErgoMemPool {
   object AppendingOutcome {
     case object Appended extends AppendingOutcome
     case object Declined extends AppendingOutcome
-    case class Blacklisted(e: Throwable) extends AppendingOutcome
+    case class Invalidated(e: Throwable) extends AppendingOutcome
   }
 
   type MemPoolRequest = Seq[ModifierId]

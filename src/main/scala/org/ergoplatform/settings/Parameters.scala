@@ -276,4 +276,5 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
       "maxBlockSize" -> p.maxBlockSize.asJson,
       "maxBlockCost" -> p.maxBlockCost.asJson
     ).asJson
+
 }

@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -17,7 +16,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate._
-
+import org.ergoplatform.settings.Parameters._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -247,15 +246,24 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
 
+  lazy val paramVoteGen: Gen[Byte] = for {
+     paramVote <- Gen.oneOf(Seq(NoParameter, StorageFeeFactorIncrease, MinValuePerByteIncrease))
+  } yield paramVote
+
+  lazy val paramVotesGen: Gen[Array[Byte]] = for {
+    firstVote <- paramVoteGen
+  } yield Array(firstVote, NoParameter, NoParameter)
+
   lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
     size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
     stateRoot <- stateRootGen
-    headers <- Gen.listOfN(size, invalidErgoFullBlockGen)
+    blocks <- Gen.listOfN(size, invalidErgoFullBlockGen)
+    votes <- Gen.listOfN(size, paramVotesGen)
   } yield {
-    headers match {
+    blocks match {
       case _ :: _ =>
-        headers.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
-          val block = b.copy(header = b.header.copy(height = h))
+        blocks.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
+          val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1
       case _ =>

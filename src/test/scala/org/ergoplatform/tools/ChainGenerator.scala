@@ -2,21 +2,25 @@ package org.ergoplatform.tools
 
 import java.io.File
 
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import akka.actor.{ActorRef, ActorSystem}
+import akka.testkit.TestKit
+import org.ergoplatform.local.ErgoMiner.StartMining
+import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
+import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings._
-import org.ergoplatform.tools.ChainGenerator.pow
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import scorex.util.ScorexLogging
+import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 
-import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.Random
 
 /**
   * Application object for chain generation.
@@ -24,12 +28,11 @@ import scala.util.Random
   * Generate blocks starting from start timestamp and until current time with expected block interval
   * between them, to ensure that difficulty does not change.
   */
-object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelpers with ScorexLogging {
+object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
@@ -40,51 +43,39 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, settings.chainSettings.monetary)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
-  val stateDir = ErgoState.stateDir(fullHistorySettings)
-  stateDir.mkdirs()
 
-  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
-  allowToApplyOldBlocks(history)
-  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
-  log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
+  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  val chain = loop(state, boxHolder, None, Seq())
-  log.info(s"Chain of length ${chain.length} generated")
-  history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
-  history.bestFullBlockOpt.get shouldBe chain.last
-  log.info("History was generated successfully")
-  System.exit(0)
+  val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
-  private def loop(state: UtxoState, boxHolder: BoxHolder,
-                   last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
-    val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
-    if (time < timeProvider.time) {
-      val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder, new Random, txsSize)
+  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-      val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
-      val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
-        txs, time, ExtensionCandidate(Seq(), Seq()))
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-      val block = generate(candidate)
-      history.append(block.header).get
-      block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
-      log.info(s"Block ${block.id} at height ${block.header.height} generated")
-      loop(state.applyModifier(block).get, newBoxHolder, Some(block.header), acc :+ block)
-    } else {
-      acc
-    }
+  val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
+
+  val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
+
+  Thread.sleep(5000)
+
+  system.eventStream.subscribe(testActor, classOf[SemanticallySuccessfulModifier[ErgoPersistentModifier]])
+
+  nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+    allowToApplyOldBlocks(v.history)
   }
 
-  @tailrec
-  private def generate(candidate: CandidateBlock): ErgoFullBlock = {
-    log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+  minerRef ! StartMining
+  txGenRef ! StartGeneration
 
-    pow.proveCandidate(candidate, defaultMinerSecretNumber) match {
-      case Some(fb) => fb
-      case _ =>
-        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
-        generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
-    }
+  receiveWhile() {
+    case SemanticallySuccessfulModifier(block: ErgoFullBlock)
+      if block.header.timestamp >= timeProvider.time =>
+      nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        log.info(s"Chain of length ${v.history.bestHeaderOpt.map(_.height).getOrElse(0)} generated")
+        v.history.bestHeaderOpt shouldBe v.history.bestFullBlockOpt.map(_.header)
+        log.info("History was generated successfully")
+        System.exit(0)
+      }
   }
 
   /**

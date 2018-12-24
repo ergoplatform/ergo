@@ -2,9 +2,10 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -17,6 +18,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
     ErgoState.rewardOutputScript(delta, pk).bytes
+
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
@@ -95,7 +98,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val costs = fromBigMempool.map { tx =>
         us.validateWithCost(tx).getOrElse {
           val boxesToSpend = tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
-          tx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata).get
+          tx.statefulValidity(boxesToSpend, upcomingContext).get
         }
       }
 

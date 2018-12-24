@@ -308,6 +308,7 @@ object ErgoMiner extends ScorexLogging {
 
       mempoolTxs.headOption match {
         case Some(tx) =>
+          implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
           us.validateWithCost(tx) match {
             case Success(costConsumed) =>
@@ -317,7 +318,7 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, us.constants.emission) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
+                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
 

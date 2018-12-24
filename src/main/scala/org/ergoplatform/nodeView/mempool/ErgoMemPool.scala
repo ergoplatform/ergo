@@ -27,6 +27,8 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
 
   override type NVCT = ErgoMemPool
 
+  private val blacklistCapacity = settings.nodeSettings.mempoolCapacity * 4
+
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
   override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
@@ -51,18 +53,16 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
 
   def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, AppendingOutcome) = {
     state match {
-      case validator: TransactionValidation[ErgoTransaction@unchecked] =>
-        if (!blacklisted.contains(tx.id) && !unconfirmed.contains(tx.id)) {
-          val ts = System.currentTimeMillis()
-          validator.validate(tx).fold(
-            new ErgoMemPool(unconfirmed.updated(tx.id, weighted(tx)), blacklisted, settings) -> AppendingOutcome.Blacklisted(_),
-            _ => new ErgoMemPool(unconfirmed, blacklisted.updated(tx.id, ts), settings) -> AppendingOutcome.Appended
-          )
-        } else {
-          this -> AppendingOutcome.Denied
-        }
+      case validator: TransactionValidation[ErgoTransaction@unchecked]
+        if !blacklisted.contains(tx.id) && !unconfirmed.contains(tx.id) &&
+          (unconfirmed.size < settings.nodeSettings.mempoolCapacity ||
+          weighted(tx)._2 > unconfirmed.headOption.map(_._2._2).getOrElse(0L)) =>
+        validator.validate(tx).fold(
+          new ErgoMemPool(unconfirmed, updateBlacklistWith(tx), settings) -> AppendingOutcome.Blacklisted(_),
+          _ => new ErgoMemPool(updatePoolWith(tx), blacklisted, settings) -> AppendingOutcome.Appended
+        )
       case _ =>
-        this -> AppendingOutcome.Denied
+        this -> AppendingOutcome.Declined
     }
   }
 
@@ -75,6 +75,22 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
     tx -> fee
   }
 
+  private def updatePoolWith(tx: ErgoTransaction) = {
+    if (unconfirmed.size >= settings.nodeSettings.mempoolCapacity) {
+      unconfirmed - unconfirmed.firstKey
+    } else {
+      unconfirmed
+    }
+  }.updated(tx.id, weighted(tx))
+
+  private def updateBlacklistWith(tx: ErgoTransaction) = {
+    if (blacklisted.size >= blacklistCapacity) {
+      blacklisted - blacklisted.firstKey
+    } else {
+      blacklisted
+    }
+  }.updated(tx.id, System.currentTimeMillis())
+
 }
 
 object ErgoMemPool {
@@ -83,7 +99,7 @@ object ErgoMemPool {
 
   object AppendingOutcome {
     case object Appended extends AppendingOutcome
-    case object Denied extends AppendingOutcome
+    case object Declined extends AppendingOutcome
     case class Blacklisted(e: Throwable) extends AppendingOutcome
   }
 

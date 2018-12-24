@@ -60,7 +60,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (newPool, AppendingOutcome.Blacklisted(e)) =>
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
-      case (_, AppendingOutcome.Denied) => // do nothing
+      case (_, AppendingOutcome.Declined) => // do nothing
     }
   }
 

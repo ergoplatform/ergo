@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.state
 import com.google.common.primitives.Ints
 import org.ergoplatform.settings._
 import com.google.common.primitives.Bytes
+import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
+import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -11,6 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.serialization.{BytesSerializable, Serializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.collection.mutable
 import scala.util.{Success, Try}
@@ -28,6 +31,26 @@ case class VotingData(epochVotes: Array[(Byte, Int)],
 
 object VotingData {
   val empty = VotingData(Array.empty)
+}
+
+/**
+  * State context with predicted header.
+  * The predicted header only contains fields that can be predicted.
+  */
+class UpcomingStateContext(lastHeaders: Seq[Header],
+                           predictedHeader: PreHeader,
+                           genesisStateDigest: ADDigest,
+                           currentParameters: Parameters,
+                           votingData: VotingData)(implicit votingSettings: VotingSettings)
+  extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
+
+  override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
+
+  override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
+
+  override val currentHeight: Int = predictedHeader.height
+
+  override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
 }
 
 /**
@@ -49,8 +72,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def votingStarts(height: Int): Boolean = height % votingEpochLength == 0 && height > 0
 
-  lazy val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk)
-    .getOrElse(Array.fill(32)(0: Byte))
+  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk).getOrElse(Array.fill(32)(0: Byte))
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -78,6 +100,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
       prevVotes += v
     }
+  }
+
+  def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
+    //todo: add votes?
+    val upcomingHeader = PreHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
+    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, currentParameters, votingData)
   }
 
   //Check that calculated parameters are matching ones written in the extension section of the block

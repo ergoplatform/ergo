@@ -1,10 +1,10 @@
 package org.ergoplatform.mining
 
-import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.modifiers.history.Header
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.math.BigInt
 import scala.util.{Random, Success, Try}
@@ -28,8 +28,8 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
-    val pk: ECPoint = genPk(sk)
-    val w: ECPoint = genPk(Random.nextLong())
+    val pk: EcPointType = genPk(sk)
+    val w: EcPointType = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
     val s = AutolykosSolution(pk, w, n, d)

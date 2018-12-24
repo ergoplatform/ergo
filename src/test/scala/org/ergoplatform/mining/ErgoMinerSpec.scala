@@ -6,7 +6,7 @@ import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef}
+import org.ergoplatform.local.ErgoMinerRef
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
@@ -62,7 +62,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    expectNoMsg(1 second)
+    expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
@@ -123,20 +123,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       r.h.bestFullBlockOpt.get.transactions.nonEmpty shouldBe true
       Thread.sleep(1000)
     }
-
-  }
-
-  it should "filter out double spend txs" in {
-    val tx = validErgoTransactionGen.sample.get._2
-    ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
-
-    val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
-    val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionFromBoxes(l)
-    val tx_2 = validTransactionFromBoxes(r :+ l.last)
-
-    ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
-    ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
   it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
@@ -154,7 +140,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       timeProvider,
       Some(defaultMinerSecret)
     )
-    expectNoMsg(1 second)
+    expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     val history: ErgoHistoryReader = r.h
@@ -181,7 +167,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
-    expectNoMsg(1 seconds)
+    expectNoMessage(1 seconds)
 
     r.m.unconfirmed.size shouldBe 2
 

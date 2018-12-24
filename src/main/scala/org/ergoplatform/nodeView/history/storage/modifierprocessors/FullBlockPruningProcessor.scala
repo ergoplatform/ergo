@@ -13,7 +13,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
 
-  private lazy val VotingEpochLength = chainSettings.voting.votingLength
+  private val VotingEpochLength = chainSettings.voting.votingLength
 
   def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)

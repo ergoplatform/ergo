@@ -189,21 +189,19 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq.empty
 
       lazy val emptyExtensionCandidate = ExtensionCandidate(Seq(), optionalFields)
-      lazy val sc = state.stateContext
+      lazy val stateContext = state.stateContext
 
       // todo fill with interlinks and other useful values after nodes update
       val (extensionCandidate, votes: Array[Byte]) = bestHeaderOpt.map { header =>
         val newHeight = header.height + 1
         if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-
           //todo: soft fork flag instead of false
-          val newParams = sc.currentParameters
-            .update(newHeight, false, sc.votingData.epochVotes, votingSettings)
-          val vs = newParams.suggestVotes(ergoSettings.votingTargets)
-          newParams.toExtensionCandidate(optionalFields) -> vs
+          val newParams = stateContext.currentParameters
+            .update(newHeight, false, stateContext.votingData.epochVotes, votingSettings)
+          newParams.toExtensionCandidate(optionalFields) -> newParams.suggestVotes(ergoSettings.votingTargets)
         } else {
-          val vs = sc.currentParameters.vote(ergoSettings.votingTargets, sc.votingData.epochVotes)
-          emptyExtensionCandidate -> vs
+          emptyExtensionCandidate ->
+            stateContext.currentParameters.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes)
         }
       }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))
 

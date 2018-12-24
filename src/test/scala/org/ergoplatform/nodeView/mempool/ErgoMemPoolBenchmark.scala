@@ -47,13 +47,8 @@ object ErgoMemPoolBenchmark
 
   private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
                     txsInIncomeOrder: Seq[ErgoTransaction]) = {
-    val pool = ErgoMemPool.empty
-    val futures = txsByWaitingGroups.map(group => {
-      pool.waitForAll(group)
-    })
-    val resultFuture = Future.sequence(futures)
+    val pool = ErgoMemPool.empty(settings)
     txsInIncomeOrder.foreach(pool.put)
-    Await.result(resultFuture, Duration.Inf)
   }
 
   performance of "ErgoMemPool awaiting" in {

@@ -29,9 +29,9 @@ trait FullNiPoPowProofsProcessor extends NiPoPowProofsProcessor {
     if (proofsChecked >= config.poPowSettings.minProofsToCheck) {
       val bestProof = bestProofPrefixIdOpt.flatMap(proofById).getOrElse(m)
       config.stateType match {
-        case StateType.Utxo =>
+        case StateType.Utxo => // request last headers to reach nearest snapshot height
           ???
-        case StateType.Digest =>
+        case StateType.Digest => // save proved chain and update best header indexes
           val bestHeader = bestProof.chain.last
           val indexesToInsert = bestProof.chain
             .foldLeft(Seq.empty[(ByteArrayWrapper, ByteArrayWrapper)]) { case (acc, h) =>

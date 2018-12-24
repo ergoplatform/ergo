@@ -1,10 +1,10 @@
 package org.ergoplatform
 
-import org.bouncycastle.math.ec.ECPoint
 import sigmastate.basics.BcDlogFp
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.{GroupElementSerializer, Serializer}
 
 package object mining {
 
@@ -20,11 +20,12 @@ package object mining {
 
   def hash(in: Array[Byte]): BigInt = hashFn.hash(in)
 
-  def genPk(s: PrivateKey): ECPoint = group.exponentiate(group.generator, s.bigInteger)
+  def genPk(s: PrivateKey): EcPointType = group.exponentiate(group.generator, s.bigInteger)
 
   def randomSecret(): PrivateKey = DLogProverInput.random().w
 
-  def pkToBytes(pk: ECPoint): Array[Byte] = pk.getEncoded(true).ensuring(_.length == PublicKeyLength)
+  def pkToBytes(pk: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(pk)
 
-  def pkFromBytes(bytes: Array[Byte]): ECPoint = group.curve.decodePoint(bytes)
+  def pkFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parseBody(Serializer.startReader(bytes))
+
 }

@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId, BoxId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
@@ -20,6 +19,7 @@ import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
 import sigmastate.Values.{TrueLeaf, Value, FalseLeaf, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
+import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.{SBoolean, _}
 
@@ -107,7 +107,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   }
 
 
-  lazy val genECPoint: Gen[ECPoint] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
+  lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
 
   lazy val powSolutionGen: Gen[AutolykosSolution] = for {
     pk <- genECPoint

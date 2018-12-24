@@ -1,10 +1,10 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
+import akka.actor.{ActorRefFactory, Props, PoisonPill, Actor, ActorRef}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.ErgoBox.{TokenId, BoxId}
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -12,25 +12,26 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.interpreter.{ProverResult, ContextExtension}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
@@ -305,6 +306,7 @@ object ErgoMiner extends ScorexLogging {
 
       mempoolTxs.headOption match {
         case Some(tx) =>
+          implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
           us.validateWithCost(tx) match {
             case Success(costConsumed) =>
@@ -314,7 +316,7 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, us.constants.emission) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
+                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
 

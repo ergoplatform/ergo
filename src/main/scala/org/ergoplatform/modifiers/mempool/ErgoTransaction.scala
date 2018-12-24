@@ -1,12 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
-import java.nio.ByteBuffer
-
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
@@ -25,7 +22,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.{Serializer => SSerializer}
-import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
@@ -96,8 +93,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       blockchainState: ErgoStateContext,
-                       metadata: Metadata): Try[Long] = {
+                       blockchainState: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -111,10 +107,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val proof = input.spendingProof
         val proverExtension = proof.extension
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
-        val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
-
-        //todo: reuse the interpreter?
-        val verifier: ErgoInterpreter = new ErgoInterpreter(blockchainState.currentParameters)
+        val ctx = new ErgoContext(blockchainState, transactionContext, proverExtension)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover { case t => t.printStackTrace() }
@@ -266,17 +259,15 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 }
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-  override def serializeBody(tx: ErgoTransaction, w: ByteWriter): Unit =
+  override def serializeBody(tx: ErgoTransaction, w: SigmaByteWriter): Unit =
     flattenedTxSerializer.serializeBody(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
 
-  override def parseBody(r: ByteReader): ErgoTransaction = {
+  override def parseBody(r: SigmaByteReader): ErgoTransaction = {
     val ftx = flattenedTxSerializer.parseBody(r)
     ErgoTransaction(ftx.inputs, ftx.outputCandidates)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoTransaction] = Try {
-    val buf = ByteBuffer.wrap(bytes)
-    buf.position(0)
-    parseBody(new ByteBufferReader(buf))
+    parseBody(sigmastate.serialization.Serializer.startReader(bytes))
   }
 }

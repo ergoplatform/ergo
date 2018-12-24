@@ -5,7 +5,6 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
@@ -33,7 +32,7 @@ object Constants {
 
   //For how many blocks a box could be put into the state with no paying.
   //4 years
-  val StoragePeriod: Int = 4 * 365 * 24 * BlocksPerHour
+  val StoragePeriod: Int = 4 * BlocksPerYear
 
   val StorageContractCost: Long = 50
 

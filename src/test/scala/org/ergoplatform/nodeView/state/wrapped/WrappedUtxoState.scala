@@ -7,8 +7,9 @@ import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters}
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
@@ -75,6 +76,7 @@ object WrappedUtxoState {
       IndexedSeq(version),
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
 
-    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants)
+    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh,
+      constants)
   }
 }

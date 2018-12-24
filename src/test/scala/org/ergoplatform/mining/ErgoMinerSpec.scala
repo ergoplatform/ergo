@@ -98,10 +98,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
           r.s.stateContext).get
       }
 
-      // put txs in mempool altogether to speedup test
-      await(nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.pool.put(txs)
-      })
+      txs.foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
 
       if (toSend > toSpend.size) {
         // wait for the next block
@@ -113,10 +110,12 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     // Generate and send `desiredSize` transactions to mempool
     loop(desiredSize)
 
-    pool.size should be > 10
+    Thread.sleep(6000)
+
+    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size should be > 10
 
     // wait for mempool to be cleaned
-    while (pool.size > 0) {
+    while (await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size > 0) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${pool.size}")
       // blocks should not be empty
       r.h.bestFullBlockOpt.get.transactions.nonEmpty shouldBe true
@@ -169,13 +168,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
     expectNoMessage(1 seconds)
 
-    r.m.unconfirmed.size shouldBe 2
+    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
 
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
 
-    r.m.unconfirmed.size shouldBe 0
+    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
     val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)

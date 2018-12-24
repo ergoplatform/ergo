@@ -60,6 +60,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
       case (_, AppendingOutcome.Declined) => // do nothing
+        log.debug(s"Transaction $tx declined")
     }
   }
 

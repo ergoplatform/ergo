@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.nodeView.ErgoInterpreter
+import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
@@ -12,6 +13,8 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 class ExpirationSpecification extends ErgoPropertyTest {
 
   type Height = Long
+
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   def falsify(box: ErgoBox): ErgoBox = {
     ErgoBox(box.value,
@@ -41,7 +44,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val updContext = emptyStateContext.updateHeaders(Seq(fakeHeader)).appendFullBlock(fb, votingSettings).get
 
     tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), updContext, settings.metadata).isSuccess shouldBe expectedValidity
+    tx.statefulValidity(IndexedSeq(from), updContext).isSuccess shouldBe expectedValidity
   }
 
   property("successful spending w. same value") {

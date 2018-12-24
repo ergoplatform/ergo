@@ -1,31 +1,31 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, Actor, ActorSystem}
 import akka.pattern.ask
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{TestProbe, TestKit}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.ErgoMinerRef
+import org.ergoplatform.local.{ErgoMinerRef, ErgoMiner}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
-import scapi.sigma.DLogProtocol
-import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import scorex.core.NodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, GetDataFromCurrentView}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import sigmastate.basics.DLogProtocol
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
@@ -54,7 +54,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((parameters.maxBlockCost / Cost.Dlog) * 2).toInt
+//    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+    val desiredSize: Int = 50
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)
@@ -94,7 +95,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
-          ergoSettings.metadata,
           r.s.stateContext
         ).get
       }
@@ -160,10 +160,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
-    val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
+    val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
-    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), ergoSettings.metadata, r.s.stateContext).get
+    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)

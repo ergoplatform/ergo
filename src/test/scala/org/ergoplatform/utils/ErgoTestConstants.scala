@@ -3,13 +3,12 @@ package org.ergoplatform.utils
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
+import org.ergoplatform.mining.{DefaultFakePowScheme, AutolykosPowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
+import org.ergoplatform.nodeView.state.{ErgoState, StateConstants, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
+import org.ergoplatform.settings.{LaunchParameters, Parameters, VotingSettings, ErgoSettings}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -18,6 +17,7 @@ import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.duration._
 
@@ -42,7 +42,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(settings.emission)
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
-  val defaultProver: ErgoProvingInterpreter = new ErgoProvingInterpreter(defaultSeed, 1, parameters)
+  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 1, parameters)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage

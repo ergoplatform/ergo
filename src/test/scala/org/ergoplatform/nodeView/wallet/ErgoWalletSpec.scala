@@ -1,11 +1,12 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
@@ -13,17 +14,18 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.idToBytes
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
+
 import scala.concurrent.blocking
 import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
-      val meta = Metadata(Metadata.TestnetNetworkPrefix)
       val address = getPublicKeys.head
       val genesisBlock = makeGenesisBlock(address.script)
       val genesisTx = genesisBlock.transactions.head
@@ -41,13 +43,12 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
     }
   }
 
   property("Generate transaction with multiple inputs") {
     withFixture { implicit w =>
-      val meta = Metadata(Metadata.TestnetNetworkPrefix)
       val addresses = getPublicKeys
       addresses.length should be > 1
       val genesisBlock = makeGenesisBlock(addresses.head.script, randomNewAsset)
@@ -69,7 +70,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context, meta) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
@@ -83,7 +84,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val tx2 = await(wallet.generateTransaction(req2)).get
       val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx2.statefulValidity(boxesToSpend2, context2, meta) shouldBe 'success
+      tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
     }
   }
 
@@ -663,13 +664,13 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val p2s = Pay2SAddress(EQ(CalcBlake2b256(preimage), hash))
       val balanceToSpend = randomLong(initialBalance)
       val tx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, p2s.script, randomNewAsset)
-      val assets = assetAmount(boxesAvailable(tx, p2s.script))
+      val assets = assetAmount(boxesAvailable(tx, p2s.script.bytes))
       val block = makeNextBlock(getUtxoState, Seq(tx))
 
       wallet.scanPersistent(block)
       waitForScanning(block)
       val confirmedBalance = getConfirmedBalances
-      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script))
+      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script.bytes))
       confirmedBalance.balance shouldBe 0
       confirmedBalance.assetBalances shouldBe empty
 

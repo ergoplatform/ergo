@@ -3,7 +3,6 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import org.bouncycastle.math.ec.ECPoint
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiEncoderOption.Detalization
@@ -16,6 +15,7 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.{SBoolean, SType}
 
@@ -50,14 +50,14 @@ trait ApiCodecs {
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
 
-  implicit val ecPointDecoder: Decoder[ECPoint] = { implicit cursor =>
+  implicit val ecPointDecoder: Decoder[EcPointType] = { implicit cursor =>
     for {
       str <- cursor.as[String]
       bytes <- fromTry(Algos.decode(str))
     } yield pkFromBytes(bytes)
   }
 
-  implicit val ecPointEncoder: Encoder[ECPoint] = { point:ECPoint =>
+  implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
       pkToBytes(point).asJson
   }
 

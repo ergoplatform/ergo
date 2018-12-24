@@ -149,6 +149,22 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Calculate header fields based on parent header
+    */
+  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
+    val interlinks: Seq[ModifierId] =
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
+
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
+
+    val version = Header.CurrentVersion
+
+    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+
+    (parentId, version, interlinks, height)
+  }
+
+  /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
@@ -180,22 +196,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   private[mining] def getB(nBits: Long): BigInt = {
     q / RequiredDifficulty.decodeCompactBits(nBits)
-  }
-
-  /**
-    * Calculate header fields based on parent header
-    */
-  protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
-    val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
-
-    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
-
-    val version = Header.CurrentVersion
-
-    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
-
-    (parentId, version, interlinks, height)
   }
 
   /**

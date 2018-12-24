@@ -20,7 +20,6 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   def getAll: Seq[ErgoTransaction] = unconfirmed.values.map(_._1).toSeq
 
-  def take(limit: Int): Iterable[ErgoTransaction] =
-    unconfirmed.values.toSeq.take(limit).map(_._1)
+  def take(limit: Int): Iterable[ErgoTransaction] = unconfirmed.values.toSeq.take(limit).map(_._1)
 
 }

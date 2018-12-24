@@ -51,7 +51,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-    expectNoMsg(1.second)
+    expectNoMessage(1.second)
 
     val minerRef: ActorRef = ErgoMinerRef(
       ergoSettings,

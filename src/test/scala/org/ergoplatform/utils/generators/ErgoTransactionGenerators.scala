@@ -6,6 +6,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -39,8 +41,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   def ergoBoxGen(propGen: Gen[Value[SBoolean.type]] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
-                 valueGenOpt: Option[Gen[Long]] = None): Gen[ErgoBox] = for {
-    h <- creationHeightGen
+                 valueGenOpt: Option[Gen[Long]] = None,
+                 heightGen: Gen[Int] = creationHeightGen): Gen[ErgoBox] = for {
+    h <- heightGen
     prop <- propGen
     transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
     boxId: Short <- boxIndexGen
@@ -55,7 +58,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens))
+    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
   }
 
   def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = coinsTotal): Gen[ErgoBox] = {

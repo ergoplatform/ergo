@@ -1,8 +1,7 @@
 package org.ergoplatform.nodeView.state
 
-import com.google.common.primitives.Ints
+import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.settings._
-import com.google.common.primitives.Bytes
 import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
 import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
@@ -19,9 +18,9 @@ import scala.collection.mutable
 import scala.util.{Success, Try}
 
 case class VotingData(epochVotes: Array[(Byte, Int)],
-                      softForkVotingStartingHeight: Int = 0,
-                      softForkVotesCollected: Int = 0,
-                      activationHeight: Int = 0) {
+                      softForkVotingStartingHeight: Option[Int],
+                      softForkVotesCollected: Option[Int],
+                      activationHeight: Option[Int]) {
   def update(voteFor: Byte): VotingData = {
     this.copy(epochVotes = epochVotes.map { case (id, votes) =>
       if (id == voteFor) id -> (votes + 1) else id -> votes
@@ -29,8 +28,53 @@ case class VotingData(epochVotes: Array[(Byte, Int)],
   }
 }
 
+object VotingDataSerializer extends Serializer[VotingData] {
+  private val NoneValue: Int = -1
+
+  override def toBytes(obj: VotingData): Array[Byte] = {
+    val votesCount = obj.epochVotes.length.toByte
+
+    val epochVotesBytes =
+      if (votesCount > 0) {
+        obj.epochVotes.map { case (id, cnt) =>
+          id +: Ints.toByteArray(cnt)
+        }.reduce(_ ++ _)
+      } else {
+        Array.emptyByteArray
+      }
+
+    val softForkData = (
+      Ints.toByteArray(obj.softForkVotingStartingHeight.getOrElse(NoneValue)),
+      Ints.toByteArray(obj.softForkVotesCollected.getOrElse(NoneValue)),
+      Ints.toByteArray(obj.activationHeight.getOrElse(NoneValue))
+    )
+
+    (votesCount +: epochVotesBytes) ++ softForkData._1 ++ softForkData._2 ++ softForkData._3
+  }
+
+  override def parseBytes(bytes: Array[Byte]): Try[VotingData] = Try {
+    val votesCount = bytes.head
+    val epochVotesBytes = bytes.tail.take(votesCount * 5)
+    val epochVotes = epochVotesBytes.grouped(5).toArray.map(bs => bs.head -> Ints.fromByteArray(bs.tail))
+    val softForkDataBytes = bytes.drop(epochVotesBytes.length + 1)
+
+    val softForkData = (
+      Ints.fromByteArray(softForkDataBytes.slice(0, 4)),
+      Ints.fromByteArray(softForkDataBytes.slice(4, 8)),
+      Ints.fromByteArray(softForkDataBytes.slice(8, 12))
+    )
+
+    VotingData(
+      epochVotes,
+      if (softForkData._1 == NoneValue) None else Some(softForkData._1),
+      if (softForkData._2 == NoneValue) None else Some(softForkData._2),
+      if (softForkData._3 == NoneValue) None else Some(softForkData._3)
+    )
+  }
+}
+
 object VotingData {
-  val empty = VotingData(Array.empty)
+  val empty = VotingData(Array.empty, None, None, None)
 }
 
 /**
@@ -153,7 +197,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     if (epochStarts) {
       val proposedVotes = votes.map(id => id -> 1)
-      val newVoting = VotingData(proposedVotes) //todo: fix
+      val newVoting = VotingData(proposedVotes, None, None, None) //todo: fix
 
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
@@ -217,52 +261,42 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Se
 
   override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
     val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
-    val votesCount = ctx.votingData.epochVotes.length.toByte
 
-    val votesBytes = if (votesCount > 0) {
-      ctx.votingData.epochVotes.map { case (id, cnt) =>
-        id +: Ints.toByteArray(cnt)
-      }.reduce(_ ++ _)
-    } else {
-      Array.emptyByteArray
-    }
+    val votingDataBytes = VotingDataSerializer.toBytes(ctx.votingData)
+    val votingDataSize = Ints.toByteArray(votingDataBytes.length)
 
     Bytes.concat(
       ctx.genesisStateDigest,
       Ints.toByteArray(lastHeaderBytes.length),
       lastHeaderBytes,
-      Array(votesCount),
-      votesBytes,
+      votingDataSize,
+      votingDataBytes,
       ParametersSerializer.toBytes(ctx.currentParameters))
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {
     val genesisDigest = ADDigest @@ bytes.take(33)
-    val length = Ints.fromByteArray(bytes.slice(33, 37))
+    val lastHeaderBytesLength = Ints.fromByteArray(bytes.slice(33, 37))
 
-    def loop(offset: Int, acc: Seq[Header]): Seq[Header] = if (offset < length) {
-      val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
-      loop(offset + header.bytes.length, header +: acc)
-    } else {
-      acc.reverse
-    }
+    def loop(bytes: Array[Byte], offset: Int, acc: Seq[Header]): Seq[Header] =
+      if (offset < lastHeaderBytesLength) {
+        val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
+        loop(bytes, offset + header.bytes.length, header +: acc)
+      } else {
+        acc.reverse
+      }
 
-    val votesCount = bytes(37 + length)
+    val afterHeaders = 37 + lastHeaderBytesLength
+    val lastHeaderBytes = bytes.slice(37, afterHeaders)
+    val lastHeaders = loop(lastHeaderBytes, 0, Seq.empty)
 
-    val (votes: VotingData, votesLength: Int) = if (votesCount > 0) {
-      val vl = votesCount * 5
-      val votesBytes = bytes.slice(37 + length + 1, 37 + length + 1 + vl)
-      VotingData(votesBytes.grouped(5).map { bs =>
-        bs.head -> Ints.fromByteArray(bs.tail)
-      }.toArray) -> vl
-    } else {
-      VotingData(Array.empty) -> 0
-    }
+    val votingDataSize = Ints.fromByteArray(bytes.slice(afterHeaders, afterHeaders + 4))
 
-    ParametersSerializer.parseBytes(bytes.slice(37 + length + 1 + votesLength, bytes.length)).map { params =>
-      //todo: fix
-      val lastHeaders = loop(offset = 37, Seq.empty)
-      new ErgoStateContext(lastHeaders, genesisDigest, params, votes)(votingSettings)
+    val afterVoting = afterHeaders + 4 + votingDataSize
+    VotingDataSerializer.parseBytes(bytes.slice(afterHeaders + 4, afterVoting)).flatMap { votingData =>
+      ParametersSerializer.parseBytes(bytes.slice(afterVoting, bytes.length)).map { params =>
+        new ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
+      }
     }
   }.flatten
 

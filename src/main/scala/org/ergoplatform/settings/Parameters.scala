@@ -154,9 +154,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     if (vs.length < maxVotes) vs ++ Array.fill(maxVotes - vs.length)(0: Byte) else vs
   }
 
-  def vote(ownTargets: Map[Byte, Int], votes: Array[(Byte, Int)]): Array[Byte] = {
-    val vs = votes.filter { case (paramId, _) =>
-      if (paramId > 0) {
+  def vote(ownTargets: Map[Byte, Int], epochVotes: Array[(Byte, Int)], voteForFork: Boolean): Array[Byte] = {
+    val vs = epochVotes.filter { case (paramId, _) =>
+      if(paramId == Parameters.SoftFork) {
+        voteForFork
+      } else if (paramId > 0) {
         ownTargets.get(paramId).exists(_ > parametersTable(paramId))
       } else if (paramId < 0) {
         ownTargets.get((-paramId).toByte).exists(_ < parametersTable((-paramId).toByte))
@@ -167,11 +169,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     padVotes(vs)
   }
 
-  def suggestVotes(ownTargets: Map[Byte, Int]): Array[Byte] = {
+  def suggestVotes(ownTargets: Map[Byte, Int], voteForFork: Boolean): Array[Byte] = {
     val vs = ownTargets.flatMap { case (paramId, value) =>
       if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
     }.take(ParamVotesCount).toArray
-    padVotes(vs)
+    padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {

@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import akka.actor.{ActorRefFactory, Props, PoisonPill, Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -14,24 +14,25 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.{ProverResult, ContextExtension}
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
@@ -43,6 +44,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private lazy val votingSettings = ergoSettings.chainSettings.voting
   private lazy val votingEpochLength = votingSettings.votingLength
+  private lazy val protocolVersion = ergoSettings.chainSettings.protocolVersion
 
   //shared mutable state
   private var isMining = false
@@ -193,14 +195,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       // todo fill with interlinks and other useful values after nodes update
       val (extensionCandidate, votes: Array[Byte]) = bestHeaderOpt.map { header =>
         val newHeight = header.height + 1
+        val currentParams = stateContext.currentParameters
+
+        val betterVersion = protocolVersion > header.version
+        val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
+          .map(h => h + votingSettings.votingLength*votingSettings.softForkEpochs)
+        val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
+        val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+        val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
+
         if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-          //todo: soft fork flag instead of false
-          val newParams = stateContext.currentParameters
-            .update(newHeight, forkVote = false, stateContext.votingData.epochVotes, votingSettings)
-          newParams.toExtensionCandidate(optionalFields) -> newParams.suggestVotes(ergoSettings.votingTargets)
+          val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
+          newParams.toExtensionCandidate(optionalFields) ->
+            newParams.suggestVotes(ergoSettings.votingTargets, voteForFork)
         } else {
           emptyExtensionCandidate ->
-            stateContext.currentParameters.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes)
+            currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork)
         }
       }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))
 

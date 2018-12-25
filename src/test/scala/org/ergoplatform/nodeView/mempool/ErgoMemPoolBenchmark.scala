@@ -29,7 +29,7 @@ object ErgoMemPoolBenchmark
           invalidErgoTransactionGen.sample
         }).flatten
       }
-    (txsByWaitingGroups.map(_.map(_.id)), txIncomeOrder(txsByWaitingGroups))
+    txIncomeOrder(txsByWaitingGroups)
   }
 
   private val bestCaseGenerator = waitForTransactionsInSequence(_.flatten)
@@ -45,29 +45,22 @@ object ErgoMemPoolBenchmark
     exec.requireGC -> true
   )
 
-  private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
-                    txsInIncomeOrder: Seq[ErgoTransaction]) = {
+  private def bench(txsInIncomeOrder: Seq[ErgoTransaction]): Unit = {
     val pool = ErgoMemPool.empty(settings)
     txsInIncomeOrder.foreach(pool.put)
   }
 
   performance of "ErgoMemPool awaiting" in {
     performance of "best case" in {
-      using(bestCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(bestCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
 
     performance of "avg case" in {
-      using(avgCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(avgCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
 
     performance of "worst case" in {
-      using(worstCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(worstCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
   }
 

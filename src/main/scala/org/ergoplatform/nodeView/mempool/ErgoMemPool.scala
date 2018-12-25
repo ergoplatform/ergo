@@ -50,18 +50,18 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
     new ErgoMemPool(unconfirmed - tx.id, updateInvalidatedWith(tx), settings)
   }
 
-  def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, AppendingOutcome) = {
+  def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     state match {
       case validator: TransactionValidation[ErgoTransaction@unchecked]
         if !invalidated.contains(tx.id) && !unconfirmed.contains(tx.id) &&
           (unconfirmed.size < settings.nodeSettings.mempoolCapacity ||
           weighted(tx)._2 > unconfirmed.headOption.map(_._2._2).getOrElse(0L)) =>
         validator.validate(tx).fold(
-          new ErgoMemPool(unconfirmed, updateInvalidatedWith(tx), settings) -> AppendingOutcome.Invalidated(_),
-          _ => new ErgoMemPool(updatePoolWith(tx), invalidated, settings) -> AppendingOutcome.Appended
+          new ErgoMemPool(unconfirmed, updateInvalidatedWith(tx), settings) -> ProcessingOutcome.Invalidated(_),
+          _ => new ErgoMemPool(updatePoolWith(tx), invalidated, settings) -> ProcessingOutcome.Accepted
         )
       case _ =>
-        this -> AppendingOutcome.Declined
+        this -> ProcessingOutcome.Declined
     }
   }
 
@@ -94,12 +94,12 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[ModifierId, (ErgoTra
 
 object ErgoMemPool {
 
-  sealed trait AppendingOutcome
+  sealed trait ProcessingOutcome
 
-  object AppendingOutcome {
-    case object Appended extends AppendingOutcome
-    case object Declined extends AppendingOutcome
-    case class Invalidated(e: Throwable) extends AppendingOutcome
+  object ProcessingOutcome {
+    case object Accepted extends ProcessingOutcome
+    case object Declined extends ProcessingOutcome
+    case class Invalidated(e: Throwable) extends ProcessingOutcome
   }
 
   type MemPoolRequest = Seq[ModifierId]

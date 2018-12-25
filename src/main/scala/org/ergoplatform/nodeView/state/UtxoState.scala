@@ -82,12 +82,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
     }.sum
 
-      if (totalCost > stateContext.currentParameters.maxBlockCost) {
-        throw new Error(s"Transaction cost $totalCost exeeds limit")
-      }
+    if (totalCost > stateContext.currentParameters.maxBlockCost) {
+      throw new Error(s"Transaction cost $totalCost exeeds limit")
+    }
 
     persistentProver.synchronized {
-
       val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
@@ -198,7 +197,7 @@ object UtxoState {
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
 
-    implicit val vs = constants.votingSettings
+    implicit val votingSettings = constants.votingSettings
 
     val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData.empty)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
@@ -212,4 +211,5 @@ object UtxoState {
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
+
 }

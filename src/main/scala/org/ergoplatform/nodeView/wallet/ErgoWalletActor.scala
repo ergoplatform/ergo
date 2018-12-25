@@ -41,7 +41,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   val parameters: Parameters = LaunchParameters
   private val prover = ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber, parameters)
 
-  // TODO probably it is incorrect to initialize in such way!!!
+  // TODO: it is incorrect to initialize in such way!!!
   private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), votingSettings)
   private def height = stateContext.currentHeight
 

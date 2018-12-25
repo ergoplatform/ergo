@@ -4,7 +4,7 @@ import akka.actor.{ActorRefFactory, Props, PoisonPill, Actor, ActorRef}
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{TokenId, BoxId}
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -169,8 +169,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
-    // todo fill with interlinks and other useful values
-    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, ergoSettings.chainSettings.powScheme)
 
@@ -198,7 +196,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         if (newHeight % votingEpochLength == 0 && newHeight > 0) {
           //todo: soft fork flag instead of false
           val newParams = stateContext.currentParameters
-            .update(newHeight, false, stateContext.votingData.epochVotes, votingSettings)
+            .update(newHeight, forkVote = false, stateContext.votingData.epochVotes, votingSettings)
           newParams.toExtensionCandidate(optionalFields) -> newParams.suggestVotes(ergoSettings.votingTargets)
         } else {
           emptyExtensionCandidate ->

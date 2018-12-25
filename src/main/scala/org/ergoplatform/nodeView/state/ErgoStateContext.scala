@@ -17,10 +17,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
-case class VotingData(epochVotes: Array[(Byte, Int)],
-                      softForkVotingStartingHeight: Option[Int],
-                      softForkVotesCollected: Option[Int],
-                      activationHeight: Option[Int]) {
+case class VotingData(epochVotes: Array[(Byte, Int)]) {
   def update(voteFor: Byte): VotingData = {
     this.copy(epochVotes = epochVotes.map { case (id, votes) =>
       if (id == voteFor) id -> (votes + 1) else id -> votes
@@ -43,38 +40,20 @@ object VotingDataSerializer extends Serializer[VotingData] {
         Array.emptyByteArray
       }
 
-    val softForkData = (
-      Ints.toByteArray(obj.softForkVotingStartingHeight.getOrElse(NoneValue)),
-      Ints.toByteArray(obj.softForkVotesCollected.getOrElse(NoneValue)),
-      Ints.toByteArray(obj.activationHeight.getOrElse(NoneValue))
-    )
-
-    (votesCount +: epochVotesBytes) ++ softForkData._1 ++ softForkData._2 ++ softForkData._3
+    votesCount +: epochVotesBytes
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[VotingData] = Try {
     val votesCount = bytes.head
     val epochVotesBytes = bytes.tail.take(votesCount * 5)
     val epochVotes = epochVotesBytes.grouped(5).toArray.map(bs => bs.head -> Ints.fromByteArray(bs.tail))
-    val softForkDataBytes = bytes.drop(epochVotesBytes.length + 1)
 
-    val softForkData = (
-      Ints.fromByteArray(softForkDataBytes.slice(0, 4)),
-      Ints.fromByteArray(softForkDataBytes.slice(4, 8)),
-      Ints.fromByteArray(softForkDataBytes.slice(8, 12))
-    )
-
-    VotingData(
-      epochVotes,
-      if (softForkData._1 == NoneValue) None else Some(softForkData._1),
-      if (softForkData._2 == NoneValue) None else Some(softForkData._2),
-      if (softForkData._3 == NoneValue) None else Some(softForkData._3)
-    )
+    VotingData(epochVotes)
   }
 }
 
 object VotingData {
-  val empty = VotingData(Array.empty, None, None, None)
+  val empty = VotingData(Array.empty)
 }
 
 /**
@@ -147,7 +126,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
-    //todo: add votes?
     val upcomingHeader = PreHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, currentParameters, votingData)
   }
@@ -196,9 +174,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
-      val proposedVotes = votes.map(id => id -> 1)
-      val newVoting = VotingData(proposedVotes, None, None, None) //todo: fix
-
       Parameters.parseExtension(height, extension).flatMap { parsedParams =>
         val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
 
@@ -208,6 +183,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
         Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
+        val proposedVotes = votes.map(id => id -> 1)
+        val newVoting = VotingData(proposedVotes)
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
       }
     } else {

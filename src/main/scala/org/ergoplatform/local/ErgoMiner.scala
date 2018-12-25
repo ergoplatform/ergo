@@ -179,7 +179,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       Parameters.MaxBlockSize,
       state,
       upcomingContext,
-      pool.getAll,
+      pool.getAllPrioritized,
       emissionTxOpt.toSeq)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>

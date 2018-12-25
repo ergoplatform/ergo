@@ -26,8 +26,6 @@ case class VotingData(epochVotes: Array[(Byte, Int)]) {
 }
 
 object VotingDataSerializer extends Serializer[VotingData] {
-  private val NoneValue: Int = -1
-
   override def toBytes(obj: VotingData): Array[Byte] = {
     val votesCount = obj.epochVotes.length.toByte
 

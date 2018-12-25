@@ -9,7 +9,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
-import org.ergoplatform.tools.ChainGenerator.pow
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import scorex.util.ScorexLogging
@@ -38,7 +37,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
 
-  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, votingSettings, pow, settings.chainSettings.monetary)
+  val chainSettings = ChainSettings(0: Byte, 0: Byte, blockInterval, 256, 8, votingSettings, pow, settings.chainSettings.monetary)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)

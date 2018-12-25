@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -190,6 +189,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val protocolVersion = 0: Byte
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
@@ -200,8 +200,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings =
-      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, votingSettings, powScheme, monetarySettings)
+    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
+                                      votingSettings, powScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,

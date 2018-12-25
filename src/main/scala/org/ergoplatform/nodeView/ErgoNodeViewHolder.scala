@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.AppendingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -50,16 +50,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
     memoryPool().putIfValid(tx, minimalState()) match {
-      case (newPool, AppendingOutcome.Appended) =>
+      case (newPool, ProcessingOutcome.Accepted) =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction[ErgoTransaction](tx))
-      case (newPool, AppendingOutcome.Invalidated(e)) =>
+      case (newPool, ProcessingOutcome.Invalidated(e)) =>
         log.debug(s"Transaction $tx invalidated")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
-      case (_, AppendingOutcome.Declined) => // do nothing
+      case (_, ProcessingOutcome.Declined) => // do nothing
         log.debug(s"Transaction $tx declined")
     }
   }

@@ -18,7 +18,8 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   override def size: Int = unconfirmed.size
 
-  def getAll: Seq[ErgoTransaction] = unconfirmed.values.map(_._1).toSeq
+  /** Returns all transactions resided in pool sorted by priority */
+  def getAll: Seq[ErgoTransaction] = unconfirmed.values.map(_._1).toSeq.view.reverse
 
   def take(limit: Int): Iterable[ErgoTransaction] = unconfirmed.values.toSeq.take(limit).map(_._1)
 

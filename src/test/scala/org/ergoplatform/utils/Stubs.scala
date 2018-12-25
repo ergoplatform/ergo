@@ -215,6 +215,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     powScheme.prove(
       history.bestHeaderOpt,
+      Header.CurrentVersion,
       Constants.InitialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),

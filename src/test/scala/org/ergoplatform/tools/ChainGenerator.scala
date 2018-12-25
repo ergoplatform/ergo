@@ -62,7 +62,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
       val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder, new Random, txsSize)
 
       val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
-      val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
+      val candidate = new CandidateBlock(last, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
         txs, time, ExtensionCandidate(Seq(), Seq()), Array())
 
       val block = generate(candidate)

@@ -41,7 +41,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
 
-  lazy val blockVersion = parametersTable(BlockVersion)
+  lazy val blockVersion: Byte = parametersTable(BlockVersion).toByte
 
   def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
     val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
@@ -94,17 +94,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
        (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
        (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
     ) {
-      table = table
-        .updated(SoftForkStartingHeight, height)
-        .updated(SoftForkVotesCollected, 0)
+      table = table.updated(SoftForkStartingHeight, height).updated(SoftForkVotesCollected, 0)
     }
 
     //new epoch in voting
     if(softForkStartingHeight.nonEmpty
         && height % votingEpochLength == 0
         && height <= softForkStartingHeight.get + votingEpochLength * votingEpochs) {
-      table = table
-        .updated(SoftForkVotesCollected, votes)
+      table = table.updated(SoftForkVotesCollected, votes)
     }
 
     //successful voting - activation
@@ -171,7 +168,10 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   def suggestVotes(ownTargets: Map[Byte, Int], voteForFork: Boolean): Array[Byte] = {
     val vs = ownTargets.flatMap { case (paramId, value) =>
-      if (value > parametersTable(paramId)) Some(paramId) else if (value < parametersTable(paramId)) Some((-paramId).toByte) else None
+      if (paramId == SoftFork) None
+      else if (value > parametersTable(paramId)) Some(paramId)
+      else if (value < parametersTable(paramId)) Some((-paramId).toByte)
+      else None
     }.take(ParamVotesCount).toArray
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
@@ -273,6 +273,7 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
   implicit val jsonEncoder: Encoder[Parameters] = (p: Parameters) =>
     Map(
       "height" -> p.height.asJson,
+      "blockVersion" -> p.blockVersion.asJson,
       "storageFeeFactor" -> p.storageFeeFactor.asJson,
       "minValuePerByte" -> p.minValuePerByte.asJson,
       "maxBlockSize" -> p.maxBlockSize.asJson,

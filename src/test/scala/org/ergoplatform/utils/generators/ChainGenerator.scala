@@ -53,6 +53,7 @@ trait ChainGenerator extends ErgoTestConstants {
                  extensionHash: Digest32 = EmptyDigest32): Header =
     powScheme.prove(
       prev,
+      Header.CurrentVersion,
       Constants.InitialNBits,
       EmptyStateRoot,
       EmptyDigest32,
@@ -99,6 +100,7 @@ trait ChainGenerator extends ErgoTestConstants {
                 nBits: Long = Constants.InitialNBits): ErgoFullBlock =
     powScheme.proveBlock(
       prev.map(_.header),
+      Header.CurrentVersion,
       nBits,
       EmptyStateRoot,
       emptyProofs,

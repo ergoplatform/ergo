@@ -8,9 +8,11 @@ import scala.collection.immutable.TreeMap
 
 trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-  val unconfirmed: TreeMap[ModifierId, (ErgoTransaction, Long)]
+  val unconfirmed: TreeMap[ModifierId, ErgoTransaction]
 
-  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = unconfirmed.get(modifierId).map(_._1)
+  val weights: TreeMap[Long, ModifierId]
+
+  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = unconfirmed.get(modifierId)
 
   override def contains(id: ModifierId): Boolean = unconfirmed.contains(id)
 
@@ -18,9 +20,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   override def size: Int = unconfirmed.size
 
-  /** Returns all transactions resided in pool sorted by priority */
-  def getAll: Seq[ErgoTransaction] = unconfirmed.values.map(_._1).toSeq.view.reverse
+  def getAll: Seq[ErgoTransaction] = unconfirmed.values.toSeq
 
-  def take(limit: Int): Iterable[ErgoTransaction] = unconfirmed.values.toSeq.take(limit).map(_._1)
+  /** Returns all transactions resided in pool sorted by priority */
+  def getAllPrioritized: Seq[ErgoTransaction] = weights.toSeq.view.reverse.flatMap(x => modifierById(x._2))
+
+  def take(limit: Int): Iterable[ErgoTransaction] = unconfirmed.values.toSeq.take(limit)
 
 }

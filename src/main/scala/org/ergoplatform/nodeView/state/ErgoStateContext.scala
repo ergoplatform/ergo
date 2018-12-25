@@ -124,7 +124,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
-    val upcomingHeader = PreHeader(lastHeaderOpt, minerPk, timestamp, nBits, powScheme)
+    //todo: get correct version from outside
+    val version = lastHeaderOpt.map(_.version).getOrElse(Header.CurrentVersion)
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, powScheme)
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, currentParameters, votingData)
   }
 
@@ -204,7 +206,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val header = fullBlock.header
     val height = header.height
 
-    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+    if (lastHeaderOpt.isEmpty || height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 

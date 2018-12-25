@@ -165,7 +165,7 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = defaultExtension
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
+    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 }

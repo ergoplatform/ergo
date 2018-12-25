@@ -193,7 +193,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       lazy val stateContext = state.stateContext
 
       // todo fill with interlinks and other useful values after nodes update
-      val (extensionCandidate, votes: Array[Byte]) = bestHeaderOpt.map { header =>
+      val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
         val newHeight = header.height + 1
         val currentParams = stateContext.currentParameters
 
@@ -206,15 +206,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
         if (newHeight % votingEpochLength == 0 && newHeight > 0) {
           val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-          newParams.toExtensionCandidate(optionalFields) ->
-            newParams.suggestVotes(ergoSettings.votingTargets, voteForFork)
+          (newParams.toExtensionCandidate(optionalFields),
+            newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
+            newParams.blockVersion)
         } else {
-          emptyExtensionCandidate ->
-            currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork)
+          (emptyExtensionCandidate,
+            currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+            currentParams.blockVersion)
         }
-      }.getOrElse(emptyExtensionCandidate -> Array(0: Byte, 0: Byte, 0: Byte))
+      }.getOrElse((emptyExtensionCandidate, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-      CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)
+      CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)
     }
   }.flatten
 

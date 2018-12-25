@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.history.Header
+import scorex.core.block.Block
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -17,6 +18,7 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
   override def validate(header: Header): Try[Unit] = Success(Unit)
 
   override def prove(parentOpt: Option[Header],
+                     version: Block.Version,
                      nBits: Long,
                      stateRoot: ADDigest,
                      adProofsRoot: Digest32,
@@ -27,7 +29,7 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
+    val (parentId, interlinks, height) = derivedHeaderFields(parentOpt)
     val pk: EcPointType = genPk(sk)
     val w: EcPointType = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)

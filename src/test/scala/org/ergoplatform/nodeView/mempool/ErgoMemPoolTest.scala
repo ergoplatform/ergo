@@ -63,16 +63,12 @@ class ErgoMemPoolTest extends FlatSpec
   it should "drop less prioritized transaction in case of pool overflow" in {
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = 4))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
-    val txs = Gen.listOfN(5, invalidErgoTransactionGen).sample.get
-    val txsWithAscendingPriority = txs.zipWithIndex.foldLeft(Seq.empty[ErgoTransaction]) { case (acc, (tx, idx)) =>
-      val proposition = ErgoState.feeProposition(settings.chainSettings.monetary.minerRewardDelay)
-      tx.outputCandidates.headOption match {
-        case Some(c) =>
-          acc :+ tx.copy(outputCandidates = IndexedSeq(
-            new ErgoBoxCandidate(idx * 10000 + 1, proposition, c.creationHeight, c.additionalTokens, c.additionalRegisters)))
-        case _ =>
-          acc
-      }
+    val masterTx = invalidErgoTransactionGen.sample.get
+    val proposition = ErgoState.feeProposition(settings.chainSettings.monetary.minerRewardDelay)
+    val txsWithAscendingPriority = (0 to 4).foldLeft(Seq.empty[ErgoTransaction]) { case (acc, idx) =>
+      val c = masterTx.outputCandidates.head
+      acc :+ masterTx.copy(outputCandidates = IndexedSeq(
+        new ErgoBoxCandidate(idx * 10000 + 1, proposition, c.creationHeight, c.additionalTokens, c.additionalRegisters)))
     }
     val lessPrioritizedTxs = txsWithAscendingPriority.init
     val mostPrioritizedTx = txsWithAscendingPriority.last

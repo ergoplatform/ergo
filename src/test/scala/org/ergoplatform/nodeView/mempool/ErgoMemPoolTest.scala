@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
+import org.scalacheck.Gen
 import org.scalatest.FlatSpec
 import org.scalatest.prop.PropertyChecks
 
@@ -62,8 +63,8 @@ class ErgoMemPoolTest extends FlatSpec
   it should "drop less prioritized transaction in case of pool overflow" in {
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = 4))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
-    val txs = invalidBlockTransactionsGen.sample.get.txs.take(5)
-    val txsWithAscendingPriority = txs.toList.zipWithIndex.foldLeft(Seq.empty[ErgoTransaction]) { case (acc, (tx, idx)) =>
+    val txs = Gen.listOfN(5, invalidErgoTransactionGen).sample.get
+    val txsWithAscendingPriority = txs.zipWithIndex.foldLeft(Seq.empty[ErgoTransaction]) { case (acc, (tx, idx)) =>
       val proposition = ErgoState.feeProposition(settings.chainSettings.monetary.minerRewardDelay)
       tx.outputCandidates.headOption match {
         case Some(c) =>
@@ -77,6 +78,7 @@ class ErgoMemPoolTest extends FlatSpec
     val mostPrioritizedTx = txsWithAscendingPriority.last
     pool = pool.putWithoutCheck(lessPrioritizedTxs)
 
+    pool.unconfirmed.size shouldBe 4
     pool.getAll should contain only (lessPrioritizedTxs: _*)
     pool = pool.putWithoutCheck(Seq(mostPrioritizedTx))
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)

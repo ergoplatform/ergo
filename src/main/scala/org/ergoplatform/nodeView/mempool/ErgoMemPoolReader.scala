@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.WeightedTx
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.WeightedTxId
 import scorex.core.transaction.MempoolReader
 import scorex.util.ModifierId
 
@@ -9,7 +9,7 @@ import scala.collection.immutable.TreeMap
 
 trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-  val unconfirmed: TreeMap[WeightedTx, ErgoTransaction]
+  val unconfirmed: TreeMap[WeightedTxId, ErgoTransaction]
 
   override def contains(id: ModifierId): Boolean = unconfirmed.keys.exists(_.id == id)
 

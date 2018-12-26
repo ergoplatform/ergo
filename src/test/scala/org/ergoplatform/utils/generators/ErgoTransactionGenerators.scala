@@ -24,7 +24,7 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
-  val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue)
+  val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
 
   val boxIndexGen: Gen[Short] = for {
     v <- Gen.chooseNum(0, Short.MaxValue)

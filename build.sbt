@@ -17,7 +17,7 @@ lazy val commonSettings = Seq(
 val scorexVersion = "53207304-SNAPSHOT"
 
 libraryDependencies ++= Seq(
-  ("org.scorexfoundation" %% "sigma-state" % "master-099dfbde-SNAPSHOT")
+  ("org.scorexfoundation" %% "sigma-state" % "box-creationInfo-height-int-6f53e5fb-SNAPSHOT")
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",

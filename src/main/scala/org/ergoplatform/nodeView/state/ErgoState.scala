@@ -94,7 +94,7 @@ object ErgoState extends ScorexLogging {
   }
 
   private def boxCreationHeight(box: Value[SBox.type]): Value[SInt.type] =
-    Downcast(SelectField(ExtractCreationInfo(box), 1).asLongValue, SInt)
+    SelectField(ExtractCreationInfo(box), 1).asIntValue
 
   /**
     * @param emission - emission curve

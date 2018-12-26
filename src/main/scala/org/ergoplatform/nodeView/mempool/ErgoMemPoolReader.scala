@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.WeightedTx
 import scorex.core.transaction.MempoolReader
 import scorex.util.ModifierId
 
@@ -8,9 +9,9 @@ import scala.collection.immutable.TreeMap
 
 trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-  val unconfirmed: TreeMap[(ModifierId, Long), ErgoTransaction]
+  val unconfirmed: TreeMap[WeightedTx, ErgoTransaction]
 
-  override def contains(id: ModifierId): Boolean = unconfirmed.values.exists(_.id == id)
+  override def contains(id: ModifierId): Boolean = unconfirmed.keys.exists(_.id == id)
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(modifierById)
 

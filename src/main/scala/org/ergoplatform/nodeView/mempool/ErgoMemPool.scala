@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.WeightedTx
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
@@ -13,7 +14,7 @@ import scala.util.Try
 /**
   * Memory pool with limited size and transaction priority management.
   */
-class ErgoMemPool private[mempool](val unconfirmed: TreeMap[(ModifierId, Long), ErgoTransaction],
+class ErgoMemPool private[mempool](val unconfirmed: TreeMap[WeightedTx, ErgoTransaction],
                                    invalidated: TreeMap[ModifierId, Long],
                                    settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
@@ -57,7 +58,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[(ModifierId, Long), 
       case validator: TransactionValidation[ErgoTransaction@unchecked]
         if !invalidated.contains(tx.id) && !unconfirmed.contains(weighted(tx)) &&
           (unconfirmed.size < settings.nodeSettings.mempoolCapacity ||
-          weighted(tx)._2 > unconfirmed.firstKey._2) =>
+          weighted(tx).weight > unconfirmed.firstKey.weight) =>
         validator.validate(tx).fold(
           new ErgoMemPool(unconfirmed, updateInvalidatedWith(tx), settings) -> ProcessingOutcome.Invalidated(_),
           _ => new ErgoMemPool(updatePoolWith(tx, unconfirmed), invalidated, settings) -> ProcessingOutcome.Accepted
@@ -67,12 +68,12 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[(ModifierId, Long), 
     }
   }
 
-  private def weighted(tx: ErgoTransaction): (ModifierId, Long) = {
+  private def weighted(tx: ErgoTransaction): WeightedTx = {
     val fee = tx.outputs
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
       .map(_.value)
       .sum
-    tx.id -> fee
+    WeightedTx(tx.id, fee)
   }
 
   /**
@@ -80,7 +81,7 @@ class ErgoMemPool private[mempool](val unconfirmed: TreeMap[(ModifierId, Long), 
     * transaction with the smallest weight is replaced by the new one
     */
   private def updatePoolWith(tx: ErgoTransaction,
-                             pool: TreeMap[(ModifierId, Long), ErgoTransaction]) = {
+                             pool: TreeMap[WeightedTx, ErgoTransaction]) = {
     (if (pool.size >= settings.nodeSettings.mempoolCapacity) pool - pool.firstKey else pool)
       .updated(weighted(tx), tx)
   }
@@ -102,14 +103,16 @@ object ErgoMemPool {
     case class Invalidated(e: Throwable) extends ProcessingOutcome
   }
 
+  case class WeightedTx(id: ModifierId, weight: Long)
+
   type MemPoolRequest = Seq[ModifierId]
 
   type MemPoolResponse = Seq[ErgoTransaction]
 
-  private implicit val ord: Ordering[(ModifierId, Long)] = Ordering[(Long, ModifierId)].on(x => (x._2, x._1))
+  private implicit val ord: Ordering[WeightedTx] = Ordering[(Long, ModifierId)].on(x => (x.weight, x.id))
 
   def empty(settings: ErgoSettings): ErgoMemPool = {
-    new ErgoMemPool(TreeMap.empty[(ModifierId, Long), ErgoTransaction], TreeMap.empty[ModifierId, Long], settings)
+    new ErgoMemPool(TreeMap.empty[WeightedTx, ErgoTransaction], TreeMap.empty[ModifierId, Long], settings)
   }
 
 }

@@ -63,7 +63,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val r: Readers = requestReaders
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
 
@@ -82,7 +82,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     @tailrec
     def loop(toSend: Int): Unit = {
       val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
-      log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
+      log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
+        s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
@@ -107,16 +108,18 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       }
     }
 
+    def requestReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
     // Generate and send `desiredSize` transactions to mempool
     loop(desiredSize)
 
-    Thread.sleep(6000)
+    Thread.sleep(5000)
 
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size should be > 10
+    requestReaders.m.size should be > 10
 
     // wait for mempool to be cleaned
-    while (await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size > 0) {
-      log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${pool.size}")
+    while (requestReaders.m.size > 0) {
+      log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       // blocks should not be empty
       r.h.bestFullBlockOpt.get.transactions.nonEmpty shouldBe true
       Thread.sleep(1000)

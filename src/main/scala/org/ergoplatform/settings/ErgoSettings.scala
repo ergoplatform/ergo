@@ -8,9 +8,11 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
+import sigmastate.{SBoolean, Values}
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
@@ -21,6 +23,7 @@ case class ErgoSettings(directory: String,
                         cacheSettings: CacheSettings) {
   lazy val metadata = Metadata(chainSettings.addressPrefix)
   lazy val emission = new EmissionRules(chainSettings.monetary)
+  lazy val feeProposition: Values.Value[SBoolean.type] = ErgoState.feeProposition(chainSettings.monetary.minerRewardDelay)
 }
 
 object ErgoSettings extends ScorexLogging

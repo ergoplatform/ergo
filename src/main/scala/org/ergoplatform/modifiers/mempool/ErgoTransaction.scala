@@ -206,7 +206,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
-      creationHeight <- cursor.downField("creationHeight").as[Long]
+      creationHeight <- cursor.downField("creationHeight").as[Int]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]

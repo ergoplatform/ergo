@@ -39,9 +39,9 @@ dependencyOverrides in ThisBuild ++= Seq(
   "io.github.scalan" % "library_2.12" % "master-c19564fd-SNAPSHOT",
   "io.github.scalan" % "macros_2.12" % "master-c19564fd-SNAPSHOT",
   "io.github.scalan" % "meta_2.12" % "master-c19564fd-SNAPSHOT",
-  "io.github.scalan" % "sigma-api_2.12" % "master-3e6ecb36-SNAPSHOT",
-  "io.github.scalan" % "sigma-impl_2.12" % "master-3e6ecb36-SNAPSHOT",
-  "io.github.scalan" % "sigma-library_2.12" % "master-3e6ecb36-SNAPSHOT",
+  "io.github.scalan" % "sigma-api_2.12" % "box-creationInfo-height-int-48244aee-SNAPSHOT",
+  "io.github.scalan" % "sigma-impl_2.12" % "box-creationInfo-height-int-48244aee-SNAPSHOT",
+  "io.github.scalan" % "sigma-library_2.12" % "box-creationInfo-height-int-48244aee-SNAPSHOT",
   "javax.activation" % "javax.activation-api" % "1.2.0",
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "jline" % "jline" % "2.14.3",
@@ -69,7 +69,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scorexfoundation" % "scorex-core_2.12" % "53207304-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.1",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.4",
-  "org.scorexfoundation" % "sigma-state_2.12" % "master-099dfbde-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "box-creationInfo-height-int-6f53e5fb-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "jawn-parser_2.12" % "0.11.0",
   "org.typelevel" % "cats-core_2.12" % "1.0.1",
@@ -79,4 +79,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH edf990b428fe4f13755eee84216a62b35881ae2b
+// LIBRARY_DEPENDENCIES_HASH cfb45b9df2069ebb4d65ee04aa97505f1c4e7c32

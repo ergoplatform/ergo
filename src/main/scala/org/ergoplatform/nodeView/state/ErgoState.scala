@@ -105,21 +105,21 @@ object ErgoState extends ScorexLogging {
     val rewardOut = ByIndex(Outputs, IntConstant(0))
     val minerOut = ByIndex(Outputs, IntConstant(1))
 
-    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
+    val epoch = Plus(IntConstant(1), Divide(Minus(Height, IntConstant(s.fixedRatePeriod.toInt)), IntConstant(s.epochLength)))
+    val coinsToIssue = If(LT(Height, IntConstant(s.fixedRatePeriod.toInt)),
       s.fixedRate,
-      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+      Minus(s.fixedRate.toInt, Multiply(s.oneEpochReduction.toInt, epoch))
     )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(rewardOut))
-    val heightCorrect = EQ(SelectField(ExtractCreationInfo(rewardOut), 1).asLongValue, Height)
-    val heightIncreased = GT(Height, SelectField(ExtractCreationInfo(Self), 1).asLongValue)
+    val heightCorrect = EQ(SelectField(ExtractCreationInfo(rewardOut), 1).asIntValue, Height)
+    val heightIncreased = GT(Height, SelectField(ExtractCreationInfo(Self), 1).asIntValue)
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
     val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
 
     val correctMinerOutput = AND(
       EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(s.minerRewardDelay, MinerPubkey)),
-      EQ(Height, SelectField(ExtractCreationInfo(minerOut), 1).asLongValue)
+      EQ(Height, SelectField(ExtractCreationInfo(minerOut), 1).asIntValue)
     )
 
     val prop = AND(
@@ -175,7 +175,7 @@ object ErgoState extends ScorexLogging {
     val genericMinerProp = rewardOutputScript(delta, genericPk)
     val genericMinerPropBytes = ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(genericMinerProp)
     val expectedGenericMinerProp = AND(
-      GE(Height, Plus(SelectField(ExtractCreationInfo(Self), 1).asLongValue, LongConstant(delta))),
+      GE(Height, Plus(Downcast(SelectField(ExtractCreationInfo(Self), 1).asLongValue, SInt).asIntValue, IntConstant(delta))),
       genericPk
     )
     assert(genericMinerProp == expectedGenericMinerProp, s"reward output script changed, check and update constant position for substitution below")
@@ -202,7 +202,7 @@ object ErgoState extends ScorexLogging {
         */
 
     AND(
-      GE(Height, Plus(SelectField(ExtractCreationInfo(Self), 1).asLongValue, LongConstant(delta))),
+      GE(Height, Plus(Downcast(SelectField(ExtractCreationInfo(Self), 1).asLongValue, SInt), IntConstant(delta))),
       minerPk
     )
   }
@@ -216,7 +216,7 @@ object ErgoState extends ScorexLogging {
   def feeProposition(delta: Int = 720): Value[SBoolean.type] = {
     val out = ByIndex(Outputs, IntConstant(0))
     AND(
-      EQ(Height, SelectField(ExtractCreationInfo(out), 1).asLongValue),
+      EQ(Height, SelectField(ExtractCreationInfo(out), 1).asIntValue),
       EQ(ExtractScriptBytes(out), expectedMinerOutScriptBytesVal(delta, MinerPubkey)),
       EQ(SizeOf(Outputs), 1)
     )

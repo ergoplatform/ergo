@@ -170,7 +170,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))) { btxs =>
       val blockTxs = btxs.map(_._2)
-      val height = Int.MaxValue
+      val height = ErgoHistory.EmptyHistoryHeight
       val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, settings.emission)
       txs.length shouldBe 2
 

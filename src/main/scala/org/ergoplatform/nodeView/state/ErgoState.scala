@@ -102,35 +102,45 @@ object ErgoState extends ScorexLogging {
     *         that allows to take part of them every block.
     */
   def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
-    val emptyHeight = ErgoHistory.EmptyHistoryHeight
-    val s = emission.settings
+    val fixedRatePeriod = emission.settings.fixedRatePeriod
+    val epochLength = emission.settings.epochLength
+    val fixedRate = emission.settings.fixedRate
+    val oneEpochReduction = emission.settings.oneEpochReduction
+    val minerRewardDelay = emission.settings.minerRewardDelay
 
+    val prop = emissionBoxProp(fixedRatePeriod, epochLength, fixedRate, oneEpochReduction, minerRewardDelay)
+    ErgoBox(emission.coinsTotal, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  }
+
+  private def emissionBoxProp(fixedRatePeriod: Long,
+                              epochLength: Int,
+                              fixedRate: Long,
+                              oneEpochReduction: Long,
+                              minerRewardDelay: Int): Value[SBoolean.type] = {
     val rewardOut = ByIndex(Outputs, IntConstant(0))
     val minerOut = ByIndex(Outputs, IntConstant(1))
 
-    val epoch = Plus(IntConstant(1), Divide(Minus(Height, IntConstant(s.fixedRatePeriod.toInt)), IntConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, IntConstant(s.fixedRatePeriod.toInt)),
-      s.fixedRate,
-      Minus(s.fixedRate.toInt, Multiply(s.oneEpochReduction.toInt, epoch))
+    val epoch = Plus(IntConstant(1), Divide(Minus(Height, IntConstant(fixedRatePeriod.toInt)), IntConstant(epochLength)))
+    val coinsToIssue = If(LT(Height, IntConstant(fixedRatePeriod.toInt)),
+      fixedRate,
+      Minus(fixedRate, Multiply(oneEpochReduction, epoch.upcastTo(SLong)))
     )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(rewardOut))
     val heightCorrect = EQ(boxCreationHeight(rewardOut), Height)
     val heightIncreased = GT(Height, boxCreationHeight(Self))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
-    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+    val lastCoins = LE(ExtractAmount(Self), oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
 
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(s.minerRewardDelay, MinerPubkey)),
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(minerRewardDelay, MinerPubkey)),
       EQ(Height, boxCreationHeight(minerOut))
     )
-
-    val prop = AND(
+    AND(
       heightIncreased,
       correctMinerOutput,
       OR(AND(outputsNum, sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins)
     )
-    ErgoBox(emission.coinsTotal, prop, emptyHeight, Seq(), Map())
   }
 
   def generateGenesisUtxoState(stateDir: File,

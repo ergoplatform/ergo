@@ -7,7 +7,6 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
-import org.scalacheck.Gen
 import org.scalatest.FlatSpec
 import org.scalatest.prop.PropertyChecks
 
@@ -74,7 +73,7 @@ class ErgoMemPoolTest extends FlatSpec
     val mostPrioritizedTx = txsWithAscendingPriority.last
     pool = pool.putWithoutCheck(lessPrioritizedTxs)
 
-    pool.unconfirmed.size shouldBe 4
+    pool.size shouldBe 4
     pool.getAll should contain only (lessPrioritizedTxs: _*)
     pool = pool.putWithoutCheck(Seq(mostPrioritizedTx))
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)

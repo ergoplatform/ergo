@@ -23,6 +23,11 @@ case class VotingData(epochVotes: Array[(Byte, Int)]) {
       if (id == voteFor) id -> (votes + 1) else id -> votes
     })
   }
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case v: VotingData => v.epochVotes.sameElements(this.epochVotes)
+    case _ => false
+  }
 }
 
 object VotingDataSerializer extends Serializer[VotingData] {
@@ -130,19 +135,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, currentParameters, votingData)
   }
 
-  //Check that calculated parameters are matching ones written in the extension section of the block
-  private def matchParameters(p1: Parameters, p2: Parameters): Unit = {
-    if (p1.parametersTable.size != p2.parametersTable.size) {
-      throw new Error(s"Parameters differ in size, p1 = $p1, p2 = $p2")
-    }
-    p1.parametersTable.foreach { case (k, v) =>
-      val v2 = p2.parametersTable(k)
-      if (v2 != v) {
-        throw new Error(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
-      }
-    }
-  }
-
   protected def checkForkVote(height: Height): Unit = {
     if (currentParameters.softForkStartingHeight.nonEmpty) {
       val startingHeight = currentParameters.softForkStartingHeight.get
@@ -181,7 +173,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
           throw new Error("Versions in header and parameters section are different")
         }
 
-        Try(matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
+        Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
       }.map { params =>
         val proposedVotes = votes.map(id => id -> 1)
         val newVoting = VotingData(proposedVotes)

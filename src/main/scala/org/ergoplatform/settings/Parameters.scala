@@ -67,7 +67,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
 
     //successful voting - cleaning after activation
-    if(softForkStartingHeight.nonEmpty
+    if (softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)) {
 
@@ -79,7 +79,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     }
 
     //unsuccessful voting - cleaning
-    if(softForkStartingHeight.nonEmpty
+    if (softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
       && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1))) {
 
@@ -90,22 +90,22 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     }
 
     //new voting
-    if((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
-       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
-       (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
+    if ((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
+      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
+      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
     ) {
       table = table.updated(SoftForkStartingHeight, height).updated(SoftForkVotesCollected, 0)
     }
 
     //new epoch in voting
-    if(softForkStartingHeight.nonEmpty
-        && height % votingEpochLength == 0
-        && height <= softForkStartingHeight.get + votingEpochLength * votingEpochs) {
+    if (softForkStartingHeight.nonEmpty
+      && height % votingEpochLength == 0
+      && height <= softForkStartingHeight.get + votingEpochLength * votingEpochs) {
       table = table.updated(SoftForkVotesCollected, votes)
     }
 
     //successful voting - activation
-    if(softForkStartingHeight.nonEmpty
+    if (softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)) {
 
@@ -153,7 +153,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   def vote(ownTargets: Map[Byte, Int], epochVotes: Array[(Byte, Int)], voteForFork: Boolean): Array[Byte] = {
     val vs = epochVotes.filter { case (paramId, _) =>
-      if(paramId == Parameters.SoftFork) {
+      if (paramId == Parameters.SoftFork) {
         voteForFork
       } else if (paramId > 0) {
         ownTargets.get(paramId).exists(_ > parametersTable(paramId))
@@ -182,6 +182,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case p: Parameters => matchParameters(this, p).isSuccess
+    case _ => false
+  }
 }
 
 object Parameters {
@@ -253,6 +258,22 @@ object Parameters {
       k.head -> Ints.fromByteArray(v)
     }.toMap
     Parameters(h, paramsTable)
+  }
+
+  //Check that calculated parameters are matching ones written in the extension section of the block
+  def matchParameters(p1: Parameters, p2: Parameters): Try[Unit] = Try {
+    if (p1.height != p2.height) {
+      throw new Error(s"Different height in parameters, p1 = $p1, p2 = $p2")
+    }
+    if (p1.parametersTable.size != p2.parametersTable.size) {
+      throw new Error(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+    }
+    p1.parametersTable.foreach { case (k, v) =>
+      val v2 = p2.parametersTable(k)
+      if (v2 != v) {
+        throw new Error(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+      }
+    }
   }
 }
 

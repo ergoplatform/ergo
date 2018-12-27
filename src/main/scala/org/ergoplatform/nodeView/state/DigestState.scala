@@ -97,7 +97,7 @@ class DigestState protected(override val version: VersionTag,
       }
 
     case _: ErgoFullBlock if !nodeSettings.verifyTransactions =>
-      log.warn("Should not get full blocks from node view holders if !settings.verifyTransactions")
+      log.warn("Should not get full blocks from node view holder if !settings.verifyTransactions")
       Try(this)
 
     case h: Header if !nodeSettings.verifyTransactions =>

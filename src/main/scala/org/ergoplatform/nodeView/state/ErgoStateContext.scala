@@ -183,17 +183,6 @@ object ErgoStateContext {
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(votingSettings)
   }
-
-  def fromBlock(fullBlock: ErgoFullBlock,
-                genesisStateDigest: ADDigest,
-                votingSettings: VotingSettings): Try[ErgoStateContext] = {
-    val header = fullBlock.header
-    val height = fullBlock.header.height
-    Parameters.parseExtension(height, fullBlock.extension).map { params =>
-      //todo: pull previous headers
-      new ErgoStateContext(Seq(header), genesisStateDigest, params, VotingData.empty)(votingSettings)
-    }
-  }
 }
 
 case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Serializer[ErgoStateContext] {

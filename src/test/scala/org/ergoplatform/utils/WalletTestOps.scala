@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -9,16 +9,15 @@ import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.emission.EmissionRules
 import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, ModifierId}
-import sigmastate.Values.{TrueLeaf, Value, LongConstant, EvaluatedValue}
+import sigmastate.Values.{TrueLeaf, Value}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.interpreter.{ProverResult, ContextExtension}
+import sigmastate.interpreter.ProverResult
 import sigmastate.serialization.ValueSerializer
-import sigmastate.{SBoolean, SLong}
-
+import sigmastate.SBoolean
 import scala.concurrent.blocking
+
 
 trait WalletTestOps extends NodeViewBaseOps {
 

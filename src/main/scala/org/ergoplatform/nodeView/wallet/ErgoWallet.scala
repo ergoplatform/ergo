@@ -15,12 +15,12 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 
 
-class ErgoWallet(stateReader: ErgoStateReader,
+class ErgoWallet(
                  historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
-  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], stateReader, settings))
+  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
 
   def watchFor(address: ErgoAddress): ErgoWallet = {
     actor ! WatchFor(address)
@@ -61,9 +61,8 @@ class ErgoWallet(stateReader: ErgoStateReader,
 
 
 object ErgoWallet {
-  def readOrGenerate(stateReader: ErgoStateReader,
-                     historyReader: ErgoHistoryReader,
+  def readOrGenerate(historyReader: ErgoHistoryReader,
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(stateReader, historyReader, settings)
+    new ErgoWallet(historyReader, settings)
   }
 }

@@ -69,9 +69,8 @@ class DigestState protected(override val version: VersionTag,
               verifier.IR.resetContext() // ensure there is no garbage in the IRContext
               tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
-            if (totalCost > stateContext.currentParameters.maxBlockCost) {
+            if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
                 throw new Error(s"Transaction cost $totalCost exceeds limit")
-
             }
           }
         case None =>

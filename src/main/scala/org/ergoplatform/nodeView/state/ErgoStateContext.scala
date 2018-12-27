@@ -206,7 +206,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val header = fullBlock.header
     val height = header.height
 
-    if (lastHeaderOpt.isEmpty || height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
+    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 
@@ -231,6 +231,17 @@ object ErgoStateContext {
 
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(votingSettings)
+  }
+
+  def fromBlock(fullBlock: ErgoFullBlock,
+                genesisStateDigest: ADDigest,
+                votingSettings: VotingSettings): Try[ErgoStateContext] = {
+    val header = fullBlock.header
+    val height = fullBlock.header.height
+    Parameters.parseExtension(height, fullBlock.extension).map { params =>
+      //todo: pull previous headers
+      new ErgoStateContext(Seq(header), genesisStateDigest, params, VotingData.empty)(votingSettings)
+    }
   }
 }
 

@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
@@ -14,11 +15,12 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 
 
-class ErgoWallet(historyReader: ErgoHistoryReader,
+class ErgoWallet(stateReader: ErgoStateReader,
+                 historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
-  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
+  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], stateReader, settings))
 
   def watchFor(address: ErgoAddress): ErgoWallet = {
     actor ! WatchFor(address)
@@ -59,8 +61,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader,
 
 
 object ErgoWallet {
-  def readOrGenerate(historyReader: ErgoHistoryReader,
+  def readOrGenerate(stateReader: ErgoStateReader,
+                     historyReader: ErgoHistoryReader,
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(historyReader, settings)
+    new ErgoWallet(stateReader, historyReader, settings)
   }
 }

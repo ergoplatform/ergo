@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, LaunchParameters}
+import org.ergoplatform.settings.{Algos, LaunchParameters, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -82,8 +82,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
     }.sum
 
-    if (totalCost > stateContext.currentParameters.maxBlockCost) {
-      throw new Error(s"Transaction cost $totalCost exeeds limit")
+    if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
+      throw new Error(s"Transaction cost $totalCost exceeds limit")
     }
 
     persistentProver.synchronized {
@@ -197,7 +197,7 @@ object UtxoState {
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
 
-    implicit val votingSettings = constants.votingSettings
+    implicit val votingSettings: VotingSettings = constants.votingSettings
 
     val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData.empty)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

@@ -40,6 +40,9 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       s1.previousStateDigest shouldEqual s2.previousStateDigest
       s1.lastHeaders shouldEqual s2.lastHeaders
       s1.lastHeaders shouldEqual lastHeaders
+      s1.currentParameters shouldEqual s2.currentParameters
+      s1.votingData shouldEqual s2.votingData
+      s1.genesisStateDigest shouldBe s2.genesisStateDigest
     }
 
     var (us, bh) = createUtxoState()

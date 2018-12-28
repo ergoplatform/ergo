@@ -59,7 +59,7 @@ class ErgoMemPoolTest extends FlatSpec
     }
   }
 
-  it should "accept only unique transaction" in {
+  it should "accept only unique transactions" in {
     val pool = ErgoMemPool.empty(settings)
     val tx = invalidErgoTransactionGen.sample.get
     pool.putWithoutCheck(Seq(tx, tx, tx)).size shouldBe 1

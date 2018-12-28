@@ -16,7 +16,7 @@ import scala.util.Try
   * Immutable transactions pool of limited size and blacklisting support.
   */
 case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
-                weightedTxs: TreeSet[WeightedTxId],
+                weights: TreeSet[WeightedTxId],
                 invalidated: TreeMap[ModifierId, Long],
                 settings: ErgoSettings) {
 
@@ -30,26 +30,26 @@ case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
 
   def put(tx: ErgoTransaction): Pool = {
     val (txs, ws) = if (transactions.size >= mempoolCapacity) {
-      (transactions - weightedTxs.firstKey.id) -> (weightedTxs - weightedTxs.firstKey)
+      (transactions - weights.firstKey.id) -> (weights - weights.firstKey)
     } else {
-      transactions -> weightedTxs
+      transactions -> weights
     }
     Pool(txs.updated(tx.id, tx), ws.insert(weighted(tx)(settings)), invalidated, settings)
   }
 
   def remove(tx: ErgoTransaction): Pool = {
-    Pool(transactions - tx.id, weightedTxs - weighted(tx)(settings), invalidated, settings)
+    Pool(transactions - tx.id, weights - weighted(tx)(settings), invalidated, settings)
   }
 
   def invalidate(tx: ErgoTransaction): Pool = {
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
-    Pool(transactions - tx.id, weightedTxs - weighted(tx)(settings), inv.updated(tx.id, ts), settings)
+    Pool(transactions - tx.id, weights - weighted(tx)(settings), inv.updated(tx.id, ts), settings)
   }
 
   def filter(condition: ErgoTransaction => Boolean): Pool = {
     val txs = transactions.filter { case (_, v) => condition(v) }
-    val ws = weightedTxs.filter(tx => transactions.get(tx.id).exists(condition))
+    val ws = weights.filter(tx => transactions.get(tx.id).exists(condition))
     Pool(txs, ws, invalidated, settings)
   }
 
@@ -79,7 +79,7 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.weightedTxs.flatMap(tx => pool.get(tx.id)).toSeq.reverse
+  override def getAllPrioritized: Seq[ErgoTransaction] = pool.weights.flatMap(tx => pool.get(tx.id)).toSeq.reverse
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -111,7 +111,7 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
       case validator: TransactionValidation[ErgoTransaction@unchecked]
         if !pool.isInvalidated(tx.id) && !pool.contains(tx.id) &&
           (pool.size < settings.nodeSettings.mempoolCapacity ||
-          weighted(tx)(settings).weight > pool.weightedTxs.firstKey.weight) =>
+          weighted(tx)(settings).weight > pool.weights.firstKey.weight) =>
         validator.validate(tx).fold(
           new ErgoMemPool(pool.invalidate(tx), settings) -> ProcessingOutcome.Invalidated(_),
           _ => new ErgoMemPool(pool.put(tx), settings) -> ProcessingOutcome.Accepted

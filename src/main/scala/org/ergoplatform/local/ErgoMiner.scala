@@ -187,9 +187,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
 
-      val optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq.empty
-
-      lazy val emptyExtensionCandidate = ExtensionCandidate(Seq(), optionalFields)
+      lazy val emptyExtensionCandidate = ExtensionCandidate(Seq())
       lazy val stateContext = state.stateContext
 
       // todo fill with interlinks and other useful values after nodes update
@@ -206,7 +204,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
         if (newHeight % votingEpochLength == 0 && newHeight > 0) {
           val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-          (newParams.toExtensionCandidate(optionalFields),
+          (newParams.toExtensionCandidate(Seq()),
             newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
             newParams.blockVersion)
         } else {

@@ -51,7 +51,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       lastResult.flatMap { _ =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
         section match {
-          case Extension(_, Seq(), Seq(), _) => Success(()) // doesn't send back any outcome
+          case Extension(_, Seq(), _) => Success(()) // doesn't send back any outcome
           case _ => expectModificationOutcome(section) // normal flow
         }
       }
@@ -82,7 +82,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     */
   def makeNextBlock(utxoState: UtxoState,
                     txs: Seq[ErgoTransaction],
-                    ext: ExtensionCandidate = ExtensionCandidate(Seq(), Seq()))
+                    ext: ExtensionCandidate = ExtensionCandidate(Seq()))
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
     val parent = getHistory.bestHeaderOpt

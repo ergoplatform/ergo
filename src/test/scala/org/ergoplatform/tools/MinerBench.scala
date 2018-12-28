@@ -71,7 +71,7 @@ object MinerBench extends App with ErgoTestHelpers {
       fb.adProofs.get.proofBytes,
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
-      ExtensionCandidate(Seq(), Seq()),
+      ExtensionCandidate(Seq()),
       Array())
     val newHeader = pow.proveCandidate(candidate, sk).get.header
 

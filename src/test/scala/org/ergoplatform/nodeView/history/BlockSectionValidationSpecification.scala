@@ -27,33 +27,18 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     val header = block.header
     val extension = block.extension
     val m = extension.mandatoryFields
-    val o = extension.optionalFields
 
     // checks, specific for extension
     // validation of mandatory fields key size
-    val imvKey = kvGen(Extension.MandatoryFieldKeySize - 1, Extension.MaxMandatoryFieldValueSize).sample.get
+    val imvKey = extensionKvGen(Extension.MandatoryFieldKeySize - 1, Extension.MaxMandatoryFieldValueSize).sample.get
     applicableCheck(extension.copy(mandatoryFields = imvKey +: m), header, history)
     // validation of mandatory fields value size
-    val imvValue = kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize + 1).sample.get
+    val imvValue = extensionKvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize + 1).sample.get
     applicableCheck(extension.copy(mandatoryFields = imvValue +: m), header, history)
-    // validation of optional fields key size
-    val omvKey = kvGen(Extension.OptionalFieldKeySize - 1, Extension.MaxOptionalFieldValueSize).sample.get
-    applicableCheck(extension.copy(optionalFields = omvKey +: o), header, history)
-    // validation of optional fields value size
-    val omvValue = kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize + 1).sample.get
-    applicableCheck(extension.copy(mandatoryFields = omvValue +: o), header, history)
-    // validation of optional fields number
-    val moreOMV = (0 until Extension.MaxOptionalFields + 1) map (_ => kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get)
-    applicableCheck(extension.copy(mandatoryFields = moreOMV), header, history, correct = true)
-    applicableCheck(extension.copy(mandatoryFields = moreOMV ++ o), header, history)
     // validation of key duplicates in mandatory fields
-    val validMKV = kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get
+    val validMKV = extensionKvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize).sample.get
     applicableCheck(extension.copy(mandatoryFields = Seq(validMKV)), header, history, correct = true)
     applicableCheck(extension.copy(mandatoryFields = Seq(validMKV, validMKV)), header, history)
-    // validation of key duplicates in optional fields
-    val validOKV = kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize).sample.get
-    applicableCheck(extension.copy(optionalFields = Seq(validOKV)), header, history, correct = true)
-    applicableCheck(extension.copy(optionalFields = Seq(validOKV, validOKV)), header, history)
 
     // common checks
     commonChecks(history, extension, header)

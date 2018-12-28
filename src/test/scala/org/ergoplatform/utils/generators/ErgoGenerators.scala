@@ -1,15 +1,15 @@
 package org.ergoplatform.utils.generators
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId, BoxId}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension, ExtensionSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{ErgoTestConstants, BoxUtils}
+import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -17,10 +17,10 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
-import sigmastate.Values.{TrueLeaf, Value, FalseLeaf, EvaluatedValue}
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
+import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ProverResult, ContextExtension}
+import sigmastate.interpreter.ProverResult
 import sigmastate.{SBoolean, _}
 
 import scala.util.Random
@@ -89,23 +89,17 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
       scorex.util.Random.randomBytes
     }
 
-  def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
+  def extensionKvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
-    value <- genSecureBoundedBytes(valuesSize, valuesSize)
+    value <- if(key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
-    height <- positiveIntGen
-    mandatoryElements <- Gen.mapOf(kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
-    optionalElementsElements <- Gen.mapOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
+    mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
   } yield {
-    val me = mandatoryElements.map(kv => kv._1.head -> kv._2).map(kv => Array(kv._1) -> kv._2)
-    Extension(headerId,
-      me.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)).toSeq,
-      optionalElementsElements.take(Extension.MaxOptionalFields).toSeq)
+    Extension(headerId, mandatoryElements.toSeq)
   }
-
 
   lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
 

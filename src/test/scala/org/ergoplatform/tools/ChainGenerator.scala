@@ -63,7 +63,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
 
       val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
       val candidate = new CandidateBlock(last, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
-        txs, time, ExtensionCandidate(Seq(), Seq()), Array())
+        txs, time, ExtensionCandidate(Seq()), Array())
 
       val block = generate(candidate)
       history.append(block.header).get
@@ -82,8 +82,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     pow.proveCandidate(candidate, defaultMinerSecretNumber) match {
       case Some(fb) => fb
       case _ =>
-        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
-        generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
+        val minerTag = scorex.utils.Random.randomBytes(Extension.MandatoryFieldKeySize)
+        generate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
     }
   }
 

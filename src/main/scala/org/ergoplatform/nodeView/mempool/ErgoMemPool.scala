@@ -88,18 +88,18 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
   }
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
-    val newPool = txs.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
+    val newPool = txs.foldLeft(pool) { case (acc, tx) =>
+      if (!acc.contains(tx.id)) acc.put(tx) else acc
+    }
     new ErgoMemPool(newPool, settings)
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
-    val newPool = pool.remove(tx)
-    new ErgoMemPool(newPool, settings)
+    new ErgoMemPool(pool.remove(tx), settings)
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
-    val newPool = pool.filter(condition)
-    new ErgoMemPool(newPool, settings)
+    new ErgoMemPool(pool.filter(condition), settings)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {

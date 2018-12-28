@@ -59,6 +59,12 @@ class ErgoMemPoolTest extends FlatSpec
     }
   }
 
+  it should "accept only unique transaction" in {
+    val pool = ErgoMemPool.empty(settings)
+    val tx = invalidErgoTransactionGen.sample.get
+    pool.putWithoutCheck(Seq(tx, tx, tx)).size shouldBe 1
+  }
+
   it should "drop less prioritized transaction in case of pool overflow" in {
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = 4))
     var pool = ErgoMemPool.empty(limitedPoolSettings)

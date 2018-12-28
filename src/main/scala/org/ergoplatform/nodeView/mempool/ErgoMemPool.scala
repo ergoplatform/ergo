@@ -9,14 +9,14 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
 
-import scala.collection.immutable.{TreeMap, TreeSet}
+import scala.collection.immutable.TreeMap
 import scala.util.Try
 
 /**
   * Immutable transactions pool of limited size and blacklisting support.
   */
-case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
-                weights: TreeSet[WeightedTxId],
+case class Pool(transactions: TreeMap[WeightedTxId, ErgoTransaction],
+                weights: TreeMap[ModifierId, Long],
                 invalidated: TreeMap[ModifierId, Long],
                 settings: ErgoSettings) {
 
@@ -26,34 +26,35 @@ case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
 
   def size: Int = transactions.size
 
-  def get(id: ModifierId): Option[ErgoTransaction] = transactions.get(id)
+  def get(id: ModifierId): Option[ErgoTransaction] = weights.get(id).flatMap(w => transactions.get(WeightedTxId(id, w)))
 
   def put(tx: ErgoTransaction): Pool = {
     val (txs, ws) = if (transactions.size >= mempoolCapacity) {
-      (transactions - weights.firstKey.id) -> (weights - weights.firstKey)
+      (transactions - transactions.firstKey) -> (weights - weights.firstKey)
     } else {
       transactions -> weights
     }
-    Pool(txs.updated(tx.id, tx), ws.insert(weighted(tx)(settings)), invalidated, settings)
+    val wtx = weighted(tx)(settings)
+    Pool(txs.updated(wtx, tx), ws.updated(wtx.id, wtx.weight), invalidated, settings)
   }
 
   def remove(tx: ErgoTransaction): Pool = {
-    Pool(transactions - tx.id, weights - weighted(tx)(settings), invalidated, settings)
+    Pool(transactions - weighted(tx)(settings), weights - tx.id, invalidated, settings)
   }
 
   def invalidate(tx: ErgoTransaction): Pool = {
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
-    Pool(transactions - tx.id, weights - weighted(tx)(settings), inv.updated(tx.id, ts), settings)
+    Pool(transactions - weighted(tx)(settings), weights - tx.id, inv.updated(tx.id, ts), settings)
   }
 
   def filter(condition: ErgoTransaction => Boolean): Pool = {
     val txs = transactions.filter { case (_, v) => condition(v) }
-    val ws = weights.filter(tx => transactions.get(tx.id).exists(condition))
+    val ws = weights.filter(tx => transactions.get(WeightedTxId(tx._1, tx._2)).exists(condition))
     Pool(txs, ws, invalidated, settings)
   }
 
-  def contains(id: ModifierId): Boolean = transactions.contains(id)
+  def contains(id: ModifierId): Boolean = weights.contains(id)
 
   def isInvalidated(id: ModifierId): Boolean = invalidated.contains(id)
 
@@ -79,7 +80,7 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.weights.flatMap(tx => pool.get(tx.id)).toSeq.reverse
+  override def getAllPrioritized: Seq[ErgoTransaction] = pool.transactions.values.toSeq.reverse
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -111,7 +112,7 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
       case validator: TransactionValidation[ErgoTransaction@unchecked]
         if !pool.isInvalidated(tx.id) && !pool.contains(tx.id) &&
           (pool.size < settings.nodeSettings.mempoolCapacity ||
-          weighted(tx)(settings).weight > pool.weights.firstKey.weight) =>
+          weighted(tx)(settings).weight > pool.transactions.firstKey.weight) =>
         validator.validate(tx).fold(
           new ErgoMemPool(pool.invalidate(tx), settings) -> ProcessingOutcome.Invalidated(_),
           _ => new ErgoMemPool(pool.put(tx), settings) -> ProcessingOutcome.Accepted
@@ -149,8 +150,8 @@ object ErgoMemPool {
   private implicit val ord: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (x.weight, x.id))
 
   def empty(settings: ErgoSettings): ErgoMemPool = {
-    val emptyPool = Pool(
-      TreeMap.empty[ModifierId, ErgoTransaction], TreeSet.empty, TreeMap.empty[ModifierId, Long], settings)
+    val emptyPool = Pool(TreeMap.empty[WeightedTxId, ErgoTransaction], TreeMap.empty[ModifierId, Long],
+      TreeMap.empty[ModifierId, Long], settings)
     new ErgoMemPool(emptyPool, settings)
   }
 

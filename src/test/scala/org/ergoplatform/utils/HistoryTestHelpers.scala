@@ -1,6 +1,5 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.EmptyBlockSectionProcessor
 import org.ergoplatform.nodeView.state.StateType
@@ -39,7 +38,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
-    val protocolVersion = 0: Byte
+    val protocolVersion = 1: Byte
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second

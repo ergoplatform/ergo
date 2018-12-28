@@ -51,7 +51,7 @@ class DigestState protected(override val version: VersionTag,
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
           stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
-              val txs = fb.blockTransactions.txs
+            val txs = fb.blockTransactions.txs
 
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
@@ -70,7 +70,7 @@ class DigestState protected(override val version: VersionTag,
               tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
             if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-                throw new Error(s"Transaction cost $totalCost exceeds limit")
+              throw new Error(s"Transaction cost $totalCost exceeds limit")
             }
           }
         case None =>

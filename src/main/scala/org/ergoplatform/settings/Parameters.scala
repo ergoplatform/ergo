@@ -177,8 +177,8 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
-    val mandatoryFields = parametersTable.toSeq.map { case (k, v) => Array(k) -> Ints.toByteArray(v) }
-    ExtensionCandidate(mandatoryFields, optionalFields)
+    val mandatoryFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
+    ExtensionCandidate(mandatoryFields ++ optionalFields)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
@@ -252,10 +252,14 @@ object Parameters {
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters(h, paramsTable)
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
-    val paramsTable = extension.mandatoryFields.map { case (k, v) =>
-      require(k.length == 1)
-      require(v.length == 4)
-      k.head -> Ints.fromByteArray(v)
+    val paramsTable = extension.mandatoryFields.flatMap { case (k, v) =>
+      require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
+      if (k.head == 0) {
+        require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")
+        Some(k.head -> Ints.fromByteArray(v))
+      } else {
+        None
+      }
     }.toMap
     Parameters(h, paramsTable)
   }

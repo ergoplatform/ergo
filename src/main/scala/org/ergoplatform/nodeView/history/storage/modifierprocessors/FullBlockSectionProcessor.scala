@@ -116,27 +116,15 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         case e: Extension =>
           // todo checks that all required mandatory fields are set and non additional mandatory fields
           failFast
-            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
-              fatal(s"Extension ${m.encodedId} have too many optional fields")
-            }
             .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
               fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
-            }
-            .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
             }
             .validate(e.mandatoryFields.forall(_._2.lengthCompare(Extension.MaxMandatoryFieldValueSize) <= 0)) {
               fatal(s"Extension ${m.encodedId} mandatory field value length > ${Extension.MaxMandatoryFieldValueSize}")
             }
-            .validate(e.optionalFields.forall(_._2.lengthCompare(Extension.MaxOptionalFieldValueSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} optional field value length > ${Extension.MaxOptionalFieldValueSize}")
-            }
             .validate(e.mandatoryFields.map(kv => bytesToId(kv._1)).distinct.length == e.mandatoryFields.length) {
               //todo this check may be done in general mandatory fields check
               fatal(s"Extension ${m.encodedId} contains duplicate mandatory keys")
-            }
-            .validate(e.optionalFields.map(kv => bytesToId(kv._1)).distinct.length == e.optionalFields.length) {
-              fatal(s"Extension ${m.encodedId} contains duplicate optionalFields keys")
             }
             .validate(header.height > 0 || e.mandatoryFields.nonEmpty) {
               //genesis block does not contain votes

@@ -16,7 +16,7 @@ object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
     with ErgoTransactionGenerators {
 
-  private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
+  private val blockSizes = Gen.enumeration("txs in block")(50, 500, 1000)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
 
   private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]) = for {
@@ -46,8 +46,8 @@ object ErgoMemPoolBenchmark
   )
 
   private def bench(txsInIncomeOrder: Seq[ErgoTransaction]): Unit = {
-    val pool = ErgoMemPool.empty(settings)
-    txsInIncomeOrder.foreach(pool.put)
+    var pool = ErgoMemPool.empty(settings)
+    txsInIncomeOrder.foreach(tx => pool = pool.put(tx).get)
   }
 
   performance of "ErgoMemPool awaiting" in {

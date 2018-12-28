@@ -41,6 +41,12 @@ case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
     Pool(transactions - tx.id, weightedTxs - weighted(tx)(settings), invalidated, settings)
   }
 
+  def invalidate(tx: ErgoTransaction): Pool = {
+    val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
+    val ts = System.currentTimeMillis()
+    Pool(transactions - tx.id, weightedTxs - weighted(tx)(settings), inv.updated(tx.id, ts), settings)
+  }
+
   def filter(condition: ErgoTransaction => Boolean): Pool = {
     val txs = transactions.filter { case (_, v) => condition(v) }
     val ws = weightedTxs.filter(tx => transactions.get(tx.id).exists(condition))
@@ -50,12 +56,6 @@ case class Pool(transactions: TreeMap[ModifierId, ErgoTransaction],
   def contains(id: ModifierId): Boolean = transactions.contains(id)
 
   def isInvalidated(id: ModifierId): Boolean = invalidated.contains(id)
-
-  def invalidate(tx: ErgoTransaction): Pool = {
-    val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
-    val ts = System.currentTimeMillis()
-    Pool(transactions - tx.id, weightedTxs - weighted(tx)(settings), inv.updated(tx.id, ts), settings)
-  }
 
 }
 
@@ -88,10 +88,10 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
   }
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
-    val newPool = txs.foldLeft(pool) { case (acc, tx) =>
+    val updatedPool = txs.foldLeft(pool) { case (acc, tx) =>
       if (!acc.contains(tx.id)) acc.put(tx) else acc
     }
-    new ErgoMemPool(newPool, settings)
+    new ErgoMemPool(updatedPool, settings)
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
@@ -103,8 +103,7 @@ class ErgoMemPool private[mempool](pool: Pool, settings: ErgoSettings)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
-    val newPool = pool.invalidate(tx)
-    new ErgoMemPool(newPool, settings)
+    new ErgoMemPool(pool.invalidate(tx), settings)
   }
 
   def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {

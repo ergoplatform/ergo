@@ -1,5 +1,6 @@
 package org.ergoplatform.utils.generators
 
+import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
@@ -98,7 +99,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     headerId <- modifierIdGen
     mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
   } yield {
-    Extension(headerId, mandatoryElements.toSeq)
+    val me = mandatoryElements
+      .map(kv => Shorts.fromByteArray(kv._1) -> kv._2)
+      .map(kv => Shorts.toByteArray(kv._1) -> kv._2)
+    Extension(headerId, me.toSeq)
   }
 
   lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))

@@ -12,7 +12,7 @@ import org.scalatest.prop.PropertyChecks
 
 import scala.util.Random
 
-class ErgoMemPoolTest extends FlatSpec
+class ErgoMemPoolSpec extends FlatSpec
   with ErgoGenerators
   with ErgoTestHelpers
   with PropertyChecks {

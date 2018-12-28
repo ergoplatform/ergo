@@ -3,11 +3,11 @@ package org.ergoplatform.mining
 import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, Serializer}
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Try
 
@@ -20,7 +20,7 @@ import scala.util.Try
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
-case class AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt) extends BytesSerializable {
+case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
   override type M = AutolykosSolution
 
   val encodedPk: Array[Byte] = pkToBytes(pk)
@@ -41,11 +41,11 @@ object AutolykosSolution extends ApiCodecs {
 
   implicit val jsonDecoder: Decoder[AutolykosSolution] = { c: HCursor =>
     for {
-      pk <- c.downField("pk").as[ECPoint]
-      w <- c.downField("w").as[ECPoint]
+      pk <- c.downField("pk").as[EcPointType]
+      w <- c.downField("w").as[EcPointType]
       n <- c.downField("n").as[Array[Byte]]
       d <- c.downField("d").as[BigInt]
-    } yield AutolykosSolution(pk: ECPoint, w: ECPoint, n: Array[Byte], d: BigInt)
+    } yield AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt)
   }
 }
 

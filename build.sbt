@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "1.8.0",
+  version := "1.8.1",
   scalaVersion := "2.12.7",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "8adeddba-SNAPSHOT"
+val scorexVersion = "53207304-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -32,12 +32,12 @@ libraryDependencies ++= Seq(
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.+" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "test",
-  "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
+  "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
+  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
 )
 
@@ -134,16 +134,6 @@ findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "fin
 scapegoatVersion in ThisBuild := "1.3.3"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
-
-val Bench = config("bench") extend Test
-
-inConfig(Bench)(Defaults.testSettings ++ Seq(
-  fork in run := true,
-  classDirectory := (classDirectory in Compile).value,
-  dependencyClasspath := (dependencyClasspath in Compile).value
-))
-
-compile in Bench := (compile in Bench).dependsOn(compile in Test).value
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 

@@ -50,7 +50,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
                     boxId: Short = 0,
                     creationHeight: Long = 0): Gen[Long] = {
-    val minValue = BoxUtils.minimalErgoAmountSimulated(proposition, additionalTokens, additionalRegisters, parameters)
+    //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
+    //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
+    val minValue = parameters.minValuePerByte * 400
     Gen.choose(minValue, coinsTotal)
   }
 

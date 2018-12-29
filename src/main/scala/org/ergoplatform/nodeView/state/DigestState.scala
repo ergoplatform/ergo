@@ -19,7 +19,7 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
+  * Minimal state variant which is storing only digest of UTXO set authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
 class DigestState protected(override val version: VersionTag,
@@ -42,7 +42,7 @@ class DigestState protected(override val version: VersionTag,
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock if notInitialized =>
-      log.info(s"Initializing state with fb ${fb.id}")
+      log.info(s"Initializing state with full block ${fb.id}")
       Success(Unit)
 
     case fb: ErgoFullBlock =>

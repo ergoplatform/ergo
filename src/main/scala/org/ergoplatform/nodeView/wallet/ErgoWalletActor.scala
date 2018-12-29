@@ -6,7 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
@@ -42,9 +42,14 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   val parameters: Parameters = LaunchParameters
   private val prover = ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber, parameters)
 
-  // TODO: it is incorrect to initialize in such way!!!
+  // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
+  // to the wallet (by executing testing transactions against them). The state context is being updating by listening
+  // to state updates.
+  //todo: initialize it, e.g. by introducing StateInitialized signal in addition to StateChanged
   private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), votingSettings)
-  private def height = stateContext.currentHeight
+
+  // Height of last full block scanned.
+  private var height = stateContext.currentHeight
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
@@ -144,7 +149,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
-      stateContext = stateContext.appendFullBlock(fullBlock, votingSettings).get //todo .get
+      height = fullBlock.header.height
       fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
         self ! Resolve(Some(tb.boxId))
       }
@@ -159,8 +164,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           registry.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
-      // TODO state context rollback needed. Subtask at https://github.com/ergoplatform/ergo/issues/529
-      stateContext = stateContext.updateHeaders(stateContext.lastHeaders.filter(_.height <= heightTo))
+      height = heightTo
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
@@ -270,7 +274,12 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
   }
 
-  override def receive: Receive = scanLogic orElse readers orElse {
+  private def onStateChanged: Receive = {
+    case ChangedState(s: ErgoStateReader@unchecked) =>
+      stateContext = s.stateContext
+  }
+
+  override def receive: Receive = onStateChanged orElse scanLogic orElse readers orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
       extractTrackedBytes(address).foreach(trackedBytes.append(_))

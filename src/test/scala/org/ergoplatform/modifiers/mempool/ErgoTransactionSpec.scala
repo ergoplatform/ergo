@@ -4,11 +4,9 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.LaunchParameters
-import org.ergoplatform.utils.{Stubs, ErgoPropertyTest}
+import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import sigmastate._
 import sigmastate.Values.GroupElementConstant

@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -60,7 +60,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
   }
 
-  def unspendableErgoBoxGen(minValue: Long = 1, maxValue: Long = coinsTotal): Gen[ErgoBox] = {
+  def unspendableErgoBoxGen(minValue: Long = LaunchParameters.minValuePerByte * 200,
+                            maxValue: Long = coinsTotal): Gen[ErgoBox] = {
     ergoBoxGen(propGen = falseLeafGen, valueGenOpt = Some(Gen.choose(minValue, maxValue)))
   }
 
@@ -135,17 +136,31 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
 
-    val inputsCount = boxesToSpend.size
-    val outputsCount = Math.min(Short.MaxValue, Math.max(inputsCount + 1, rnd.nextInt(inputsCount * 2)))
+    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
 
-    val outputAmounts = (1 to outputsCount).foldLeft(Seq[Long]() -> inputSum) { case ((amounts, remainder), idx) =>
-      val amount = if (idx == outputsCount) {
-        remainder
+    require(inputSum >= minValue)
+    val inputsCount = boxesToSpend.size
+    val maxOutputs = Math.min(Short.MaxValue, inputSum / minValue).toInt
+    val outputsCount = Math.min(maxOutputs, Math.max(inputsCount + 1, rnd.nextInt(inputsCount * 2)))
+    require(outputsCount > 0, s"outputs count is not positive: $outputsCount")
+
+    require(minValue * outputsCount <= inputSum)
+    val outputPreamounts = (1 to outputsCount).map(_ => minValue.toLong).toBuffer
+
+    var remainder = inputSum - minValue * outputsCount
+    do {
+      val idx = Random.nextInt(outputsCount)
+      if (remainder < inputSum / inputsCount) {
+        outputPreamounts.update(idx, outputPreamounts(idx) + remainder)
+        remainder = 0
       } else {
-        Math.abs(rnd.nextLong()) % (remainder / inputsCount)
+        val value = Math.abs(rnd.nextLong()) % (remainder / outputsCount)
+        outputPreamounts.update(idx, outputPreamounts(idx) + value)
+        remainder = remainder - value
       }
-      (amounts :+ amount) -> (remainder - amount)
-    }._1.toIndexedSeq
+    } while (remainder > 0)
+
+    val outputAmounts = outputPreamounts.toIndexedSeq
 
     val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
       mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
@@ -245,7 +260,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield ErgoFullBlock(header, txs, extension, Some(proof))
 
   lazy val paramVoteGen: Gen[Byte] = for {
-     paramVote <- Gen.oneOf(Seq(NoParameter, StorageFeeFactorIncrease, MinValuePerByteIncrease))
+    paramVote <- Gen.oneOf(Seq(NoParameter, StorageFeeFactorIncrease, MinValuePerByteIncrease))
   } yield paramVote
 
   lazy val paramVotesGen: Gen[Array[Byte]] = for {

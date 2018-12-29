@@ -93,21 +93,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       blockchainState: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
+                       stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
     failFast
       .payload(0L)
-      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, blockchainState.currentParameters)), s"Transaction is trying to create dust: $this")
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${blockchainState.currentHeight}")
+      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateContext.currentParameters)), s"Transaction is trying to create dust: $this")
+      .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${stateContext.currentHeight}")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
-        val ctx = new ErgoContext(blockchainState, transactionContext, proverExtension)
+        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover { case t => t.printStackTrace() }

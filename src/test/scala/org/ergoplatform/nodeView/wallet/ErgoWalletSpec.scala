@@ -248,7 +248,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
-//      applyBlock(spendingBlock) shouldBe 'success
+      applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       waitForScanning(spendingBlock)
       val balanceAfterSpending = getConfirmedBalances
@@ -285,7 +285,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       assets should not be empty
 
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
-//      applyBlock(spendingBlock) shouldBe 'success
+      applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       waitForScanning(spendingBlock)
 
@@ -315,7 +315,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       initialBalance shouldBe sumBalance
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
-//      applyBlock(block) shouldBe 'success
+      applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       waitForScanning(block)
 
@@ -344,7 +344,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, address.script)
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.script)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
-//      applyBlock(block) shouldBe 'success
+      applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       waitForScanning(block)
       val totalBalance = getBalancesWithUnconfirmed.balance
@@ -448,7 +448,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val totalBeforeRollback = getBalancesWithUnconfirmed
 
       wallet.rollback(initialState.version)
-      blocking(Thread.sleep(100))
+      blocking(Thread.sleep(1000))
       val confirmedAfterRollback = getConfirmedBalances
       val totalAfterRollback = getBalancesWithUnconfirmed
 

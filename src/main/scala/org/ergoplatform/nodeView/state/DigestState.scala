@@ -41,10 +41,6 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock if notInitialized =>
-      log.info(s"Initializing state with full block ${fb.id}")
-      Success(Unit)
-
     case fb: ErgoFullBlock =>
       fb.adProofs match {
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
@@ -154,9 +150,6 @@ class DigestState protected(override val version: VersionTag,
       toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)) ++ additionalData)
     new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
   }
-
-  // DigestState is not initialized yet. Waiting for first full block to apply without checks
-  private lazy val notInitialized = nodeSettings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {

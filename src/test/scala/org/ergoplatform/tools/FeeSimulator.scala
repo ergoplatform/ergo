@@ -35,7 +35,7 @@ object FeeSimulator extends App {
 
   println("=====================")
   println("Global parameters:")
-  println(s"K: $storageFeeFactor")
+  println(s"Storage fee factor: $storageFeeFactor")
   println(s"Output size: $stdSize B")
   println(s"Simple tx size: $simpleTxSize B")
   println(s"Block size: $BlockSize B")
@@ -43,7 +43,7 @@ object FeeSimulator extends App {
   println(s"Min dust value of standard-size box: $minStdDust")
 
   println("=====================")
-  println(s"Assume that Ergo state have the same number of outputs($bitcoinUtxos), as Bitcion.")
+  println(s"Assume that Ergo state have the same number of outputs($bitcoinUtxos), as Bitcoin.")
 
   def bitcoinUtxos = 60000000
 

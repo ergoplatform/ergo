@@ -19,7 +19,9 @@ import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
+
+  override val historyGen: Gen[HT] =
+    generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>

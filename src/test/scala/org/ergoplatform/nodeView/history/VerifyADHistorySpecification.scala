@@ -59,7 +59,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     modifiersCache.findCandidateKey(history).isDefined shouldBe true
   }
 
-
   property("should not be able to apply blocks older than blocksToKeep") {
     var history = genHistory()._1
     history.bestFullBlockOpt shouldBe None

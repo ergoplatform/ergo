@@ -180,4 +180,5 @@ object ErgoStatsCollectorRef {
             timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
     system.actorOf(props(readersHolder, networkController, settings, timeProvider), name)
+
 }

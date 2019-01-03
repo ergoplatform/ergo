@@ -57,6 +57,8 @@ trait FullBlockProcessor extends HeadersProcessor {
     case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
       if isValidFirstFullBlock(fullBlock.header) =>
 
+      //todo: add headers
+
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
       ProgressInfo(None, Seq.empty, toApply, Seq.empty)

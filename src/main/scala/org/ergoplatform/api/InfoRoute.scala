@@ -23,4 +23,5 @@ case class InfoRoute(statsCollector: ActorRef,
     val timeJson = Map("currentTime" -> timeProvider.time().asJson).asJson
     ApiResponse((statsCollector ? GetNodeInfo).mapTo[NodeInfo].map(_.asJson.deepMerge(timeJson)))
   }
+
 }

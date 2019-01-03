@@ -134,7 +134,6 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-
   private def update(header: Header): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
     update(version, header.stateRoot, Seq())
@@ -150,6 +149,7 @@ class DigestState protected(override val version: VersionTag,
       toUpdate = Seq(wrappedVersion -> ByteArrayWrapper(newRootHash)) ++ additionalData)
     new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
   }
+
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {

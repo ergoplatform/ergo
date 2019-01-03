@@ -151,7 +151,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     *
     * @param fullBlock      - full block (transactions, extension section, maybe state transformation proofs)
     * @param votingSettings - chain-wide voting settings
-    * @return
+    * @return updated state context or error
     */
   def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
     val header = fullBlock.header

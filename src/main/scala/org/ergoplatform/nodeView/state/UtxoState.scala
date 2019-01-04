@@ -113,8 +113,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
           val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
-            val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+            val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
             val proofHash = ADProofs.proofDigest(proofBytes)
             if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
@@ -140,6 +140,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       }
 
     case h: Header =>
+      log.warn("Only full-blocks are expected (before UTXO snapshot downloading implementation")
+      //todo: update state context with headers (when snapshot downloading is done), so
+      //todo: application of the first full block after the snapshot should have correct state context
+      //todo: (in particular, "lastHeaders" field of it)
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>

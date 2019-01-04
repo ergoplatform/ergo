@@ -58,10 +58,10 @@ trait FullBlockProcessor extends HeadersProcessor {
       if isValidFirstFullBlock(fullBlock.header) =>
 
       //todo: add headers
-
+      val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
-      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
+      ProgressInfo(None, Seq.empty, headers.headers ++ toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {

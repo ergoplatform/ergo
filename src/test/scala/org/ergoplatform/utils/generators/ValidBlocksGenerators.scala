@@ -26,6 +26,10 @@ trait ValidBlocksGenerators
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
+    createUtxoState(constants)
+  }
+
+  def createUtxoState(constants: StateConstants): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, constants)
   }
 

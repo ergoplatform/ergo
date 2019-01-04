@@ -109,7 +109,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield ErgoTransaction(from, to)
 
   /**
-    * Generates a transaction, that is valid, if correct boxes were provided.
+    * Generates a transaction that is valid if correct boxes were provided.
     * Generated transaction may still be invalid, if:
     * - default prover does not know how to sign at least one input
     * - number of assets exceeds Transaction.MaxTokens
@@ -200,7 +200,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
     defaultProver.sign(unsignedTx, boxesToSpend, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
-      log.debug("Going to generate a transaction with incorrect proofs")
+      log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
       new ErgoTransaction(inputs, newBoxes)
     }
   }

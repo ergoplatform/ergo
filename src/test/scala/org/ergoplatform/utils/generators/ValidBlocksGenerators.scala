@@ -165,7 +165,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.getOrElse(timeProvider.time())
+    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
     val extension: ExtensionCandidate = defaultExtension
     val votes = Array.fill(3)(0: Byte)
 

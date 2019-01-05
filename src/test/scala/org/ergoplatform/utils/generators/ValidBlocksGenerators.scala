@@ -133,7 +133,7 @@ trait ValidBlocksGenerators
   }
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
-    validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, new Random)
+    validFullBlock(parentOpt, utxoState: UtxoState, boxHolder: BoxHolder, new Random)
 
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
@@ -149,8 +149,8 @@ trait ValidBlocksGenerators
   }
 
   def validFullBlock(parentOpt: Option[Header],
-                     utxoState: WrappedUtxoState): ErgoFullBlock = {
-    validFullBlock(parentOpt, utxoState, validTransactionsFromUtxoState(utxoState))
+                     wrappedState: WrappedUtxoState): ErgoFullBlock = {
+    validFullBlock(parentOpt, wrappedState, wrappedState.versionedBoxHolder)
   }
 
   def validFullBlock(parentOpt: Option[Header],

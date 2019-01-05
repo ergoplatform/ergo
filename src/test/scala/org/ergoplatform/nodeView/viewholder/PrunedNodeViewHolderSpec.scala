@@ -27,14 +27,13 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
         stateType = StateType.Digest,
         verifyTransactions = true,
         PoPoWBootstrap = false,
-        keepVersions = 3
+        blocksToKeep = 3
       )
     )
   }
 
   def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
-    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])){case ((chain, wus, parentOpt), h) =>
-      println(s"Generate block at height $h")
+    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])) { case ((chain, wus, parentOpt), h) =>
       val block = validFullBlock(parentOpt, wus)
       val newState = wus.applyModifier(block).get
       (chain :+ block, newState, Some(block.header))
@@ -43,10 +42,20 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
   property(s"pruned") {
     new NodeViewFixture(prunedSettings).apply({ fixture =>
+      import fixture._
+
       val (us, bh) = createUtxoState(stateConstants)
       val wus = WrappedUtxoState(us, bh, stateConstants)
 
       val fullChain = genFullChain(wus, 10)
+
+      fullChain.foreach { block =>
+        if(block.header.height < 7) {
+          applyBlock(block,true).isSuccess shouldBe true
+        } else {
+          applyBlock(block, false).isSuccess shouldBe true
+        }
+      }
     })
   }
 

@@ -172,4 +172,5 @@ trait ValidBlocksGenerators
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
+
 }

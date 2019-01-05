@@ -4,7 +4,7 @@ import java.io.File
 
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.{PublicKeyLength, group}
+import org.ergoplatform.mining.group
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}

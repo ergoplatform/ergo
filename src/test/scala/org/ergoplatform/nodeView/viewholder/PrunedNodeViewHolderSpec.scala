@@ -33,18 +33,16 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   }
 
   def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
-    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])) { case ((chain, us, parentOpt), h) =>
+    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])){case ((chain, wus, parentOpt), h) =>
       println(s"Generate block at height $h")
-      val block = validFullBlock(parentOpt, us)
-      val newState = us.applyModifier(block).get
+      val block = validFullBlock(parentOpt, wus)
+      val newState = wus.applyModifier(block).get
       (chain :+ block, newState, Some(block.header))
     }._1
   }
 
   property(s"pruned") {
     new NodeViewFixture(prunedSettings).apply({ fixture =>
-      import fixture._
-
       val (us, bh) = createUtxoState(stateConstants)
       val wus = WrappedUtxoState(us, bh, stateConstants)
 

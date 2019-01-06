@@ -40,12 +40,10 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   def stateType(implicit ctx: Ctx): StateType = ctx.settings.nodeSettings.stateType
 
-  def applyBlock(fullBlock: ErgoFullBlock, headerOnly: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
+  def applyBlock(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
     nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
-    expectModificationOutcome(fullBlock.header).flatMap { _ =>
-      if (!headerOnly) applyPayload(fullBlock) else Success(Unit)
-    }
+    expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock))
   }
 
   def applyPayload(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
@@ -142,7 +140,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getAfterGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
     ctx.settings.chainSettings.monetary.afterGenesisStateDigest
+
 }
 
-object NodeViewTestOps extends NodeViewTestOps {
-}
+object NodeViewTestOps extends NodeViewTestOps

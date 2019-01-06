@@ -50,11 +50,14 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       val fullChain = genFullChain(wus, 10)
 
       fullChain.foreach { block =>
-        if(block.header.height < 7) {
-          applyBlock(block,true).isSuccess shouldBe true
-        } else {
-          applyBlock(block, false).isSuccess shouldBe true
-        }
+        applyBlock(block).isSuccess shouldBe true
+      }
+      
+      println("===========================================")
+      fullChain.takeRight(3).foreach { block =>
+        val status = applyPayload(block)
+        println("status: " + status)
+        status.isSuccess shouldBe true
       }
     })
   }

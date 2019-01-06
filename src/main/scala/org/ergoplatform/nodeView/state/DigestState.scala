@@ -121,8 +121,7 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-  override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions()
-    .map(w => bytesToVersion(w.data))
+  override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(w => bytesToVersion(w.data))
 
   def close(): Unit = store.close()
 

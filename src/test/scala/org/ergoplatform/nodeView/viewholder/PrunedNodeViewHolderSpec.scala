@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
@@ -17,18 +17,22 @@ import scala.concurrent.duration._
   * Test how pruning is working
   */
 class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
+
+  val BlocksToKeep = 3
+
   def prunedSettings: ErgoSettings = {
     val defaultSettings = ErgoSettings.read(None)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
-        powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)
+        powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),
+        voting = VotingSettings(10, 10, 10)
       ),
       walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Digest,
         verifyTransactions = true,
         PoPoWBootstrap = false,
-        blocksToKeep = 3
+        blocksToKeep = BlocksToKeep
       )
     )
   }
@@ -48,18 +52,16 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       val (us, bh) = createUtxoState(stateConstants)
       val wus = WrappedUtxoState(us, bh, stateConstants)
 
-      val fullChain = genFullChain(wus, 10)
+      val fullChain = genFullChain(wus, 20)
 
       fullChain.foreach { block =>
         applyHeader(block.header).isSuccess shouldBe true
       }
 
       println("===========================================")
-      fullChain.takeRight(3).foreach { block =>
-
-        val sections = block.blockSections
-
-        sections.foreach { section =>
+      fullChain.takeRight(11).foreach { block =>
+        println(s"=+++===========Block at height ${block.header.height} to be applied============")
+        block.blockSections.foreach { section =>
           nodeViewHolderRef ! LocallyGeneratedModifier(section)
           Thread.sleep(500)
         }

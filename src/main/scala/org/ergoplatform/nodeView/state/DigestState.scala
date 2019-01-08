@@ -96,11 +96,8 @@ class DigestState protected(override val version: VersionTag,
       log.warn("Should not get full blocks from node view holder if !settings.verifyTransactions")
       Try(this)
 
-    case h: Header if !nodeSettings.verifyTransactions =>
+    case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
-      update(h)
-
-    case h: Header if nodeSettings.verifyTransactions =>
       update(h)
 
     case a: Any =>

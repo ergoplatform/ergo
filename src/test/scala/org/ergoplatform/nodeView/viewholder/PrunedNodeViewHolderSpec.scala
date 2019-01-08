@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
+import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.testkit.utils.NoShrink
 
 import scala.concurrent.duration._
@@ -50,14 +51,18 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       val fullChain = genFullChain(wus, 10)
 
       fullChain.foreach { block =>
-        applyBlock(block).isSuccess shouldBe true
+        applyHeader(block.header).isSuccess shouldBe true
       }
-      
+
       println("===========================================")
       fullChain.takeRight(3).foreach { block =>
-        val status = applyPayload(block)
-        println("status: " + status)
-        status.isSuccess shouldBe true
+
+        val sections = block.blockSections
+
+        sections.foreach { section =>
+          nodeViewHolderRef ! LocallyGeneratedModifier(section)
+          Thread.sleep(500)
+        }
       }
     })
   }

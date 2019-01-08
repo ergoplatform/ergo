@@ -43,6 +43,8 @@ class DigestState protected(override val version: VersionTag,
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       fb.adProofs match {
+        case None =>
+          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
@@ -69,8 +71,6 @@ class DigestState protected(override val version: VersionTag,
               throw new Error(s"Transaction cost $totalCost exceeds limit")
             }
           }
-        case None =>
-          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
     case _: Header => Success(Unit)

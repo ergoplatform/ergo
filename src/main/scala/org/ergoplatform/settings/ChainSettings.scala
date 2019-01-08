@@ -18,6 +18,3 @@ case class ChainSettings(protocolVersion: Byte,
                          powScheme: AutolykosPowScheme,
                          monetary: MonetarySettings,
                          genesisId: Option[ModifierId] = None)
-
-
-

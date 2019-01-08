@@ -40,6 +40,12 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   def stateType(implicit ctx: Ctx): StateType = ctx.settings.nodeSettings.stateType
 
+  def applyHeader(header: Header)(implicit ctx: Ctx): Try[Unit] = {
+    subscribeModificationOutcome()
+    nodeViewHolderRef ! LocallyGeneratedModifier(header)
+    expectModificationOutcome(header)
+  }
+
   def applyBlock(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
     nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
@@ -70,6 +76,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
         Success(())
       case outcome =>
+        println("outcome: " + outcome)
         val msg = section match {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"

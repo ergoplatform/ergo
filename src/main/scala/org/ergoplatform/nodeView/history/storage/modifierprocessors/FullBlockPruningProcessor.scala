@@ -28,7 +28,9 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
 
   /** Start height to download full blocks from
     */
-  def minimalFullBlockHeight: Int = minimalFullBlockHeightVar
+  def minimalFullBlockHeight: Int = {
+    minimalFullBlockHeightVar
+  }
 
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */

@@ -18,14 +18,16 @@ import scala.concurrent.duration._
   */
 class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
-  val BlocksToKeep = 3
+  private val BlocksToKeep = 3
+  private val BlockInterval = 2.minutes
 
   def prunedSettings: ErgoSettings = {
     val defaultSettings = ErgoSettings.read(None)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),
-        voting = VotingSettings(10, 10, 10)
+        voting = VotingSettings(10, 10, 10),
+        blockInterval = BlockInterval
       ),
       walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
@@ -39,7 +41,8 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
   def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
     (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])) { case ((chain, wus, parentOpt), h) =>
-      val block = validFullBlock(parentOpt, wus)
+      val time = System.currentTimeMillis() - (howMany - h) * BlockInterval.toMillis
+      val block = validFullBlock(parentOpt, wus, time)
       val newState = wus.applyModifier(block).get
       (chain :+ block, newState, Some(block.header))
     }._1
@@ -54,13 +57,15 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
       val fullChain = genFullChain(wus, 20)
 
-      fullChain.foreach { block =>
+      fullChain.take(10).foreach { block =>
         applyHeader(block.header).isSuccess shouldBe true
       }
 
-      println("===========================================")
+      fullChain.drop(10).foreach { block =>
+        applyHeader(block.header).isSuccess shouldBe true
+      }
+
       fullChain.takeRight(11).foreach { block =>
-        println(s"=+++===========Block at height ${block.header.height} to be applied============")
         block.blockSections.foreach { section =>
           nodeViewHolderRef ! LocallyGeneratedModifier(section)
           Thread.sleep(500)

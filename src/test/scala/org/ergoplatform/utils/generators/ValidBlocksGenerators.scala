@@ -154,6 +154,17 @@ trait ValidBlocksGenerators
   }
 
   def validFullBlock(parentOpt: Option[Header],
+                     wrappedState: WrappedUtxoState,
+                     time: Long): ErgoFullBlock = {
+    validFullBlock(
+      parentOpt,
+      wrappedState,
+      validTransactionsFromBoxHolder(wrappedState.versionedBoxHolder, new Random())._1,
+      Some(time)
+    )
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
                      timeOpt: Option[Long] = None): ErgoFullBlock = {

@@ -108,8 +108,21 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def processExtension(extension: Extension,
-                       header: Header): Try[ErgoStateContext] = Try {
+  def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
+    val height = header.height
+
+    Parameters.parseExtension(height, extension).flatMap { parsedParams =>
+      val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
+
+      if (calculatedParams.blockVersion != header.version) {
+        throw new Error("Versions in header and parameters section are different")
+      }
+
+      Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
+    }
+  }
+
+  def process(header: Header, extension: Extension): Try[ErgoStateContext] = Try {
 
     val headerVotes: Array[Byte] = header.votes
     val height = header.height
@@ -125,15 +138,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
-      Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-        val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
-
-        if (calculatedParams.blockVersion != header.version) {
-          throw new Error("Versions in header and parameters section are different")
-        }
-
-        Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
-      }.map { params =>
+      processExtension(extension, header, forkVote).map { params =>
         val proposedVotes = votes.map(id => id -> 1)
         val newVoting = VotingData(proposedVotes)
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
@@ -161,7 +166,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       throw new Error(s"Improper block applied: $fullBlock to state context $this")
     }
 
-    processExtension(fullBlock.extension, header).map { sc =>
+    process(header, fullBlock.extension).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
       sc.updateHeaders(newHeaders)
     }

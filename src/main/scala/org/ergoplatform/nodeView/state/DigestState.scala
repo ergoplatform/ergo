@@ -100,9 +100,8 @@ class DigestState protected(override val version: VersionTag,
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(h)
 
-    case _: Header if nodeSettings.verifyTransactions =>
-      log.warn("Should not get header from node view holders if settings.verifyTransactions")
-      Try(this)
+    case h: Header if nodeSettings.verifyTransactions =>
+      update(h)
 
     case a: Any =>
       log.warn(s"Unhandled modifier: $a")
@@ -133,9 +132,13 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
+  //todo: refactor to eliminate common boilerplate with the method above
   private def update(header: Header): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
-    update(version, header.stateRoot, Seq())
+    stateContext.appendBlock(header, None, votingSettings).flatMap { newStateContext =>
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      update(version, header.stateRoot, Seq(contextKeyVal))
+    }
   }
 
   private def update(newVersion: VersionTag,

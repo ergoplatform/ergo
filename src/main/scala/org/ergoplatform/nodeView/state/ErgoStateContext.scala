@@ -155,6 +155,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }.flatten
 
+
+  def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] =
+    appendBlock(fullBlock.header, Some(fullBlock.extension), votingSettings)
+
   /**
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
@@ -163,15 +167,16 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * @param votingSettings - chain-wide voting settings
     * @return updated state context or error
     */
-  def appendFullBlock(fullBlock: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
-    val header = fullBlock.header
+  def appendBlock(header: Header,
+                  extensionOpt: Option[Extension],
+                  votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
     val height = header.height
 
     if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-      throw new Error(s"Improper block applied: $fullBlock to state context $this")
+      throw new Error(s"Improper header applied: $header to state context $this")
     }
 
-    process(header, fullBlock.extension).map { sc =>
+    process(header, extensionOpt).map { sc =>
       val newHeaders = header +: lastHeaders.takeRight(Constants.LastHeadersInContext - 1)
       sc.updateHeaders(newHeaders)
     }

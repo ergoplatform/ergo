@@ -122,7 +122,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def process(header: Header, extension: Extension): Try[ErgoStateContext] = Try {
+  def process(header: Header, extension: Extension): Try[ErgoStateContext] = process(header, Some(extension))
+
+  def process(header: Header, extensionOpt: Option[Extension]): Try[ErgoStateContext] = Try {
 
     val headerVotes: Array[Byte] = header.votes
     val height = header.height
@@ -138,7 +140,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
-      processExtension(extension, header, forkVote).map { params =>
+      val processExtResult =
+        extensionOpt.map(ext => processExtension(ext, header, forkVote)).getOrElse(Success(currentParameters))
+
+      processExtResult.map { params =>
         val proposedVotes = votes.map(id => id -> 1)
         val newVoting = VotingData(proposedVotes)
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)

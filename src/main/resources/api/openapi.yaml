@@ -289,9 +289,7 @@ components:
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
-          description: Base16-encoded votes for a soft-fork and parameters
-          type: string
-          example: '000000'
+          $ref: '#/components/schemas/Votes'
         size:
           description: Size in bytes
           type: integer
@@ -384,6 +382,8 @@ components:
           $ref: '#/components/schemas/ModifierId'
         transactions:
           $ref: '#/components/schemas/Transactions'
+        votes:
+          $ref: '#/components/schemas/Votes'
 
     Peer:
       type: object
@@ -633,6 +633,12 @@ components:
       type: string
       format: base16
       example: '0101'
+
+    Votes:
+      description: Base16-encoded votes for a soft-fork and parameters
+      type: string
+      format: base16
+      example: '000000'
 
     ModifierId:
       description: Base16-encoded 32 byte modifier id

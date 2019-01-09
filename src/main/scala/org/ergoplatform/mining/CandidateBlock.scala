@@ -33,7 +33,7 @@ object CandidateBlock {
       "timestamp" -> c.timestamp.asJson,
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
-      "votes" -> c.votes.asJson,
+      "votes" -> Algos.encode(c.votes).asJson,
       "extensionHash" -> Algos.encode(Extension.rootHash(c.extension)).asJson
     ).asJson
 }

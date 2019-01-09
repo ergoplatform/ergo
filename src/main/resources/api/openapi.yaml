@@ -338,7 +338,6 @@ components:
       - headerId
       - digest
       - mandatoryFields
-      - optionalFields
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
@@ -346,12 +345,6 @@ components:
           $ref: '#/components/schemas/Digest32'
         mandatoryFields:
           description: List of mandatory key-value fields
-          type: array
-          nullable: true
-          items:
-            $ref: '#/components/schemas/KeyValueItem'
-        optionalFields:
-          description: List of optional key-value fields
           type: array
           nullable: true
           items:

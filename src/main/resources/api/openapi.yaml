@@ -539,6 +539,7 @@ components:
           type: object
           required:
           - height
+          - blockVersion
           - storageFeeFactor
           - minValuePerByte
           - maxBlockSize
@@ -578,7 +579,13 @@ components:
               description: Maximum cumulative computational complexity of input scipts in block transactions
               minimum: 0
               example: 104876
-              nullable: true
+              nullable: false
+            blockVersion:
+              type: integer
+              format: int32
+              description: Ergo blockchain protocol version
+              example: 2
+              nullable: false
 
 
     TransactionBoxId:

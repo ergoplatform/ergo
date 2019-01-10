@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.ErgoBox
 import org.scalatest.Matchers
@@ -177,7 +177,7 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val extension: ExtensionCandidate = defaultExtension
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate()
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,

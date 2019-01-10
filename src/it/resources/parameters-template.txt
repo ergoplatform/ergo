@@ -5,6 +5,7 @@ paths:
       - |
         {
           "header": {
+            "votes": "000000",
             "difficulty": "291",
             "timestamp": 1538572701768,
             "size": 607,

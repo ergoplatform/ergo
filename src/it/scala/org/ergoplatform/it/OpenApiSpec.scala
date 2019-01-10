@@ -35,9 +35,10 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite {
       .flatMap { _ => node.headerIdsByHeight(expectedHeight) }
       .map { headerIds =>
         createParamsFile(
-          Map("blockHeight" -> expectedHeight.toString,
-              "lastHeadersCount" -> expectedHeight.toString,
-              "headerId" -> headerIds.head)
+          Map(
+            "blockHeight" -> expectedHeight.toString,
+            "lastHeadersCount" -> expectedHeight.toString,
+            "headerId" -> headerIds.head)
         )
 
         val apiAddressToCheck: String = s"${node.nodeInfo.networkIpAddress}:${node.nodeInfo.containerApiPort}"

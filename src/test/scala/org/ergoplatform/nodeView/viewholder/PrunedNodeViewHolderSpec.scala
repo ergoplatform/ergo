@@ -4,13 +4,12 @@ import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.testkit.utils.NoShrink
-
 import scala.concurrent.duration._
 
 /**
@@ -48,7 +47,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     }._1
   }
 
-  property(s"pruned") {
+  property(s"pruned chain bootstrapping - first 10 blocks out of 20 are not to be applied to the state") {
     new NodeViewFixture(prunedSettings).apply({ fixture =>
       import fixture._
 
@@ -68,9 +67,13 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       fullChain.takeRight(11).foreach { block =>
         block.blockSections.foreach { section =>
           nodeViewHolderRef ! LocallyGeneratedModifier(section)
-          Thread.sleep(500)
+          Thread.sleep(50)
         }
       }
+
+      val state = getCurrentState.asInstanceOf[DigestState]
+      state.version shouldBe fullChain.last.id
+      state.stateContext.lastHeaderOpt.get.id shouldBe fullChain.last.header.id
     })
   }
 

@@ -201,4 +201,5 @@ object HeaderSerializer extends Serializer[Header] {
         nBits, height, extensionHash, powSolution, votes, Some(bytes.length))
     }
   }.flatten
+  
 }

@@ -228,6 +228,7 @@ components:
           format: int32
 
     PowSolutions:
+      description: An object containing all components of pow solution
       type: object
       required:
       - pk

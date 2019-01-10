@@ -91,8 +91,10 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
     //new voting
     if ((softForkStartingHeight.isEmpty && height % votingEpochLength == 0 && forkVote) ||
-      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
-      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
+      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get +
+        (votingEpochLength * (votingEpochs + activationEpochs + 1)) && forkVote) ||
+      (softForkStartingHeight.nonEmpty && height == softForkStartingHeight.get +
+        (votingEpochLength * (votingEpochs + 1)) && votes <= votingEpochLength * votingEpochs * 9 / 10 && forkVote)
     ) {
       table = table.updated(SoftForkStartingHeight, height).updated(SoftForkVotesCollected, 0)
     }
@@ -168,10 +170,15 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   def suggestVotes(ownTargets: Map[Byte, Int], voteForFork: Boolean): Array[Byte] = {
     val vs = ownTargets.flatMap { case (paramId, value) =>
-      if (paramId == SoftFork) None
-      else if (value > parametersTable(paramId)) Some(paramId)
-      else if (value < parametersTable(paramId)) Some((-paramId).toByte)
-      else None
+      if (paramId == SoftFork) {
+        None
+      } else if (value > parametersTable(paramId)) {
+        Some(paramId)
+      } else if (value < parametersTable(paramId)) {
+        Some((-paramId).toByte)
+      } else {
+        None
+      }
     }.take(ParamVotesCount).toArray
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
@@ -183,10 +190,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
 
-  override def equals(obj: scala.Any): Boolean = obj match {
+  def canEqual(o: Any): Boolean = o.isInstanceOf[Parameters]
+
+  override def equals(obj: Any): Boolean = obj match {
     case p: Parameters => matchParameters(this, p).isSuccess
     case _ => false
   }
+
+  override def hashCode(): Height = height.hashCode() + parametersTable.hashCode()
 }
 
 object Parameters {

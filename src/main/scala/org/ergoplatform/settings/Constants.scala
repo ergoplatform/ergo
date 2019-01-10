@@ -48,6 +48,4 @@ object Constants {
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
 
   val SoftForkEpochs = 32 //about 45.5 days
-
-//  println(VotingEpochLength * SoftForkEpochs / BlocksPerHour.toDouble / 24)
 }

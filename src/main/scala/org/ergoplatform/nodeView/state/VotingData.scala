@@ -12,6 +12,8 @@ case class VotingData(epochVotes: Array[(Byte, Int)]) {
     })
   }
 
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[VotingData]
+
   override def equals(obj: scala.Any): Boolean = obj match {
     case v: VotingData => v.epochVotes.sameElements(this.epochVotes)
     case _ => false
@@ -45,4 +47,5 @@ object VotingDataSerializer extends Serializer[VotingData] {
 
     VotingData(epochVotes)
   }
+
 }

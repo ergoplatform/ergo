@@ -163,7 +163,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
     *
-    * @param fullBlock      - full block (transactions, extension section, maybe state transformation proofs)
+    * @param header      - header of a block
+    * @param extensionOpt - extension section of a block (could be missed then only header data being used for update)
     * @param votingSettings - chain-wide voting settings
     * @return updated state context or error
     */

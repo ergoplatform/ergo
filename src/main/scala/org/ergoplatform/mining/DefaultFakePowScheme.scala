@@ -40,4 +40,5 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
   }
 
   override def realDifficulty(header: Header): PrivateKey = header.requiredDifficulty
+
 }

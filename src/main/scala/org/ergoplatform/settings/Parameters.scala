@@ -66,24 +66,17 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     //successful voting - cleaning after activation
     if (softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
-      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)) {
-
-      val votes = parametersTable(SoftForkVotesCollected)
-
-      if (votes > votingEpochLength * votingEpochs * 9 / 10) {
+      && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)
+      && votes > votingEpochLength * votingEpochs * 9 / 10) {
         table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
-      }
     }
 
     //unsuccessful voting - cleaning
     if (softForkStartingHeight.nonEmpty
       && height % votingEpochLength == 0
-      && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1))) {
-
-      //unsuccessful voting
-      if (votes <= votingEpochLength * votingEpochs * 9 / 10) {
+      && height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1))
+      && votes <= votingEpochLength * votingEpochs * 9 / 10) {
         table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
-      }
     }
 
     //new voting

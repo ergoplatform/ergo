@@ -60,9 +60,6 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
     var table = parametersTable
 
-    def activationHeight(startingHeight: Height) =
-      startingHeight + (votingEpochs + activationEpochs) * votingEpochLength
-
     lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
     lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
 

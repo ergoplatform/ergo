@@ -48,4 +48,6 @@ object Constants {
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
 
   val SoftForkEpochs = 32 //about 45.5 days
+
+  val extensionMaxSize: Int = 10 * 1024 //10 kb
 }

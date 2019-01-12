@@ -5,7 +5,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
 import scorex.crypto.authds.LeafData
@@ -97,8 +97,7 @@ object ExtensionSerializer extends Serializer[Extension] {
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
     val totalLength = bytes.length
 
-    // todo check bytes length more precisely after voting implementation
-    require(totalLength < 10000)
+    require(totalLength < Constants.extensionMaxSize)
 
     @tailrec
     def parseFields(pos: Int,

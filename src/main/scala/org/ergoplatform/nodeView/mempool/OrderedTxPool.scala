@@ -70,7 +70,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 object OrderedTxPool {
 
   case class WeightedTxId(id: ModifierId, weight: Long) {
-    // in order to avoid redundant allocations only `id` is used.
+    // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
       case _ => false

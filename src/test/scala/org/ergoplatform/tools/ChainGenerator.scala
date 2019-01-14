@@ -39,7 +39,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val blockInterval = 2.minute
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
-  val dir = if (args.length < 2) new File("/Users/oskin/Desktop/Dev/scala_dev/ergo/ergo/data") else new File(args(1))
+  val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
   val miningDelay = 1.second

@@ -2,25 +2,26 @@ package org.ergoplatform.tools
 
 import java.io.File
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
-import org.ergoplatform.local.{ErgoMinerRef, TransactionGeneratorRef}
-import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import scapi.sigma.DLogProtocol.ProveDlog
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.util.Try
 
 /**
   * Application object for chain generation.
@@ -30,52 +31,106 @@ import scala.concurrent.duration._
   */
 object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
 
+  val EmissionTxCost: Long = 20000
+
+  val prover = new ErgoProvingInterpreter("seed", 1)
+
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
+  val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
+  val dir = if (args.length < 2) new File("/Users/oskin/Desktop/Dev/scala_dev/ergo/ergo/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
   val miningDelay = 1.second
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
-  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, settings.chainSettings.monetary)
+  val monetarySettings = settings.chainSettings.monetary.copy(minerRewardDelay = 720)
+  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, monetarySettings)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
+  val stateDir = ErgoState.stateDir(fullHistorySettings)
+  stateDir.mkdirs()
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+  allowToApplyOldBlocks(history)
+  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
+  log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
-  val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  val chain = loop(state, boxHolder, None, Seq())
+  log.info(s"Chain of length ${chain.length} generated")
+  history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
+  history.bestFullBlockOpt.get shouldBe chain.last
+  log.info("History was generated successfully")
+  System.exit(0)
 
-  val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+  private def loop(state: UtxoState, boxHolder: BoxHolder,
+                   last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+    val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
+    if (time < timeProvider.time) {
+      val wus = WrappedUtxoState(state, boxHolder, stateConstants)
+      val txs = validTransactionsFromUtxoState(wus)
 
-  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
+      val usedBoxes = txs.flatMap(_.inputs)
 
-  val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
+      val newBoxHolder = BoxHolder(txs.flatMap(_.outputs) ++ boxHolder.boxes.values.filterNot(usedBoxes.contains))
 
-  val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
+      val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
 
-  Thread.sleep(5000)
-
-  system.eventStream.subscribe(testActor, classOf[SemanticallySuccessfulModifier[ErgoPersistentModifier]])
-
-  nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-    allowToApplyOldBlocks(v.history)
+      val block = proveCandidate(candidate.get)
+      history.append(block.header).get
+      block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
+      log.info(s"Block ${block.id} at height ${block.header.height} generated")
+      loop(state.applyModifier(block).get, newBoxHolder, Some(block.header), acc :+ block)
+    } else {
+      acc
+    }
   }
 
-  minerRef ! StartMining
-  txGenRef ! StartGeneration
+  private def genCandidate(minerPk: ProveDlog,
+                           lastHeaderOpt: Option[Header],
+                           ts: Long,
+                           txsFromPool: Seq[ErgoTransaction],
+                           state: UtxoStateReader): Try[CandidateBlock] = Try {
 
-  receiveWhile() {
-    case SemanticallySuccessfulModifier(block: ErgoFullBlock)
-      if block.header.timestamp >= timeProvider.time =>
-      nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        log.info(s"Chain of length ${v.history.bestHeaderOpt.map(_.height).getOrElse(0)} generated")
-        v.history.bestHeaderOpt shouldBe v.history.bestFullBlockOpt.map(_.header)
-        log.info("History was generated successfully")
-        System.exit(0)
-      }
+    val nBits: Long = lastHeaderOpt
+      .map(parent => history.requiredDifficultyAfter(parent))
+      .map(d => RequiredDifficulty.encodeCompactBits(d))
+      .getOrElse(Constants.InitialNBits)
+
+    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
+
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, ts, nBits, chainSettings.powScheme)
+
+    //only transactions valid from against the current utxo state we take from the mem pool
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, fullHistorySettings.emission).map(_ -> EmissionTxCost)
+
+    val txs = ErgoMiner.collectTxs(
+      minerPk,
+      Parameters.MaxBlockCost,
+      Parameters.MaxBlockSize,
+      state,
+      upcomingContext,
+      txsFromPool,
+      emissionTxOpt.toSeq
+    )
+
+    state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
+      CandidateBlock(lastHeaderOpt, nBits, adDigest, adProof, txs, ts, extensionCandidate)
+    }
+  }.flatten
+
+  @tailrec
+  private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
+    log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+
+    pow.proveCandidate(candidate, prover.secrets.head.w) match {
+      case Some(fb) => fb
+      case _ =>
+        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
+        proveCandidate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
+    }
   }
 
   /**

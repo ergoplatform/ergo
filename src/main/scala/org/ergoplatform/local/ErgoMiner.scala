@@ -40,7 +40,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
-
   //shared mutable state
   private var isMining = false
   private var candidateOpt: Option[CandidateBlock] = None
@@ -54,7 +53,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     if (secretKeyOpt.isEmpty) {
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(rTry => rTry.foreach(r => callback ! UpdateSecret(r)))
+        v.vault.firstSecret().onComplete(_.foreach(r => callback ! UpdateSecret(r)))
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -254,7 +253,6 @@ object ErgoMiner extends ScorexLogging {
     }
     Seq(emissionTxOpt, feeTxOpt).flatten
   }
-
 
   /**
     * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from

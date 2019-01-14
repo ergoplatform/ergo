@@ -333,14 +333,14 @@ components:
       required:
       - headerId
       - digest
-      - mandatoryFields
+      - fields
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
         digest:
           $ref: '#/components/schemas/Digest32'
-        mandatoryFields:
-          description: List of mandatory key-value fields
+        fields:
+          description: List of key-value records
           type: array
           nullable: true
           items:

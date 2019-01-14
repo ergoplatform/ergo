@@ -5,7 +5,6 @@ import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
@@ -42,7 +41,8 @@ class ErgoWallet(
       case fb: ErgoFullBlock =>
         actor ! ScanOnchain(fb)
       case _ =>
-        log.warn("Only a full block is expected in ErgoWallet.scanPersistent")
+        log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
+          "state = digest when bootstrapping")
     }
     this
   }

@@ -17,7 +17,7 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.SCollection.SByteArray
-import sigmastate.Values.{IntArrayConstant, IntConstant, LongConstant, SigmaPropValue, Value}
+import sigmastate.Values.{IntArrayConstant, IntConstant, SigmaPropValue, Value}
 import sigmastate.{Values, _}
 import sigmastate.lang.Terms._
 import sigmastate.serialization.ErgoTreeSerializer
@@ -93,41 +93,54 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
+  private def boxCreationHeight(box: Value[SBox.type]): Value[SInt.type] =
+    SelectField(ExtractCreationInfo(box), 1).asIntValue
+
   /**
     * @param emission - emission curve
     * @return Genesis box that contains all the coins in the system, protected by the script,
     *         that allows to take part of them every block.
     */
   def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
-    val emptyHeight = ErgoHistory.EmptyHistoryHeight
-    val s = emission.settings
+    val fixedRatePeriod = emission.settings.fixedRatePeriod
+    val epochLength = emission.settings.epochLength
+    val fixedRate = emission.settings.fixedRate
+    val oneEpochReduction = emission.settings.oneEpochReduction
+    val minerRewardDelay = emission.settings.minerRewardDelay
 
+    val prop = emissionBoxProp(fixedRatePeriod, epochLength, fixedRate, oneEpochReduction, minerRewardDelay)
+    ErgoBox(emission.coinsTotal, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  }
+
+  private def emissionBoxProp(fixedRatePeriod: Long,
+                              epochLength: Int,
+                              fixedRate: Long,
+                              oneEpochReduction: Long,
+                              minerRewardDelay: Int): Value[SBoolean.type] = {
     val rewardOut = ByIndex(Outputs, IntConstant(0))
     val minerOut = ByIndex(Outputs, IntConstant(1))
 
-    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
-      s.fixedRate,
-      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
+    val epoch = Plus(IntConstant(1), Divide(Minus(Height, IntConstant(fixedRatePeriod.toInt)), IntConstant(epochLength)))
+    val coinsToIssue = If(LT(Height, IntConstant(fixedRatePeriod.toInt)),
+      fixedRate,
+      Minus(fixedRate, Multiply(oneEpochReduction, epoch.upcastTo(SLong)))
     )
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(rewardOut))
-    val heightCorrect = EQ(SelectField(ExtractCreationInfo(rewardOut), 1).asLongValue, Height)
-    val heightIncreased = GT(Height, SelectField(ExtractCreationInfo(Self), 1).asLongValue)
+    val heightCorrect = EQ(boxCreationHeight(rewardOut), Height)
+    val heightIncreased = GT(Height, boxCreationHeight(Self))
     val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
-    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+    val lastCoins = LE(ExtractAmount(Self), oneEpochReduction)
     val outputsNum = EQ(SizeOf(Outputs), 2)
 
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(s.minerRewardDelay, MinerPubkey)),
-      EQ(Height, SelectField(ExtractCreationInfo(minerOut), 1).asLongValue)
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(minerRewardDelay, MinerPubkey)),
+      EQ(Height, boxCreationHeight(minerOut))
     )
-
-    val prop = AND(
+    AND(
       heightIncreased,
       correctMinerOutput,
       OR(AND(outputsNum, sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins)
     )
-    ErgoBox(emission.coinsTotal, prop, emptyHeight, Seq(), Map())
   }
 
   def generateGenesisUtxoState(stateDir: File,
@@ -175,7 +188,7 @@ object ErgoState extends ScorexLogging {
     val genericMinerProp = rewardOutputScript(delta, genericPk)
     val genericMinerPropBytes = ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(genericMinerProp)
     val expectedGenericMinerProp = AND(
-      GE(Height, Plus(SelectField(ExtractCreationInfo(Self), 1).asLongValue, LongConstant(delta))),
+      GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))),
       genericPk
     )
     assert(genericMinerProp == expectedGenericMinerProp, s"reward output script changed, check and update constant position for substitution below")
@@ -202,7 +215,7 @@ object ErgoState extends ScorexLogging {
         */
 
     AND(
-      GE(Height, Plus(SelectField(ExtractCreationInfo(Self), 1).asLongValue, LongConstant(delta))),
+      GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))),
       minerPk
     )
   }
@@ -216,7 +229,7 @@ object ErgoState extends ScorexLogging {
   def feeProposition(delta: Int = 720): Value[SBoolean.type] = {
     val out = ByIndex(Outputs, IntConstant(0))
     AND(
-      EQ(Height, SelectField(ExtractCreationInfo(out), 1).asLongValue),
+      EQ(Height, boxCreationHeight(out)),
       EQ(ExtractScriptBytes(out), expectedMinerOutScriptBytesVal(delta, MinerPubkey)),
       EQ(SizeOf(Outputs), 1)
     )

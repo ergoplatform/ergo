@@ -12,7 +12,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ExpirationSpecification extends ErgoPropertyTest {
 
-  type Height = Long
+  type Height = Int
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 

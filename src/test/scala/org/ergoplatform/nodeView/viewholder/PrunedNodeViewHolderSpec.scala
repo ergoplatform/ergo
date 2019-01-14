@@ -13,7 +13,7 @@ import scorex.testkit.utils.NoShrink
 import scala.concurrent.duration._
 
 /**
-  * Test how pruning is working
+  * Test how node view holder is working in pruned mode
   */
 class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
@@ -56,11 +56,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
       val fullChain = genFullChain(wus, 20)
 
-      fullChain.take(10).foreach { block =>
-        applyHeader(block.header).isSuccess shouldBe true
-      }
-
-      fullChain.drop(10).foreach { block =>
+      fullChain.foreach { block =>
         applyHeader(block.header).isSuccess shouldBe true
       }
 

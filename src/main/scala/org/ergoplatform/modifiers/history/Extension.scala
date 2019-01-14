@@ -19,10 +19,8 @@ import scala.util.Try
   * Extension section of Ergo block. Contains key-value storage
   * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
   *
-  * @param headerId        - id of corresponding header
-  * @param fields - fields that are known to all nodes in the network and may be changed
-  *                        via soft/hard forks only. These fields have 4 bytes key and at most `MandatoryFieldValueSize`
-  *                        bytes value.
+  * @param headerId - id of corresponding header
+  * @param fields - fields as a sequence of key -> value records. A key is 2-bytes long, value is 64 bytes max.
   */
 case class Extension(headerId: ModifierId,
                      fields: Seq[(Array[Byte], Array[Byte])],
@@ -48,9 +46,9 @@ case class ExtensionCandidate(fields: Seq[(Array[Byte], Array[Byte])]) {
 
 object Extension extends ApiCodecs {
 
-  val MandatoryFieldKeySize: Int = 2
+  val FieldKeySize: Int = 2
 
-  val MaxMandatoryFieldValueSize: Int = 64
+  val FieldValueMaxSize: Int = 64
 
   def apply(header: Header): Extension = Extension(header.id, Seq())
 
@@ -101,7 +99,7 @@ object ExtensionSerializer extends Serializer[Extension] {
     @tailrec
     def parseFields(pos: Int,
                      acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] = {
-      val keySize = Extension.MandatoryFieldKeySize
+      val keySize = Extension.FieldKeySize
       if (pos == totalLength) {
         // deserialization complete
         acc.reverse
@@ -109,7 +107,7 @@ object ExtensionSerializer extends Serializer[Extension] {
         val key = bytes.slice(pos, pos + keySize)
         val length: Byte = bytes(pos + keySize)
         require(length >= 0, s"value size should not be negative, length = $length, pos = $pos")
-        require(length <= Extension.MaxMandatoryFieldValueSize, "value size should be <= " + Extension.MaxMandatoryFieldValueSize)
+        require(length <= Extension.FieldValueMaxSize, "value size should be <= " + Extension.FieldValueMaxSize)
         val value = bytes.slice(pos + keySize + 1, pos + keySize + 1 + length)
         parseFields(pos + keySize + 1 + length, (key, value) +: acc)
       }

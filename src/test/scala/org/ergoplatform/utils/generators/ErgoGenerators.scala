@@ -99,7 +99,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
-    mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
+    mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize))
   } yield {
     val me = mandatoryElements
       .map(kv => Shorts.fromByteArray(kv._1) -> kv._2)

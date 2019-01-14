@@ -20,8 +20,6 @@ val sigmaStateVersion = "master-97f53b6c-SNAPSHOT"
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
 libraryDependencies ++= Seq(
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.google.guava" % "guava" % "21.0",
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),

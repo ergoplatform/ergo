@@ -45,7 +45,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
     val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
-    val table2 = updateParams(table1, epochVotes, votingSettings.votingLength)
+    val table2 = updateParams(table1, epochVotes, votingSettings)
     Parameters(height, table2)
   }
 
@@ -99,12 +99,12 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   //Update non-fork parameters
   def updateParams(parametersTable: Map[Byte, Int],
                    epochVotes: Seq[(Byte, Int)],
-                   votingEpochLength: Int): Map[Byte, Int] = {
+                   votingSettings: VotingSettings): Map[Byte, Int] = {
     epochVotes.filter(_._1 < Parameters.SoftFork).foldLeft(parametersTable) { case (table, (paramId, count)) =>
 
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
-      if (count > votingEpochLength / 2) {
+      if (votingSettings.changeApproved(count)) {
         val currentValue = parametersTable(paramIdAbs)
         val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2) //todo: more precise upper-bound
         val minValue = minValues.getOrElse(paramIdAbs, 0)

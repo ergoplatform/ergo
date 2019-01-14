@@ -2,6 +2,8 @@ package org.ergoplatform.tools
 
 import java.io.File
 
+import akka.actor.ActorSystem
+import akka.testkit.TestKit
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
@@ -9,13 +11,13 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
-import scapi.sigma.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -31,7 +33,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
   val EmissionTxCost: Long = 20000
 
-  val prover = new ErgoProvingInterpreter("seed", 1)
+  val prover = defaultProver
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
@@ -50,6 +52,9 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
   stateDir.mkdirs()
+
+  val votingEpochLength = votingSettings.votingLength
+  val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
@@ -97,8 +102,6 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
-
     val upcomingContext = state.stateContext.upcoming(minerPk.h, ts, nBits, chainSettings.powScheme)
 
     //only transactions valid from against the current utxo state we take from the mem pool
@@ -106,8 +109,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
     val txs = ErgoMiner.collectTxs(
       minerPk,
-      Parameters.MaxBlockCost,
-      Parameters.MaxBlockSize,
+      state.stateContext.currentParameters.maxBlockCost,
+      state.stateContext.currentParameters.maxBlockSize,
       state,
       upcomingContext,
       txsFromPool,
@@ -115,7 +118,35 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     )
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, nBits, adDigest, adProof, txs, ts, extensionCandidate)
+
+      lazy val emptyExtensionCandidate = ExtensionCandidate(Seq())
+      lazy val stateContext = state.stateContext
+
+      // todo fill with interlinks and other useful values after nodes update
+      val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
+        val newHeight = header.height + 1
+        val currentParams = stateContext.currentParameters
+
+        val betterVersion = protocolVersion > header.version
+        val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
+          .map(h => h + votingSettings.votingLength * votingSettings.softForkEpochs)
+        val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
+        val forkOrdered = fullHistorySettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+        val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
+
+        if (newHeight % votingEpochLength == 0 && newHeight > 0) {
+          val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
+          (newParams.toExtensionCandidate(Seq()),
+            newParams.suggestVotes(fullHistorySettings.votingTargets, voteForFork),
+            newParams.blockVersion)
+        } else {
+          (emptyExtensionCandidate,
+            currentParams.vote(fullHistorySettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+            currentParams.blockVersion)
+        }
+      }.getOrElse((emptyExtensionCandidate, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
     }
   }.flatten
 

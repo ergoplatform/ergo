@@ -55,8 +55,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   lazy val votingEpochLength: Int = votingSettings.votingLength
 
-  def votingStarts(height: Int): Boolean = height % votingEpochLength == 0 && height > 0
-
   val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk).getOrElse(Array.fill(32)(0: Byte))
 
   // State root hash before the last block
@@ -74,24 +72,16 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
 
-  //Check that non-zero votes extracted from block header are correct
-  protected def checkVotes(votes: Array[Byte], epochStarts: Boolean): Unit = {
-    if (votes.count(_ != Parameters.SoftFork) > Parameters.ParamVotesCount) throw new Error("Too many votes")
-
-    val prevVotes = mutable.Buffer[Byte]()
-    votes.foreach { v =>
-      if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
-      if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
-      if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
-      prevVotes += v
-    }
-  }
-
-  def upcoming(minerPk: EcPointType, timestamp: Long, nBits: Long, powScheme: AutolykosPowScheme): ErgoStateContext = {
-    //todo: get correct version from outside
-    val version = lastHeaderOpt.map(_.version).getOrElse(Header.CurrentVersion)
-    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, powScheme)
-    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, currentParameters, votingData)
+  def upcoming(minerPk: EcPointType,
+               timestamp: Long,
+               nBits: Long,
+               votes: Array[Byte],
+               version: Byte,
+               powScheme: AutolykosPowScheme): ErgoStateContext = {
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes, powScheme)
+    val forkVote = votes.contains(Parameters.SoftFork)
+    val calculatedParams = currentParameters.update(upcomingHeader.height, forkVote, votingData.epochVotes, votingSettings)
+    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -101,8 +91,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val afterActivationHeight = finishingHeight + votingSettings.votingLength * (votingSettings.activationEpochs + 1)
       val votesCollected = currentParameters.softForkVotesCollected.get
 
-      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && votesCollected <= (finishingHeight - startingHeight) * 9 / 10) ||
-        (height >= finishingHeight && height < afterActivationHeight && votesCollected > (finishingHeight - startingHeight) * 9 / 10)) {
+      if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && !votingSettings.softForkApproved(votesCollected)) ||
+        (height >= finishingHeight && height < afterActivationHeight && votingSettings.softForkApproved(votesCollected))) {
         throw new Error(s"Voting for fork is prohibited at height $height")
       }
     }
@@ -131,9 +121,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     val votes = headerVotes.filter(_ != Parameters.NoParameter)
 
-    val epochStarts = votingStarts(height)
-
-    checkVotes(votes, epochStarts)
+    val epochStarts = header.votingStarts(votingEpochLength)
 
     val forkVote = votes.contains(Parameters.SoftFork)
 

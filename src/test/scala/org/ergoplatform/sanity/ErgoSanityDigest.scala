@@ -5,12 +5,13 @@ import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
@@ -18,12 +19,14 @@ import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
-  override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
+
+  override val historyGen: Gen[HT] =
+    generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
-      new WrappedDigestState(digestState, wus, settings)
+      new WrappedDigestState(digestState, wus, settings, ErgoInterpreter(LaunchParameters))
     }
   }
 

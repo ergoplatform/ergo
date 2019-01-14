@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.HeaderSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.testkit.utils.NoShrink
@@ -22,6 +21,5 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
       pow.validate(newHeader) shouldBe 'success
     }
   }
-
 
 }

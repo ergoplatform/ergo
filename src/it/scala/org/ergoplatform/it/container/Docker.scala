@@ -71,9 +71,9 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def startNodes(nodeConfigs: List[Config],
                  configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-    val nodes: Try[List[Node]] = nodeConfigs.map(cfg => startNode(cfg, configEnrich)).sequence
-    blocking(Thread.sleep(nodeConfigs.size * 5000))
-    nodes
+     nodeConfigs.map(cfg => startNode(cfg, configEnrich))
+      .sequence
+      .map(waitForStartupBlocking(_))
   }
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
@@ -277,6 +277,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       throw new IllegalStateException(errMsg)
     }
   }
+
+  def stopNode(node: Node, secondsToWait: Int): Unit = stopNode(node.containerId, secondsToWait)
 
   def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)

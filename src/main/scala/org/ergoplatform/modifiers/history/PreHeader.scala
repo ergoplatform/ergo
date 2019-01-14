@@ -8,6 +8,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 /**
   * Only header fields that can be predicted by a miner
   */
+//todo: add votes to the PreHeader?
 trait PreHeader {
   val version: Version
   val parentId: ModifierId
@@ -20,13 +21,14 @@ trait PreHeader {
 object PreHeader {
 
   def apply(lastHeaderOpt: Option[Header],
+            blockVersion: Version,
             pk: EcPointType,
             ts: Long,
             nb: Long,
             powScheme: AutolykosPowScheme): PreHeader = {
-    val (pId, v, _, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
+    val (pId, _, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
     new PreHeader {
-      override val version: Version = v
+      override val version: Version = blockVersion
       override val parentId: ModifierId = pId
       override val timestamp: Timestamp = ts
       override val nBits: Timestamp = nb

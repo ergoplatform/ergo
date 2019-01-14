@@ -1,7 +1,7 @@
 package org.ergoplatform
 
-import scapi.sigma.BcDlogFp
-import scapi.sigma.DLogProtocol.DLogProverInput
+import sigmastate.basics.BcDlogFp
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.{GroupElementSerializer, Serializer}

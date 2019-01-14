@@ -2,8 +2,6 @@ package org.ergoplatform.tools
 
 import java.io.File
 
-import akka.actor.ActorSystem
-import akka.testkit.TestKit
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
@@ -47,7 +45,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
   val monetarySettings = settings.chainSettings.monetary.copy(minerRewardDelay = 720)
-  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, monetarySettings)
+  val chainSettings = ChainSettings(0: Byte, 0: Byte, blockInterval, 256, 8, votingSettings, pow, monetarySettings)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
@@ -128,8 +126,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     pow.proveCandidate(candidate, prover.secrets.head.w) match {
       case Some(fb) => fb
       case _ =>
-        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
-        proveCandidate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
+        val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
+        proveCandidate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
     }
   }
 

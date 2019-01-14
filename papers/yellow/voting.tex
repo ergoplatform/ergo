@@ -1,21 +1,57 @@
-Subjects to voting are instructions costs, computational cost limit, block size limit,
-and the block version. Voting for the block version lasts for 16 epochs, and requires
-90 percent of the miners to vote for the change.
+\section{Voting}
 
-All other kinds of voting are organized in the following way. A miner who
-successfully generates the first block in the epoch initiates the voting over one
-of the parameters, stating explicitly whether a value of the parameter should be
-decreased~(except the case when the current value is below $min\_step$) or increased from miner's
-point of view.
+Many parameters can be changed on-the-fly via miners voting, such as instruction costs, computational cost limit per block,
+block size limit, storage fee factor, block version, and so on. Voting for the block version~(so for a soft-fork)
+lasts for 32 epochs~(see epoch length below), and requires more than 90 percent of the miners to vote for the change.
+For less critical changes~(such as block size limit), simple majority is enough. We will further refer to the changes
+of the first kind as to foundational changes, we call the changes of the second kind as to everyday changes.
+Per block, a miner can vote for two everyday changes and also one foundational change.
 
-The value of the change is predefined as $\max(\lceil0.01 \times current\_value\rceil, min\_step)$ with $min\_step$
-being the hard-coded value. The voting lasts for one epoch. Every miner
-submitting the block during this epoch has two options: accept or reject the
-proposal. Miner's vote must be written in the generated block. Change in the
-value requires the majority of votes over the epoch. Every block contains the
-vote of the miner who generated it. In case the proposal fails, the parameters
-remain unchanged.
+To vote "Yes"~("I'm agree on the change proposed"), a miner is publishing identifier of the change directly in a
+block header. To vote "No" (or avoid voting at all, which is the same), a miner is simply writing zero value instead of
+a corresponding byte (another option is to provide a vote identifier which is not being considered within the epoch).
+To initialize a voting procedure, a miner is publishing change identifier in a first block of an epoch.
 
-\knote{Foundation wallet address change via 90 percent voting?}
+System constants:
+\begin{itemize}
+\item{} Voting epoch length = 1024 blocks.
+\item{} Voting epochs per foundational change = 32
+\item{} Voting epochs before approved foundational change activation = 128
+\end{itemize}
 
-\knote{Foundation tax change after first years?}
+\subsection{Parameters table}
+
+The following table describes vote identifiers, default value (during launch), possible step, minimum and maximum values.
+If the step is not defined in the table, its value is defined as $\max(\lceil0.01 \times current\_value\rceil, 1)$.
+If minimum value for a parameter is not defined, it equals to zero. If maximum value is not defined, it equals to
+1,073,741,823.
+
+To propose or vote for increasing a parameter, a miner is inluding a parameter identifier ($id$) into a blockheader.
+If miner is for decreasing parameter, the miner is including ($-id$) into a block header.
+
+\begin{tabular}{| l | l | l | l | l | l |}
+\hline
+Id & Description & Default & Step & Min & Max \\
+\hline
+\hline
+1 & Storage fee factor  & 1250000 & 25000 & 0 & 5000000 \\
+  &  (in nanoErgs per byte per storage period) & & & & \\
+\hline
+2 & Minimum monetary value of a box (in nanoErgs) & 360 & 10 & 0 & 10000 \\
+\hline
+3 & Maximum block size & 524288 & - & 16384 & - \\
+\hline
+4 & Maximum cumulative computational cost of a block & 1000000 & - & 16384 & - \\
+\hline
+\end{tabular}
+
+Parameter values are to written into extension section
+
+
+
+
+\subsection{Voting for a change}
+
+\subsection{Voting for a soft-fork}
+
+To start voting for a soft-fork, a miner needs

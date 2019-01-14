@@ -34,8 +34,8 @@ case class Header(version: Version,
                   height: Int,
                   extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
-                  override val sizeOpt: Option[Int] = None
-                 ) extends PreHeader with ErgoPersistentModifier {
+                  votes: Array[Byte], //3 bytes
+                  override val sizeOpt: Option[Int] = None) extends PreHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(bytes)
 
@@ -99,6 +99,7 @@ object Header extends ApiCodecs {
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
       "version" -> h.version.asJson,
+      "votes" -> Algos.encode(h.votes).asJson,
       "size" -> h.size.asJson
     ).asJson
   }
@@ -115,9 +116,10 @@ object Header extends ApiCodecs {
       nBits <- c.downField("nBits").as[Long]
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
+      votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
     } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
   }
 }
 
@@ -133,7 +135,8 @@ object HeaderSerializer extends Serializer[Header] {
       Longs.toByteArray(h.timestamp),
       h.extensionRoot,
       RequiredDifficulty.toBytes(h.nBits),
-      Ints.toByteArray(h.height))
+      Ints.toByteArray(h.height),
+      h.votes)
 
   def bytesWithoutPow(h: Header): Array[Byte] = {
     @SuppressWarnings(Array("TraversableHead"))
@@ -175,6 +178,7 @@ object HeaderSerializer extends Serializer[Header] {
     val extensionHash = Digest32 @@ bytes.slice(138, 170)
     val nBits = RequiredDifficulty.parseBytes(bytes.slice(170, 174)).get
     val height = Ints.fromByteArray(bytes.slice(174, 178))
+    val votes = bytes.slice(178, 181)
 
     @tailrec
     def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
@@ -187,14 +191,15 @@ object HeaderSerializer extends Serializer[Header] {
       acc
     }
 
-    val interlinksSize = Chars.fromByteArray(bytes.slice(178, 180))
-    val interlinks = parseInterlinks(180, 180 + interlinksSize, Seq.empty)
+    val interlinksSize = Chars.fromByteArray(bytes.slice(181, 183))
+    val interlinks = parseInterlinks(183, 183 + interlinksSize, Seq.empty)
 
-    val powSolutionsBytes = bytes.slice(180 + interlinksSize, bytes.length)
+    val powSolutionsBytes = bytes.slice(183 + interlinksSize, bytes.length)
 
     AutolykosSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
       Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, powSolution, Some(bytes.length))
+        nBits, height, extensionHash, powSolution, votes, Some(bytes.length))
     }
   }.flatten
+  
 }

@@ -86,7 +86,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
 
     val chain = genChain(1, history)
 
-    chain.foreach(fb => history = applyBlock(history, fb))
+    chain.foreach{fb => history = applyBlock(history, fb)}
 
     val chain1 = genChain(5, history).tail
 

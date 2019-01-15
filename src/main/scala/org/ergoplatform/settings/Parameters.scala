@@ -45,7 +45,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
 
   def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
     val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
-    val table2 = updateParams(table1, epochVotes, votingSettings.votingLength)
+    val table2 = updateParams(table1, epochVotes, votingSettings)
     Parameters(height, table2)
   }
 
@@ -99,12 +99,12 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   //Update non-fork parameters
   def updateParams(parametersTable: Map[Byte, Int],
                    epochVotes: Seq[(Byte, Int)],
-                   votingEpochLength: Int): Map[Byte, Int] = {
+                   votingSettings: VotingSettings): Map[Byte, Int] = {
     epochVotes.filter(_._1 < Parameters.SoftFork).foldLeft(parametersTable) { case (table, (paramId, count)) =>
 
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
-      if (count > votingEpochLength / 2) {
+      if (votingSettings.changeApproved(count)) {
         val currentValue = parametersTable(paramIdAbs)
         val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2) //todo: more precise upper-bound
         val minValue = minValues.getOrElse(paramIdAbs, 0)
@@ -159,8 +159,8 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   }
 
   def toExtensionCandidate(optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
-    val mandatoryFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
-    ExtensionCandidate(mandatoryFields ++ optionalFields)
+    val paramFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
+    ExtensionCandidate(paramFields ++ optionalFields)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
@@ -238,7 +238,7 @@ object Parameters {
   def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters(h, paramsTable)
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
-    val paramsTable = extension.mandatoryFields.flatMap { case (k, v) =>
+    val paramsTable = extension.fields.flatMap { case (k, v) =>
       require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
       if (k.head == 0) {
         require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")

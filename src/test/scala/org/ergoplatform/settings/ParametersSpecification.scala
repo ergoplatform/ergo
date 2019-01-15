@@ -20,6 +20,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
+  //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
   property("simple voting - start - conditions") {
     val kInit = 1000000
 
@@ -29,26 +30,6 @@ class ParametersSpecification extends ErgoPropertyTest {
     val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
     val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     val esc2 = esc.process(h, p).get
-
-    //double vote
-    val wrongVotes1 = Array(StorageFeeFactorIncrease, StorageFeeFactorIncrease, NoParameter)
-    val hw1 = defaultHeaderGen.sample.get.copy(votes = wrongVotes1, version = 0: Byte)
-    esc.process(hw1, p).isSuccess shouldBe false
-
-    //contradictory votes
-    val wrongVotes2 = Array(StorageFeeFactorIncrease, StorageFeeFactorDecrease, NoParameter)
-    val hw2 = defaultHeaderGen.sample.get.copy(votes = wrongVotes2, version = 0: Byte)
-    esc.process(hw2, p).isSuccess shouldBe false
-
-    //too many votes - only two ordinary changes allowed per epoch
-    val wrongVotes3 = Array(StorageFeeFactorIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
-    val hw3 = defaultHeaderGen.sample.get.copy(votes = wrongVotes3, version = 0: Byte)
-    esc.process(hw3, p).isSuccess shouldBe false
-
-    //a vote proposed on non-existing parameter
-    val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
-    val hw4 = defaultHeaderGen.sample.get.copy(votes = wrongVotes4, version = 0: Byte, height = 2)
-    esc.process(hw4, p).isSuccess shouldBe false
 
     //no quorum gathered - no parameter change
     val he = defaultHeaderGen.sample.get.copy(votes = Array.fill(3)(NoParameter), version = 0: Byte)

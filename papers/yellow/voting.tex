@@ -69,4 +69,10 @@ epoch.
 
 \subsection{Voting for a soft-fork}
 
-To start voting for a soft-fork, a miner needs
+Soft-fork is when a protocol version supported by the network is being increased. This version is written in a block
+header.
+
+To start voting for a soft-fork, a miner needs to publish identifier $120$ in the first block of the epoch, consider,
+for example, that its height is $h_s$. Next epoch, a miner should post height when start fork was proposed ($122: h_s$)
+in the extension section of the block, and number of votes collected in the previous epochs $v_s$ should be written
+there as well as $(121, v_s)$.

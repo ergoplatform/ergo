@@ -36,7 +36,7 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private val feeProp: Value[SBoolean.type] = ErgoState.feeProposition(settings.emission.settings.minerRewardDelay)
+  private val feeProp: Value[SBoolean.type] = settings.chainSettings.monetary.feeProposition
   private var transactionsPerBlock: Int = 0
   private var currentFullHeight: Int = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()

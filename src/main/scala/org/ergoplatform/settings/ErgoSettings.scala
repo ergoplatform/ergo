@@ -23,8 +23,6 @@ case class ErgoSettings(directory: String,
                         cacheSettings: CacheSettings) {
   lazy val metadata = Metadata(chainSettings.addressPrefix)
   lazy val emission = new EmissionRules(chainSettings.monetary)
-  val feeProposition: Values.Value[SBoolean.type] = ErgoState.feeProposition(chainSettings.monetary.minerRewardDelay)
-  val feePropositionBytes: Array[Byte] = feeProposition.bytes
 }
 
 object ErgoSettings extends ScorexLogging

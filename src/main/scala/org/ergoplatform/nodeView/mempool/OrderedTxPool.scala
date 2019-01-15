@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.mempool
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.immutable.TreeMap
@@ -17,6 +17,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
                         (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
+
+  private implicit val ms: MonetarySettings = settings.chainSettings.monetary
 
   private val mempoolCapacity = settings.nodeSettings.mempoolCapacity
 
@@ -87,9 +89,9 @@ object OrderedTxPool {
       TreeMap.empty[ModifierId, Long])(settings)
   }
 
-  private def weighted(tx: ErgoTransaction)(implicit settings: ErgoSettings): WeightedTxId = {
+  private def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
     val fee = tx.outputs
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, settings.feePropositionBytes))
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
     WeightedTxId(tx.id, fee)

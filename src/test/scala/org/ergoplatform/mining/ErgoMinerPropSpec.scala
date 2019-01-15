@@ -2,32 +2,24 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scapi.sigma.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.util.Random
 
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 
   val delta: Int = settings.emission.settings.minerRewardDelay
-  val expectedBytes: Array[Byte] = ErgoState.rewardOutputScriptStartBytes(delta)
 
-  property("rewardOutputScriptStartBytes correct serialization") {
-    def checkBytes(d: Int) = {
-      val bytes = ErgoState.rewardOutputScript(d, ProveDlog(group.generator)).bytes.dropRight(PublicKeyLength)
-      bytes shouldEqual ErgoState.rewardOutputScriptStartBytes(d)
-    }
+  private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
+    ErgoState.rewardOutputScript(delta, pk).bytes
 
-    forAll { d: Int =>
-      checkBytes(d)
-    }
-    checkBytes(720)
-    checkBytes(delta)
-  }
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
@@ -41,7 +33,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val emissionTx = txs.head
     emissionTx.outputs.length shouldBe 2
     emissionTx.outputs.last.value shouldBe expectedReward
-    emissionTx.outputs.last.propositionBytes shouldEqual expectedBytes ++ defaultMinerPk.pkBytes
+    emissionTx.outputs.last.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
 
     us.applyModifier(validFullBlock(None, us, incorrectTxs)) shouldBe 'failure
     us.applyModifier(validFullBlock(None, us, txs)) shouldBe 'success
@@ -59,7 +51,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val feeTx = txs.head
     feeTx.outputs.length shouldBe 1
     feeTx.outputs.head.value shouldBe txs.flatMap(_.outputs).map(_.value).sum
-    feeTx.outputs.head.propositionBytes shouldEqual expectedBytes ++ defaultMinerPk.pkBytes
+    feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
 
     us.applyModifier(validFullBlock(None, us, blockTx +: incorrect)) shouldBe 'failure
     us.applyModifier(validFullBlock(None, us, blockTx +: txs)) shouldBe 'success
@@ -106,7 +98,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val costs = fromBigMempool.map { tx =>
         us.validateWithCost(tx).getOrElse {
           val boxesToSpend = tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
-          tx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata).get
+          tx.statefulValidity(boxesToSpend, upcomingContext).get
         }
       }
 
@@ -178,19 +170,19 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))) { btxs =>
       val blockTxs = btxs.map(_._2)
-      val height = Int.MaxValue
+      val height = ErgoHistory.EmptyHistoryHeight
       val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, settings.emission)
       txs.length shouldBe 2
 
       val emissionTx = txs.head
       emissionTx.outputs.length shouldBe 2
       emissionTx.outputs.last.value shouldBe expectedReward
-      emissionTx.outputs.last.propositionBytes shouldEqual expectedBytes ++ defaultMinerPk.pkBytes
+      emissionTx.outputs.last.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
 
       val feeTx = txs.last
       feeTx.outputs.length shouldBe 1
       feeTx.outputs.head.value shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
-      feeTx.outputs.head.propositionBytes shouldEqual expectedBytes ++ defaultMinerPk.pkBytes
+      feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
     }
   }
 

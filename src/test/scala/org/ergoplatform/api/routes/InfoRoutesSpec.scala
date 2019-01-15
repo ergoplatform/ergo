@@ -19,7 +19,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
-import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 

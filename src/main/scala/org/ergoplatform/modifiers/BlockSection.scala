@@ -10,7 +10,6 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
   */
 trait BlockSection extends ErgoPersistentModifier {
 
-
   override lazy val serializedId: Array[Byte] = BlockSection.computeIdBytes(modifierTypeId, headerId, digest)
 
   override lazy val id: ModifierId = bytesToId(serializedId)

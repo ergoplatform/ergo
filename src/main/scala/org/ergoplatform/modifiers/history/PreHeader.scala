@@ -15,6 +15,7 @@ trait PreHeader {
   val timestamp: Timestamp
   val nBits: Long
   val height: Int
+  val votes: Array[Byte]
   def minerPk: EcPointType
 }
 
@@ -25,6 +26,7 @@ object PreHeader {
             pk: EcPointType,
             ts: Long,
             nb: Long,
+            v: Array[Byte],
             powScheme: AutolykosPowScheme): PreHeader = {
     val (pId, _, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
     new PreHeader {
@@ -33,6 +35,7 @@ object PreHeader {
       override val timestamp: Timestamp = ts
       override val nBits: Timestamp = nb
       override val height: Int = h
+      override val votes: Array[Byte] = v
       override val minerPk: EcPointType = pk
     }
   }

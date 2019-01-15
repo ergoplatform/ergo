@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
@@ -19,6 +19,7 @@ import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.util._
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.Try
 
 /**
@@ -316,12 +317,32 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
+    /**
+      * Check that non-zero votes extracted from block header are correct
+      */
+    private def checkVotes(header: Header): Unit = {
+      val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
+      val epochStarts = header.votingStarts(chainSettings.voting.votingLength)
+      val votesCount = votes.count(_ != Parameters.SoftFork)
+      if (votesCount > Parameters.ParamVotesCount) throw new Error(s"Too many votes $votesCount")
+
+      val prevVotes = mutable.Buffer[Byte]()
+      votes.foreach { v =>
+        if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
+        if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+        if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
+        prevVotes += v
+      }
+    }
+
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       accumulateErrors
         .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
           fatal(s"Genesis block should have genesis parent id. $detail")
         }
-        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
+        .validate(chainSettings.genesisId.forall {
+          _ == Algos.encode(header.id)
+        }) {
           fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
             s" got genesis block with id ${Algos.encode(header.id)}")
         }
@@ -331,6 +352,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(header.height == GenesisHeight) {
           fatal(s"Height of genesis block $header is incorrect")
         }
+        .demandNoThrow(checkVotes(header), "Incorrect votes")
         .result
     }
 
@@ -363,6 +385,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateNot(historyStorage.contains(header.id)) {
           error(s"Header ${header.id} is already in history")
         }
+        .demandNoThrow(checkVotes(header), "Incorrect votes")
         .result
     }
 

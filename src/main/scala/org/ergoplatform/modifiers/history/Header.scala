@@ -74,6 +74,11 @@ case class Header(version: Version,
     timeProvider.time() - timestamp < timeDiff.toMillis
   }
 
+  /**
+    * New voting epoch starts
+    */
+  def votingStarts(votingEpochLength: Int): Boolean = height % votingEpochLength == 0 && height > 0
+
 }
 
 object Header extends ApiCodecs {

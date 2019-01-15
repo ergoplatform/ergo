@@ -20,7 +20,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      miningDelay: FiniteDuration,
                                      offlineGeneration: Boolean,
                                      keepVersions: Int,
-                                     mempoolCapacity: Int)
+                                     mempoolCapacity: Int,
+                                     blacklistCapacity: Int)
 
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
@@ -38,7 +39,8 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[FiniteDuration](s"$path.miningDelay"),
       cfg.as[Boolean](s"$path.offlineGeneration"),
       cfg.as[Int](s"$path.keepVersions"),
-      cfg.as[Int](s"$path.mempoolCapacity")
+      cfg.as[Int](s"$path.mempoolCapacity"),
+      cfg.as[Int](s"$path.blacklistCapacity")
     )
   }
 

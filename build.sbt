@@ -15,9 +15,12 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "53207304-SNAPSHOT"
+val sigmaStateVersion = "master-5f01afb6-SNAPSHOT"
+// for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
+val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
 libraryDependencies ++= Seq(
-  ("org.scorexfoundation" %% "sigma-state" % "master-97f53b6c-SNAPSHOT")
+  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",

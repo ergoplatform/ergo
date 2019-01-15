@@ -51,16 +51,17 @@ Some of these fields may be calculated by node by itself if it is in a certain m
 \end{itemize}
 
 \subsection{Extension}
+\label{sec:extension}
 
 Extension is a key-value storage for a variety of data.
-It contains 2 parts:
-\begin{itemize}
-    \item{\em Mandatory fields } - fields which keys and values are set via consensus rules (so they may be changed
-    via soft/hard forks only). These fields have one-byte key and at most 32 bytes value.
 
-    \knote{How to add new keys via soft-fork?}
+A key is always 2-bytes long, maximum size of a value is 64 bytes. Extension could be no more than of $10,240$ bytes.
+Some keys have predefined semantics. In particular, if the first byte of a key is equals to $0x00$, then the second byte
+defines parameter identifier, and the value defines value of the parameter. See Section~\ref{sec:params-table}
+for details. Other prefixes may be used freely.
 
-    \item{\em Optional fields } - random data miner may add to a block. This section contains at most 2
-    elements with 32-bytes key size and at most 64-bytes value size.
-\end{itemize}
+\knote{$0x01$ - will be used for interlinks}
+
+
+
 

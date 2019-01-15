@@ -82,7 +82,7 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     pow.proveCandidate(candidate, defaultMinerSecretNumber) match {
       case Some(fb) => fb
       case _ =>
-        val minerTag = scorex.utils.Random.randomBytes(Extension.MandatoryFieldKeySize)
+        val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         generate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
     }
   }

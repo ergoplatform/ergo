@@ -46,7 +46,9 @@ Id & Description & Default & Step & Min & Max \\
 \hline
 \end{tabular}
 
-Parameter values are to written into extension section
+Parameter values are to be written into extension section on first block of a voting epoch, that is, in the extension
+of a block when its $height \% 1024 = 0 \land height > 0$. Parameters for initial moment of time~$(height = 0)$ are simply
+hardcoded. It is prohibited to start voting on $height = 0$.
 
 
 

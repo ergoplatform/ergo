@@ -6,12 +6,13 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -29,6 +30,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
+  private val votingSettings = ergoSettings.chainSettings.voting
+
   private lazy val seed: String = ergoSettings.walletSettings.seed
 
   private val registry = new WalletStorage
@@ -36,12 +39,17 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   //todo: pass as a class argument, add to config
   private val boxSelector: BoxSelector = DefaultBoxSelector
 
-  private val prover = new ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber)
+  val parameters: Parameters = LaunchParameters
+  private val prover = ErgoProvingInterpreter(seed, ergoSettings.walletSettings.dlogSecretsNumber, parameters)
 
-  private def height = stateContext.currentHeight
+  // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
+  // to the wallet (by executing testing transactions against them). The state context is being updating by listening
+  // to state updates.
+  //todo: initialize it, e.g. by introducing StateInitialized signal in addition to StateChanged
+  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), votingSettings)
 
-  // TODO looks like incorrect to initialize in such a way
-  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte))
+  // Height of last full block scanned.
+  private var height = stateContext.currentHeight
 
   private implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
@@ -49,7 +57,13 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(_.contentBytes)
+  private def extractTrackedBytes(addr: ErgoAddress): Option[Array[Byte]] = addr match {
+    case p2pk: P2PKAddress => Some(p2pk.script.pkBytes)
+    case p2s: Pay2SAddress => Some(p2s.contentBytes)
+    case p2sh: Pay2SHAddress => Some(p2sh.contentBytes)
+  }
+
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.flatMap(extractTrackedBytes(_).toSeq)
 
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
@@ -67,7 +81,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
 
       val context =
-        new ErgoContext(stateContext, transactionContext, ergoSettings.metadata, ContextExtension.empty)
+        new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
 
       prover.prove(box.proposition, context, testingTx.messageToSign) match {
         case Success(_) =>
@@ -135,7 +149,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
-      stateContext = stateContext.appendHeader(fullBlock.header)
+      height = fullBlock.header.height
       fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
         self ! Resolve(Some(tb.boxId))
       }
@@ -150,11 +164,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           registry.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
-      // TODO state context rollback needed. Subtask at https://github.com/ergoplatform/ergo/issues/529
-      stateContext = {
-        val oldHeaders = stateContext.lastHeaders.filter(_.height <= heightTo)
-        ErgoStateContext(oldHeaders, stateContext.genesisStateDigest)
-      }
+      height = heightTo
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
@@ -164,11 +174,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
         val firstInput = inputsFor(
           requests
-            .foldLeft(Seq.empty[PaymentRequest]) {
-              case (acc, pr: PaymentRequest) => acc :+ pr
-              case (acc, _) => acc
-            }
-            .map(_.value)
+            .collect { case pr: PaymentRequest => pr.value }
             .sum
         ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
@@ -180,7 +186,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
           .getOrElse(throw new Exception("No address available for box locking"))
         val minimalErgoAmount =
-          BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters)
+          BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Seq(assetId -> amount), nonMandatoryRegisters, parameters)
         new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, height, Seq(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
@@ -190,7 +196,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
     requestsToBoxCandidates(requests).flatMap { payTo =>
       require(prover.dlogPubkeys.nonEmpty, "No public keys in the prover to extract change address from")
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
-      require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c)), "Minimal ERG value not met")
+      require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
       require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Negative asset value")
 
       val assetIssueBox = payTo
@@ -225,7 +231,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, ergoSettings.metadata, stateContext)
+        prover.sign(unsignedTx, inputs, stateContext)
           .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
       } match {
         case Some(txTry) => txTry
@@ -264,10 +270,19 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       sender() ! trackedAddresses.toIndexedSeq
   }
 
-  override def receive: Receive = scanLogic orElse readers orElse {
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+  }
+
+  private def onStateChanged: Receive = {
+    case ChangedState(s: ErgoStateReader@unchecked) =>
+      stateContext = s.stateContext
+  }
+
+  override def receive: Receive = onStateChanged orElse scanLogic orElse readers orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
-      trackedBytes.append(address.contentBytes)
+      extractTrackedBytes(address).foreach(trackedBytes.append(_))
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>

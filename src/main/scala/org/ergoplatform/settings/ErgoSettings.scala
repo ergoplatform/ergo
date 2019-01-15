@@ -6,11 +6,12 @@ import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
+
+import scala.collection.JavaConverters._
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
@@ -18,8 +19,8 @@ case class ErgoSettings(directory: String,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
-                        cacheSettings: CacheSettings) {
-  lazy val metadata = Metadata(chainSettings.addressPrefix)
+                        cacheSettings: CacheSettings,
+                        votingTargets: Map[Byte, Int] = Map()) {
   lazy val emission = new EmissionRules(chainSettings.monetary)
 }
 
@@ -45,13 +46,19 @@ object ErgoSettings extends ScorexLogging
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
 
+    val votingSettings = config.getObject(s"$configPath.voting")
+    val votingTargets = votingSettings.keySet().asScala.map{id =>
+      id.toInt.toByte -> votingSettings.get(id).render().toInt
+    }.toMap
+
+
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
       ErgoApp.forceStopApplication()
     }
 
     consistentSettings(
-      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings)
+      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings, votingTargets)
     )
   }
 

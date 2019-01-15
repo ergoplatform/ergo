@@ -14,7 +14,6 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
-import scala.collection.mutable
 import scala.util.{Success, Try}
 
 

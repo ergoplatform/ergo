@@ -127,7 +127,7 @@ paths:
           "extension": {
             "headerId": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
             "digest": "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
-            "mandatoryFields": []
+            "fields": []
           },
           "adProofs": {
             "headerId": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",

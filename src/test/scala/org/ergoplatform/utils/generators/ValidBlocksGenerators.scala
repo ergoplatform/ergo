@@ -121,7 +121,6 @@ trait ValidBlocksGenerators
     txs -> bs
   }
 
-
   def validTransactionsFromUtxoState(wus: WrappedUtxoState, rnd: Random = new Random): Seq[ErgoTransaction] = {
     val num = 1 + rnd.nextInt(10)
 

@@ -9,19 +9,26 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
+import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform._
+import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId, idToBytes}
+import sigmastate.Values
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.ContextExtension
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Failure, Random, Success, Try}
 
 /**
   * Application object for chain generation.
@@ -31,15 +38,22 @@ import scala.util.Try
   */
 object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
 
+  implicit val ergoAddressEncoder: ErgoAddressEncoder =
+    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
   val EmissionTxCost: Long = 20000
+  val MinTxAmount: Long = 2000000
 
   val prover = defaultProver
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
+  val boxSelector: BoxSelector = DefaultBoxSelector
+  val registry = new WalletStorage
+
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
-  val dir = if (args.length < 2) new File("/tmp/ergo/node1/data") else new File(args(1))
+  val dir = if (args.length < 2) new File("/Users/oskin/Desktop/Dev/scala_dev/ergo/ergo/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
   val miningDelay = 1.second
@@ -58,36 +72,125 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
-  val (state, boxHolder) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
   log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
-  val chain = loop(state, boxHolder, None, Seq())
+  val chain = loop(state, None, Seq())
   log.info(s"Chain of length ${chain.length} generated")
   history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
-  history.bestFullBlockOpt.get shouldBe chain.last
+  history.bestFullBlockOpt.get.id shouldBe chain.last
   log.info("History was generated successfully")
   System.exit(0)
 
-  private def loop(state: UtxoState, boxHolder: BoxHolder,
-                   last: Option[Header], acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+  private def loop(state: UtxoState, last: Option[Header], acc: Seq[ModifierId]): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < timeProvider.time) {
-      val wus = WrappedUtxoState(state, boxHolder, stateConstants)
-      val txs = validTransactionsFromUtxoState(wus)
-
-      val usedBoxes = txs.flatMap(_.inputs)
-
-      val newBoxHolder = BoxHolder(txs.flatMap(_.outputs) ++ boxHolder.boxes.values.filterNot(usedBoxes.contains))
+      val txs = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight), state.stateContext)
 
       val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
 
       val block = proveCandidate(candidate.get)
       history.append(block.header).get
+      txs.foreach(scan(_, block.header.height, state.stateContext))
       block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
       log.info(s"Block ${block.id} at height ${block.header.height} generated")
-      loop(state.applyModifier(block).get, newBoxHolder, Some(block.header), acc :+ block)
+      loop(state.applyModifier(block).get, Some(block.header), acc :+ block.id)
     } else {
       acc
+    }
+  }
+
+  private def genTransactions(height: Height, ctx: ErgoStateContext): Seq[ErgoTransaction] = {
+    val balance = registry.confirmedBalance
+    if (balance >= MinTxAmount) {
+      val qty = (balance / MinTxAmount).toInt
+      val amount = balance / qty
+      val outs = (0 to qty).foldLeft(Seq.empty[ErgoBoxCandidate]) { case (acc, _) =>
+        val bc = new ErgoBoxCandidate(amount, Pay2SAddress(prover.dlogPubkeys.head).script, height)
+        acc :+ bc
+      }
+      outs
+        .flatMap { out =>
+          boxSelector.select(registry.unspentCertainBoxesIterator, _ => true, amount, Map.empty).map { r =>
+            val inputs = r.boxes.toIndexedSeq
+
+            val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
+
+            val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
+              val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+              new ErgoBoxCandidate(ergChange, changeAddress, height, assets)
+            }
+
+            val unsignedTx = new UnsignedErgoTransaction(
+              inputs.map(_.id).map(id => new UnsignedInput(id)),
+              (out +: changeBoxCandidates).toIndexedSeq
+            )
+
+            prover.sign(unsignedTx, inputs, ctx)
+              .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+          }
+        }
+        .collect { case Success(tx) => tx }
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def scan(tx: ErgoTransaction, height: Height, ctx: ErgoStateContext): Unit = {
+    scanInputs(tx, Some(height))
+    val bxs = tx.outputCandidates
+      .zipWithIndex
+      .map { case (outCandidate, outIndex) => scanOutput(outCandidate, outIndex.toShort, tx, Some(height)) }
+    bxs.foreach(bx => resolveUncertainty(bx.boxId, height, ctx))
+  }
+
+  private def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
+    tx.inputs.forall { inp =>
+      val boxId = bytesToId(inp.boxId)
+      registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
+    }
+  }
+
+  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
+                         tx: ErgoTransaction, heightOpt: Option[Height]): TrackedBox = {
+    val trackedBox = TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain)
+    if (registry.contains(trackedBox.boxId)) {
+      trackedBox.creationHeight match {
+        case Some(h) =>
+          registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
+        case None =>
+          log.warn(s"Double registration of the off-chain box: ${trackedBox.boxId}")
+      }
+    } else {
+      registry.register(trackedBox)
+    }
+    trackedBox
+  }
+
+  private def resolveUncertainty(id: ModifierId, height: Height, ctx: ErgoStateContext): Boolean = {
+    (registry.byId(id) orElse registry.nextUncertain()).exists { uncertainBox =>
+      val box = uncertainBox.box
+
+      val testingTx = UnsignedErgoLikeTransaction(
+        IndexedSeq(new UnsignedInput(box.id)),
+        IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf, creationHeight = height))
+      )
+
+      val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
+
+      val context =
+        new ErgoContext(ctx, transactionContext, ContextExtension.empty)
+
+      prover.prove(box.proposition, context, testingTx.messageToSign) match {
+        case Success(_) =>
+          log.debug(s"Uncertain box is mine! $uncertainBox")
+          registry.makeTransition(uncertainBox.boxId, MakeCertain)
+        case Failure(_) =>
+          log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
+            s"${uncertainBox.creationHeight} while current height is ${ctx.currentHeight}")
+          //todo: remove after some time? remove spent after some time?
+          false
+      }
     }
   }
 
@@ -116,6 +219,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       txsFromPool,
       emissionTxOpt.toSeq
     )
+
+    println(txs.size)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
 

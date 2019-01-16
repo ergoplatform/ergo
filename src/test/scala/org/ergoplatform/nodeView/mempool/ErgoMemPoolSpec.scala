@@ -19,7 +19,7 @@ class ErgoMemPoolSpec extends FlatSpec
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState()
-    val genesis = validFullBlockWithBlockHolder(None, us, bh, Random)._1
+    val genesis = validFullBlock(None, us, bh, Random)
     val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     val txs = validTransactionsFromUtxoState(wus, Random)
     val pool = ErgoMemPool.empty(settings)
@@ -30,7 +30,7 @@ class ErgoMemPoolSpec extends FlatSpec
 
   it should "decline already contained transaction" in {
     val (us, bh) = createUtxoState()
-    val genesis = validFullBlockWithBlockHolder(None, us, bh, Random)._1
+    val genesis = validFullBlock(None, us, bh, Random)
     val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     val txs = validTransactionsFromUtxoState(wus, Random)
     var pool = ErgoMemPool.empty(settings)

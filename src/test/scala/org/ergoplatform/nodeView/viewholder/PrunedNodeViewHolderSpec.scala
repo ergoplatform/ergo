@@ -45,10 +45,8 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     }._1
   }
 
-  private def testCode(fixture: NodeViewFixture, toSkip: Int) = {
+  private def testCode(fixture: NodeViewFixture, toSkip: Int, totalBlocks: Int = 20) = {
     import fixture._
-
-    val totalBlocks = 20
 
     val (us, bh) = createUtxoState(stateConstants)
     val wus = WrappedUtxoState(us, bh, stateConstants)
@@ -81,6 +79,10 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
   property(s"pruned chain bootstrapping - BK = 15 - all the blocks are to be applied to the state") {
     new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 0))
+  }
+
+  property(s"pruned chain bootstrapping - total = 30, BK = 15 - first 9 blocks are not to be applied to the state") {
+    new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 9, 30))
   }
 
 }

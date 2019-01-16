@@ -9,7 +9,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scala.collection.immutable.TreeMap
 
 /**
-  * An immutable transactions pool of limited size with priority management and blacklisting support.
+  * An immutable pool of transactions of limited size with priority management and blacklisting support.
   * @param orderedTransactions - collection containing transactions ordered by `tx.weight`
   * @param transactionsRegistry - mapping `tx.id` -> `tx.weight` required for fast access to transaction by its `id`
   * @param invalidated - collection containing invalidated transaction ids as keys

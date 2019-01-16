@@ -45,19 +45,21 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     }._1
   }
 
-  private def testCode(fixture: NodeViewFixture, applyCount: Int) = {
+  private def testCode(fixture: NodeViewFixture, toSkip: Int) = {
     import fixture._
+
+    val totalBlocks = 20
 
     val (us, bh) = createUtxoState(stateConstants)
     val wus = WrappedUtxoState(us, bh, stateConstants)
 
-    val fullChain = genFullChain(wus, 20)
+    val fullChain = genFullChain(wus, totalBlocks)
 
     fullChain.foreach { block =>
       applyHeader(block.header).isSuccess shouldBe true
     }
 
-    fullChain.takeRight(applyCount).foreach { block =>
+    fullChain.takeRight(totalBlocks - toSkip).foreach { block =>
       block.blockSections.foreach { section =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
         Thread.sleep(50)
@@ -69,8 +71,16 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     state.stateContext.lastHeaderOpt.get.id shouldBe fullChain.last.header.id
   }
 
+  property(s"pruned chain bootstrapping - BK = -1 - all the blocks are to be applied to the state") {
+    new NodeViewFixture(prunedSettings(-1)).apply(f => testCode(f, 0))
+  }
+
   property(s"pruned chain bootstrapping - BK = 3 - first 9 blocks out of 20 are not to be applied to the state") {
-    new NodeViewFixture(prunedSettings(3)).apply(f => testCode(f, 11))
+    new NodeViewFixture(prunedSettings(3)).apply(f => testCode(f, 9))
+  }
+
+  property(s"pruned chain bootstrapping - BK = 15 - first 5 blocks out of 20 are not to be applied to the state") {
+    new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 3))
   }
 
 }

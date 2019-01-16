@@ -82,7 +82,7 @@ class ErgoNodeViewHolderSpec
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, ergoSettings).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     applyBlock(genesis) shouldBe 'success
 
     val block = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -118,7 +118,7 @@ class ErgoNodeViewHolderSpec
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, ergoSettings).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
@@ -166,7 +166,7 @@ class ErgoNodeViewHolderSpec
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, ergoSettings).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
@@ -214,7 +214,7 @@ class ErgoNodeViewHolderSpec
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, ergoSettings).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     applyBlock(genesis) shouldBe 'success
 
     val block1 = validFullBlock(Some(genesis.header), wusAfterGenesis)
@@ -234,7 +234,7 @@ class ErgoNodeViewHolderSpec
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, ergoSettings).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)

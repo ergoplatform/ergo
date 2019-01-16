@@ -64,13 +64,10 @@ object WrappedUtxoState {
     val constants = StateConstants(nodeViewHolderRef, settings)
     val emissionBox = Some(ErgoState.genesisEmissionBox(constants.emission))
     val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, constants, settings)
-    WrappedUtxoState(us, boxHolder, constants, settings)
+    WrappedUtxoState(us, boxHolder, constants)
   }
 
-  def apply(us: UtxoState,
-            boxHolder: BoxHolder,
-            constants: StateConstants,
-            settings: ErgoSettings): WrappedUtxoState = {
+  def apply(us: UtxoState, boxHolder: BoxHolder, constants: StateConstants): WrappedUtxoState = {
     val boxes = boxHolder.boxes
 
     val version = Algos.versionToBAW(us.version)
@@ -80,6 +77,8 @@ object WrappedUtxoState {
       Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq))
     )
 
-    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants, settings)
+    new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion,
+      us.store, vbh, constants, constants.settings)
   }
+
 }

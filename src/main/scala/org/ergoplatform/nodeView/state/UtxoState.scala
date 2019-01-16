@@ -181,22 +181,24 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       serializer.combine(manifest.proverManifest -> chunks.map(_.subtree))
         .flatMap { prover =>
-          val manifestRootDigest = lastHeaders.head.stateRoot
-          val recoveredStateContext = ErgoStateContext(lastHeaders, stateContext.genesisStateDigest)
-          val newStore = recreateStore()
-          val recoveredPersistentProver = {
-            val storage: VersionedIODBAVLStorage[Digest32] =
-              new VersionedIODBAVLStorage(newStore, UtxoState.nodeParameters)(Algos.hash)
-            UtxoState.createPersistentProver(
-              prover, storage, idToVersion(manifest.blockId), None, recoveredStateContext)
-          }
-          if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifestRootDigest)) {
-            Failure(new Exception(
-              s"Unexpected prover digest after state recovery ${Algos.encode(recoveredPersistentProver.digest)}"))
-          } else {
-            log.info(s"State successfully recovered at height ${lastHeaders.head.height}")
-            Success(new UtxoState(
-              recoveredPersistentProver, idToVersion(manifest.blockId), newStore, constants, settings))
+          ErgoStateContext.empty(constants).process(lastHeaders.last, None).flatMap { recoveredCtx =>
+            implicit val vs: VotingSettings = settings.chainSettings.voting
+            val manifestRootDigest = lastHeaders.head.stateRoot
+            val newStore = recreateStore()
+            val recoveredPersistentProver = {
+              val storage: VersionedIODBAVLStorage[Digest32] =
+                new VersionedIODBAVLStorage(newStore, UtxoState.nodeParameters)(Algos.hash)
+              UtxoState.createPersistentProver(
+                prover, storage, idToVersion(manifest.blockId), None, recoveredCtx)
+            }
+            if (!java.util.Arrays.equals(recoveredPersistentProver.digest, manifestRootDigest)) {
+              Failure(new Exception(
+                s"Unexpected prover digest after state recovery ${Algos.encode(recoveredPersistentProver.digest)}"))
+            } else {
+              log.info(s"State successfully recovered at height ${lastHeaders.head.height}")
+              Success(new UtxoState(
+                recoveredPersistentProver, idToVersion(manifest.blockId), newStore, constants, settings))
+            }
           }
         }
   }

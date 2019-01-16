@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import scorex.core.block.Block
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -72,19 +73,21 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],
+            version: Block.Version,
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
             extensionHash: Digest32,
+            votes: Array[Byte],
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
+    val (parentId, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null)
+      nBits, height, extensionHash, null, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
@@ -101,12 +104,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def proveBlock(parentOpt: Option[Header],
+                 version: Block.Version,
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate,
+                 votes: Array[Byte],
                  sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
@@ -115,11 +120,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot, sk, minNonce, maxNonce).map { h =>
+    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, extensionRoot, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
-      val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
+      val extension = Extension(h.id, extensionCandidate.fields)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }
@@ -133,12 +138,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
     proveBlock(candidateBlock.parentOpt,
+      candidateBlock.version,
       candidateBlock.nBits,
       candidateBlock.stateRoot,
       candidateBlock.adProofBytes,
       candidateBlock.transactions,
       candidateBlock.timestamp,
       candidateBlock.extension,
+      candidateBlock.votes,
       sk,
       minNonce,
       maxNonce
@@ -148,17 +155,15 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Calculate header fields based on parent header
     */
-  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
+  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Seq[ModifierId], Int) = {
     val interlinks: Seq[ModifierId] =
       parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
-    val version = Header.CurrentVersion
-
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
-    (parentId, version, interlinks, height)
+    (parentId, interlinks, height)
   }
 
   /**

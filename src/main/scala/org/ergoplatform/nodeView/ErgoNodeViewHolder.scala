@@ -56,7 +56,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
-    val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
+    val wallet = ErgoWallet.readOrGenerate(
+      history.getReader.asInstanceOf[ErgoHistoryReader],
+      settings)
 
     val memPool = ErgoMemPool.empty
 
@@ -72,10 +74,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-    val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
-    val memPool = ErgoMemPool.empty
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
+    val wallet = ErgoWallet.readOrGenerate(
+      history.getReader.asInstanceOf[ErgoHistoryReader],
+      settings)
+    val memPool = ErgoMemPool.empty
     Some((history, state, wallet, memPool))
   }
 
@@ -107,10 +111,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         stateIn
-      case (_, None, state) =>
+      case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         recreatedState()
-      case (_, Some(bestFullBlock), state: DigestState) =>
+      case (_, Some(bestFullBlock), _: DigestState) =>
         // Just update state root hash
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
         recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))

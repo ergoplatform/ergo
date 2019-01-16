@@ -36,7 +36,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[Header] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -86,10 +86,14 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds2.rollbackVersions.size shouldEqual 2
 
+      ds2.stateContext.lastHeaders.size shouldEqual 1
+
       java.util.Arrays.equals(ds2.rootHash, ds.rootHash) shouldBe false
 
       val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash
+
+      ds3.stateContext.lastHeaders.size shouldEqual 0
 
       ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash
     }

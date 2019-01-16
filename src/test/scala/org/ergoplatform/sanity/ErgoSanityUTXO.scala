@@ -25,7 +25,10 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
   override val stateGen: Gen[WrappedUtxoState] =
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
 
-  override def semanticallyValidModifier(state: UTXO_ST): PM = validFullBlock(None, state.asInstanceOf[WrappedUtxoState])
+  override def semanticallyValidModifier(state: UTXO_ST): PM = {
+    val parentOpt = state.stateContext.lastHeaderOpt
+    validFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
+  }
 
   override def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get
 

@@ -40,6 +40,9 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       s1.previousStateDigest shouldEqual s2.previousStateDigest
       s1.lastHeaders shouldEqual s2.lastHeaders
       s1.lastHeaders shouldEqual lastHeaders
+      s1.currentParameters shouldEqual s2.currentParameters
+      s1.votingData shouldEqual s2.votingData
+      s1.genesisStateDigest shouldBe s2.genesisStateDigest
     }
 
     var (us, bh) = createUtxoState()
@@ -47,7 +50,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var lastHeaders: Seq[Header] = Seq()
     requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(lastHeaders.headOption, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastHeaders.headOption, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -70,7 +73,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[Header] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       parentOpt = Some(block.header)
       bh = blBh._2

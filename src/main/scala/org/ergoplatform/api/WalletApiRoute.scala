@@ -11,14 +11,14 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
-import scapi.sigma.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.ProveDlog
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.SBoolean
 import sigmastate.Values.Value
-import sigmastate.lang.SigmaCompiler
+import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -69,8 +69,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def compileSource(source: String, env: Map[String, Any]): Try[Value[SBoolean.type]] = {
-    val compiler = new SigmaCompiler
-    Try(compiler.compile(env, source)).flatMap {
+    val compiler = SigmaCompiler()
+    Try(compiler.compile(env, source, ergoSettings.chainSettings.addressPrefix)).flatMap {
       case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
         Success(script)
       case other =>

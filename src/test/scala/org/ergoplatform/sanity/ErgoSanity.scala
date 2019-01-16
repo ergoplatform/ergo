@@ -2,7 +2,6 @@ package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -40,9 +39,6 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   with ErgoTestHelpers
   with HistoryTestHelpers {
 
-  //Node view components
-  //override val historyGen: Gen[HT] = generateHistory(verifyTransactions = true, StateType.Utxo,
-  //PoPoWBootstrap = false, -1)
 
   override val memPool: MPool = ErgoMemPool.empty(settings)
 
@@ -55,12 +51,14 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
 
     powScheme.prove(
       history.bestHeaderOpt,
+      Header.CurrentVersion,
       Constants.InitialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
+      Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
     ).get
   }
@@ -133,4 +131,5 @@ object ErgoSanity {
   type UTXO_ST = UtxoState
   type DIGEST_ST = DigestState
   type MPool = ErgoMemPool
+
 }

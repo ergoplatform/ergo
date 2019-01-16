@@ -6,6 +6,7 @@ branches:
     - v2.0
     - master
     - /^\d\.\d+$/
+    - height-as-int
 jdk:
 - oraclejdk9
 scala:

@@ -266,6 +266,7 @@ components:
       - height
       - difficulty
       - parentId
+      - votes
       - size
       properties:
         id:
@@ -273,9 +274,7 @@ components:
         timestamp:
           $ref: '#/components/schemas/Timestamp'
         version:
-          type: integer
-          format: int32
-          example: 2
+          $ref: '#/components/schemas/Version'
         interlinks:
           description: A vector containing pointers to previous blocks, including the id of the previous block. See https://pdfs.semanticscholar.org/1969/453d7960eaca8cfbd642877925f5f5028ce5.pdf for more info
           type: array
@@ -308,6 +307,8 @@ components:
           example: 62
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
         size:
           description: Size in bytes
           type: integer
@@ -353,21 +354,14 @@ components:
       required:
       - headerId
       - digest
-      - mandatoryFields
-      - optionalFields
+      - fields
       properties:
         headerId:
           $ref: '#/components/schemas/ModifierId'
         digest:
           $ref: '#/components/schemas/Digest32'
-        mandatoryFields:
-          description: List of mandatory key-value fields
-          type: array
-          nullable: true
-          items:
-            $ref: '#/components/schemas/KeyValueItem'
-        optionalFields:
-          description: List of optional key-value fields
+        fields:
+          description: List of key-value records
           type: array
           nullable: true
           items:
@@ -386,9 +380,9 @@ components:
       - extensionHash
       - parentId
       properties:
-        transactionsNumber:
+        version:
           type: integer
-          format: int32
+          format: int8
           example: 2
         extensionHash:
           $ref: '#/components/schemas/Digest32'
@@ -405,8 +399,14 @@ components:
           $ref: '#/components/schemas/SerializedAdProof'
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        transactionsNumber:
+                  type: integer
+                  format: int32
+                  example: 2
         transactions:
           $ref: '#/components/schemas/Transactions'
+        votes:
+          $ref: '#/components/schemas/Votes'
 
     Peer:
       type: object
@@ -451,6 +451,7 @@ components:
       - currentTime
       - launchTime
       - genesisBlockId
+      - parameters
       properties:
         name:
           type: string
@@ -552,6 +553,65 @@ components:
           nullable: true
           allOf:
           - $ref: '#/components/schemas/ModifierId'
+        parameters:
+          type: object
+          description: current parameters
+          $ref: '#/components/schemas/Parameters'
+
+    Parameters:
+          type: object
+          required:
+          - height
+          - blockVersion
+          - storageFeeFactor
+          - minValuePerByte
+          - maxBlockSize
+          - maxBlockCost
+          properties:
+            height:
+              type: integer
+              format: int32
+              description: Height when current parameters were considered(not actual height). Can be '0' if state is empty
+              minimum: 0
+              example: 667
+              nullable: false
+            storageFeeFactor:
+              type: integer
+              format: int32
+              description: Storage fee coefficient (per byte per storage period ~4 years)
+              minimum: 0
+              example: 100000
+              nullable: false
+            minValuePerByte:
+              type: integer
+              format: int32
+              description: Minimum value per byte of an output
+              minimum: 0
+              example: 360
+              nullable: false
+            maxBlockSize:
+              type: integer
+              format: int32
+              description: Maximum block size (in bytes)
+              minimum: 0
+              example: 1048576
+              nullable: false
+            maxBlockCost:
+              type: integer
+              format: int32
+              description: Maximum cumulative computational complexity of input scipts in block transactions
+              minimum: 0
+              example: 104876
+              nullable: false
+            blockVersion:
+              $ref: '#/components/schemas/Version'
+              nullable: false
+
+    Version:
+      description: Ergo blockchain protocol version
+      type: integer
+      format: int8
+      example: 2
 
     TransactionBoxId:
       description: Base16-encoded transaction box id bytes. Should be 32 bytes long
@@ -605,6 +665,12 @@ components:
       type: string
       format: base16
       example: '0101'
+
+    Votes:
+      description: Base16-encoded votes for a soft-fork and parameters
+      type: string
+      format: base16
+      example: '000000'
 
     ModifierId:
       description: Base16-encoded 32 byte modifier id

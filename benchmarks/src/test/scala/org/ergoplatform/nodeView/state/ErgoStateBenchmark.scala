@@ -11,7 +11,6 @@ import org.openjdk.jmh.runner.{Runner, RunnerException}
 
 import scala.util.Random
 
-
 class ErgoStateBenchmark {
   @Benchmark
   def boxChanges(state: BenchmarkState, bh: Blackhole): Unit = {

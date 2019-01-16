@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.{Header, HeaderChain}
-import org.ergoplatform.modifiers.state.UtxoSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -15,6 +14,33 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
+
+  property("Header votes") {
+    import org.ergoplatform.settings.Parameters._
+
+    val history = genHistory()
+
+    //double vote
+    val wrongVotes1 = Array(StorageFeeFactorIncrease, StorageFeeFactorIncrease, NoParameter)
+    val hw1 = genHeaderChain(1, history).head.copy(votes = wrongVotes1, version = 0: Byte)
+    history.applicableTry(hw1).isSuccess shouldBe false
+
+
+    //contradictory votes
+    val wrongVotes2 = Array(StorageFeeFactorIncrease, StorageFeeFactorDecrease, NoParameter)
+    val hw2 = genHeaderChain(1, history).head.copy(votes = wrongVotes2, version = 0: Byte)
+    history.applicableTry(hw2).isSuccess shouldBe false
+
+    //too many votes - only two ordinary changes allowed per epoch
+    val wrongVotes3 = Array(StorageFeeFactorIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
+    val hw3 = genHeaderChain(1, history).head.copy(votes = wrongVotes3, version = 0: Byte)
+    history.applicableTry(hw3).isSuccess shouldBe false
+
+    //a vote proposed on non-existing parameter
+    val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
+    val hw4 = genHeaderChain(1, history).head.copy(votes = wrongVotes4, version = 0: Byte, height = 2)
+    history.applicableTry(hw4).isSuccess shouldBe false
+  }
 
   property("Should calculate difficulty correctly") {
     val epochLength = 3

@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.ActorRef
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
@@ -78,7 +77,8 @@ object WrappedUtxoState {
     val vbh = new VersionedInMemoryBoxHolder(
       boxes,
       IndexedSeq(version),
-      Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq)))
+      Map(version -> (Seq() -> boxHolder.sortedBoxes.toSeq))
+    )
 
     new WrappedUtxoState(us.persistentProver, ErgoState.genesisStateVersion, us.store, vbh, constants, settings)
   }

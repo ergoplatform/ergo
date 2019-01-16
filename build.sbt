@@ -4,8 +4,8 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "1.8.1",
-  scalaVersion := "2.12.7",
+  version := "1.9.0",
+  scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
@@ -15,11 +15,12 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "53207304-SNAPSHOT"
+val sigmaStateVersion = "master-5f01afb6-SNAPSHOT"
+// for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
+val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
 libraryDependencies ++= Seq(
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "sigma-state" % "master-c645b1a1-SNAPSHOT")
+  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
@@ -31,6 +32,8 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "scrypto" % "2.1.5",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "com.google.guava" % "guava" % "21.0",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
@@ -40,8 +43,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
-  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded",
-  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
+  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
+  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
@@ -138,16 +141,6 @@ findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "fin
 scapegoatVersion in ThisBuild := "1.3.3"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
-
-val Bench = config("bench") extend Test
-
-inConfig(Bench)(Defaults.testSettings ++ Seq(
-  fork in run := true,
-  classDirectory := (classDirectory in Compile).value,
-  dependencyClasspath := (dependencyClasspath in Compile).value
-))
-
-compile in Bench := (compile in Bench).dependsOn(compile in Test).value
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 

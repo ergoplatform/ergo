@@ -9,9 +9,10 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.UtxoSnapshot
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.UtxoState.ModifierProcessing
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -72,10 +73,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   /**
     * Tries to validate and execute transactions.
     * @return Result of transactions execution with total cost inside
-    * */
+    */
   private def execTransactionsTry(transactions: Seq[ErgoTransaction],
                                   currentStateContext: ErgoStateContext): Try[Long] = {
     import cats.implicits._
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val execResults: Try[List[Long]] = transactions.toList
       .map { tx =>
@@ -88,7 +90,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
             .sequence
           boxesToSpendTry.flatMap { boxes =>
-            tx.statefulValidity(boxes.toIndexedSeq, currentStateContext, constants.settings.metadata)
+            tx.statefulValidity(boxes.toIndexedSeq, currentStateContext)
           }
         }
       }
@@ -101,7 +103,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
     import cats.implicits._
     execTransactionsTry(transactions, currentStateContext) match {
-      case Success(executionCost) if executionCost <= Parameters.MaxBlockCost =>
+      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost =>
         persistentProver.synchronized {
           val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
           val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
@@ -131,15 +133,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val height = fb.header.height
 
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
-      persistentProver.synchronized {
-        val inRoot = rootHash
-        val newStateContext = stateContext.appendHeader(fb.header)
+      stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
+        persistentProver.synchronized {
+          val inRoot = rootHash
 
-        val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
           .map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
-            val md = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(md)
+            val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
             val proofHash = ADProofs.proofDigest(proofBytes)
             if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
@@ -159,13 +161,17 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
             s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
           persistentProver.rollback(inRoot).ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-          Failure(e)
+          Failure(e)}
         }
       }
   }
 
   private def applyHeader: ModifierProcessing = {
     case h: Header =>
+      log.warn("Only full-blocks are expected (before UTXO snapshot downloading implementation")
+      //todo: update state context with headers (when snapshot downloading is done), so
+      //todo: application of the first full block after the snapshot should have correct state context
+      //todo: (in particular, "lastHeaders" field of it)
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, settings))
   }
 
@@ -288,7 +294,10 @@ object UtxoState {
     bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val defaultStateContext = ErgoStateContext.empty(p.digest)
+
+    implicit val votingSettings: VotingSettings = constants.votingSettings
+
+    val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData.empty)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, nodeParameters)(Algos.hash)
     val persistentProver =
       createPersistentProver(p, storage, ErgoState.genesisStateVersion, currentEmissionBoxOpt, defaultStateContext)

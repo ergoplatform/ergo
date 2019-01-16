@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -19,8 +18,7 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
-import scapi.sigma.DLogProtocol
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -31,7 +29,6 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -134,7 +131,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def seed: String = "walletstub"
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-    private val prover = new ErgoProvingInterpreter(seed, 2)
+    private val prover = ErgoProvingInterpreter(seed, 2, parameters)
     private val trackedAddresses: Seq[P2PKAddress] = prover.dlogPubkeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
@@ -192,6 +189,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val protocolVersion = 0: Byte
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
@@ -202,8 +200,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings =
-      ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, powScheme, monetarySettings)
+    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
+                                      votingSettings, powScheme, monetarySettings)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
@@ -217,12 +215,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     powScheme.prove(
       history.bestHeaderOpt,
+      Header.CurrentVersion,
       Constants.InitialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Math.max(timeProvider.time(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
+      Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
     ).value
   }

@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.utils.{BoxUtils, LoggingUtil}
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -19,13 +19,21 @@ import scorex.testkit.utils.FileUtils
 import sigmastate.Values
 
 import scala.annotation.tailrec
-import scala.util.{Random, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
-  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
+  extends TestkitHelpers
+    with FileUtils
+    with Matchers
+    with ChainGenerator
+    with ErgoTransactionGenerators {
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
+    createUtxoState(constants)
+  }
+
+  def createUtxoState(constants: StateConstants): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, constants, settings)
   }
 
@@ -41,16 +49,13 @@ trait ValidBlocksGenerators
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
-  /** @param sizeLimit maximum transactions size in bytes */
+  /**
+    * @param sizeLimit maximum transactions size in bytes
+    */
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
-
-    val stateCtx = ErgoStateContext.empty(StateConstants(None, settings).emission.settings.afterGenesisStateDigest)
-
-    def validOutputs(tx: ErgoTransaction) = tx.outputs
-      .forall(o => o.value >= BoxUtils.minimalErgoAmount(o))
 
     @tailrec
     def loop(stateBoxes: Seq[ErgoBox],
@@ -82,22 +87,22 @@ trait ValidBlocksGenerators
             // disable tokens generation to avoid situation with too many tokens
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq, rnd, issueNew)
             tx.statelessValidity match {
-              case Success(_) if validOutputs(tx) =>
-                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
-              case _ =>
-                log.warn(s"Failed to generate valid transaction")
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
             }
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
             val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
             tx.statelessValidity match {
-              case Success(_) if validOutputs(tx) =>
-                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
-              case _ =>
-                log.warn(s"Failed to generate valid transaction")
+              case Failure(e) =>
+                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(stateBoxes, selfBoxes, acc, rnd)
+              case _ =>
+                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
             }
           }
       }
@@ -137,24 +142,35 @@ trait ValidBlocksGenerators
   }
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
-    validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, new Random)
+    validFullBlock(parentOpt, utxoState: UtxoState, boxHolder: BoxHolder, new Random)
 
 
   def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
     validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
-  def validFullBlockWithBlockHolder(parentOpt: Option[Header],
-                                    utxoState: UtxoState,
-                                    boxHolder: BoxHolder,
-                                    rnd: Random): (ErgoFullBlock, BoxHolder) = {
+  def validFullBlockWithBoxHolder(parentOpt: Option[Header],
+                                  utxoState: UtxoState,
+                                  boxHolder: BoxHolder,
+                                  rnd: Random): (ErgoFullBlock, BoxHolder) = {
     val txsBh = validTransactionsFromBoxHolder(boxHolder, rnd)
     validFullBlock(parentOpt, utxoState, txsBh._1) -> txsBh._2
   }
 
   def validFullBlock(parentOpt: Option[Header],
-                     utxoState: WrappedUtxoState): ErgoFullBlock = {
-    validFullBlock(parentOpt, utxoState, validTransactionsFromUtxoState(utxoState))
+                     wrappedState: WrappedUtxoState): ErgoFullBlock = {
+    validFullBlock(parentOpt, wrappedState, wrappedState.versionedBoxHolder)
+  }
+
+  def validFullBlock(parentOpt: Option[Header],
+                     wrappedState: WrappedUtxoState,
+                     time: Long): ErgoFullBlock = {
+    validFullBlock(
+      parentOpt,
+      wrappedState,
+      validTransactionsFromBoxHolder(wrappedState.versionedBoxHolder, new Random())._1,
+      Some(time)
+    )
   }
 
   def validFullBlock(parentOpt: Option[Header],
@@ -169,11 +185,12 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.getOrElse(timeProvider.time())
-    val extension: ExtensionCandidate = defaultExtension
+    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate()
+    val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, defaultMinerSecretNumber).get
+    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
+      transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
 }

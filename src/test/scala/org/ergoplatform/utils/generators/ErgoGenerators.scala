@@ -1,27 +1,27 @@
 package org.ergoplatform.utils.generators
 
+import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, ExtensionSerializer, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
+import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
 import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.interpreter.ProverResult
 import sigmastate.{SBoolean, _}
 
 import scala.util.Random
@@ -42,17 +42,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
 
-  lazy val ergoStateContextGen: Gen[ErgoStateContext] = for {
-    size <- Gen.choose(0, Constants.LastHeadersInContext + 3)
-    stateRoot <- stateRootGen
-    headers <- Gen.listOfN(size, invalidHeaderGen)
-  } yield {
-    headers match {
-      case s :: tail => tail.foldLeft(ErgoStateContext(s, startDigest))((c, h) => c.appendHeader(h))
-      case _ => ErgoStateContext.empty(stateRoot)
-    }
-  }
-
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
   def validValueGen(proposition: Value[SBoolean.type],
@@ -61,7 +50,9 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
                     boxId: Short = 0,
                     creationHeight: Long = 0): Gen[Long] = {
-    val minValue = BoxUtils.minimalErgoAmountSimulated(proposition, additionalTokens, additionalRegisters)
+    //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
+    //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
+    val minValue = parameters.minValuePerByte * 400
     Gen.choose(minValue, coinsTotal)
   }
 
@@ -101,19 +92,20 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
       scorex.util.Random.randomBytes
     }
 
-  def kvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
+  def extensionKvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
-    value <- genSecureBoundedBytes(valuesSize, valuesSize)
+    value <- if(key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
-    mandatoryElements <- Gen.listOf(kvGen(Extension.MandatoryFieldKeySize, Extension.MaxMandatoryFieldValueSize))
-    optionalElementsElements <- Gen.listOf(kvGen(Extension.OptionalFieldKeySize, Extension.MaxOptionalFieldValueSize))
-  } yield Extension(headerId,
-    mandatoryElements.filter(e => !java.util.Arrays.equals(e._1, ExtensionSerializer.Delimiter)),
-    optionalElementsElements.take(Extension.MaxOptionalFields))
-
+    mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize))
+  } yield {
+    val me = mandatoryElements
+      .map(kv => Shorts.fromByteArray(kv._1) -> kv._2)
+      .map(kv => Shorts.toByteArray(kv._1) -> kv._2)
+    Extension(headerId, me.toSeq)
+  }
 
   lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))
 
@@ -155,6 +147,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     height,
     extensionHash,
     powSolution,
+    Array.fill(3)(0: Byte),
     None
   )
   lazy val randomADProofsGen: Gen[ADProofs] = for {

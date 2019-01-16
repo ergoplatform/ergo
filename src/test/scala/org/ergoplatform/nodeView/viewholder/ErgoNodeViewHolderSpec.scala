@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView
+package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
 

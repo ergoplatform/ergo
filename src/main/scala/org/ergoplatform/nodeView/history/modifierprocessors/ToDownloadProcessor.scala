@@ -2,20 +2,18 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.{UtxoSnapshot, UtxoSnapshotManifest}
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.BasicReaders
 import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
-import scala.reflect.ClassTag
 
-/** Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
+/**
+  * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ToDownloadProcessor extends ScorexLogging {
-
-  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor = new FullBlockPruningProcessor(config)
+trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   lazy val isPrunedFullMode: Boolean = config.blocksToKeep > 0 && !config.stateType.requireProofs
 
@@ -25,23 +23,20 @@ trait ToDownloadProcessor extends ScorexLogging {
 
   protected val timeProvider: NetworkTimeProvider
 
-  def bestFullBlockOpt: Option[ErgoFullBlock]
-
-  def headerIdsAtHeight(height: Int): Seq[ModifierId]
-
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T]
-
-  def contains(id: ModifierId): Boolean
+  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
+    new FullBlockPruningProcessor(config, chainSettings)
 
   protected def lastSnapshotAppliedHeight: Option[Int]
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
-  /** return true if we estimate, that our chain is synced with the network. Start downloading full blocks after that
+  /**
+    * Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /** return Next `howMany` modifier ids satisfying `filter` condition our node should download
+  /**
+    * Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
     * to synchronize full block chain with headers chain
     */
   def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
@@ -71,11 +66,12 @@ trait ToDownloadProcessor extends ScorexLogging {
     }
   }
 
-  /** Checks, whether it's time to download full chain and return toDownload modifiers
+  /**
+    * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!config.verifyTransactions) {
-      // Regime that do not download and verify transaction.
+      // A regime that do not download and verify transaction.
       Seq.empty
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height) &&
       (!isPrunedFullMode || lastSnapshotAppliedHeight.exists(_ < header.height))) {
@@ -101,13 +97,12 @@ trait ToDownloadProcessor extends ScorexLogging {
   }
 
   private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    lazy val emptyExtensionId: ModifierId = Extension(h.id).id
     if (!config.verifyTransactions) {
       Seq.empty
     } else if (config.stateType.requireProofs) {
-      h.sectionIds.filterNot(_._2 == emptyExtensionId)
+      h.sectionIds
     } else {
-      h.sectionIds.tail.filterNot(_._2 == emptyExtensionId)
+      h.sectionIds.tail
     }
   }
 

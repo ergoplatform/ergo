@@ -32,7 +32,7 @@ object Constants {
 
   //For how many blocks a box could be put into the state with no paying.
   //4 years
-  val StoragePeriod: Int = 4 * 365 * 24 * BlocksPerHour
+  val StoragePeriod: Int = 4 * BlocksPerYear
 
   val StorageContractCost: Long = 50
 
@@ -51,4 +51,7 @@ object Constants {
     UtxoSnapshotChunk.modifierTypeId -> UtxoSnapshotChunkSerializer
   )
 
+  val SoftForkEpochs = 32 //about 45.5 days
+
+  val extensionMaxSize: Int = 10 * 1024 //10 kb
 }

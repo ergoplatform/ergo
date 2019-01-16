@@ -4,7 +4,7 @@ import com.google.common.primitives.Bytes
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.ExtensionCandidate
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
@@ -67,11 +67,12 @@ object MinerBench extends App with ErgoTestHelpers {
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
     val h = inHeader.copy(nBits = nBits)
 
-    val candidate = new CandidateBlock(None, nBits: Long, h.stateRoot,
+    val candidate = new CandidateBlock(None, Header.CurrentVersion, nBits: Long, h.stateRoot,
       fb.adProofs.get.proofBytes,
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
-      ExtensionCandidate(Seq(), Seq()))
+      ExtensionCandidate(Seq()),
+      Array())
     val newHeader = pow.proveCandidate(candidate, sk).get.header
 
     val Steps = 10000

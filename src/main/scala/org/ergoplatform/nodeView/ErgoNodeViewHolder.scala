@@ -98,7 +98,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
-    val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
+    val wallet = ErgoWallet.readOrGenerate(
+      history.getReader.asInstanceOf[ErgoHistoryReader],
+      settings)
 
     val memPool = ErgoMemPool.empty
 
@@ -114,10 +116,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
-    val wallet = ErgoWallet.readOrGenerate(history.getReader.asInstanceOf[ErgoHistoryReader], settings)
-    val memPool = ErgoMemPool.empty
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
+    val wallet = ErgoWallet.readOrGenerate(
+      history.getReader.asInstanceOf[ErgoHistoryReader],
+      settings)
+    val memPool = ErgoMemPool.empty
     Some((history, state, wallet, memPool))
   }
 

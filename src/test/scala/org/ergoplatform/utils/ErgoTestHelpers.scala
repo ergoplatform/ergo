@@ -25,7 +25,7 @@ trait ErgoTestHelpers
 
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
-  def updateHeight(box: ErgoBoxCandidate, creationHeight: Long): ErgoBoxCandidate =
+  def updateHeight(box: ErgoBoxCandidate, creationHeight: Int): ErgoBoxCandidate =
     new ErgoBoxCandidate(box.value, box.proposition, creationHeight, box.additionalTokens, box.additionalRegisters)
 
   def changeValue(box: ErgoBoxCandidate, delta: Long): Option[ErgoBoxCandidate] = {

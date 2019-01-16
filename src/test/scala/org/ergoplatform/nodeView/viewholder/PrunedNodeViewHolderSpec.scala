@@ -16,11 +16,9 @@ import scala.concurrent.duration._
   * Test how node view holder is working in pruned mode
   */
 class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
-
-  private val BlocksToKeep = 3
   private val BlockInterval = 2.minutes
 
-  def prunedSettings: ErgoSettings = {
+  def prunedSettings(blocksToKeep: Int): ErgoSettings = {
     val defaultSettings = ErgoSettings.read(None)
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
@@ -33,7 +31,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
         stateType = StateType.Digest,
         verifyTransactions = true,
         PoPoWBootstrap = false,
-        blocksToKeep = BlocksToKeep
+        blocksToKeep = blocksToKeep
       )
     )
   }
@@ -47,30 +45,32 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     }._1
   }
 
-  property(s"pruned chain bootstrapping - first 10 blocks out of 20 are not to be applied to the state") {
-    new NodeViewFixture(prunedSettings).apply({ fixture =>
-      import fixture._
+  private def testCode(fixture: NodeViewFixture, applyCount: Int) = {
+    import fixture._
 
-      val (us, bh) = createUtxoState(stateConstants)
-      val wus = WrappedUtxoState(us, bh, stateConstants)
+    val (us, bh) = createUtxoState(stateConstants)
+    val wus = WrappedUtxoState(us, bh, stateConstants)
 
-      val fullChain = genFullChain(wus, 20)
+    val fullChain = genFullChain(wus, 20)
 
-      fullChain.foreach { block =>
-        applyHeader(block.header).isSuccess shouldBe true
+    fullChain.foreach { block =>
+      applyHeader(block.header).isSuccess shouldBe true
+    }
+
+    fullChain.takeRight(applyCount).foreach { block =>
+      block.blockSections.foreach { section =>
+        nodeViewHolderRef ! LocallyGeneratedModifier(section)
+        Thread.sleep(50)
       }
+    }
 
-      fullChain.takeRight(11).foreach { block =>
-        block.blockSections.foreach { section =>
-          nodeViewHolderRef ! LocallyGeneratedModifier(section)
-          Thread.sleep(50)
-        }
-      }
+    val state = getCurrentState.asInstanceOf[DigestState]
+    state.version shouldBe fullChain.last.id
+    state.stateContext.lastHeaderOpt.get.id shouldBe fullChain.last.header.id
+  }
 
-      val state = getCurrentState.asInstanceOf[DigestState]
-      state.version shouldBe fullChain.last.id
-      state.stateContext.lastHeaderOpt.get.id shouldBe fullChain.last.header.id
-    })
+  property(s"pruned chain bootstrapping - BK = 3 - first 9 blocks out of 20 are not to be applied to the state") {
+    new NodeViewFixture(prunedSettings(3)).apply(f => testCode(f, 11))
   }
 
 }

@@ -99,8 +99,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
         val toProcess = if (config.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
-        val toApply = toDownload(h)
-        ProgressInfo(None, Seq.empty, toProcess, toApply)
+        val toDwnld = toDownload(h)
+        ProgressInfo(None, Seq.empty, toProcess, toDwnld)
       case None =>
         log.error("Should always have best header after header application")
         ErgoApp.forceStopApplication()

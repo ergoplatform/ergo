@@ -71,7 +71,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
@@ -117,27 +116,20 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         case e: Extension =>
           // todo checks that all required mandatory fields are set and non additional mandatory fields
           failFast
-            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
-              fatal(s"Extension ${m.encodedId} have too many optional fields")
+            .validate(e.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
+              fatal(s"Extension ${m.encodedId} field key length is not ${Extension.FieldKeySize}")
             }
-            .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
+            .validate(e.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
+              fatal(s"Extension ${m.encodedId} field value length > ${Extension.FieldValueMaxSize}")
             }
-            .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
-            }
-            .validate(e.mandatoryFields.forall(_._2.lengthCompare(Extension.MaxMandatoryFieldValueSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field value length > ${Extension.MaxMandatoryFieldValueSize}")
-            }
-            .validate(e.optionalFields.forall(_._2.lengthCompare(Extension.MaxOptionalFieldValueSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} optional field value length > ${Extension.MaxOptionalFieldValueSize}")
-            }
-            .validate(e.mandatoryFields.map(kv => bytesToId(kv._1)).distinct.length == e.mandatoryFields.length) {
+            .validate(e.fields.map(kv => bytesToId(kv._1)).distinct.length == e.fields.length) {
               //todo this check may be done in general mandatory fields check
               fatal(s"Extension ${m.encodedId} contains duplicate mandatory keys")
             }
-            .validate(e.optionalFields.map(kv => bytesToId(kv._1)).distinct.length == e.optionalFields.length) {
-              fatal(s"Extension ${m.encodedId} contains duplicate optionalFields keys")
+            .validate(header.height > 0 || e.fields.nonEmpty) {
+              //genesis block does not contain votes
+              //todo: this rule may be reconsidered when moving interlink vector to extension section
+              fatal("Fields in genesis block")
             }
         case _ =>
           // todo some validations of block transactions, including size limit, should go there.

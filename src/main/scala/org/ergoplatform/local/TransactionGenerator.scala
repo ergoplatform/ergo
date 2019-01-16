@@ -69,7 +69,8 @@ class TransactionGenerator(viewHolder: ActorRef,
       transactionsPerBlock -= 1
       if (transactionsPerBlock >= 0 && propositions.nonEmpty) {
         viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-          genTransaction(v.vault).onComplete(t => self ! t.flatten)
+          val params = v.state.stateContext.currentParameters
+          genTransaction(v.vault, params).onComplete(t => self ! t.flatten)
         }
       }
 
@@ -83,7 +84,7 @@ class TransactionGenerator(viewHolder: ActorRef,
     case SuccessfulTransaction(_) => self ! Attempt
   }
 
-  private def genTransaction(wallet: ErgoWallet): Future[Try[ErgoTransaction]] = {
+  private def genTransaction(wallet: ErgoWallet, parameters: Parameters): Future[Try[ErgoTransaction]] = {
     val feeReq = PaymentRequest(Pay2SAddress(feeProp), 100000L, None, None)
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
@@ -93,7 +94,7 @@ class TransactionGenerator(viewHolder: ActorRef,
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
-          val minimalErgoAmount = approximateBoxSize * Parameters.MinValuePerByte
+          val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
           Try(idToBytes(tokenToSpend._1)).map { id =>
             PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
           }.toOption

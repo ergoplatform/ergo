@@ -36,7 +36,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
-  val chainSettings = ChainSettings(0: Byte, blockInterval, 256, 8, pow, settings.chainSettings.monetary)
+
+  val chainSettings = ChainSettings(0: Byte, 0: Byte, blockInterval, 256, 8, votingSettings, pow, settings.chainSettings.monetary)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
@@ -61,8 +62,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
       val (txs, newBoxHolder) = validTransactionsFromBoxHolder(boxHolder, new Random, txsSize)
 
       val (adProofBytes, updStateDigest) = state.proofsForTransactions(txs).get
-      val candidate = new CandidateBlock(last, Constants.InitialNBits, updStateDigest, adProofBytes,
-        txs, time, ExtensionCandidate(Seq(), Seq()))
+      val candidate = new CandidateBlock(last, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
+        txs, time, ExtensionCandidate(Seq()), Array())
 
       val block = generate(candidate)
       history.append(block.header).get
@@ -81,8 +82,8 @@ object ChainGenerator extends App with ValidBlocksGenerators with ErgoTestHelper
     pow.proveCandidate(candidate, defaultMinerSecretNumber) match {
       case Some(fb) => fb
       case _ =>
-        val randomKey = scorex.utils.Random.randomBytes(Extension.OptionalFieldKeySize)
-        generate(candidate.copy(extension = ExtensionCandidate(Seq(), Seq(randomKey -> Array[Byte]()))))
+        val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
+        generate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
     }
   }
 

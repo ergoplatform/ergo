@@ -15,8 +15,6 @@ import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
 import sigmastate.Values
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-
 import scala.concurrent.duration._
 
 class TransactionApiRouteSpec extends FlatSpec
@@ -32,7 +30,7 @@ class TransactionApiRouteSpec extends FlatSpec
 
   val input = Input(ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),emptyProverResult)
 
-  val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Values.TrueLeaf)
+  val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Values.TrueLeaf, parameters)
   val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Values.TrueLeaf,
     creationHeight = creationHeightGen.sample.get)
   val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))

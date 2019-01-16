@@ -227,6 +227,29 @@ components:
           type: integer
           format: int32
 
+    PowSolutions:
+      description: An object containing all components of pow solution
+      type: object
+      required:
+      - pk
+      - w
+      - n
+      - d
+      properties:
+        pk:
+          type: string
+          description: Base16-encoded public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        w:
+          type: string
+          example: '0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12'
+        n:
+          type: string
+          example: '0000000000000000'
+        d:
+          type: integer
+          example: 987654321
+
     BlockHeader:
       type: object
       required:
@@ -271,9 +294,7 @@ components:
         extensionHash:
           $ref: '#/components/schemas/Digest32'
         powSolutions:
-          description: Base16-encoded Autolykos solutions
-          type: string
-          example: '000098250001b89e0001ecb60001fd5f00009e6d00013ac400018e0f0001e15e0000abeb000108d9000118890001bc2e0000ae350000bab7000113bc0001f24c00009b550000fd4c0000d0e30001acbe0000e635000102130001311900015aff0000df6800018e4600012c1400013ecb0000e2b10001575f00014b4d0001592a'
+          $ref: '#/components/schemas/PowSolutions'
         height:
           type: integer
           format: int32

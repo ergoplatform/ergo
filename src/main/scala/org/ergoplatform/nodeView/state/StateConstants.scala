@@ -14,7 +14,7 @@ import scorex.crypto.authds.ADDigest
   */
 case class StateConstants(nodeViewHolderRef: Option[ActorRef], settings: ErgoSettings) {
   lazy val emission: EmissionRules = settings.emission
-  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisEmissionBox(emission)
+  lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(emission).head
   lazy val keepVersions: Int = settings.nodeSettings.keepVersions
   lazy val genesisStateDigest: ADDigest = emission.settings.afterGenesisStateDigest
   lazy val votingSettings: VotingSettings = settings.chainSettings.voting

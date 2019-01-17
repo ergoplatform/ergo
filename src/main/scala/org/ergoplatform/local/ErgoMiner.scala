@@ -265,7 +265,7 @@ object ErgoMiner extends ScorexLogging {
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.proposition
-      val emissionAmount = emission.emissionAtHeight(nextHeight)
+      val emissionAmount = emission.minersRewardAtHeight(nextHeight)
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
         nextHeight, Seq(), Map())
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))

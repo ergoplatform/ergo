@@ -138,12 +138,12 @@ object ErgoState extends ScorexLogging {
 
     UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
+      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
       stateDir, settings)
   }
 

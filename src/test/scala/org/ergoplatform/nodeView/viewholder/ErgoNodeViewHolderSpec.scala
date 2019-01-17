@@ -23,7 +23,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
   private val t1 = TestCase("check genesis state") { fixture =>
     import fixture._
-    getCurrentState.rootHash shouldBe getAfterGenesisStateDigest
+    getCurrentState.rootHash shouldBe getGenesisStateDigest
   }
 
   private val t2 = TestCase("check history after genesis") { fixture =>

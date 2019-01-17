@@ -16,6 +16,6 @@ case class StateConstants(nodeViewHolderRef: Option[ActorRef], settings: ErgoSet
   lazy val emission: EmissionRules = settings.emission
   lazy val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(emission).head
   lazy val keepVersions: Int = settings.nodeSettings.keepVersions
-  lazy val genesisStateDigest: ADDigest = emission.settings.afterGenesisStateDigest
+  lazy val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   lazy val votingSettings: VotingSettings = settings.chainSettings.voting
 }

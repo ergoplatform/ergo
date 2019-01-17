@@ -107,10 +107,7 @@ object ErgoState extends ScorexLogging {
     val secret = new DLogProverInput(BigInt(1).bigInteger)
     val protection = ByteArrayConstant(ValueSerializer.serialize(secret.publicImage))
     val value = emission.foundersCoinsTotal
-    val prop = ErgoScriptPredef.foundationScript(emission.settings.fixedRatePeriod,
-      emission.settings.epochLength,
-      emission.settings.oneEpochReduction,
-      emission.settings.foundersInitialReward)(new RuntimeIRContext)
+    val prop = ErgoScriptPredef.foundationScript(emission.settings)
     ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> protection))
   }
 
@@ -120,11 +117,7 @@ object ErgoState extends ScorexLogging {
     */
   private def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
     val value = emission.minersCoinsTotal
-    val prop = ErgoScriptPredef.emissionBoxProp(emission.settings.fixedRatePeriod,
-      emission.settings.epochLength,
-      emission.settings.fixedRate,
-      emission.settings.oneEpochReduction,
-      emission.settings.minerRewardDelay)
+    val prop = ErgoScriptPredef.emissionBoxProp(emission.settings)
     ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
   }
 

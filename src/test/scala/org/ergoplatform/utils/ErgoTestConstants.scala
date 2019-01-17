@@ -40,6 +40,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
+  val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.emission)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.emission).head
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
   val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 1, parameters)

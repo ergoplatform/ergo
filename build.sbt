@@ -35,7 +35,7 @@ libraryDependencies ++= Seq(
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
-  "org.scalatest" %% "scalatest" % "3.0.+" % "test,it",
+  "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",

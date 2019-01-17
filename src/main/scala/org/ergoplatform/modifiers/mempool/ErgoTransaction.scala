@@ -94,6 +94,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
+    verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 

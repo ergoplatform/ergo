@@ -64,7 +64,6 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              verifier.IR.resetContext() // ensure there is no garbage in the IRContext
               tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
             if (totalCost > currentStateContext.currentParameters.maxBlockCost) {

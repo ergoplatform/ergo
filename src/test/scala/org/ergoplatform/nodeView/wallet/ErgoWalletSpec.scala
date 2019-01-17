@@ -620,7 +620,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val genesisBlock = makeGenesisBlock(pubKey)
       val uncertainAmount = 2000000
       val modifiedBlock = {
-        val prop = ErgoState.rewardOutputScript(100, pubKey)
+        val prop = ErgoScriptPredef.rewardOutputScript(100, pubKey)
         val txToModify = genesisBlock.blockTransactions.txs.last
         val txWithUncertainOutput = txToModify
           .copy(outputCandidates = IndexedSeq(new ErgoBoxCandidate(uncertainAmount, prop, 1)))

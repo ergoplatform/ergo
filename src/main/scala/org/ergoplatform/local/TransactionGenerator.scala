@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress}
+import org.ergoplatform._
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
@@ -36,7 +36,7 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private val feeProp: Value[SBoolean.type] = ErgoState.feeProposition(settings.emission.settings.minerRewardDelay)
+  private val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(settings.emission.settings.minerRewardDelay)
   private var transactionsPerBlock: Int = 0
   private var currentFullHeight: Int = 0
   @volatile private var propositions: Seq[P2PKAddress] = Seq()

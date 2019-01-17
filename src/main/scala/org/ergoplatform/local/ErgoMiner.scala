@@ -255,13 +255,13 @@ object ErgoMiner extends ScorexLogging {
                      emission: EmissionRules,
                      assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
-    val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
+    val propositionBytes = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay).bytes
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
       .filter(b => !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val nextHeight = currentHeight + 1
-    val minerProp = ErgoState.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+    val minerProp = ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.proposition

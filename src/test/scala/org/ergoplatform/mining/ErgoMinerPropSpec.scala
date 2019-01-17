@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoInterpreter
@@ -17,7 +18,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   val delta: Int = settings.emission.settings.minerRewardDelay
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
-    ErgoState.rewardOutputScript(delta, pk).bytes
+    ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
@@ -79,7 +80,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val rnd: Random = new Random
       val us = createUtxoState(bh)
       val usClone = createUtxoState(bh)
-      val feeProposition = ErgoState.feeProposition(delta)
+      val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
       val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
       val head = txsWithFees.head
@@ -123,7 +124,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("should not be able to spend recent fee boxes") {
 
     val delta = 1
-    val feeProposition = ErgoState.feeProposition(delta)
+    val feeProposition = ErgoScriptPredef.feeProposition(delta)
 
     val bh = boxesHolderGen.sample.get
     var us = createUtxoState(bh)

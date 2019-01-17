@@ -1,14 +1,14 @@
 package org.ergoplatform.utils
 
 import akka.util.Timeout
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ErgoScriptPredef}
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.mining.{DefaultFakePowScheme, AutolykosPowScheme}
+import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.state.{ErgoState, StateConstants, ErgoStateContext}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{LaunchParameters, Parameters, VotingSettings, ErgoSettings}
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -31,7 +31,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val coinsTotal: Long = settings.emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
   val afterGenesisDigest: ADDigest = settings.chainSettings.monetary.afterGenesisStateDigest
-  val feeProp: Value[SBoolean.type] = ErgoState.feeProposition(settings.emission.settings.minerRewardDelay)
+  val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(settings.emission.settings.minerRewardDelay)
 
 
   implicit val votingSettings = VotingSettings(1024, 32, 128)

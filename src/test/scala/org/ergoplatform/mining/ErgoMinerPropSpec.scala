@@ -24,7 +24,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
     us.emissionBoxOpt should not be None
-    val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
+    val expectedReward = us.constants.emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     val incorrectTxs = ErgoMiner.collectEmission(us, proveDlogGen.sample.get, us.constants.emission).toSeq
     val txs = ErgoMiner.collectEmission(us, defaultMinerPk, us.constants.emission).toSeq
@@ -166,7 +166,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("collect reward from both emission box and fees") {
     val (us, _) = createUtxoState()
     us.emissionBoxOpt should not be None
-    val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
+    val expectedReward = us.constants.emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))) { btxs =>
       val blockTxs = btxs.map(_._2)

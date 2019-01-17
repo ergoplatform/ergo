@@ -132,8 +132,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     val emissionRules = new EmissionRules(
       MonetarySettings(
-        minerRewardDelay = delta,
-        afterGenesisStateDigestHex = "584748265afc5bd6d7fb80f750131b923a431ae6e4bedc2b590d49dd81ef64b601"
+        minerRewardDelay = delta
       )
     )
 

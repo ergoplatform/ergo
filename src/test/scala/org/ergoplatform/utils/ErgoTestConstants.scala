@@ -1,7 +1,6 @@
 package org.ergoplatform.utils
 
 import akka.util.Timeout
-import org.ergoplatform.{ErgoBox, ErgoScriptPredef}
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
@@ -9,34 +8,33 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConsta
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
+import org.ergoplatform.{ErgoBox, ErgoScriptPredef}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.SBoolean
 import sigmastate.Values.Value
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-  val parameters: Parameters = LaunchParameters
+  implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
 
+  val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)
   val settings: ErgoSettings = initSettings
   val coinsTotal: Long = settings.emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
-  val afterGenesisDigest: ADDigest = settings.chainSettings.monetary.afterGenesisStateDigest
+  val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(settings.emission.settings.minerRewardDelay)
 
-
-  implicit val votingSettings = VotingSettings(1024, 32, 128)
-
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(afterGenesisDigest, votingSettings)
+  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

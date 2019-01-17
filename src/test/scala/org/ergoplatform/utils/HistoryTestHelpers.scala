@@ -31,6 +31,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     }
   }
 
+  // todo looks like copy-paste from Stubs.generateHistory
   def generateHistory(verifyTransactions: Boolean,
                       stateType: StateType,
                       PoPoWBootstrap: Boolean,

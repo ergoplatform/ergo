@@ -88,7 +88,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.boxChanges() double spend attempt") {
     val (_, bh) = createUtxoState()
-    bh.boxes.size shouldBe 1
+    bh.boxes.size shouldBe 2
     val genesisBox = bh.boxes.head._2
 
     forAll { seed: Int =>
@@ -114,7 +114,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.stateChanges()") {
     val (us: UtxoState, bh) = createUtxoState()
-    bh.boxes.size shouldBe 1
+    bh.boxes.size shouldBe 2
     val genesisBox = bh.boxes.head._2
 
     forAll { seed: Int =>

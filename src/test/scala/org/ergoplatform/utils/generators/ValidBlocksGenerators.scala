@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -112,7 +113,8 @@ trait ValidBlocksGenerators
                                      rnd: Random,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
     val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
-    val (regularBoxes, drainedBh) = boxHolderWithoutEmission.take(rnd.nextInt(txSizeLimit / 100) + 1)
+    val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
+    val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)

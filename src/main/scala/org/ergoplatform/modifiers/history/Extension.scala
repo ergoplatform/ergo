@@ -44,6 +44,11 @@ case class ExtensionCandidate(fields: Seq[(Array[Byte], Array[Byte])]) {
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
 }
 
+object ExtensionCandidate {
+  // todo fill with interlinks and other useful values after nodes update
+  def empty: ExtensionCandidate = ExtensionCandidate(Seq.empty)
+}
+
 object Extension extends ApiCodecs {
 
   val FieldKeySize: Int = 2

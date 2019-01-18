@@ -30,6 +30,8 @@ object Algos extends ScorexEncoding {
 
   @inline def decode(str: String): Try[Array[Byte]] = encoder.decode(str)
 
+  @inline def decodeUnsafe(str: String): Array[Byte] = decode(str).get
+
   def blockIdDifficulty(id: Array[Byte]): BigInt = {
     val blockTarget = BigInt(1, id).ensuring(_ <= Constants.MaxTarget)
     Constants.MaxTarget / blockTarget

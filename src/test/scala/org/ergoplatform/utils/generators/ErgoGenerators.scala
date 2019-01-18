@@ -156,7 +156,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield ADProofs(headerId, proof)
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
-    Gen.resultOf({ _: Unit => ErgoMemPool.empty })(Arbitrary(Gen.const(())))
+    Gen.resultOf({ _: Unit => ErgoMemPool.empty(settings) })(Arbitrary(Gen.const(())))
 
   /** Random long from 1 to maximum - 1
     *

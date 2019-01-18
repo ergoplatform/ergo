@@ -2,8 +2,7 @@ package org.ergoplatform.api.routes
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
-import akka.testkit.TestDuration
+import akka.http.scaladsl.testkit.ScalatestRouteTest
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -13,7 +12,6 @@ import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 
-import scala.concurrent.duration._
 
 class BlocksApiRouteSpec extends FlatSpec
   with Matchers

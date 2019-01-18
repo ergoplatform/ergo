@@ -65,23 +65,30 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    private def etxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx)
+    private def ttxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx)
+    private def tiPredicate(tx: ErgoTransaction) = containsAssetIssuingBox(tx)
+
+    val ergoTransferringTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx) => true
-    }
+        if etxPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    val tokenTransferringTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx) => true
-    }
+        if ttxPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
-    }
+    val tokenIssuingTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction) if tiPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    ergoTransferringTx shouldBe true
-    tokenTransferringTx shouldBe true
-    tokenIssuingTx shouldBe true
+    etxPredicate(ergoTransferringTx) shouldBe true
+    ttxPredicate(tokenTransferringTx) shouldBe true
+    tiPredicate(tokenIssuingTx) shouldBe true
   }
 
 }

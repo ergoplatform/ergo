@@ -12,17 +12,19 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.annotation.tailrec
@@ -40,6 +42,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   import ErgoMiner._
 
+  private lazy val votingSettings = ergoSettings.chainSettings.voting
+  private lazy val votingEpochLength = votingSettings.votingLength
+  private lazy val protocolVersion = ergoSettings.chainSettings.protocolVersion
 
   //shared mutable state
   private var isMining = false
@@ -166,24 +171,53 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
-    // todo fill with interlinks and other useful values
-    val extensionCandidate = ExtensionCandidate(Seq(), Seq())
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, ergoSettings.chainSettings.powScheme)
+    val stateContext = state.stateContext
+
+    // todo fill with interlinks and other useful values after nodes update
+    lazy val emptyExtensionCandidate = ExtensionCandidate(Seq())
+    val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
+      val newHeight = header.height + 1
+      val currentParams = stateContext.currentParameters
+
+      val betterVersion = protocolVersion > header.version
+      val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
+        .map(h => h + votingSettings.votingLength * votingSettings.softForkEpochs)
+      val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
+      val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+      val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
+
+      if (newHeight % votingEpochLength == 0 && newHeight > 0) {
+        val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
+        (newParams.toExtensionCandidate(Seq()),
+          newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
+          newParams.blockVersion)
+      } else {
+        (emptyExtensionCandidate,
+          currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+          currentParams.blockVersion)
+      }
+    }.getOrElse((emptyExtensionCandidate, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
+      ergoSettings.chainSettings.powScheme)
 
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
 
     val txs = ErgoMiner.collectTxs(minerPk,
-      Parameters.MaxBlockCost,
-      Parameters.MaxBlockSize,
+      state.stateContext.currentParameters.maxBlockCost,
+      state.stateContext.currentParameters.maxBlockSize,
       state,
       upcomingContext,
-      pool.unconfirmed.values,
+      pool.getAllPrioritized,
       emissionTxOpt.toSeq)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(bestHeaderOpt, nBits, adDigest, adProof, txs, timestamp, extensionCandidate)
+
+      lazy val stateContext = state.stateContext
+
+      CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)
     }
   }.flatten
 
@@ -221,7 +255,7 @@ object ErgoMiner extends ScorexLogging {
                      emission: EmissionRules,
                      assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
 
-    val propositionBytes = ErgoState.feeProposition(emission.settings.minerRewardDelay).bytes
+    val propositionBytes = emission.settings.feePropositionBytes
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
@@ -283,6 +317,7 @@ object ErgoMiner extends ScorexLogging {
 
       mempoolTxs.headOption match {
         case Some(tx) =>
+          implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
           us.validateWithCost(tx) match {
             case Success(costConsumed) =>
@@ -292,7 +327,7 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, us.constants.emission) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext, us.constants.settings.metadata) match {
+                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
 

@@ -1,7 +1,9 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.nodeView.state.ErgoState
 import scorex.crypto.authds.ADDigest
 import scorex.util.encode.Base16
+import sigmastate.{SBoolean, Values}
 
 import scala.util.Success
 
@@ -16,6 +18,9 @@ case class MonetarySettings(fixedRatePeriod: Long = 30 * 2 * 24 * 365,
                             oneEpochReduction: Long = 300000000L,
                             minerRewardDelay: Int = 720,
                             afterGenesisStateDigestHex: String) {
+
+  val feeProposition: Values.Value[SBoolean.type] = ErgoState.feeProposition(minerRewardDelay)
+  val feePropositionBytes: Array[Byte] = feeProposition.bytes
 
   val afterGenesisStateDigest: ADDigest = Base16.decode(afterGenesisStateDigestHex) match {
     case Success(b) => ADDigest @@ b

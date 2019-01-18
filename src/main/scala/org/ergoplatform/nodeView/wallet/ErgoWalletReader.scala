@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
-import scapi.sigma.DLogProtocol.DLogProverInput
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.concurrent.Future
@@ -19,7 +19,7 @@ import scala.util.Try
 trait ErgoWalletReader extends VaultReader {
   val actor: ActorRef
 
-  private implicit val timeout: Timeout = Timeout(5, TimeUnit.SECONDS)
+  private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
   def balances(chainStatus: ChainStatus): Future[BalancesSnapshot] = {
     (actor ? ErgoWalletActor.ReadBalances(chainStatus)).mapTo[BalancesSnapshot]

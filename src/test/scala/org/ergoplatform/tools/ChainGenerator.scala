@@ -4,27 +4,23 @@ import java.io.File
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform._
 import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId, idToBytes}
-import sigmastate.Values
+import scorex.util.{ModifierId, idToBytes}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.interpreter.ContextExtension
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -43,6 +39,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000
+  val RewardDelay: Int = 720
 
   val prover = defaultProver
 
@@ -50,7 +47,6 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val blockInterval = 2.minute
 
   val boxSelector: BoxSelector = DefaultBoxSelector
-  val registry = new WalletStorage
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/Users/oskin/Desktop/Dev/scala_dev/ergo/ergo/data") else new File(args(1))
@@ -60,7 +56,10 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
-  val monetarySettings = settings.chainSettings.monetary.copy(minerRewardDelay = 720)
+  val monetarySettings = settings.chainSettings.monetary.copy(
+    minerRewardDelay = RewardDelay,
+    afterGenesisStateDigestHex = "d801a0e4573d6993caa2eda7dc97aad2b4c8ed51ebb0afe0dd272c8d7e26d5fd01"
+  )
   val chainSettings = ChainSettings(0: Byte, 0: Byte, blockInterval, 256, 8, votingSettings, pow, monetarySettings)
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
@@ -102,7 +101,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   private def genTransactions(height: Height,
                               bh: BoxHolder,
                               ctx: ErgoStateContext): (Seq[ErgoTransaction], BoxHolder) = {
-    val balance = registry.confirmedBalance
+    val balance = bh.boxes.filter(_._2.creationHeight + RewardDelay >= height).map(_._2.value).sum
     if (balance >= MinTxAmount) {
       val qty = (balance / MinTxAmount).toInt
       val amount = balance / qty

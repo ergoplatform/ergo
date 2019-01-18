@@ -105,7 +105,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
     from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
-    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i, ergoBoxCandidateGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, to)
 
   /**

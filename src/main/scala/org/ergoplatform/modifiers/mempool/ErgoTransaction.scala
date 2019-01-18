@@ -1,12 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
-import java.nio.ByteBuffer
-
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeContext.Metadata
 import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
@@ -25,7 +22,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.{Serializer => SSerializer}
-import sigmastate.utils.{ByteBufferReader, ByteReader, ByteWriter}
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
@@ -88,7 +85,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
       .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
-      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o)), s"Transaction is trying to create dust: $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
       .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
       .result
@@ -97,26 +93,22 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       blockchainState: ErgoStateContext,
-                       metadata: Metadata): Try[Long] = {
+                       stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
+    verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
     failFast
       .payload(0L)
-      .demand(outputCandidates.forall(_.creationHeight <= blockchainState.currentHeight),
-        s"box created in future ${outputCandidates.map(_.creationHeight)} vs ${blockchainState.currentHeight}")
+      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateContext.currentParameters)), s"Transaction is trying to create dust: $this")
+      .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${stateContext.currentHeight}")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
-
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
-
-        val ctx = new ErgoContext(blockchainState, transactionContext, metadata, proverExtension)
-
-        val verifier: ErgoInterpreter = ErgoInterpreter.instance
+        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
         val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
         costTry.recover { case t => t.printStackTrace() }
@@ -145,8 +137,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             }
           case Failure(e) => fatal(e.getMessage)
         }
-      }
-      .toTry
+      }.toTry
   }
 
   override type M = ErgoTransaction
@@ -216,7 +207,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
-      creationHeight <- cursor.downField("creationHeight").as[Long]
+      creationHeight <- cursor.downField("creationHeight").as[Int]
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
@@ -269,17 +260,15 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 }
 
 object ErgoTransactionSerializer extends Serializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-  override def serializeBody(tx: ErgoTransaction, w: ByteWriter): Unit =
+  override def serializeBody(tx: ErgoTransaction, w: SigmaByteWriter): Unit =
     flattenedTxSerializer.serializeBody(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
 
-  override def parseBody(r: ByteReader): ErgoTransaction = {
+  override def parseBody(r: SigmaByteReader): ErgoTransaction = {
     val ftx = flattenedTxSerializer.parseBody(r)
     ErgoTransaction(ftx.inputs, ftx.outputCandidates)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[ErgoTransaction] = Try {
-    val buf = ByteBuffer.wrap(bytes)
-    buf.position(0)
-    parseBody(new ByteBufferReader(buf))
+    parseBody(sigmastate.serialization.Serializer.startReader(bytes))
   }
 }

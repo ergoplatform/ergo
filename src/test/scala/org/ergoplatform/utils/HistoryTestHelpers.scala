@@ -1,6 +1,5 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.EmptyBlockSectionProcessor
 import org.ergoplatform.nodeView.state.StateType
@@ -39,17 +38,18 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
+    val protocolVersion = 1: Byte
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = ChainSettings(networkPrefix, blockInterval, epochLength, useLastEpochs, powScheme,
-      settings.chainSettings.monetary)
+    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
+      votingSettings, powScheme, settings.chainSettings.monetary)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,

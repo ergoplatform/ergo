@@ -247,7 +247,6 @@ object ErgoMiner extends ScorexLogging {
                      minerPk: ProveDlog,
                      emission: EmissionRules,
                      assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
-
     val propositionBytes = emission.settings.feePropositionBytes
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2

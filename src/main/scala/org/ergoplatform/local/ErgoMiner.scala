@@ -167,11 +167,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val timestamp = timeProvider.time()
+    val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
-    val stateContext = state.stateContext
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -189,11 +189,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate.empty,
+        (ExtensionCandidate(Seq.empty),
           currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate.empty, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((ExtensionCandidate(Seq.empty), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
       ergoSettings.chainSettings.powScheme)

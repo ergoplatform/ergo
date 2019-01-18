@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -13,12 +14,35 @@ import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.Values
+import sigmastate.Values.ByteArrayConstant
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
 class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+
+  property("Correct genesis state") {
+    val (us, bh) = createUtxoState()
+    val boxes = bh.boxes.values.toList
+    // check tests consistency
+    genesisBoxes.length shouldBe bh.boxes.size
+    genesisBoxes.foreach{ b =>
+      us.boxById(b.id).isDefined shouldBe true
+      bh.boxes.get(ByteArrayWrapper(b.id)).isDefined shouldBe true
+    }
+
+    // check total supply
+    boxes.map(_.value).sum shouldBe coinsTotal
+
+    // boxes should contain all no-premine proofs in registers
+    val additionalRegisters = boxes.flatMap(_.additionalRegisters.values)
+    initSettings.chainSettings.noPermineProof.foreach{ pStr =>
+      val pBytes = ByteArrayConstant(pStr.getBytes("UTF-8"))
+      additionalRegisters should contain(pBytes)
+    }
+
+  }
 
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()

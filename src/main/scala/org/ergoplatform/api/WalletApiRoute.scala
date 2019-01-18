@@ -79,7 +79,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(ErgoScriptPredef.feeProposition(ergoSettings.emission.settings.minerRewardDelay)),
+    val feeProp = ErgoScriptPredef.feeProposition(ergoSettings.chainSettings.monetary.minerRewardDelay)
+    requests :+ PaymentRequest(Pay2SAddress(feeProp),
       feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), None, None)
   }
 

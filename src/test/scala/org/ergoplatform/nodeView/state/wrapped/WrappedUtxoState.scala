@@ -61,7 +61,7 @@ object WrappedUtxoState {
             nodeViewHolderRef: Option[ActorRef],
             settings: ErgoSettings): WrappedUtxoState = {
     val constants = StateConstants(nodeViewHolderRef, settings)
-    val emissionBox = ErgoState.genesisBoxes(constants.emission).headOption
+    val emissionBox = ErgoState.genesisBoxes(constants.settings.chainSettings).headOption
     val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, constants)
     WrappedUtxoState(us, boxHolder, constants)
   }

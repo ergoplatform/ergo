@@ -16,7 +16,7 @@ import scala.collection.immutable.TreeMap
   *                      ordered by invalidation timestamp (values)
   */
 case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
-                         transactionsRegistry: TreeMap[ModifierId, Long],
+                         transactionsRegistry: TreeMap[ModifierId, Double],
                          invalidated: TreeMap[ModifierId, Long])
                         (implicit settings: ErgoSettings) extends ScorexLogging {
 
@@ -77,7 +77,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
 object OrderedTxPool {
 
-  case class WeightedTxId(id: ModifierId, weight: Long) {
+  case class WeightedTxId(id: ModifierId, weight: Double) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
@@ -86,10 +86,10 @@ object OrderedTxPool {
     override def hashCode(): Int = Ints.fromByteArray(Algos.decodeUnsafe(id.take(8)))
   }
 
-  private implicit val ord: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (x.weight, x.id))
+  private implicit val ord: Ordering[WeightedTxId] = Ordering[(Double, ModifierId)].on(x => (x.weight, x.id))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
-    OrderedTxPool(TreeMap.empty[WeightedTxId, ErgoTransaction], TreeMap.empty[ModifierId, Long],
+    OrderedTxPool(TreeMap.empty[WeightedTxId, ErgoTransaction], TreeMap.empty[ModifierId, Double],
       TreeMap.empty[ModifierId, Long])(settings)
   }
 
@@ -98,7 +98,7 @@ object OrderedTxPool {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
-    WeightedTxId(tx.id, fee)
+    WeightedTxId(tx.id, fee.toDouble / tx.size)
   }
 
 }

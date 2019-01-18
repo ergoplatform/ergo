@@ -5,7 +5,6 @@ import org.ergoplatform.ErgoBox
 
 import scala.collection.immutable.SortedMap
 
-
 /**
   * Unauthenticated ordered in-memory box storage. Useful to store genesis state and also for tests.
   * Not suitable for big collections.
@@ -31,6 +30,8 @@ class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, ErgoBox]) {
     val (filtered, remained) = boxes.partition(b => condition(b._2))
     (filtered.values.toSeq, new BoxHolder(remained))
   }
+
+  def filter(cond: ErgoBox => Boolean): BoxHolder = new BoxHolder(boxes.filter(x => cond(x._2)))
 
   def sortedBoxes: Set[ErgoBox] = boxes.keySet.map(k => boxes(k))
 

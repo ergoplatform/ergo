@@ -15,7 +15,7 @@ import scala.util.Random
 
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 
-  val delta: Int = settings.emission.settings.minerRewardDelay
+  val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
     ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
@@ -46,8 +46,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val height = us.stateContext.currentHeight
     val blockTx = validTransactionFromBoxes(bh.boxes.take(10).values.toIndexedSeq, outputsProposition = feeProp)
 
-    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, settings.emission).toSeq
-    val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, settings.emission).toSeq
+    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, emission).toSeq
+    val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emission).toSeq
     txs.length shouldBe 1
     val feeTx = txs.head
     feeTx.outputs.length shouldBe 1
@@ -171,7 +171,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))) { btxs =>
       val blockTxs = btxs.map(_._2)
       val height = ErgoHistory.EmptyHistoryHeight
-      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, settings.emission)
+      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, emission)
       txs.length shouldBe 2
 
       val emissionTx = txs.head

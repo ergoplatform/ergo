@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.mining.emission.EmissionRules
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -30,4 +31,7 @@ case class ChainSettings(protocolVersion: Byte,
     case Success(b) => ADDigest @@ b
     case _ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex")
   }
+
+  val emission = new EmissionRules(monetary)
+
 }

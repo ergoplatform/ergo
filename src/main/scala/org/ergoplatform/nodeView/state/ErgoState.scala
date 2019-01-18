@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import org.ergoplatform.ErgoBox.R4
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.group
@@ -10,14 +10,14 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.SCollection.SByteArray
-import sigmastate.Values.{ByteArrayConstant, IntArrayConstant, IntConstant, SigmaPropValue, Value}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, IntArrayConstant, IntConstant, SigmaPropValue, Value}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.RuntimeIRContext
 import sigmastate.lang.Terms._
@@ -95,18 +95,16 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
-  private def boxCreationHeight(box: Value[SBox.type]): Value[SInt.type] =
-    SelectField(ExtractCreationInfo(box), 1).asIntValue
-
   /**
-    * Genesis box that contains coins in the system to be collected by miners.
-    * Box is protected by the script that allows to take part of them every block.
+    * Genesis box that contains all coins to be collected by Ergo foundation.
+    * Box is protected by the script that allows to take part of them every block
+    * and proposition from R4
     */
   private def genesisFoundersBox(emission: EmissionRules): ErgoBox = {
     // todo move to config
     val secret = new DLogProverInput(BigInt(1).bigInteger)
     val protection = ByteArrayConstant(ValueSerializer.serialize(secret.publicImage))
-    val value = emission.foundersCoinsTotal
+    val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(emission.settings)
     ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> protection))
   }
@@ -115,25 +113,35 @@ object ErgoState extends ScorexLogging {
     * Genesis box that contains coins in the system to be collected by miners.
     * Box is protected by the script that allows to take part of them every block.
     */
-  private def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
-    val value = emission.minersCoinsTotal
-    val prop = ErgoScriptPredef.emissionBoxProp(emission.settings)
+  private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
+    val value = chainSettings.emission.minersCoinsTotal
+    val prop = ErgoScriptPredef.emissionBoxProp(chainSettings.monetary)
     ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  }
+
+  /**
+    * Genesis box that contains proofs of no premine.
+    * It is a long-living box with special bytes in registers
+    */
+  private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
+    val proofsBytes = chainSettings.noPermineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
+    val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
+    ErgoBox(EmissionRules.CoinsInOneErgo, Values.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
   }
 
   /**
     * All boxes of genesis state.
     * Emission box is always the first.
     */
-  def genesisBoxes(emission: EmissionRules): Seq[ErgoBox] = {
-    Seq(genesisEmissionBox(emission), genesisFoundersBox(emission))
+  def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
+    Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings.emission))
   }
 
   def generateGenesisUtxoState(stateDir: File,
                                constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val boxes = genesisBoxes(constants.emission)
+    val boxes = genesisBoxes(constants.settings.chainSettings)
     val bh = BoxHolder(boxes)
 
     UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants).ensuring(us => {

@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import akka.util.Timeout
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
@@ -29,19 +30,20 @@ trait ErgoTestConstants extends ScorexLogging {
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)
   val settings: ErgoSettings = initSettings
-  val coinsTotal: Long = settings.emission.coinsTotal
+  val emission: EmissionRules = settings.chainSettings.emission
+  val coinsTotal: Long = emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
-  val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(settings.emission.settings.minerRewardDelay)
+  val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
-  val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.emission)
-  val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.emission).head
+  val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
+  val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
-  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 1, parameters)
+  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 2, parameters)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage

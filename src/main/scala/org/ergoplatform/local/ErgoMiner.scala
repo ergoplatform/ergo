@@ -203,7 +203,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       ergoSettings.chainSettings.powScheme)
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emission).map(_ -> EmissionTxCost)
 
     val txs = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,

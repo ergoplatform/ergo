@@ -25,7 +25,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.unconfirmed.values.toSeq.slice(offset, offset + limit).map(_.asJson).asJson
+    p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
   def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
@@ -41,4 +41,5 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
+
 }

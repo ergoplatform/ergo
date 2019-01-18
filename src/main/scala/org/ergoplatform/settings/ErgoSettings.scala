@@ -7,11 +7,9 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
-import sigmastate.{SBoolean, Values}
 
 import scala.collection.JavaConverters._
 

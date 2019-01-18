@@ -11,7 +11,7 @@ class MempoolPerformanceBench extends PropSpec
   with ErgoGenerators
   with ErgoTransactionGenerators {
 
-  override val memPool: ErgoMemPool = ErgoMemPool.empty
+  override val memPool: ErgoMemPool = ErgoMemPool.empty(settings)
   override val memPoolGenerator: Gen[ErgoMemPool] = emptyMemPoolGen
   override val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen
 }

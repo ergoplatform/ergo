@@ -234,4 +234,5 @@ object ErgoState extends ScorexLogging {
       EQ(SizeOf(Outputs), 1)
     )
   }
+
 }

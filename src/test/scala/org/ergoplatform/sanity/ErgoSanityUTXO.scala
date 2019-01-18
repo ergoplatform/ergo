@@ -15,6 +15,8 @@ import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
+import scala.concurrent.ExecutionContextExecutor
+
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
   override val historyGen: Gen[HT] =
@@ -50,9 +52,9 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val pool = ErgoMemPool.empty
-    implicit val ec = system.dispatcher
     val settings = ErgoSettings.read(None)
+    val pool = ErgoMemPool.empty(settings)
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")

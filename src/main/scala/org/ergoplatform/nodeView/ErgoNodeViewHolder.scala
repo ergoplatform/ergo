@@ -7,16 +7,17 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core._
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 
 import scala.util.Try
-
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
@@ -47,6 +48,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     minimalState().closeStorage()
   }
 
+  override protected def txModify(tx: ErgoTransaction): Unit = {
+    memoryPool().putIfValid(tx, minimalState()) match {
+      case (newPool, ProcessingOutcome.Accepted) =>
+        log.debug(s"Unconfirmed transaction $tx added to the memory pool")
+        val newVault = vault().scanOffchain(tx)
+        updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
+        context.system.eventStream.publish(SuccessfulTransaction[ErgoTransaction](tx))
+      case (newPool, ProcessingOutcome.Invalidated(e)) =>
+        log.debug(s"Transaction $tx invalidated")
+        updateNodeView(updatedMempool = Some(newPool))
+        context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
+      case (_, ProcessingOutcome.Declined) => // do nothing
+        log.debug(s"Transaction $tx declined")
+    }
+  }
+
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
@@ -60,7 +77,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       history.getReader.asInstanceOf[ErgoHistoryReader],
       settings)
 
-    val memPool = ErgoMemPool.empty
+    val memPool = ErgoMemPool.empty(settings)
 
     (history, state, wallet, memPool)
   }
@@ -74,12 +91,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
     val wallet = ErgoWallet.readOrGenerate(
       history.getReader.asInstanceOf[ErgoHistoryReader],
       settings)
-    val memPool = ErgoMemPool.empty
     Some((history, state, wallet, memPool))
   }
 

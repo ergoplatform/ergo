@@ -44,7 +44,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

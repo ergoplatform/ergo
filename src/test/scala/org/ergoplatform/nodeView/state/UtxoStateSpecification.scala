@@ -63,6 +63,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   property("Correct genesis state") {
     val (us, bh) = createUtxoState()
     val boxes = bh.boxes.values.toList
+    boxes.size shouldBe 3
+
     // check tests consistency
     genesisBoxes.length shouldBe bh.boxes.size
     genesisBoxes.foreach { b =>

@@ -3,10 +3,9 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -15,6 +14,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.Values
 import sigmastate.Values.ByteArrayConstant
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -22,12 +22,43 @@ import scala.util.{Random, Try}
 
 class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
+  property("Founders should be able to spend genesis founders box") {
+    var (us, bh) = createUtxoState()
+    val foundersBox = genesisBoxes.last
+    var height: Int = ErgoHistory.GenesisHeight
+
+    forAll(defaultHeaderGen) { header =>
+      val rewardPk = (new DLogProverInput(BigInt(header.height).bigInteger)).publicImage
+
+      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val txs = t._1
+      bh = t._2
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
+      us = us.applyModifier(fb).get
+      val remaining = emission.remainingFoundationRewardAtHeight(height)
+
+      // check validity of transaction, spending founders box
+      val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
+      val newBoxes = IndexedSeq(
+        ErgoBox(remaining, foundersBox.proposition, height, Seq(), foundersBox.additionalRegisters),
+        ErgoBox(foundersBox.value - remaining, rewardPk, height, Seq())
+      )
+      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), us.stateContext).get
+      us.validate(tx) shouldBe 'success
+      height = height + 1
+    }
+  }
+
   property("Correct genesis state") {
     val (us, bh) = createUtxoState()
     val boxes = bh.boxes.values.toList
     // check tests consistency
     genesisBoxes.length shouldBe bh.boxes.size
-    genesisBoxes.foreach{ b =>
+    genesisBoxes.foreach { b =>
       us.boxById(b.id).isDefined shouldBe true
       bh.boxes.get(ByteArrayWrapper(b.id)).isDefined shouldBe true
     }
@@ -37,7 +68,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
     // boxes should contain all no-premine proofs in registers
     val additionalRegisters = boxes.flatMap(_.additionalRegisters.values)
-    initSettings.chainSettings.noPermineProof.foreach{ pStr =>
+    initSettings.chainSettings.noPermineProof.foreach { pStr =>
       val pBytes = ByteArrayConstant(pStr.getBytes("UTF-8"))
       additionalRegisters should contain(pBytes)
     }

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -12,9 +13,10 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
+import scorex.util.encode.Base16
 import sigmastate.Values
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -26,6 +28,11 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var (us, bh) = createUtxoState()
     val foundersBox = genesisBoxes.last
     var height: Int = ErgoHistory.GenesisHeight
+
+    val settingsPks = settings.chainSettings.foundersPubkeys
+      .map(str => pkFromBytes(Base16.decode(str).get))
+      .map(pk => ProveDlog(pk))
+    settingsPks.count(p => defaultProver.dlogPubkeys.contains(p)) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = (new DLogProverInput(BigInt(header.height).bigInteger)).publicImage

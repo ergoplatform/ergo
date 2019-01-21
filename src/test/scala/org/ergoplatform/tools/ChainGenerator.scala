@@ -100,7 +100,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       history.append(block.header).get
       block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
 
-      log.info(s"Block ${block.id} at height ${block.header.height} generated")
+      log.info(
+        s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
       val newBxs = leftBxs ++ block.transactions
         .flatMap(_.outputs)
@@ -193,17 +194,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       }
     }.getOrElse((emptyExtensionCandidate, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, ts, nBits, votes, version,
-      fullHistorySettings.chainSettings.powScheme)
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, fullHistorySettings.emission).map(_ -> EmissionTxCost)
-
-    val txs = ErgoMiner.collectTxs(minerPk,
-      state.stateContext.currentParameters.maxBlockCost,
-      state.stateContext.currentParameters.maxBlockSize,
-      state,
-      upcomingContext,
-      txsFromPool,
-      emissionTxOpt.toSeq)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, fullHistorySettings.emission)
+    val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)

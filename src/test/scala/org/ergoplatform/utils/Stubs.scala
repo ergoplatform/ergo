@@ -48,14 +48,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val wallet = new WalletStub
 
-  val txs: Seq[ErgoTransaction] = chain.head.transactions
+  val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).get
+  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
-
 
   val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
   val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
+
   val ts1: Long = System.currentTimeMillis() - 100
   val ts2: Long = System.currentTimeMillis() + 100
 
@@ -192,7 +192,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

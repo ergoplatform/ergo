@@ -128,6 +128,7 @@ trait ErgoHistory
                 Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
+              // todo: last requirement could not be met in pruned full mode.
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
                 .flatMap(h => getFullBlock(h))

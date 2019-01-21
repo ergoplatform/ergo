@@ -132,46 +132,47 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     case fb: ErgoFullBlock =>
       val height = fb.header.height
 
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
-      stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
-        persistentProver.synchronized {
-          val inRoot = rootHash
+      log.info(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+      stateContext.appendFullBlock(fb, votingSettings)
+        .flatMap { newStateContext =>
+          persistentProver.synchronized {
+            val inRoot = rootHash
 
-          val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
-          .map { _: Unit =>
-            val emissionBox = extractEmissionBox(fb)
-            val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-            val proofHash = ADProofs.proofDigest(proofBytes)
-            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+            applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+              .map { _ =>
+                val emissionBox = extractEmissionBox(fb)
+                val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+                val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+                val proofHash = ADProofs.proofDigest(proofBytes)
+                if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-            if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
-              throw new Exception("Storage kept stateRoot is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-              throw new Exception("Calculated proofHash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Exception("Calculated stateRoot is not equal to the declared one")
-            }
+                if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
+                  throw new Exception("Storage kept stateRoot is not equal to the declared one")
+                } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+                  throw new Exception("Calculated proofHash is not equal to the declared one")
+                } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+                  throw new Exception("Calculated stateRoot is not equal to the declared one")
+                }
 
-            log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, settings)
+                log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
+                  s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
+                new UtxoState(persistentProver, idToVersion(fb.id), store, constants, settings)
+              }
+              .recoverWith[UtxoState] { case e =>
+                persistentProver.rollback(inRoot).ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+                Failure(e)
+              }
           }
-        stateTry.recoverWith[UtxoState] { case e =>
-          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
-          persistentProver.rollback(inRoot).ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-          Failure(e)}
         }
-      }
+        .recoverWith { case e =>
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UtxoState." +
+            s"Reason: ${LoggingUtil.getReasonMsg(e)}")
+          Failure(e)
+        }
   }
 
   private def applyHeader: ModifierProcessing = {
     case h: Header =>
-      log.warn("Only full-blocks are expected (before UTXO snapshot downloading implementation")
-      //todo: update state context with headers (when snapshot downloading is done), so
-      //todo: application of the first full block after the snapshot should have correct state context
-      //todo: (in particular, "lastHeaders" field of it)
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, settings))
   }
 

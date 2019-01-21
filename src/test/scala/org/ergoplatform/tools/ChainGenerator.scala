@@ -76,7 +76,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   allowToApplyOldBlocks(history)
   val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
-  log.error(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
+  log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, IndexedSeq.empty, None, Seq())
   log.info(s"Chain of length ${chain.length} generated")

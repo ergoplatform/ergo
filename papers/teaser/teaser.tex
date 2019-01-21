@@ -14,20 +14,21 @@
 
 \begin{document}
     \title{The Ergo Platform}
+    \author{Dmitry Meshkov}
 
     \date{\today}
     \maketitle
 
     \begin{abstract}
-        This document contains the general idea of Ergo platform and a high-level overview of it`s main
-        features. More details may be found in separate papers cited along with this one.
+        This document contains the general idea of Ergo platform and a high-level overview of its main
+        features. More details may be found in dedicated papers cited.
     \end{abstract}
 
     \section{Vision}
 
     Ergo platform development began in 2017 after several years of research and prototype
     implementations. Despite the huge hype around cryptocurrencies, the technology itself has
-    been stuck close to it`s initial stage. In pursuit of high profits and popularity, developers claimed
+    been stuck close to its initial stage. In pursuit of high profits and popularity, developers claimed
     implementations of blockchain 2.0, 3.0 and so on, mostly in opposition to the main advantage of
     cryptocurrencies -- decentralization -- and teams have simply promised that decentralization will
     be achieved at some point in the future.
@@ -36,18 +37,18 @@
     truly decentralized. It may be called a "blockchain 1.1" implementation -- a major update to
     blockchain technology instead of revolutionary breaking changes. The objective of Ergo is to be
     the platform that is truly useful for blockchain-demanded decentralized applications, and to be
-    survivable for the long-term enabling it to be a powerful store of value. Technical and economic
-    solutions that will allow it to achieve this will be summarized in the following sections.
+    survivable in the long-term thus enabling it to be a powerful store of value. Technical and economic
+    solutions that will allow it to achieve this are summarized in the following sections.
 
     \section{Consensus}
 
     Consensus protocol of Ergo -- Autolykos -- is based on the well-known Proof-of-Work ("PoW")
-    consensus algorithm. PoW was chosen for several reasons including PoW protocols are widely
-    studied, have high security guarantees and are friendly to light clients.
+    consensus algorithm. PoW was chosen for several reasons including that PoW protocols are widely
+    studied, have high security guarantees, and are friendly to light clients.
 
     However, existing PoW protocols have known drawbacks: ASIC-equipped miners produce
-    blocks orders of magnitude faster than CPU or GPU-equipped miners, moreover they unite in
-    mining pools and just a few pool operators control the network as a result, sometimes in a nontransparent
+    blocks orders of magnitude faster than CPU or GPU-equipped miners, moreover, they unite in
+    mining pools and just a few pool operators control the network as a result, sometimes in a non-transparent
     manner. This potentially represents a single point of failure for a network and poses
     a severe threat to long-term survivability.
 
@@ -64,15 +65,15 @@
 
     It is almost impossible to use existing cryptocurrencies without the help of trusted third-parties.
     To receive even a small sum of coins in a trustless fashion, a client must download and process
-    gigabytes of data to synchronize the network, which may take several weeks even on a highend
+    gigabytes of data to synchronize the network, which may take several weeks even on highend
     hardware, not to mention mobile devices. It is therefore no surprise that most users prefer
     to use trusted solutions for wallets, exchanges, block explorers and so on.
 
     Ergo was designed to be maximally user-friendly in the sense of decentralization. One of
     important properties of PoW is that it enables verification of the work done without downloading
     the full chain. Ergo block headers support NiPoPoW~\cite{kiayias2017non} proofs, allowing light clients to
-    synchronize the network by downloading less than a megabyte of data. In addition, Ergo uses
-    authenticated state~\cite{reyzin2017improving} and for any transaction included, a client may download a proof of it’s
+    synchronize themselves with the network by downloading less than a megabyte of data. In addition, Ergo uses
+    authenticated state~\cite{reyzin2017improving} and for any transaction included, a client may download a proof of its
     correctness. Thus, regardless of the blockchain size, a regular user with a smart-phone can join
     the network and start using Ergo with the same security guarantees as a full node.
 
@@ -85,7 +86,7 @@
     solution for some problem, we perform our own research and the number of peer-reviewed
     papers from the Ergo development team is already extensive:~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}
 
-    To be survivable, the network should adopt to a changing environment without the intervention
+    To be survivable, the network should adopt to changing environment without the intervention
     of trusted parties (such as a "core developer" team). Ergo`s on-chain miner voting protocol
     allows gradual changes in a large number of parameters including:
 
@@ -104,16 +105,16 @@
     \label{sec:economy}
 
     To achieve survivability, Ergo provides economic improvements in addition to the technical
-    ones. Most central of which is a demurrage component which plays an important role for Ergo`s
-    stability: once every 4 years an output remains in state without being moved, users are forced to
-    pay a small fee for every byte kept in the state. If an output value is less than a required fee to
-    pay, this output will be removed from the state.
+    ones, most central of which is a demurrage component which plays an important role for Ergo`s
+    stability: if an output remains in state for 4 years without being moved, a miner may charge
+    small fee for every byte kept in the state. If value of the output is less than a required fee to
+    pay, then the output will be removed from the state.
 
     Thus, demurrage component is similar to regular cloud storage services, however, it is new for
     cryptocurrencies and has several important consequences. First, Ergo mining will always be
     stable, unlike Bitcoin and other PoW currencies, in which mining may become unstable after the
-    initial emission~\cite{carlsten2016instability}. Second, state size becomes controllable and predictable, reducing
-    hardware requirements for Ergo miners. Third, by collecting a storage fee from outdated boxes,
+    initial emission~\cite{carlsten2016instability}. Second, state size growth becomes controllable and predictable,
+    reducing hardware requirements for Ergo miners. Third, by collecting a storage fee from outdated boxes,
     miners return coins to circulation, preventing steady decrease of circulating supply due to lost
     keys~\cite{wsj2018}.
 
@@ -125,7 +126,7 @@
     pre-mine. As proof-of-no-pre-mine we are going to use news headlines, like Satoshi, as well as
     latest block id's from Bitcoin and Ethereum.
 
-    \begin{figure}[h]
+    \begin{figure}[ht]
         \centering
         \includegraphics[width=\textwidth]{emission.jpg}
         \caption{Ergo emission curve
@@ -136,7 +137,7 @@
     \section{Applicability}
 
     To survive, a blockchain must have a user base. DApps and offchain protocols may be
-    implemented in a truly decentralized way due to light clients, however they also require a useful
+    implemented in a truly decentralized way due to light clients, however, they also require a useful
     and safe smart contract language. Ergo smart contracts are based on a Bitcoin-like UTXO
     model, where every output is protected by some script. If the scripting language is rich enough,
     it enables the writing of Turing-complete contracts~\cite{chepurnoy2018self} while avoiding ad-hoc solutions for

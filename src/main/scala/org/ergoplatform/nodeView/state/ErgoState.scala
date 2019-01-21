@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4}
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.group
+import org.ergoplatform.mining.pkFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
@@ -16,14 +16,10 @@ import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SCollection.SByteArray
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, IntArrayConstant, IntConstant, SigmaPropValue, Value}
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.eval.RuntimeIRContext
-import sigmastate.lang.Terms._
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
-import sigmastate.utxo._
-import sigmastate.{Values, _}
+import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.serialization.ValueSerializer
+import sigmastate.{AtLeast, Values}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -100,13 +96,16 @@ object ErgoState extends ScorexLogging {
     * Box is protected by the script that allows to take part of them every block
     * and proposition from R4
     */
-  private def genesisFoundersBox(emission: EmissionRules): ErgoBox = {
-    // todo move to config
-    val secret = new DLogProverInput(BigInt(1).bigInteger)
-    val protection = ByteArrayConstant(ValueSerializer.serialize(secret.publicImage))
+  private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
+    val emission = settings.emission
+    val pks = settings.foundersPubkeys
+      .map(str => pkFromBytes(Base16.decode(str).get))
+      .map(pk => SigmaPropConstant(ProveDlog(pk)))
+    val protection = AtLeast(IntConstant(2), pks).isProven
+    val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
-    val prop = ErgoScriptPredef.foundationScript(emission.settings)
-    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> protection))
+    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
   /**
@@ -134,7 +133,7 @@ object ErgoState extends ScorexLogging {
     * Emission box is always the first.
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
-    Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings.emission))
+    Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))
   }
 
   def generateGenesisUtxoState(stateDir: File,

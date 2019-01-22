@@ -43,7 +43,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val MaxTxsPerBlock: Int = 20
 
   val prover = defaultProver
-  val selfAddressScript = Pay2SAddress(prover.dlogPubkeys.head).script
+  val selfAddressScript = P2PKAddress(prover.dlogPubkeys.head).script
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute

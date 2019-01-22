@@ -7,11 +7,6 @@
 
 \bibliographystyle{abbrv}
 
-\newcommand{\knote}[1]{\textcolor{green}{A: {#1}}}
-\newcommand{\dnote}[1]{\textcolor{red}{D: {#1}}}
-\newcommand{\vk}[1]{\textcolor{blue}{V: {#1}}}
-
-
 \begin{document}
     \title{The Ergo Platform}
     \author{Dmitry Meshkov}
@@ -57,8 +52,7 @@
     The general method to reduce the advantage of ASICs is to use memory-hard computations.
     Autolykos is based on the k-sum problem, that is similar to a known memory-hard Equihash
     PoW~\cite{biryukov2017equihash}. In addition, Autolykos is a variant of a Schnorr signature and thus mining is not
-    possible without access to the private key.\vk{making the underlying puzzle
-    non-outsourceable...}
+    possible without access to the private key making the underlying puzzle non-outsourceable.
 
     These two properties of Ergo platform prevent the centralization of the network around pool
     operators and ASIC manufacturers, and return Ergo back to the original one-CPU-one-vote idea

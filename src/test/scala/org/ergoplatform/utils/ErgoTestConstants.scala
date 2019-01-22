@@ -30,7 +30,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)
   val settings: ErgoSettings = initSettings
-  val emission: EmissionRules = settings.chainSettings.emission
+  val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest

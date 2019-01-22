@@ -97,7 +97,7 @@ object ErgoState extends ScorexLogging {
     * and proposition from R4
     */
   private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
-    val emission = settings.emission
+    val emission = settings.emissionRules
     val pks = settings.foundersPubkeys
       .map(str => pkFromBytes(Base16.decode(str).get))
       .map(pk => SigmaPropConstant(ProveDlog(pk)))
@@ -113,8 +113,8 @@ object ErgoState extends ScorexLogging {
     * Box is protected by the script that allows to take part of them every block.
     */
   private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
-    val value = chainSettings.emission.minersCoinsTotal
-    val prop = ErgoScriptPredef.emissionBoxProp(chainSettings.monetary)
+    val value = chainSettings.emissionRules.minersCoinsTotal
+    val prop = chainSettings.monetary.emissionBoxProposition
     ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
   }
 

@@ -20,7 +20,7 @@ final case class EmissionApiRoute(ergoSettings: ErgoSettings)
   }
 
   val emissionAt = (pathPrefix("at" / LongNumber) & get) { height =>
-    ApiResponse(emissionInfoAtHeight(height, ergoSettings.chainSettings.emission))
+    ApiResponse(emissionInfoAtHeight(height, ergoSettings.chainSettings.emissionRules))
   }
 }
 

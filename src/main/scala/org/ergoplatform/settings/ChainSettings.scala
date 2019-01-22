@@ -32,6 +32,6 @@ case class ChainSettings(protocolVersion: Byte,
     case _ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex")
   }
 
-  val emission = new EmissionRules(monetary)
+  val emissionRules: EmissionRules = new EmissionRules(monetary)
 
 }

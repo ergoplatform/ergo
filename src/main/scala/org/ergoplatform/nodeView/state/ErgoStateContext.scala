@@ -180,7 +180,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 object ErgoStateContext {
   def empty(constants: StateConstants): ErgoStateContext = {
     implicit val votingSettings: VotingSettings = constants.votingSettings
-    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData.empty)
+    new ErgoStateContext(Seq.empty, constants.settings.chainSettings.genesisStateDigest, LaunchParameters, VotingData.empty)
   }
 
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {

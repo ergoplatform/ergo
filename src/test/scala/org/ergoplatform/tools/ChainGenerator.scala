@@ -39,7 +39,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000
   val RewardDelay: Int = 720
-  val MaxTxsPerBlock: Int = 20
+  val MaxTxsPerBlock: Int = 10
 
   val prover = defaultProver
   val minerPk = prover.dlogPubkeys.head
@@ -79,7 +79,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
-  val chain = loop(state, IndexedSeq.empty, None, Seq())
+  val chain = loop(state, None, None, Seq())
   log.info(s"Chain of length ${chain.length} generated")
   history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
   history.bestFullBlockOpt.get.id shouldBe chain.last
@@ -87,13 +87,13 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   System.exit(0)
 
   private def loop(state: UtxoState,
-                   bxs: IndexedSeq[ErgoBox],
+                   initBox: Option[ErgoBox],
                    last: Option[Header],
                    acc: Seq[ModifierId]): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < timeProvider.time) {
-      val (txs, leftBxs) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
-        bxs, state.stateContext)
+      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
+        initBox, state.stateContext)
 
       val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
       val block = proveCandidate(candidate.get)
@@ -101,24 +101,27 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       history.append(block.header).get
       block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
 
+      val outToPassNext = if (last.isEmpty) {
+        block.transactions.flatMap(_.outputs).find(_.proposition == minerProp)
+      } else {
+        lastOut
+      }
+
+      assert(outToPassNext.isDefined)
+
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      val usedIds = block.transactions.flatMap(_.inputs).map(_.boxId)
-      val newBxs = leftBxs.toIndexedSeq ++ block.transactions
-        .flatMap(_.outputs)
-        .filterNot(out => usedIds.contains(out.id))
-
-      loop(state.applyModifier(block).get, newBxs, Some(block.header), acc :+ block.id)
+      loop(state.applyModifier(block).get, outToPassNext, Some(block.header), acc :+ block.id)
     } else {
       acc
     }
   }
 
   private def genTransactions(height: Height,
-                              bxs: IndexedSeq[ErgoBox],
-                              ctx: ErgoStateContext): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
-    bxs
+                              inOpt: Option[ErgoBox],
+                              ctx: ErgoStateContext): (Seq[ErgoTransaction], Option[ErgoBox]) = {
+    inOpt
       .find { bx =>
         val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition != minerProp)
         canUnlock && bx.proposition != genesisBox.proposition && bx.value >= MinTxAmount
@@ -139,9 +142,9 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
               .fold(_ => acc -> in, tx => (acc :+ tx) -> unsignedTx.outputs.head)
           }
           ._1
-        (x, bxs.filterNot(_ == input))
+        (x, Some(x.last.outputs.head))
       }
-      .getOrElse(Seq.empty -> bxs)
+      .getOrElse(Seq.empty -> inOpt)
   }
 
   private def genCandidate(minerPk: ProveDlog,

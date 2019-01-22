@@ -18,13 +18,12 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoTestHelpers
-import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, idToBytes}
+import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.{Random, Try}
+import scala.util.Try
 
 /**
   * Application object for chain generation.
@@ -43,7 +42,9 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val MaxTxsPerBlock: Int = 20
 
   val prover = defaultProver
-  val selfAddressScript = P2PKAddress(prover.dlogPubkeys.head).script
+  val minerPk = prover.dlogPubkeys.head
+  val selfAddressScript = P2PKAddress(minerPk).script
+  val minerProp = ErgoState.rewardOutputScript(RewardDelay, minerPk)
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
@@ -95,9 +96,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         bxs, state.stateContext)
 
       val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
-        .getOrElse(genCandidate(prover.dlogPubkeys.head, last, time, Seq.empty, state).get)
-
-      val block = proveCandidate(candidate)
+      val block = proveCandidate(candidate.get)
 
       history.append(block.header).get
       block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
@@ -105,9 +104,10 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      val newBxs = leftBxs ++ block.transactions
+      val usedIds = block.transactions.flatMap(_.inputs).map(_.boxId)
+      val newBxs = leftBxs.toIndexedSeq ++ block.transactions
         .flatMap(_.outputs)
-        .filterNot(_.proposition == genesisBox.proposition)
+        .filterNot(out => usedIds.contains(out.id))
 
       loop(state.applyModifier(block).get, newBxs, Some(block.header), acc :+ block.id)
     } else {
@@ -117,49 +117,31 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
   private def genTransactions(height: Height,
                               bxs: IndexedSeq[ErgoBox],
-                              ctx: ErgoStateContext): (Seq[ErgoTransaction], IndexedSeq[ErgoBox]) = {
-    val availableBxs = bxs.filter { bx =>
-      bx.creationHeight + RewardDelay <= height && bx.proposition != genesisBox.proposition
-    }
-    val balance = availableBxs.map(_.value).sum
-    if (balance >= MinTxAmount) {
-      val qty = math.min((balance / MinTxAmount).toInt, MaxTxsPerBlock)
-      val amount = balance / qty
-      val outs = (0 to qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
-      val (txs, usedBoxed) = outs
-        .foldLeft(Seq.empty[(ErgoTransaction, IndexedSeq[ErgoBox])]) { case (acc, out) =>
-          val spentBxs = acc.flatMap(_._2)
-          val unspentBxs = (availableBxs ++ acc.flatMap(_._1.outputs)).filterNot(spentBxs.contains)
-          val trackedBxs = unspentBxs.map { box =>
-            TrackedBox(invalidErgoTransactionGen.sample.get, 0, None, box, BoxCertainty.Certain)
+                              ctx: ErgoStateContext): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+    bxs
+      .find { bx =>
+        val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition != minerProp)
+        canUnlock && bx.proposition != genesisBox.proposition && bx.value >= MinTxAmount
+      }
+      .map { input =>
+        val qty = MaxTxsPerBlock
+        val amount = input.value
+        val outs = (0 to qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
+        val x = outs
+          .foldLeft(Seq.empty[ErgoTransaction], input) { case ((acc, in), out) =>
+            val inputs = IndexedSeq(in)
+            val unsignedTx = new UnsignedErgoTransaction(
+              inputs.map(_.id).map(id => new UnsignedInput(id)),
+              IndexedSeq(out)
+            )
+
+            prover.sign(unsignedTx, inputs, ctx)
+              .fold(_ => acc -> in, tx => (acc :+ tx) -> unsignedTx.outputs.head)
           }
-          boxSelector.select(trackedBxs.iterator, _ => true, amount, Map.empty)
-            .map { r =>
-              val inputs = r.boxes.toIndexedSeq
-
-              val changeAddress = prover.dlogPubkeys(Random.nextInt(prover.dlogPubkeys.size))
-
-              val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-                val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-                new ErgoBoxCandidate(ergChange, changeAddress, height, assets)
-              }
-
-              val unsignedTx = new UnsignedErgoTransaction(
-                inputs.map(_.id).map(id => new UnsignedInput(id)),
-                (out +: changeBoxCandidates).toIndexedSeq
-              )
-
-              prover.sign(unsignedTx, inputs, ctx).fold(_ => acc, tx => acc :+ tx -> inputs)
-            }
-            .fold(acc)(res => res)
-        }
-        .foldLeft(Seq.empty[ErgoTransaction], Seq.empty[ErgoBox]) { case ((txsAcc, inputsAcc), (tx, inputs)) =>
-          (txsAcc :+ tx, inputsAcc ++ inputs)
-        }
-      txs -> bxs.filterNot(usedBoxed.contains)
-    } else {
-      Seq.empty -> bxs
-    }
+          ._1
+        (x, bxs.filterNot(_ == input))
+      }
+      .getOrElse(Seq.empty -> bxs)
   }
 
   private def genCandidate(minerPk: ProveDlog,

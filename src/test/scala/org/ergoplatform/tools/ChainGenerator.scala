@@ -129,7 +129,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       .map { input =>
         val qty = MaxTxsPerBlock
         val amount = input.value
-        val outs = (0 to qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
+        val outs = (0 until qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
         val x = outs
           .foldLeft(Seq.empty[ErgoTransaction], input) { case ((acc, in), out) =>
             val inputs = IndexedSeq(in)

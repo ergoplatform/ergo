@@ -94,23 +94,22 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       val (txs, leftBxs) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
         bxs, state.stateContext)
 
-      genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
-        .map { candidate =>
-          val block = proveCandidate(candidate)
+      val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
+        .getOrElse(genCandidate(prover.dlogPubkeys.head, last, time, Seq.empty, state).get)
 
-          history.append(block.header).get
-          block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
+      val block = proveCandidate(candidate)
 
-          log.info(
-            s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
+      history.append(block.header).get
+      block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
 
-          val newBxs = leftBxs ++ block.transactions
-            .flatMap(_.outputs)
-            .filterNot(_.proposition == genesisBox.proposition)
+      log.info(
+        s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-          loop(state.applyModifier(block).get, newBxs, Some(block.header), acc :+ block.id)
-        }
-        .getOrElse(loop(state, bxs.reverse, last, acc))
+      val newBxs = leftBxs ++ block.transactions
+        .flatMap(_.outputs)
+        .filterNot(_.proposition == genesisBox.proposition)
+
+      loop(state.applyModifier(block).get, newBxs, Some(block.header), acc :+ block.id)
     } else {
       acc
     }

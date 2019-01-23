@@ -17,6 +17,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
+import sigmastate.interpreter.CryptoConstants.EcPointType
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
 import scala.annotation.tailrec
@@ -34,8 +35,8 @@ case class Header(version: Version,
                   height: Int,
                   extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
-                  override val sizeOpt: Option[Int] = None
-                 ) extends ErgoPersistentModifier {
+                  votes: Array[Byte], //3 bytes
+                  override val sizeOpt: Option[Int] = None) extends PreHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(HeaderSerializer.toBytes(this))
 
@@ -48,6 +49,8 @@ case class Header(version: Version,
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
   lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+
+  override def minerPk: EcPointType = powSolution.pk
 
   lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
     (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))
@@ -69,6 +72,11 @@ case class Header(version: Version,
   def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
     timeProvider.time() - timestamp < timeDiff.toMillis
   }
+
+  /**
+    * New voting epoch starts
+    */
+  def votingStarts(votingEpochLength: Int): Boolean = height % votingEpochLength == 0 && height > 0
 
 }
 
@@ -95,6 +103,7 @@ object Header extends ApiCodecs {
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
       "version" -> h.version.asJson,
+      "votes" -> Algos.encode(h.votes).asJson,
       "size" -> h.size.asJson
     ).asJson
   }
@@ -111,9 +120,10 @@ object Header extends ApiCodecs {
       nBits <- c.downField("nBits").as[Long]
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
+      votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
     } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions)
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
   }
 }
 
@@ -133,7 +143,8 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putLong(h.timestamp)
     w.putBytes(h.extensionRoot)
     RequiredDifficulty.serialize(h.nBits, w)
-    w.putInt(h.height)
+    w.putInt(h.height),
+    w.putBytes(h.votes)
   }
 
   def serializeWithoutInterlinks(h: Header, w: Writer): Unit = {
@@ -189,6 +200,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val extensionHash = Digest32 @@ r.getBytes(32)
     val nBits = RequiredDifficulty.parse(r)
     val height = r.getInt()
+    val votes = r.getBytes(4)
 
     val interlinksSize = r.getULong()
 
@@ -210,6 +222,6 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val powSolution = AutolykosSolutionSerializer.parse(r)
 
     Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, powSolution, Some(r.consumed))
+        nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
   }
 }

@@ -6,13 +6,14 @@ branches:
     - v2.0
     - master
     - /^\d\.\d+$/
+    - height-as-int
 jdk:
 - oraclejdk9
 scala:
 - 2.12.6
 script:
   - sbt clean coverage test coverageReport
-  - sbt bench:compile
+  - sbt benchmarks/compile
 # These directories are cached to S3 at the end of the build
 cache:
   directories:

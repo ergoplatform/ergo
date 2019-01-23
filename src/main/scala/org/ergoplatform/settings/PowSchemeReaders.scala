@@ -1,45 +1,25 @@
 package org.ergoplatform.settings
 
-import com.typesafe.config.{Config, ConfigException}
+import com.typesafe.config.ConfigException
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.mining._
 
-
 trait PowSchemeReaders {
-
-  val readers: Seq[PowSchemeReader[_ <: AutolykosPowScheme]] = Seq(
-    AutolykosPowSchemeReader,
-    FakePowSchemeReader
-  )
 
   implicit val powSchemeReader: ValueReader[AutolykosPowScheme] = { (cfg, path) =>
     val schemeNameKey = s"$path.powType"
     val schemeName = cfg.getString(schemeNameKey)
-    val schemeReader = readers.find(_.schemeName == schemeName)
-      .getOrElse(throw new ConfigException.BadValue(schemeNameKey, schemeName))
-    schemeReader.read(cfg, path)
+    val n = cfg.as[Int](s"$path.n")
+    val k = cfg.as[Int](s"$path.k")
+    if (schemeName == "autolykos") {
+      new AutolykosPowScheme(k, n)
+    } else if (schemeName == "fake") {
+      new DefaultFakePowScheme(k, n)
+    } else {
+      throw new ConfigException.BadValue(schemeNameKey, schemeName)
+    }
   }
+
 }
 
-sealed trait PowSchemeReader[T <: AutolykosPowScheme] {
-  def schemeName: String
-
-  def read(config: Config, path: String): T
-}
-
-object AutolykosPowSchemeReader extends PowSchemeReader[AutolykosPowScheme] {
-  val schemeName = "autolykos"
-
-  def read(config: Config, path: String): AutolykosPowScheme = {
-    val N = config.as[Int](s"$path.N")
-    val k = config.as[Int](s"$path.k")
-    new AutolykosPowScheme(k, N)
-  }
-}
-
-object FakePowSchemeReader extends PowSchemeReader[AutolykosPowScheme] {
-  val schemeName = "fake"
-
-  def read(config: Config, path: String): AutolykosPowScheme = DefaultFakePowScheme
-}

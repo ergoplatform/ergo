@@ -9,23 +9,23 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
 import sigmastate.Values
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
-class UtxoStateSpecification extends ErgoPropertyTest {
+class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
   property("extractEmissionBox() should extract correct box") {
     var (us, bh) = createUtxoState()
     us.emissionBoxOpt should not be None
     var lastBlockOpt: Option[Header] = None
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(lastBlockOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlockOpt, us, bh, new Random(seed))
       val block = blBh._1
       us.extractEmissionBox(block) should not be None
       lastBlockOpt = Some(block.header)
@@ -53,7 +53,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }
@@ -76,7 +76,7 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader.id, Seq(), Seq()), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
       fb
     }
@@ -113,7 +113,6 @@ class UtxoStateSpecification extends ErgoPropertyTest {
   }
 
   property("applyTransactions() - simple case") {
-    val header = defaultHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
 
@@ -126,7 +125,9 @@ class UtxoStateSpecification extends ErgoPropertyTest {
       val us = createUtxoState(bh)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+      val wBlock = invalidErgoFullBlockGen.sample.get
+      val block = wBlock.copy(header = wBlock.header.copy(height = 1))
+      val newSC = us.stateContext.appendFullBlock(block, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -147,7 +148,10 @@ class UtxoStateSpecification extends ErgoPropertyTest {
 
       val us = createUtxoState(bh)
       val digest = us.proofsForTransactions(txs).get._2
-      val newSC = us.stateContext.appendHeader(header.copy(stateRoot = digest, height = 1))
+
+      val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
+      val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), Extension(header), None)
+      val newSC = us.stateContext.appendFullBlock(fb, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }

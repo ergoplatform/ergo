@@ -10,8 +10,8 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
+import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerInfo
@@ -32,12 +32,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   override def preStart(): Unit = {
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.schedule(10.seconds, 10.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
   }
 
-  var nodeInfo = NodeInfo(
+  private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
     Version.VersionString,
     0,
@@ -51,10 +52,10 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     timeProvider.time(),
-    None
-  )
+    None,
+    LaunchParameters)
 
-  override def receive: Receive = onConnectedPeers orElse getNodeInfo orElse onMempoolChanged orElse
+  override def receive: Receive = onConnectedPeers orElse getInfo orElse onMempoolChanged orElse onStateChanged orElse
     onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
 
   private def init: Receive = {
@@ -66,12 +67,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
         genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption,
         stateRoot = Some(Algos.encode(s.rootHash)),
-        stateVersion = Some(s.version)
+        stateVersion = Some(s.version),
+        parameters = s.stateContext.currentParameters
       )
   }
 
-  private def getNodeInfo: Receive = {
-    case GetNodeInfo => sender ! nodeInfo
+  private def getInfo: Receive = {
+    case GetNodeInfo => sender() ! nodeInfo
   }
 
   private def onMempoolChanged: Receive = {
@@ -79,11 +81,16 @@ class ErgoStatsCollector(readersHolder: ActorRef,
       nodeInfo = nodeInfo.copy(unconfirmedCount = p.size)
   }
 
+  private def onStateChanged: Receive = {
+    case ChangedState(s: ErgoStateReader@unchecked) =>
+      nodeInfo = nodeInfo.copy(parameters = s.stateContext.currentParameters)
+  }
+
   private def onHistoryChanged: Receive = {
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
       if (nodeInfo.genesisBlockIdOpt.isEmpty) {
-        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(0).headOption)
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
@@ -123,10 +130,12 @@ object ErgoStatsCollector {
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
                       launchTime: Long,
-                      genesisBlockIdOpt: Option[String]) {
-  }
+                      genesisBlockIdOpt: Option[String],
+                      parameters: Parameters)
 
   object NodeInfo extends ApiCodecs {
+    implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
+
     implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
       Map(
         "name" -> ni.nodeName.asJson,
@@ -146,7 +155,8 @@ object ErgoStatsCollector {
         "isMining" -> ni.isMining.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
-        "genesisBlockId" -> ni.genesisBlockIdOpt.asJson
+        "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
+        "parameters" -> ni.parameters.asJson
       ).asJson
   }
 
@@ -170,4 +180,5 @@ object ErgoStatsCollectorRef {
             timeProvider: NetworkTimeProvider)
            (implicit system: ActorSystem): ActorRef =
     system.actorOf(props(readersHolder, networkController, settings, timeProvider), name)
+
 }

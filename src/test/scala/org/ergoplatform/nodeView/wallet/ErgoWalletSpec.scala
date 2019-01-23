@@ -3,9 +3,10 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
@@ -19,17 +20,16 @@ import scala.util.Random
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
       val address = getPublicKeys.head
-      val genesisBlock = makeGenesisBlock(address.script, randomNewAsset)
+      val genesisBlock = makeGenesisBlock(address.script)
       val genesisTx = genesisBlock.transactions.head
-      applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
       waitForScanning(genesisBlock)
       val availableAmount = getConfirmedBalances.balance
       val emissionAmount: Int = 100000000
@@ -41,7 +41,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
-      val context = ErgoStateContext(genesisBlock.header, startDigest)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, context) shouldBe 'success
     }
@@ -54,35 +54,35 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val genesisBlock = makeGenesisBlock(addresses.head.script, randomNewAsset)
       val genesisTx = genesisBlock.transactions.head
       val initialBoxes = boxesAvailable(genesisTx, addresses.head.script)
-      applyBlock(genesisBlock) shouldBe 'success
-      wallet.scanPersistent(genesisBlock)
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
       waitForScanning(genesisBlock)
       val snap = getConfirmedBalances
-      val assetsToSpend = Some(assetsByTokenId(initialBoxes).toSeq)
+      val assetsToSpend = assetsByTokenId(initialBoxes).toSeq
+      assetsToSpend should not be empty
+
       val sumToSpend = snap.balance / (addresses.length + 1)
       val req =
-        PaymentRequest(addresses.head, sumToSpend, assetsToSpend, None) +:
+        PaymentRequest(addresses.head, sumToSpend,  Some(assetsToSpend), None) +:
         addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
       log.info(s"Generated transaction $tx")
-      val context = ErgoStateContext(genesisBlock.header, startDigest)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, context) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
-      applyBlock(block) shouldBe 'success
-      wallet.scanPersistent(block)
+      applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
       waitForScanning(block)
       val newSnap = getConfirmedBalances
       val newSumToSpend = newSnap.balance / (addresses.length + 1)
-      val req2 = PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, None) +:
+      val req2 = PaymentRequest(addresses.head, newSumToSpend, Some(assetsToSpend), None) +:
         addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = await(wallet.generateTransaction(req2)).get
-      val context2 = ErgoStateContext(block.header, startDigest)
+      val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
     }
@@ -144,6 +144,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToReturn = randomLong(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
       val assetsAfterSpending = assetAmount(boxesAvailable(spendingTx, address.script))
+      assetsAfterSpending should not be empty
+
       wallet.scanOffchain(spendingTx)
       waitForOffchainScanning(tx)
       val totalAfterSpending = getBalancesWithUnconfirmed
@@ -170,6 +172,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
 //      val doubleSpendingTx = makeSpendingTx(boxesToSpend, address, randomLong(balanceToSpend))
       val assets = assetAmount(boxesAvailable(spendingTx, address.script))
+      assets should not be empty
+
       wallet.scanOffchain(Seq(spendingTx, spendingTx))
       wallet.scanOffchain(spendingTx)
       blocking(Thread.sleep(offchainScanTime(tx) * 3))
@@ -198,6 +202,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToReturn = randomLong(sumBalance)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
       val assets = assetAmount(boxesAvailable(spendingTx, address.script))
+      assets should not be empty
+
       wallet.scanOffchain(spendingTx)
       waitForOffchainScanning(spendingTx)
       val confirmedAfterSpending = getConfirmedBalances.balance
@@ -221,14 +227,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val asset1Sum = randomLong()
-      val genesisTx = makeGenesisTx(address.script, Seq(newAssetIdStub -> asset1Sum))
-      val genesisBlock = makeNextBlock(getUtxoState, Seq(genesisTx))
-      val boxesToSpend = boxesAvailable(genesisTx, address.script)
+      val genesisBlock = makeGenesisBlock(address.script, Seq(newAssetIdStub -> asset1Sum))
+      val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       applyBlock(genesisBlock) shouldBe 'success
       waitForScanning(genesisBlock)
       val initialBalance = getConfirmedBalances
       val initialTotal = getBalancesWithUnconfirmed
       val initialAssets = initialBalance.assetBalances
+      log.info(s"Initial assets: ${boxesToSpend.flatMap(_.additionalTokens)}")
       log.info(s"Confirmed: $initialBalance")
       log.info(s"With unconfirmed: $initialTotal")
       initialAssets should not be empty
@@ -239,10 +245,10 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
       val assets2Seq = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
-      val balanceToReturn = 1000 * Parameters.MinValuePerByte
+      val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
-//      applyBlock(spendingBlock) shouldBe 'success
+      applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       waitForScanning(spendingBlock)
       val balanceAfterSpending = getConfirmedBalances
@@ -276,8 +282,10 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToReturn = randomLong(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
       val assets = assetAmount(boxesAvailable(spendingTx, address.script))
+      assets should not be empty
+
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
-//      applyBlock(spendingBlock) shouldBe 'success
+      applyBlock(spendingBlock) shouldBe 'success
       wallet.scanPersistent(spendingBlock)
       waitForScanning(spendingBlock)
 
@@ -301,11 +309,13 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val boxesToSpend = boxesAvailable(tx, pubKey)
       val sumBalance = balanceAmount(boxesToSpend)
       val sumAssets = assetAmount(boxesToSpend)
+      sumAssets should not be empty
+
       val initialBalance = getBalancesWithUnconfirmed.balance
       initialBalance shouldBe sumBalance
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
-//      applyBlock(block) shouldBe 'success
+      applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       waitForScanning(block)
 
@@ -334,7 +344,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, address.script)
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.script)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
-//      applyBlock(block) shouldBe 'success
+      applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       waitForScanning(block)
       val totalBalance = getBalancesWithUnconfirmed.balance
@@ -381,6 +391,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceToSpend = randomLong(balanceAmount(boxesToSpend))
       val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, pubKey, randomNewAsset)
       val initialAssets = assetAmount(boxesAvailable(creationTx, pubKey))
+      initialAssets should not be empty
+
       val block = makeNextBlock(getUtxoState, Seq(creationTx))
       wallet.scanPersistent(block)
       waitForScanning(block)
@@ -419,6 +431,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val boxesToSpend = boxesAvailable(genesisBlock, address.script)
       val sumBalance = balanceAmount(boxesToSpend)
       val sumAssets = assetAmount(boxesToSpend)
+      sumAssets should not be empty
 
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
@@ -435,7 +448,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val totalBeforeRollback = getBalancesWithUnconfirmed
 
       wallet.rollback(initialState.version)
-      blocking(Thread.sleep(100))
+      blocking(Thread.sleep(1000))
       val confirmedAfterRollback = getConfirmedBalances
       val totalAfterRollback = getBalancesWithUnconfirmed
 
@@ -474,6 +487,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balanceToReturn = randomLong(sumBalance)
       val sumAsset1 = assetsByTokenId(boxesToSpend).toSeq
+      sumAsset1 should not be empty
+
       val asset1Map = toAssetMap(sumAsset1)
       val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
       val assetsForSpending = randomNewAsset ++ assetToReturn
@@ -531,6 +546,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balanceToReturn = randomLong(balanceToSpend)
       val sumAsset1 = assetsByTokenId(boxesToSpend).toSeq
+      sumAsset1 should not be empty
+
       val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
       val assetsForSpending = randomNewAsset ++ assetToReturn
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
@@ -575,6 +592,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       //pay out all the wallet balance:
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
       val req1 = PaymentRequest(Pay2SAddress(Values.FalseLeaf), confirmedBalance, Some(assetToSpend), None)
 
       val tx1 = await(wallet.generateTransaction(Seq(req1))).get
@@ -596,6 +614,41 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
+  property("only unspent certain boxes is used for transaction generation") {
+    withFixture { implicit w =>
+      val pubKey = getPublicKeys.head.script
+      val genesisBlock = makeGenesisBlock(pubKey)
+      val uncertainAmount = 2000000
+      val modifiedBlock = {
+        val prop = ErgoState.rewardOutputScript(100, pubKey)
+        val txToModify = genesisBlock.blockTransactions.txs.last
+        val txWithUncertainOutput = txToModify
+          .copy(outputCandidates = IndexedSeq(new ErgoBoxCandidate(uncertainAmount, prop, 1)))
+        genesisBlock.copy(
+          blockTransactions = genesisBlock.blockTransactions.copy(
+            txs = genesisBlock.blockTransactions.txs :+ txWithUncertainOutput
+          )
+        )
+      }
+      val initialBoxes = boxesAvailable(modifiedBlock, pubKey)
+      val totalAvailableAmount = initialBoxes.map(_.value).sum
+      val certainAmount = totalAvailableAmount - uncertainAmount
+
+      wallet.scanPersistent(modifiedBlock)
+
+      blocking(Thread.sleep(100))
+
+      val requestWithTotalAmount = PaymentRequest(
+        ErgoAddressEncoder(0: Byte).fromProposition(pubKey).get, totalAvailableAmount, None, None)
+      val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
+
+      val uncertainTxTry = await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
+      uncertainTxTry shouldBe 'failure
+      uncertainTxTry.failed.get.getMessage.startsWith("No enough boxes to assemble a transaction") shouldBe true
+      await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
+    }
+  }
+
   property("watchFor") {
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.script
@@ -611,13 +664,13 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val p2s = Pay2SAddress(EQ(CalcBlake2b256(preimage), hash))
       val balanceToSpend = randomLong(initialBalance)
       val tx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, p2s.script, randomNewAsset)
-      val assets = assetAmount(boxesAvailable(tx, p2s.script))
+      val assets = assetAmount(boxesAvailable(tx, p2s.script.bytes))
       val block = makeNextBlock(getUtxoState, Seq(tx))
 
       wallet.scanPersistent(block)
       waitForScanning(block)
       val confirmedBalance = getConfirmedBalances
-      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script))
+      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script.bytes))
       confirmedBalance.balance shouldBe 0
       confirmedBalance.assetBalances shouldBe empty
 

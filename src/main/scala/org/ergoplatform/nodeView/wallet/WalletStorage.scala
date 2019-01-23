@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.wallet.BoxCertainty.{Certain, Uncertain}
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util._
 
 import scala.collection.{immutable, mutable}
 
@@ -33,13 +33,13 @@ class WalletStorage extends ScorexLogging {
   private val uncertainBoxes = mutable.TreeSet[ModifierId]()
   private var lastScanned: ModifierId = initialScanValue
 
-  def unspentBoxesIterator: Iterator[TrackedBox] =
+  def unspentCertainBoxesIterator: Iterator[TrackedBox] =
     unspentBoxes.iterator.flatMap(id => registry.get(id))
 
   def nextUncertain(): Option[TrackedBox] = {
     uncertainBoxes.from(lastScanned).headOption match {
       case Some(id) =>
-        lastScanned = id
+        lastScanned = bytesToId((BigInt(idToBytes(id)) + 1).toByteArray)
         registry.get(id)
       case None =>
         lastScanned = initialScanValue
@@ -50,15 +50,18 @@ class WalletStorage extends ScorexLogging {
   def uncertainExists: Boolean = uncertainBoxes.nonEmpty
 
   private def put(trackedBox: TrackedBox): Option[TrackedBox] = {
-    if (trackedBox.certainty == Uncertain) uncertainBoxes += trackedBox.boxId
-    if (trackedBox.spendingStatus == Unspent) unspentBoxes += trackedBox.boxId
+    if (trackedBox.certainty == Uncertain) {
+      uncertainBoxes += trackedBox.boxId
+    } else if (trackedBox.spendingStatus == Unspent) {
+      unspentBoxes += trackedBox.boxId
+    }
     registry.put(trackedBox.boxId, trackedBox)
   }
 
   private def remove(boxId: ModifierId): Option[TrackedBox] = {
-    registry.remove(boxId).map { trackedBox: TrackedBox =>
-      if (trackedBox.certainty == Uncertain) uncertainBoxes -= trackedBox.boxId
-      if (trackedBox.spendingStatus == Unspent) unspentBoxes -= trackedBox.boxId
+    registry.remove(boxId).map { trackedBox =>
+      if (trackedBox.certainty == Uncertain) uncertainBoxes.remove(boxId)
+      if (trackedBox.spendingStatus == Unspent) unspentBoxes.remove(boxId)
       trackedBox
     }
   }

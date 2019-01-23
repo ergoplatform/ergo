@@ -1,21 +1,23 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R4, TokenId}
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state.{UtxoState, ErgoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
-import scapi.sigma.DLogProtocol.ProveDlog
+import org.ergoplatform.local.ErgoMiner
 import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.{EvaluatedValue, LongConstant, TrueLeaf, Value}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.{SBoolean, SLong}
-
+import scorex.util.{bytesToId, ModifierId}
+import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.ProverResult
+import sigmastate.serialization.ValueSerializer
+import sigmastate.SBoolean
 import scala.concurrent.blocking
+
 
 trait WalletTestOps extends NodeViewBaseOps {
 
@@ -60,12 +62,20 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 
-  def boxesAvailable(block: ErgoFullBlock, script: Value[SBoolean.type]): Seq[ErgoBox] = {
-    block.transactions.flatMap(boxesAvailable(_, script))
+  def boxesAvailable(block: ErgoFullBlock, bytes: Array[Byte]): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, bytes))
   }
 
-  def boxesAvailable(tx: ErgoTransaction, script: Value[SBoolean.type]): Seq[ErgoBox] = {
-    tx.outputs.filter(_.proposition == script)
+  def boxesAvailable(tx: ErgoTransaction, bytes: Array[Byte]): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(bytes))
+  }
+
+  def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, pk))
+  }
+
+  def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(ValueSerializer.serialize(pk.value)))
   }
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
@@ -96,17 +106,15 @@ trait WalletTestOps extends NodeViewBaseOps {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
-  def makeGenesisTx(publicKey: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
-    //ErgoMiner.createCoinbase(Some(genesisEmissionBox), 0, Seq.empty, script, emission)
-    val emissionBox = genesisEmissionBox
-    val height = ErgoHistory.GenesisHeight
-    val emissionAmount = settings.emission.emissionAtHeight(height)
-    val newEmissionAmount = emissionBox.value - emissionAmount
-    val emissionRegs = Map[NonMandatoryRegisterId, EvaluatedValue[SLong.type]](R4 -> LongConstant(height))
-    val inputs = IndexedSeq(new Input(emissionBox.id, emptyProverResult))
-    val newEmissionBox = new ErgoBoxCandidate(newEmissionAmount, emissionBox.proposition, startHeight, Seq.empty, emissionRegs)
-    val minerBox = new ErgoBoxCandidate(emissionAmount, publicKey, startHeight, replaceNewAssetStub(assets, inputs), Map.empty)
-    ErgoTransaction(inputs, IndexedSeq(newEmissionBox, minerBox))
+  def makeGenesisTx(publicKey: ProveDlog, assetsIn: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+    val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
+    val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
+    ErgoMiner.collectRewards(Some(genesisEmissionBox),
+      ErgoHistory.EmptyHistoryHeight,
+      Seq.empty,
+      publicKey,
+      settings.emission,
+      assets).head
   }
 
   def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
@@ -135,7 +143,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
-  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> assetGen.sample.value._2)
+  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
   def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

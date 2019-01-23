@@ -57,9 +57,10 @@ trait FullBlockProcessor extends HeadersProcessor {
     case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
       if isValidFirstFullBlock(fullBlock.header) =>
 
+      val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
-      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
+      ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {
@@ -133,7 +134,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
   }
 
-  //Not used so far
+  //todo: not used so far
   private def pruneOnNewBestBlock(header: Header, blocksToKeep: Int): Unit = {
     heightOf(header.id).filter(h => h > blocksToKeep)
       .foreach(h => pruneBlockDataAt(Seq(h - blocksToKeep)))
@@ -169,5 +170,4 @@ object FullBlockProcessor {
                         blocksToKeep: Int,
                         bestFullChain: Seq[ErgoFullBlock]
                       )
-
 }

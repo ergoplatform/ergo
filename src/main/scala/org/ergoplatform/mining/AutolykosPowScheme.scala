@@ -6,9 +6,10 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import scorex.core.block.Block
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Blake2b512, Digest32}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -16,21 +17,27 @@ import scala.math.BigInt
 import scala.util.Try
 
 /**
-  * Autolykos PoW puzzle implementation.
+  * Autolykos PoW puzzle scheme reference implementation.
   * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
   * @param k - number of elements in one solution
-  * @param N - list size
+  * @param n - power of number of elements in a list
   */
-class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
+class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
-  assert(k <= 21, "k > 21 is not allowed due to genIndexes function")
+  assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
+  assert(n < 31, "n >= 31 is not allowed")
+
+  /**
+    * Total number of elements
+    */
+  private val N: Int = Math.pow(2, n).toInt
 
   /**
     * Constant data to be added to hash function to increase it's calculation time
     */
-  val M: Array[Byte] = (0 until 2048).toArray.flatMap(i => Longs.toByteArray(i))
+  val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
@@ -40,15 +47,15 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    require(s.d < b || s.d > (q - b), s"Incorrect d=${s.d} for b=$b")
+    require(s.d < b || s.d > (q - b), s"Incorrect d = ${s.d} for b = $b")
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
     val p1 = pkToBytes(s.pk)
     val p2 = pkToBytes(s.w)
     val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
-    val left = s.w.multiply(f.bigInteger).add(s.pk.negate())
-    val right = group.generator.multiply(s.d.bigInteger)
+    val left = s.w.multiply(f.bigInteger)
+    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
     require(left == right, "Incorrect points")
   }
@@ -66,19 +73,21 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],
+            version: Block.Version,
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
             transactionsRoot: Digest32,
             timestamp: Timestamp,
             extensionHash: Digest32,
+            votes: Array[Byte],
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, version, interlinks, height) = derivedHeaderFields(parentOpt)
+    val (parentId, interlinks, height) = derivedHeaderFields(parentOpt)
 
     val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null)
+      nBits, height, extensionHash, null, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
@@ -95,12 +104,14 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def proveBlock(parentOpt: Option[Header],
+                 version: Block.Version,
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
                  transactions: Seq[ErgoTransaction],
                  timestamp: Timestamp,
                  extensionCandidate: ExtensionCandidate,
+                 votes: Array[Byte],
                  sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
@@ -109,11 +120,11 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
     val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
-    prove(parentOpt, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot, sk, minNonce, maxNonce).map { h =>
+    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, extensionRoot, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
-      val extension = Extension(h.id, extensionCandidate.mandatoryFields, extensionCandidate.optionalFields)
+      val extension = Extension(h.id, extensionCandidate.fields)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }
@@ -127,16 +138,32 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
     proveBlock(candidateBlock.parentOpt,
+      candidateBlock.version,
       candidateBlock.nBits,
       candidateBlock.stateRoot,
       candidateBlock.adProofBytes,
       candidateBlock.transactions,
       candidateBlock.timestamp,
       candidateBlock.extension,
+      candidateBlock.votes,
       sk,
       minNonce,
       maxNonce
     )
+  }
+
+  /**
+    * Calculate header fields based on parent header
+    */
+  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Seq[ModifierId], Int) = {
+    val interlinks: Seq[ModifierId] =
+      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
+
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
+
+    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
+
+    (parentId, interlinks, height)
   }
 
   /**
@@ -174,28 +201,15 @@ class AutolykosPowScheme(k: Int, N: Int) extends ScorexLogging {
   }
 
   /**
-    * Calculate header fields based on parent header
-    */
-  protected def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Byte, Seq[ModifierId], Int) = {
-    val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
-
-    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
-
-    val version = Header.CurrentVersion
-
-    val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
-
-    (parentId, version, interlinks, height)
-  }
-
-  /**
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
     * [0,`N`)
     */
   private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b512(Bytes.concat(seed))
-    hash.grouped(3).take(k).toSeq.map(b => Math.abs(Ints.fromByteArray(0.toByte +: b) % N))
+    val hash = Blake2b256(seed)
+    val extendedHash = Bytes.concat(hash, hash.take(3))
+    (0 until k).map { i =>
+      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
+    }
   }.ensuring(_.length == k)
 
   /**

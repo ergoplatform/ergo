@@ -4,14 +4,13 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
-import scapi.sigma.ProveDHTuple
-import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import sigmastate._
 import sigmastate.Values.GroupElementConstant
+import sigmastate.basics.ProveDHTuple
 import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
@@ -44,7 +43,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.additionalRegisters)
   }
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter()
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
@@ -158,7 +157,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       validity.isSuccess shouldBe false
       val e = validity.failed.get
       log.info(s"Validation message: ${e.getMessage}", e)
-      e.getMessage should startWith("Input script verification failed for input #0 of tx")
+      e.getMessage should startWith("Input script verification failed for input #0")
     }
   }
 

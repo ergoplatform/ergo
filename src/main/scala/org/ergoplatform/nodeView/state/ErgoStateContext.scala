@@ -52,8 +52,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
-  val votingEpochLength: Int = votingSettings.votingLength
-
   val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption
     .map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
@@ -65,11 +63,13 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     genesisStateDigest
   }
 
-  def lastHeaderOpt: Option[Header] = lastHeaders.headOption
-
   val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
+
+  def votingEpochLength: Int = votingSettings.votingLength
+
+  def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
   override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
 
@@ -99,7 +99,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
+  // processExtension
+  def extractParameters(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
     val height = header.height
 
     Parameters.parseExtension(height, extension).flatMap { parsedParams =>
@@ -109,6 +110,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         throw new Exception("Versions in header and parameters section are different")
       }
 
+      // Why matching?
       Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
     }
   }
@@ -129,11 +131,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
-      val processExtResult =
-        extensionOpt.map(ext => processExtension(ext, header, forkVote)).getOrElse(Success(currentParameters))
+      val extractedParams = extensionOpt
+        .map(extractParameters(_, header, forkVote))
+        .getOrElse(Success(currentParameters))
 
-      processExtResult.map { params =>
-        val proposedVotes = votes.map(id => id -> 1)
+      extractedParams.map { params =>
+        val proposedVotes = votes.map(_ -> 1)
         val newVoting = VotingData(proposedVotes)
         new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
       }
@@ -177,7 +180,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 }
 
 object ErgoStateContext {

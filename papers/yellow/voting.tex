@@ -4,14 +4,15 @@ Many parameters can be changed on-the-fly via miners voting, such as instruction
 block size limit, storage fee factor, block version, and so on. Voting for the block version~(so for a soft-fork)
 lasts for 32 epochs~(see epoch length below), and requires more than 90 percent of the miners to vote for the change.
 For less critical changes~(such as block size limit), simple majority is enough. We will further refer to the changes
-of the first kind as to foundational changes, we call the changes of the second kind as to everyday changes.
-Per block, a miner can vote for two everyday changes and also one foundational change.
+of the first kind as to foundational changes, and we refer to the changes of the second kind as to everyday changes.
+Per block, a miner can vote for two everyday changes and also one foundational change, with the votes to be included
+into the header of the block.
 
 To vote "Yes"~("I'm agree on the change proposed"), and also to propose change in the first block of an epoch, a miner
-is publishing identifier of the change directly in a block header. To vote "No" (or avoid voting at all, which is
+is publishing identifier of the change directly in the block header. To vote "No" (or avoid voting at all, which is
 the same), a miner is simply writing zero value instead of a corresponding byte (another option is to provide a vote
-identifier which is not being considered within the epoch). To initialize a voting procedure, a miner is publishing
-change identifier in a first block of an epoch.
+identifier which is not being considered within the epoch).
+%To initialize a voting procedure, a miner is publishing change identifier in a first block of an epoch.
 
 System constants:
 \begin{itemize}

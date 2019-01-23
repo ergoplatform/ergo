@@ -52,9 +52,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
-  lazy val votingEpochLength: Int = votingSettings.votingLength
+  val votingEpochLength: Int = votingSettings.votingLength
 
-  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption.map(_.powSolution.encodedPk).getOrElse(Array.fill(32)(0: Byte))
+  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption
+    .map(_.powSolution.encodedPk)
+    .getOrElse(Array.fill(32)(0: Byte))
 
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
@@ -92,7 +94,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && !votingSettings.softForkApproved(votesCollected)) ||
         (height >= finishingHeight && height < afterActivationHeight && votingSettings.softForkApproved(votesCollected))) {
-        throw new Error(s"Voting for fork is prohibited at height $height")
+        throw new Exception(s"Voting for fork is prohibited at height $height")
       }
     }
   }
@@ -104,7 +106,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
 
       if (calculatedParams.blockVersion != header.version) {
-        throw new Error("Versions in header and parameters section are different")
+        throw new Exception("Versions in header and parameters section are different")
       }
 
       Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
@@ -161,7 +163,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = header.height
 
     if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-      throw new Error(s"Improper header applied: $header to state context $this")
+      throw new Exception(s"Improper header applied: $header to $this")
     }
 
     process(header, extensionOpt).map { sc =>
@@ -174,7 +176,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings)
   }
 
-  override def toString: String = s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+  override def toString: String =
+    s"ErgoStateContext($currentHeight,${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 }
 
 object ErgoStateContext {

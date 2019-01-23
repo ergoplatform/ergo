@@ -17,7 +17,7 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
@@ -113,12 +113,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case _ =>
           ErgoState.readOrGenerate(settings, StateConstants(Some(self), settings))
       }
-    }.asInstanceOf[State]
-      .ensuring(t => java.util.Arrays.equals(t.rootHash, digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest)),
-        "State root is incorrect")
+    }
+      .asInstanceOf[State]
+      .ensuring(
+        t => java.util.Arrays.equals(t.rootHash, digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest)),
+        "State root is incorrect"
+      )
   }
 
-  // scalastyle:off cyclomatic.complexity
   @SuppressWarnings(Array("TryGet"))
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
@@ -140,22 +142,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
           s"apply ${newChain.length} modifiers")
-        val startState = rollbackId.map(id => state.rollbackTo(idToVersion(id)).get)
+        val startState = rollbackId
+          .map(id => state.rollbackTo(idToVersion(id)).get)
           .getOrElse(recreatedState())
         val toApply = newChain.headers.map { h =>
-          history.getFullBlock(h) match {
-            case Some(fb) => fb
-            case None => throw new Error(s"Failed to get full block for header $h")
-          }
+          history.getFullBlock(h)
+            .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
         toApply.foldLeft(startState) { (s, m) =>
           s.applyModifier(m).get
         }
     }
-  }.recoverWith { case e =>
-    log.error("Failed to recover state, try to resync from genesis manually", e)
-    ErgoApp.forceStopApplication(500)
-  }.get
+  } match {
+    case Failure(e) =>
+      log.error("Failed to recover state, try to resync from genesis manually", e)
+      ErgoApp.forceStopApplication(500)
+    case Success(state) =>
+      state
+  }
 
   // scalastyle:on
 

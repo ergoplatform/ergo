@@ -25,7 +25,7 @@ System constants:
 \label{sec:params-table}
 
 The following table describes vote identifiers, default values (during launch), possible steps, and also minimum and maximum values.
-If the step is not defined in the table, its value is defined as $\max(\lceil0.01 \times current\_value\rceil, 1)$.
+If the step is not defined in the table, its value is defined as $\max(\lfloor current\_value / 100 \rfloor, 1)$.
 If minimum value for a parameter is not defined, it equals to zero. If maximum value is not defined, it equals to
 1,073,741,823.
 
@@ -73,9 +73,23 @@ epoch.
 
 A soft-fork is when a protocol version supported by the network is being increased. This version is written in a block
 header. Semantics behind versioning is not defined ahead of time by the protocol and so up to clients and their
-developers.
+developers. The protocol version is being written into every block header, with initial value during launch to be set
+to 1.
+
+The protocol version upgrade is to be done in the following steps:
+\begin{enumerate}
+    \item{} A miner is proposing to increase protocol version.
+    \item{} Other miners are voting within 32 epochs for the proposal
+    \item{} If the soft-fork proposal is being rejected~(so if it gathers no more than $90\%$ of votes during voting period, e.i.
+            no more than $\lfloor 32 * 1024 * 90 / 100 \rfloor = 29491$ votes), new voting may be proposed next epoch
+            after the voting done.
+    \item{} If the soft-fork proposal is being approved
+\end{enumerate}
+
 
 To start voting for a soft-fork, a miner needs to publish the identifier $120$ in the first block of the epoch, consider,
 for example, that its height is $h_s$. Next epoch, a miner should post height when start fork was proposed ($122: h_s$)
 in the extension section of the block, and number of votes collected in the previous epochs $v_s$ should be written
-there as well as $(121, v_s)$.
+there as well as ($121: v_s$).
+
+Examples:

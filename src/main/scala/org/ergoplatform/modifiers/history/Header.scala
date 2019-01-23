@@ -49,7 +49,7 @@ case class Header(version: Version,
 
   lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+  def extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
 
   override def minerPk: EcPointType = powSolution.pk
 

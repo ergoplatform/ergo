@@ -7,10 +7,11 @@ For less critical changes~(such as block size limit), simple majority is enough.
 of the first kind as to foundational changes, we call the changes of the second kind as to everyday changes.
 Per block, a miner can vote for two everyday changes and also one foundational change.
 
-To vote "Yes"~("I'm agree on the change proposed"), a miner is publishing identifier of the change directly in a
-block header. To vote "No" (or avoid voting at all, which is the same), a miner is simply writing zero value instead of
-a corresponding byte (another option is to provide a vote identifier which is not being considered within the epoch).
-To initialize a voting procedure, a miner is publishing change identifier in a first block of an epoch.
+To vote "Yes"~("I'm agree on the change proposed"), and also to propose change in the first block of an epoch, a miner
+is publishing identifier of the change directly in a block header. To vote "No" (or avoid voting at all, which is
+the same), a miner is simply writing zero value instead of a corresponding byte (another option is to provide a vote
+identifier which is not being considered within the epoch). To initialize a voting procedure, a miner is publishing
+change identifier in a first block of an epoch.
 
 System constants:
 \begin{itemize}

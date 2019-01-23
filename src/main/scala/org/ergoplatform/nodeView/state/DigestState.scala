@@ -44,9 +44,9 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock =>
       fb.adProofs match {
         case None =>
-          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
+          Failure(new Exception("Empty proofs when trying to apply full block to Digest state"))
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
-          Failure(new Error("Incorrect proofs digest"))
+          Failure(new Exception("Incorrect proofs digest"))
         case Some(proofs) =>
           stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
             val txs = fb.blockTransactions.txs
@@ -61,13 +61,13 @@ class DigestState protected(override val version: VersionTag,
               val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
                 knownBoxes.get(ByteArrayWrapper(id)) match {
                   case Some(box) => box
-                  case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+                  case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
               tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
             if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-              throw new Error(s"Transaction cost $totalCost exceeds limit")
+              throw new Exception(s"Transaction cost $totalCost exceeds limit")
             }
           }
       }
@@ -75,7 +75,7 @@ class DigestState protected(override val version: VersionTag,
     case _: Header => Success(Unit)
 
     case a: Any =>
-      Failure(new Error(s"Modifier not validated: $a"))
+      Failure(new Exception(s"Modifier not validated: $a"))
   }
 
   //todo: utxo snapshot could go here
@@ -83,25 +83,25 @@ class DigestState protected(override val version: VersionTag,
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
-      this.validate(fb).flatMap { _ =>
-        update(fb)
-      }.recoverWith {
-        case e =>
-          log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
-          Failure(e)
-      }
+      validate(fb)
+        .flatMap(_ => update(fb))
+        .recoverWith {
+          case e =>
+            log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
+            Failure(e)
+        }
 
-    case _: ErgoFullBlock if !nodeSettings.verifyTransactions =>
+    case _: ErgoFullBlock =>
       log.warn("Should not get full blocks from node view holder if !settings.verifyTransactions")
-      Try(this)
+      Success(this)
 
     case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(h)
 
-    case a: Any =>
-      log.warn(s"Unhandled modifier: $a")
-      Try(this)
+    case other =>
+      log.warn(s"Unhandled modifier: $other")
+      Success(this)
   }
 
   @SuppressWarnings(Array("OptionGet"))

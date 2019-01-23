@@ -62,4 +62,3 @@ class EmissionRules(val settings: MonetarySettings) {
   }.ensuring(_ >= 0, s"Negative at $h")
 
 }
-

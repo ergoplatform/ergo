@@ -1,22 +1,11 @@
 #!/usr/bin/env sh
 
-STOP_FLAG=false
-
-command -v pdflatex
-if [ "$?" != 0 ]; then
-    echo "Command 'pdflatex' not exist, please install. For Ubuntu, try 'sudo apt install texlive-latex-base'"
-    STOP_FLAG=true
-fi
-
-command -v bibtex
-if [ "$?" != 0 ]; then
-    echo "Command 'bibtex' not exist, please install. For Ubuntu, try 'sudo apt install texlive-binaries'"
-    STOP_FLAG=true
-fi
-
-if [ "$STOP_FLAG" = true ]; then
-    echo "Install needed programs to compile TeX."
-    echo "You may need to install additional packages like fonts, etc. For Ubuntu, try:"
+command -v pdflatex && command -v bibtex
+if [[ "$?" != 0 ]]; then
+    echo "Command 'pdflatex' or 'bibtex' not exist, both must be installed. For Ubuntu, try:"
+    echo "sudo apt install texlive-latex-base texlive-binaries"
+    echo
+    echo "You may also need to install additional packages like fonts, etc. For Ubuntu, try:"
     echo "sudo apt-get install texlive-fonts-recommended latex-xcolor texlive-latex-extra cm-super"
     exit 1;
 fi

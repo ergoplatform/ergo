@@ -5,7 +5,6 @@ import org.ergoplatform.ErgoBox
 
 import scala.collection.immutable.SortedMap
 
-
 /**
   * Unauthenticated ordered in-memory box storage. Useful to store genesis state and also for tests.
   * Not suitable for big collections.

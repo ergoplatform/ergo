@@ -11,10 +11,10 @@ import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -56,7 +56,6 @@ class ErgoProvingInterpreter(seed: String,
   /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
-           metadata: Metadata,
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)

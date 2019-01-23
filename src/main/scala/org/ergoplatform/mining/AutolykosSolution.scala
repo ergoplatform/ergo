@@ -5,10 +5,9 @@ import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.{BytesSerializable, Serializer}
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-
-import scala.util.Try
 
 /**
   * Solution of Autolykos PoW puzzle
@@ -19,11 +18,8 @@ import scala.util.Try
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
-case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
-  override type M = AutolykosSolution
-
+case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) {
   val encodedPk: Array[Byte] = pkToBytes(pk)
-
 }
 
 object AutolykosSolution extends ApiCodecs {
@@ -49,7 +45,6 @@ object AutolykosSolution extends ApiCodecs {
 
 object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
-
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
     w.putBytes(pkToBytes(obj.pk))
@@ -67,5 +62,6 @@ object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
     val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))
     AutolykosSolution(pk, w, nonce, d)
   }
+
 }
 

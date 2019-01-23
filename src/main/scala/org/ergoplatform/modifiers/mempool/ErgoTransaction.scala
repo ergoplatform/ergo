@@ -6,7 +6,7 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeTransaction.{FlattenedTransaction, flattenedTxSerializer}
+import org.ergoplatform.ErgoLikeTransaction.FlattenedTransaction
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
@@ -14,16 +14,17 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.BoxUtils
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.serialization.{Serializer => SSerializer}
+import sigmastate.serialization.{SigmaSerializer => SSerializer}
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.{SBoolean, SType}
 
@@ -43,6 +44,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override val serializedId: Array[Byte] = Algos.hash(messageToSign)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
+
+  lazy val size = sizeOpt.getOrElse(ErgoTransactionSerializer.toBytes(this).length)
 
   /**
     * Fill a mutable map passed as a parameter with (assets -> total amount) data, based on boxes passed as
@@ -257,12 +260,13 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
   }
 }
 
-object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] with SSerializer[ErgoTransaction, ErgoTransaction] {
-  override def serializeBody(tx: ErgoTransaction, w: SigmaByteWriter): Unit =
-    flattenedTxSerializer.serialize(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
+object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
 
-  override def parse(r: ByteReader): ErgoTransaction = {
-    val ftx = flattenedTxSerializer.parse(r)
+  override def serialize(tx: ErgoTransaction, w: Writer): Unit =
+    FlattenedTransaction.sigmaSerializer.serializeWithGenericWriter(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
+
+  override def parse(r: Reader): ErgoTransaction = {
+    val ftx = FlattenedTransaction.sigmaSerializer.parseWithGenericReader(r)
     ErgoTransaction(ftx.inputs, ftx.outputCandidates)
   }
 }

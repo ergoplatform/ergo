@@ -4,7 +4,7 @@ import sigmastate.basics.BcDlogFp
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.{GroupElementSerializer, Serializer}
+import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
 package object mining {
 
@@ -26,6 +26,6 @@ package object mining {
 
   def pkToBytes(pk: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(pk)
 
-  def pkFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parseBody(Serializer.startReader(bytes))
+  def pkFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parse(SigmaSerializer.startReader(bytes))
 
 }

@@ -10,7 +10,6 @@ import scorex.core.serialization.Serializer
 
 import scala.util.Try
 
-
 /**
   * System parameters which could be readjusted via collective miners decision.
   */
@@ -263,9 +262,11 @@ object Parameters {
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
   }
+
 }
 
 object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
+
   override def toBytes(params: Parameters): Array[Byte] = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
     Ints.toByteArray(params.height) ++
@@ -279,7 +280,7 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
     Parameters(height, table)
   }
 
-  implicit val jsonEncoder: Encoder[Parameters] = (p: Parameters) =>
+  implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>
     Map(
       "height" -> p.height.asJson,
       "blockVersion" -> p.blockVersion.asJson,
@@ -288,5 +289,6 @@ object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
       "maxBlockSize" -> p.maxBlockSize.asJson,
       "maxBlockCost" -> p.maxBlockCost.asJson
     ).asJson
+  }
 
 }

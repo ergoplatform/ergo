@@ -121,37 +121,34 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
-  @SuppressWarnings(Array("TryGet"))
-  private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = Try {
+  private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
-        stateIn
+        Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
-        stateIn
+        Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
-        recreatedState()
+        Success(recreatedState())
       case (_, Some(bestFullBlock), _: DigestState) =>
-        // Just update state root hash
+        val chainToApply = history.headerChainBack(Int.MaxValue, bestFullBlock.header, h => h.isGenesis).headers
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
-        recreatedState(Some(idToVersion(bestFullBlock.id)), Some(bestFullBlock.header.stateRoot))
+        chainToApply.foldLeft[Try[State]](Success(genesisState._2))((acc, m) => acc.flatMap(_.applyModifier(m)))
       case (stateId, Some(historyBestBlock), state) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](versionToId(stateId))
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
         log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
           s"apply ${newChain.length} modifiers")
-        val startState = rollbackId
+        val initState = rollbackId
           .map(id => state.rollbackTo(idToVersion(id)).get)
           .getOrElse(recreatedState())
         val toApply = newChain.headers.map { h =>
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft(startState) { (s, m) =>
-          s.applyModifier(m).get
-        }
+        toApply.foldLeft[Try[State]](Success(initState))((acc, m) => acc.flatMap(_.applyModifier(m)))
     }
   } match {
     case Failure(e) =>

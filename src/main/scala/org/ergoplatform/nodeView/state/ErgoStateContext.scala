@@ -16,7 +16,6 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.{Success, Try}
 
-
 /**
   * State context with predicted header.
   * The predicted header only contains fields that can be predicted.
@@ -99,7 +98,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  // processExtension
   def extractParameters(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
     val height = header.height
 
@@ -110,7 +108,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         throw new Exception("Versions in header and parameters section are different")
       }
 
-      // Why matching?
       Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
     }
   }

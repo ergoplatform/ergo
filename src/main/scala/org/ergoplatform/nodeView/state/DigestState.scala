@@ -54,7 +54,7 @@ class DigestState protected(override val version: VersionTag,
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+              .get.map(v => ErgoBoxSerializer.parseBytes(v))
             val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
@@ -123,7 +123,8 @@ class DigestState protected(override val version: VersionTag,
   private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
     val version: VersionTag = idToVersion(fullBlock.header.id)
     stateContext.appendFullBlock(fullBlock, votingSettings).flatMap { newStateContext =>
-      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      val sateContexBytes = ErgoStateContextSerializer(votingSettings).toBytes(newStateContext)
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(sateContexBytes)
       update(version, fullBlock.header.stateRoot, Seq(contextKeyVal))
     }
   }
@@ -132,7 +133,8 @@ class DigestState protected(override val version: VersionTag,
   private def update(header: Header): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
     stateContext.appendBlock(header, None, votingSettings).flatMap { newStateContext =>
-      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      val sateContexBytes = ErgoStateContextSerializer(votingSettings).toBytes(newStateContext)
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(sateContexBytes)
       update(version, header.stateRoot, Seq(contextKeyVal))
     }
   }
@@ -180,4 +182,5 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
     Failure(e)
   }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))
+
 }

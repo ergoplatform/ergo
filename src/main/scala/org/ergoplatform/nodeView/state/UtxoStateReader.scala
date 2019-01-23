@@ -72,7 +72,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver
       .unauthenticatedLookup(id)
-      .map(ErgoBoxSerializer.parseBytes)
+      .map(ErgoBoxSerializer.parseBytesTry)
       .flatMap(_.toOption)
   }
 

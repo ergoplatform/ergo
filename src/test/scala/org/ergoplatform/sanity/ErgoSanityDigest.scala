@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool

@@ -143,7 +143,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putLong(h.timestamp)
     w.putBytes(h.extensionRoot)
     RequiredDifficulty.serialize(h.nBits, w)
-    w.putInt(h.height),
+    w.putInt(h.height)
     w.putBytes(h.votes)
   }
 
@@ -200,7 +200,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val extensionHash = Digest32 @@ r.getBytes(32)
     val nBits = RequiredDifficulty.parse(r)
     val height = r.getInt()
-    val votes = r.getBytes(4)
+    val votes = r.getBytes(3)
 
     val interlinksSize = r.getULong()
 

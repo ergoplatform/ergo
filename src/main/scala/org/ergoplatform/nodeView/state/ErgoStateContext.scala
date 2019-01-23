@@ -9,13 +9,13 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.serialization.{BytesSerializable, Serializer}
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.{Success, Try}
-
 
 /**
   * State context with predicted header.
@@ -50,7 +50,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val currentParameters: Parameters,
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
-  extends BytesSerializable with ScorexEncoding {
+  extends ScorexEncoding {
 
   lazy val votingEpochLength: Int = votingSettings.votingLength
 
@@ -66,10 +66,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
   val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
-
-  override type M = ErgoStateContext
-
-  override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
 
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
@@ -194,8 +190,8 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
     w.putBytes(obj.genesisStateDigest)
     w.putInt(obj.lastHeaders.size)
     obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
-    VotingDataSerializer.serialize(w)
-    ParametersSerializer(ctx.currentParameters)
+    VotingDataSerializer.serialize(obj.votingData, w)
+    ParametersSerializer.serialize(obj.currentParameters, w)
   }
 
   override def parse(r: Reader): ErgoStateContext = {
@@ -204,6 +200,6 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
     val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)
-    ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
+    new ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
   }
 }

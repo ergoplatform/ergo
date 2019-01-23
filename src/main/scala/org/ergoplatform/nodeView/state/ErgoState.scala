@@ -55,6 +55,8 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
 object ErgoState extends ScorexLogging {
 
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
+
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**

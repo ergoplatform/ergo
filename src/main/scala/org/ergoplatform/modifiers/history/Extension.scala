@@ -17,57 +17,44 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 /**
-  * Extension section of Ergo block. Contains two key-value storages,
+  * Extension section of Ergo block. Contains key-value storage
   * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
   *
-  * @param headerId        - id of corresponding header
-  * @param mandatoryFields - fields that are known to all nodes in the network and may be changed
-  *                        via soft/hard forks only. These fields have 4 bytes key and at most `MandatoryFieldValueSize`
-  *                        bytes value.
-  * @param optionalFields  - random data miner may add to a block. This section contains at most `MaxOptionalFields`
-  *                        elements with `OptionalFieldKeySize` byte key size and at most `OptionalFieldValueSize`
-  *                        bytes value size.
+  * @param headerId - id of corresponding header
+  * @param fields - fields as a sequence of key -> value records. A key is 2-bytes long, value is 64 bytes max.
   */
 case class Extension(headerId: ModifierId,
-                     mandatoryFields: Seq[(Array[Byte], Array[Byte])],
-                     optionalFields: Seq[(Array[Byte], Array[Byte])],
+                     fields: Seq[(Array[Byte], Array[Byte])],
                      override val sizeOpt: Option[Int] = None) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
-  override def digest: Digest32 = Extension.rootHash(mandatoryFields, optionalFields)
+  override def digest: Digest32 = Extension.rootHash(fields)
 
   override def toString: String = {
-    s"Extension(${Algos.encode(headerId)}, " +
-      s"${mandatoryFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})" +
-      s"${optionalFields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")})"
+    s"Extension(id: $id, headerId: ${Algos.encode(headerId)}, " +
+      s"fields: ${fields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")}) "
   }
 
 }
 
-case class ExtensionCandidate(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
-                              optionalFields: Seq[(Array[Byte], Array[Byte])])
+case class ExtensionCandidate(fields: Seq[(Array[Byte], Array[Byte])]) {
+  def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
+}
 
 object Extension extends ApiCodecs {
 
-  val MandatoryFieldKeySize: Int = 4
+  val FieldKeySize: Int = 2
 
-  val OptionalFieldKeySize: Int = 32
+  val FieldValueMaxSize: Int = 64
 
-  val MaxMandatoryFieldValueSize: Int = 64
+  def apply(header: Header): Extension = Extension(header.id, Seq())
 
-  val MaxOptionalFieldValueSize: Int = 64
+  def rootHash(e: Extension): Digest32 = rootHash(e.fields)
 
-  val MaxOptionalFields: Int = 2
+  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)
 
-  def apply(headerId: ModifierId): Extension = Extension(headerId, Seq(), Seq())
-
-  def rootHash(e: Extension): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
-
-  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.mandatoryFields, e.optionalFields)
-
-  def rootHash(mandatoryFields: Seq[(Array[Byte], Array[Byte])],
-               optionalFields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
-    val elements: Seq[Array[Byte]] = (mandatoryFields ++ optionalFields).map { f =>
+  def rootHash(fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
+    val elements: Seq[Array[Byte]] = fields.map { f =>
       Bytes.concat(Array(f._1.length.toByte), f._1, f._2)
     }
     Algos.merkleTreeRoot(LeafData @@ elements)
@@ -79,17 +66,15 @@ object Extension extends ApiCodecs {
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
       "digest" -> Algos.encode(e.digest).asJson,
-      "mandatoryFields" -> e.mandatoryFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson,
-      "optionalFields" -> e.optionalFields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
+      "fields" -> e.fields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
     ).asJson
   }
 
   implicit val jsonDecoder: Decoder[Extension] = { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
-      mandatoryFields <- c.downField("mandatoryFields").as[List[(Array[Byte], Array[Byte])]]
-      optionalFields <- c.downField("optionalFields").as[List[(Array[Byte], Array[Byte])]]
-    } yield Extension(headerId, mandatoryFields, optionalFields)
+      fields <- c.downField("fields").as[List[(Array[Byte], Array[Byte])]]
+    } yield Extension(headerId, fields)
   }
 }
 
@@ -100,13 +85,6 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
 
     w.putUShort(obj.mandatoryFields.size)
     obj.mandatoryFields.foreach { case (key, value) =>
-      w.putBytes(key)
-      w.putUByte(value.length)
-      w.putBytes(value)
-    }
-
-    w.putUShort(obj.optionalFields.size)
-    obj.optionalFields.foreach { case (key, value) =>
       w.putBytes(key)
       w.putUByte(value.length)
       w.putBytes(value)
@@ -124,13 +102,7 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
       (key, value)
     }
 
-    val optFieldsSize = r.getUShort()
-    val optFields = (1 to optFieldsSize) map { _ =>
-      val key = r.getBytes(Extension.OptionalFieldKeySize)
-      val size = r.getUShort()
-      val value = r.getBytes(size)
-      (key, value)
-    }
-    Extension(headerId, madatoryFields, optFields, Some(r.position - startPosition))
+    Extension(headerId, madatoryFields, Some(r.position - startPosition))
   }
+
 }

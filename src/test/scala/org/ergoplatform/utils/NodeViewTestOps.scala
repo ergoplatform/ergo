@@ -33,10 +33,18 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   }
 
   def getHistory(implicit ctx: Ctx): ErgoHistory = getCurrentView.history
+
   def getCurrentState(implicit ctx: Ctx): ErgoState[_] = getCurrentView.state
 
   def verifyTransactions(implicit ctx: Ctx): Boolean = ctx.settings.nodeSettings.verifyTransactions
+
   def stateType(implicit ctx: Ctx): StateType = ctx.settings.nodeSettings.stateType
+
+  def applyHeader(header: Header)(implicit ctx: Ctx): Try[Unit] = {
+    subscribeModificationOutcome()
+    nodeViewHolderRef ! LocallyGeneratedModifier(header)
+    expectModificationOutcome(header)
+  }
 
   def applyBlock(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
@@ -51,7 +59,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       lastResult.flatMap { _ =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
         section match {
-          case Extension(_, Seq(), Seq(), _) => Success(()) // doesn't send back any outcome
+          case Extension(_, Seq(), _) => Success(()) // doesn't send back any outcome
           case _ => expectModificationOutcome(section) // normal flow
         }
       }
@@ -68,6 +76,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
         Success(())
       case outcome =>
+        println("outcome: " + outcome)
         val msg = section match {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"
@@ -82,7 +91,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     */
   def makeNextBlock(utxoState: UtxoState,
                     txs: Seq[ErgoTransaction],
-                    ext: ExtensionCandidate = ExtensionCandidate(Seq(), Seq()))
+                    ext: ExtensionCandidate = ExtensionCandidate(Seq()))
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
     val parent = getHistory.bestHeaderOpt
@@ -90,12 +99,19 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   }
 
   @inline private def nodeViewHolderRef(implicit ctx: Ctx): ActorRef = ctx.nodeViewHolderRef
+
   @inline def send(msg: Any)(implicit ctx: Ctx): Unit = ctx.testProbe.send(nodeViewHolderRef, msg)
+
   @inline def ctxTimeout(implicit ctx: Ctx): FiniteDuration = ctx.testProbe.remainingOrDefault
+
   @inline def expectMsg[T](obj: T)(implicit ctx: Ctx): T = ctx.testProbe.expectMsg(obj)
+
   @inline def expectMsgType[T](implicit ctx: Ctx, t: ClassTag[T]): T = ctx.testProbe.expectMsgType
+
   @inline def expectNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.expectNoMessage(ctxTimeout)
+
   @inline def ignoreMsg(f: PartialFunction[Any, Boolean])(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreMsg(f)
+
   @inline def ignoreNoMsg()(implicit ctx: Ctx): Unit = ctx.testProbe.ignoreNoMsg()
 
   @inline def subscribeEvents(eventType: Class[_])(implicit ctx: Ctx): Boolean = {
@@ -110,19 +126,28 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getBestHeaderOpt(implicit ctx: Ctx): Option[Header] = getHistory.bestHeaderOpt
+
   def getPoolSize(implicit ctx: Ctx): Int = getCurrentView.pool.size
+
   def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootHash)
+
   def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
+
   def getBestFullBlockEncodedId(implicit ctx: Ctx): Option[String] = getBestFullBlockOpt.map(_.header.encodedId)
+
   def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
+
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
+
   def getHeightOf(id: scorex.util.ModifierId)(implicit ctx: Ctx): Option[Int] = getHistory.heightOf(id)
+
   def getLastHeadersLength(count: Int)(implicit ctx: Ctx): Int = getHistory.lastHeaders(count).size
+
   def getModifierById(id: ModifierId)(implicit ctx: Ctx): Option[ErgoPersistentModifier] = getHistory.modifierById(id)
 
   def getAfterGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
     ctx.settings.chainSettings.monetary.afterGenesisStateDigest
+
 }
 
-object NodeViewTestOps extends NodeViewTestOps {
-}
+object NodeViewTestOps extends NodeViewTestOps

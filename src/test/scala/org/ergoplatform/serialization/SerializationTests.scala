@@ -50,7 +50,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoStateContext serialization") {
-    val serializer = ErgoStateContextSerializer
+    val serializer = ErgoStateContextSerializer(votingSettings)
     forAll(ergoStateContextGen) { b: ErgoStateContext =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)

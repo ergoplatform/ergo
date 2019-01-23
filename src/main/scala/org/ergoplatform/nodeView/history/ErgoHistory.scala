@@ -235,4 +235,5 @@ object ErgoHistory extends ScorexLogging {
     }
     history
   }
+
 }

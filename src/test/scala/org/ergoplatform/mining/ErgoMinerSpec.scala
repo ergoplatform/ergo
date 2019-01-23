@@ -1,32 +1,31 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, Actor, ActorSystem}
 import akka.pattern.ask
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{TestProbe, TestKit}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.{ErgoMiner, ErgoMinerRef}
+import org.ergoplatform.local.{ErgoMinerRef, ErgoMiner}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings._
+import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
-import scapi.sigma.DLogProtocol
-import scapi.sigma.DLogProtocol.DLogProverInput
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import scorex.core.NodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, GetDataFromCurrentView}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
@@ -55,7 +54,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((Parameters.MaxBlockCost / Cost.DlogDeclaration) * 2).toInt
+//    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+    val desiredSize: Int = 50
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)
@@ -64,7 +64,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val r: Readers = requestReaders
     val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
 
@@ -83,11 +83,12 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     @tailrec
     def loop(toSend: Int): Unit = {
       val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
-      log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains, pool size: ${pool.size}")
+      log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
+        s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
         val inputs = IndexedSeq(Input(boxToSend.id, emptyProverResult))
 
-        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, Constants.FeeProposition, r.s.stateContext.currentHeight)
+        val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, feeProp, r.s.stateContext.currentHeight)
         val outputs = (1 until desiredSize).map { _ =>
           new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
         }
@@ -95,13 +96,11 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
-          r.s.stateContext).get
+          r.s.stateContext
+        ).get
       }
 
-      // put txs in mempool altogether to speedup test
-      await(nodeViewHolderRef ? GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.pool.put(txs)
-      })
+      txs.foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
 
       if (toSend > toSpend.size) {
         // wait for the next block
@@ -110,32 +109,22 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       }
     }
 
+    def requestReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
     // Generate and send `desiredSize` transactions to mempool
     loop(desiredSize)
 
-    pool.size should be > 10
+    Thread.sleep(5000)
+
+    requestReaders.m.size should be > 10
 
     // wait for mempool to be cleaned
-    while (pool.size > 0) {
-      log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${pool.size}")
+    while (requestReaders.m.size > 0) {
+      log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       // blocks should not be empty
       r.h.bestFullBlockOpt.get.transactions.nonEmpty shouldBe true
       Thread.sleep(1000)
     }
-
-  }
-
-  it should "filter out double spend txs" in {
-    val tx = validErgoTransactionGen.sample.get._2
-    ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
-
-    val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
-    val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionFromBoxes(l)
-    val tx_2 = validTransactionFromBoxes(r :+ l.last)
-
-    ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
-    ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
   }
 
   it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
@@ -167,7 +156,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.proposition shouldBe defaultMinerSecret.publicImage
+    boxToDoubleSpend.propositionBytes shouldBe ErgoState.rewardOutputScript(settings.emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
@@ -182,13 +171,13 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx2)
     expectNoMessage(1 seconds)
 
-    r.m.unconfirmed.size shouldBe 2
+    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
 
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
     testProbe.expectMsgClass(newBlockDuration, newBlock)
 
-    r.m.unconfirmed.size shouldBe 0
+    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
     val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)

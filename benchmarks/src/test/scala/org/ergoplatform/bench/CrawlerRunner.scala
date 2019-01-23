@@ -1,6 +1,8 @@
 package org.ergoplatform.bench
 
-import akka.actor.{ActorRef, Props}
+import java.io.File
+
+import akka.actor.ActorRef
 import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.bench.misc.CrawlerConfig
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
@@ -10,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
@@ -26,11 +28,11 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
-  lazy val fileToSave = args.headOption.getOrElse("/")
+  lazy val fileToSave: String = args.headOption.getOrElse("/")
   lazy val threshold: Int = args.lift(1).getOrElse("15000").toInt
   lazy val cfgPath: Option[String] = args.lift(2)
-  lazy val benchConfig = CrawlerConfig(fileToSave, threshold)
-  lazy val tempDir = TempDir.createTempDir
+  lazy val benchConfig: CrawlerConfig = CrawlerConfig(fileToSave, threshold)
+  lazy val tempDir: File = TempDir.createTempDir
 
   log.info(s"Temp dir is ${tempDir.getAbsolutePath}")
   log.info(s"Config is $benchConfig")

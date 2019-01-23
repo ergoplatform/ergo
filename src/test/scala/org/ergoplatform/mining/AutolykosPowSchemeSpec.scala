@@ -1,18 +1,14 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.HeaderSerializer
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.testkit.utils.NoShrink
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
-  val k = 21
-  val N = 100000000
-
   property("generated solution should be valid") {
-    val pow = new AutolykosPowScheme(k, N)
+    val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
     forAll(invalidHeaderGen, Gen.choose(1, 20)) { (inHeader, difficulty) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits)
@@ -25,6 +21,5 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
       pow.validate(newHeader) shouldBe 'success
     }
   }
-
 
 }

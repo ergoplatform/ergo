@@ -1,22 +1,18 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
 import org.scalameter.picklers.Implicits._
-import scorex.util.ModifierId
-import org.ergoplatform.utils.ErgoTestHelpers.defaultExecutionContext
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.util.{Random => Rng}
 
 object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
     with ErgoTransactionGenerators {
 
-  private val blockSizes = Gen.enumeration("txs in block")(50, 100, 200)
+  private val blockSizes = Gen.enumeration("txs in block")(50, 500, 1000)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
 
   private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]) = for {
@@ -29,7 +25,7 @@ object ErgoMemPoolBenchmark
           invalidErgoTransactionGen.sample
         }).flatten
       }
-    (txsByWaitingGroups.map(_.map(_.id)), txIncomeOrder(txsByWaitingGroups))
+    txIncomeOrder(txsByWaitingGroups)
   }
 
   private val bestCaseGenerator = waitForTransactionsInSequence(_.flatten)
@@ -45,34 +41,22 @@ object ErgoMemPoolBenchmark
     exec.requireGC -> true
   )
 
-  private def bench(txsByWaitingGroups: Seq[Seq[ModifierId]],
-                    txsInIncomeOrder: Seq[ErgoTransaction]) = {
-    val pool = ErgoMemPool.empty
-    val futures = txsByWaitingGroups.map(group => {
-      pool.waitForAll(group)
-    })
-    val resultFuture = Future.sequence(futures)
-    txsInIncomeOrder.foreach(pool.put)
-    Await.result(resultFuture, Duration.Inf)
+  private def bench(txsInIncomeOrder: Seq[ErgoTransaction]): Unit = {
+    var pool = ErgoMemPool.empty(settings)
+    txsInIncomeOrder.foreach(tx => pool = pool.put(tx).get)
   }
 
   performance of "ErgoMemPool awaiting" in {
     performance of "best case" in {
-      using(bestCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(bestCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
 
     performance of "avg case" in {
-      using(avgCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(avgCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
 
     performance of "worst case" in {
-      using(worstCaseGenerator) config (config: _*) in {
-        case (txsByWaitingGroups, txsInIncomeOrder) => bench(txsByWaitingGroups, txsInIncomeOrder)
-      }
+      using(worstCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
   }
 

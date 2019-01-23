@@ -93,7 +93,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
   }
 
   protected def readErgoBox(r: Reader)(parser: ErgoBox => TrackedBox): Try[TrackedBox] = {
-    Try(ErgoBoxSerializer.parse(r)).map { box => parser(box) }
+    ErgoBoxSerializer.parseTry(r).map { box => parser(box) }
   }
 
 }

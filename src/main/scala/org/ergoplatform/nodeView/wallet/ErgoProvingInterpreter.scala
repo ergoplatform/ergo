@@ -9,12 +9,12 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
 import scorex.crypto.hash.Blake2b256
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 
 /**
@@ -35,8 +35,8 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Parameters.MaxBlockCost)(implicit IR: IRContext)
-  extends ErgoInterpreter(maxCost) with ProverInterpreter {
+                             params: Parameters)(implicit IR: IRContext)
+  extends ErgoInterpreter(params) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
 
@@ -56,6 +56,7 @@ class ErgoProvingInterpreter(seed: String,
   /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
+           metadata: Metadata,
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
@@ -92,6 +93,6 @@ class ErgoProvingInterpreter(seed: String,
 
 object ErgoProvingInterpreter {
 
-  def apply(seed: String, numOfSecrets: Int, maxCost: Long = Parameters.MaxBlockCost): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(seed, numOfSecrets, maxCost)(new RuntimeIRContext)
+  def apply(seed: String, numOfSecrets: Int, params: Parameters): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(seed, numOfSecrets, params)(new RuntimeIRContext)
 }

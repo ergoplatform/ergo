@@ -1,16 +1,12 @@
 package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import org.ergoplatform.P2PKAddress
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
@@ -18,7 +14,6 @@ import org.scalatest.FlatSpec
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with WalletTestOps {
 
@@ -70,23 +65,30 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    val ergoTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    private def etxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx)
+    private def ttxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx)
+    private def tiPredicate(tx: ErgoTransaction) = containsAssetIssuingBox(tx)
+
+    val ergoTransferringTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx) => true
-    }
+        if etxPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    val tokenTransferringTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
+    val tokenTransferringTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
       case SuccessfulTransaction(tx: ErgoTransaction)
-        if tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx) => true
-    }
+        if ttxPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    val tokenIssuingTx: Boolean = fishForSpecificMessage(transactionAwaitDuration) {
-      case SuccessfulTransaction(tx: ErgoTransaction) if containsAssetIssuingBox(tx) => true
-    }
+    val tokenIssuingTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {
+      case SuccessfulTransaction(tx: ErgoTransaction) if tiPredicate(tx) => true
+      case _ => false
+    }.asInstanceOf[SuccessfulTransaction[ErgoTransaction]].transaction
 
-    ergoTransferringTx shouldBe true
-    tokenTransferringTx shouldBe true
-    tokenIssuingTx shouldBe true
+    etxPredicate(ergoTransferringTx) shouldBe true
+    ttxPredicate(tokenTransferringTx) shouldBe true
+    tiPredicate(tokenIssuingTx) shouldBe true
   }
 
 }

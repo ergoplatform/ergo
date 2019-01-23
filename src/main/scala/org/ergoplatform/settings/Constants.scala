@@ -5,14 +5,8 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer
-import org.ergoplatform.{MinerPubkey, Outputs}
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import sigmastate.Values.{IntConstant, Value}
-import sigmastate._
-import sigmastate.serialization.ErgoTreeSerializer
-import sigmastate.utxo.{ByIndex, ExtractScriptBytes, SizeOf}
-
 
 object Constants {
   val HashLength: Int = 32
@@ -41,18 +35,9 @@ object Constants {
   val StorageContractCost: Long = 50
 
   val StorageIndexVarId: Byte = Byte.MaxValue
-  
+
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
-
-  val FeeProposition: Value[SBoolean.type] = {
-    val correctMinerProposition = EQ(
-      ExtractScriptBytes(ByIndex(Outputs, IntConstant(0))),
-      ErgoTreeSerializer.serializedPubkeyPropValue(MinerPubkey)
-    )
-    val outputsNum = EQ(SizeOf(Outputs), 1)
-    AND(correctMinerProposition, outputsNum)
-  }
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
@@ -60,4 +45,8 @@ object Constants {
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+
+  val SoftForkEpochs = 32 //about 45.5 days
+
+  val extensionMaxSize: Int = 10 * 1024 //10 kb
 }

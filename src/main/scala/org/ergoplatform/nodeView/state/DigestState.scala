@@ -19,7 +19,7 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Minimal state variant which is storing only digest of UTXO authenticated as a dynamic dictionary.
+  * Minimal state variant which is storing only digest of UTXO set authenticated as a dynamic dictionary.
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
 class DigestState protected(override val version: VersionTag,
@@ -41,23 +41,20 @@ class DigestState protected(override val version: VersionTag,
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
-    case fb: ErgoFullBlock if notInitialized =>
-      log.info(s"Initializing state with fb ${fb.id}")
-      Success(Unit)
-
     case fb: ErgoFullBlock =>
       fb.adProofs match {
+        case None =>
+          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Error("Incorrect proofs digest"))
         case Some(proofs) =>
-          Try {
+          stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
             val txs = fb.blockTransactions.txs
-            val currentStateContext = stateContext.appendHeader(fb.header)
 
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-              .get.map(v => ErgoBoxSerializer.parseBytes(v))
+              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
             val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
@@ -67,14 +64,12 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              verifier.IR.resetContext() // ensure there is no garbage in the IRContext
               tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
             }.sum
-            if (totalCost > Parameters.MaxBlockCost) throw new Error(s"Transaction cost $totalCost exeeds limit")
-
+            if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
+              throw new Error(s"Transaction cost $totalCost exceeds limit")
+            }
           }
-        case None =>
-          Failure(new Error("Empty proofs when trying to apply full block to Digest state"))
       }
 
     case _: Header => Success(Unit)
@@ -89,24 +84,20 @@ class DigestState protected(override val version: VersionTag,
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
         s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
       this.validate(fb).flatMap { _ =>
-        update(fb.header)
+        update(fb)
       }.recoverWith {
         case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
           Failure(e)
       }
 
-    case fb: ErgoFullBlock if !nodeSettings.verifyTransactions =>
-      log.warn("Should not get full blocks from node view holders if !settings.verifyTransactions")
+    case _: ErgoFullBlock if !nodeSettings.verifyTransactions =>
+      log.warn("Should not get full blocks from node view holder if !settings.verifyTransactions")
       Try(this)
 
-    case h: Header if !nodeSettings.verifyTransactions =>
+    case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       update(h)
-
-    case h: Header if nodeSettings.verifyTransactions =>
-      log.warn("Should not get header from node view holders if settings.verifyTransactions")
-      Try(this)
 
     case a: Any =>
       log.warn(s"Unhandled modifier: $a")
@@ -125,17 +116,25 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-  override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions()
-    .map(w => bytesToVersion(w.data))
+  override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(w => bytesToVersion(w.data))
 
   def close(): Unit = store.close()
 
+  private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
+    val version: VersionTag = idToVersion(fullBlock.header.id)
+    stateContext.appendFullBlock(fullBlock, votingSettings).flatMap { newStateContext =>
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      update(version, fullBlock.header.stateRoot, Seq(contextKeyVal))
+    }
+  }
+
+  //todo: refactor to eliminate common boilerplate with the method above
   private def update(header: Header): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
-    val newContext = stateContext.appendHeader(header)
-    val newContextBytes = ErgoStateContextSerializer.toBytes(newContext)
-    val cb = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newContextBytes)
-    update(version, header.stateRoot, Seq(cb))
+    stateContext.appendBlock(header, None, votingSettings).flatMap { newStateContext =>
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
+      update(version, header.stateRoot, Seq(contextKeyVal))
+    }
   }
 
   private def update(newVersion: VersionTag,
@@ -149,9 +148,6 @@ class DigestState protected(override val version: VersionTag,
     new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
   }
 
-  // DigestState is not initialized yet. Waiting for first full block to apply without checks
-  private lazy val notInitialized = nodeSettings.blocksToKeep >= 0 && (version == ErgoState.genesisStateVersion)
-
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {
@@ -161,7 +157,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              settings: ErgoSettings): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = settings.nodeSettings.keepVersions)
-    val verifier = ErgoInterpreter()
+    val verifier = ErgoInterpreter(LaunchParameters)
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {

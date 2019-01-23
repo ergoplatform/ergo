@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state.wrapped
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.DigestState
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import scorex.core.VersionTag
 
 import scala.util.Try
@@ -23,5 +23,6 @@ class WrappedDigestState(val digestState: DigestState,
   }
 
   private def wrapped(digestT: Try[DigestState], utxoT: Try[WrappedUtxoState]): Try[WrappedDigestState] =
-    digestT.flatMap(digest => utxoT.map(utxo => new WrappedDigestState(digest, utxo, settings, ErgoInterpreter())))
+    digestT.flatMap(digest => utxoT.map(utxo =>
+      new WrappedDigestState(digest, utxo, settings, ErgoInterpreter(LaunchParameters))))
 }

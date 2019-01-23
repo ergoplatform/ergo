@@ -1,30 +1,31 @@
 package org.ergoplatform
 
-import org.bouncycastle.math.ec.ECPoint
-import scapi.sigma.BcDlogFp
-import scapi.sigma.DLogProtocol.DLogProverInput
+import sigmastate.basics.BcDlogFp
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.{GroupElementSerializer, Serializer}
 
 package object mining {
 
   type PrivateKey = BigInt
 
   val PublicKeyLength: Byte = 33
+
   val group: BcDlogFp[EcPointType] = CryptoConstants.dlogGroup
+
   val q: BigInt = group.q
+
   private val hashFn: NumericHash = new NumericHash(q)
 
   def hash(in: Array[Byte]): BigInt = hashFn.hash(in)
 
-  def genPk(s: PrivateKey): ECPoint = group.exponentiate(group.generator, s.bigInteger)
+  def genPk(s: PrivateKey): EcPointType = group.exponentiate(group.generator, s.bigInteger)
 
   def randomSecret(): PrivateKey = DLogProverInput.random().w
 
-  def lg(x: Int): Int = (Math.log(x) / Math.log(2)).toInt.ensuring(s => Math.pow(2, s) == x)
+  def pkToBytes(pk: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(pk)
 
-  def pkToBytes(pk: ECPoint): Array[Byte] = pk.getEncoded(true).ensuring(_.size == PublicKeyLength)
-
-  def pkFromBytes(bytes: Array[Byte]): ECPoint = group.curve.decodePoint(bytes)
+  def pkFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parseBody(Serializer.startReader(bytes))
 
 }

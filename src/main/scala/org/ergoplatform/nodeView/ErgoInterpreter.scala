@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
-import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.eval.{IRContext, RuntimeIRContext}
@@ -15,10 +15,10 @@ import scala.util.Try
   * ErgoTree language interpreter, Ergo version. In addition to ErgoLikeInterpreter, it contains
   * rules for expired boxes spending validation.
   *
-  * @param maxCost - maximum cost of a script
+  * @param params - current values of adjustable blockchain settings
   */
-class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)(implicit IR: IRContext)
-  extends ErgoLikeInterpreter(maxCost) {
+class ErgoInterpreter(params: Parameters)(implicit IR: IRContext)
+  extends ErgoLikeInterpreter(params.maxBlockCost) {
 
   override type CTX = ErgoContext
 
@@ -31,7 +31,7 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)(impl
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = Parameters.K * box.bytes.length
+    val maxStorageFee = params.storageFeeFactor * box.bytes.length
 
     (box.value - maxStorageFee <= 0) || {
       output.creationHeight == currentHeight &&
@@ -67,6 +67,6 @@ class ErgoInterpreter(override val maxCost: Long = Parameters.MaxBlockCost)(impl
 
 object ErgoInterpreter {
 
-  def apply(maxCost: Height = Parameters.MaxBlockCost): ErgoInterpreter =
-    new ErgoInterpreter(maxCost)(new RuntimeIRContext)
+  def apply(params: Parameters): ErgoInterpreter =
+    new ErgoInterpreter(params)(new RuntimeIRContext)
 }

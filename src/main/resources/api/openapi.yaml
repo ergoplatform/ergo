@@ -13,6 +13,12 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: api_key
+
   schemas:
     # Objects
     ErgoTransactionInput:
@@ -1318,6 +1324,8 @@ paths:
 
   /wallet/balances:
     get:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Get total amount of confirmed Ergo tokens and assets
       operationId: walletBalances
       tags:
@@ -1338,6 +1346,8 @@ paths:
 
   /wallet/balances/with_unconfirmed:
     get:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
       operationId: walletBalancesUnconfirmed
       tags:
@@ -1358,6 +1368,8 @@ paths:
 
   /wallet/addresses:
     get:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Get wallet addresses
       operationId: walletAddresses
       tags:
@@ -1380,6 +1392,8 @@ paths:
 
   /wallet/p2s_address:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Create P2SAddress from Sigma source
       operationId: walletP2SAddress
       tags:
@@ -1412,6 +1426,8 @@ paths:
 
   /wallet/p2sh_address:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
       operationId: walletP2SAddress
       tags:
@@ -1444,6 +1460,8 @@ paths:
 
   /wallet/transaction/generate:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate arbitrary transaction
       operationId: walletTransactionGenerate
       tags:
@@ -1476,6 +1494,8 @@ paths:
 
   /wallet/transaction/send:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate and send arbitrary transaction
       operationId: walletTransactionGenerateAndSend
       tags:
@@ -1508,6 +1528,8 @@ paths:
 
   /wallet/payment/generate:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate payment transaction
       operationId: walletPaymentTransactionGenerate
       tags:
@@ -1542,6 +1564,8 @@ paths:
 
   /wallet/payment/send:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate and send payment transaction
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
@@ -1576,6 +1600,8 @@ paths:
 
   /wallet/assets/generate:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate asset issue transaction
       operationId: walletAssetIssueTransactionGenerate
       tags:
@@ -1610,6 +1636,8 @@ paths:
 
   /wallet/assets/issue:
     post:
+      security:
+      - ApiKeyAuth: [api_key]
       summary: Generate and send asset issue transaction
       operationId: walletAssetIssueTransactionGenerateAndSend
       tags:

@@ -55,14 +55,14 @@ Parameters for initial moment of time~$(height = 1)$ are simply hardcoded.
 \subsection{Proposing a change and voting for it}
 
 To propose a change, in the first block of a voting epoch (of $1,024$ blocks, so in a block of
-$height\,mod\,1024 = 0 \land height > 0$), a miner is posting vote for a change. There are three slots (three bytes)
-in a block header for changes to propose, with two slots for everyday chanegs and third one to propose a softfork. Slot
-not occuppied by a proposal is to be set to zero. Votes could come in any order. Examples of the bytes:
-$(0, 1, 120)$, $(0, -3, 120)$. In the first case, a miner is proposing to increase storage fee factor ($id:1$), and
+$height\,mod\,1024 = 0$), a miner is posting an identifier of a vote for a change. There are three slots (three bytes)
+in a block header for changes to propose, with two slots reserved for everyday changes and the third one for
+proposing a softfork. Slot not occuppied by a proposal is to be set to zero. Votes could come in any order.
+Examples of the bytes: $(0, 1, 120)$, $(120, -3, 0)$. In the first case, a miner is proposing to increase storage fee factor ($id:1$), and
 also proposes a soft-fork ($id:120$), In the second case, a miner is proposing to decrease block size ($id:-3$), and also
  is proposing a soft-fork ($id:120$).
 
-To vote for a proposal~(proposed in the first block of an epoch) within the epoch, a miner is including vote identifier
+To vote for a proposal~(which is, again, proposed in the first block of an epoch) within the epoch, a miner is including vote identifier
 into the block header. Identifiers not proposed in the first block of the epoch are ignored.
 
 If majority of votes within an epoch are supporting an everyday change (so at least 513 blocks are containing an

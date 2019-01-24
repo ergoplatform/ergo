@@ -107,11 +107,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     for (file <- dir.listFiles) file.delete
 
     {
+      val constants = StateConstants(Some(self), settings)
       (version, digest, settings.nodeSettings.stateType) match {
         case (Some(_), Some(_), StateType.Digest) =>
-          DigestState.create(version, digest, dir, settings)
+          DigestState.create(version, digest, dir, constants)
         case _ =>
-          ErgoState.readOrGenerate(settings, StateConstants(Some(self), settings))
+          ErgoState.readOrGenerate(settings, constants)
       }
     }
       .asInstanceOf[State]

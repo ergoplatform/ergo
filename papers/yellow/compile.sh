@@ -12,15 +12,18 @@ if [ "$?" != 0 ]; then
     exit 1;
 fi
 
-rm YellowPaper.pdf
+rm -f YellowPaper.pdf
 pdflatex -shell-escape YellowPaper
 bibtex -shell-escape YellowPaper
 pdflatex -shell-escape YellowPaper
 pdflatex -shell-escape YellowPaper
-rm *.aux
-rm *.log
-rm *.blg
-rm *.bbl
-rm *.out
-rm *.toc
-rm -r _minted-YellowPaper/
+
+if [ $(dirname $0) = "." ]; then
+    rm -f *.aux
+    rm -f *.log
+    rm -f *.blg
+    rm -f *.bbl
+    rm -f *.out
+    rm -f *.toc
+    rm -fr _minted-YellowPaper/
+fi

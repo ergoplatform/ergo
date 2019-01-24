@@ -12,10 +12,13 @@ if [ "$?" != 0 ]; then
     exit 1;
 fi
 
-rm ErgoPow.pdf
+rm -f ErgoPow.pdf
 pdflatex ErgoPow.tex
 bibtex ErgoPow
 pdflatex ErgoPow.tex
 pdflatex ErgoPow.tex
-rm *.aux
-rm *.log
+
+if [ $(dirname $0) = "." ]; then
+    rm -f *.aux
+    rm -f *.log
+fi

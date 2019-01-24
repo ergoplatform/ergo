@@ -1,8 +1,10 @@
 package org.ergoplatform.nodeView
 
+import java.io.File
+
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
@@ -10,7 +12,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
@@ -102,8 +104,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): State = {
-    val dir = ErgoState.stateDir(settings)
-    dir.mkdirs()
+    val dir = stateDir(settings)
     for (file <- dir.listFiles) file.delete
 
     {
@@ -134,9 +135,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         Success(recreatedState())
       case (_, Some(bestFullBlock), _: DigestState) =>
-        val chainToApply = history.headerChainBack(Int.MaxValue, bestFullBlock.header, h => h.isGenesis).headers
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
-        chainToApply.foldLeft[Try[State]](Success(genesisState._2))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        recoverDigestState(bestFullBlock, history).map(_.asInstanceOf[State])
       case (stateId, Some(historyBestBlock), state) =>
         val stateBestHeaderOpt = history.typedModifierById[Header](versionToId(stateId))
         val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
@@ -157,6 +157,38 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       ErgoApp.forceStopApplication(500)
     case Success(state) =>
       state
+  }
+
+  private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
+    val constants = StateConstants(Some(self), settings)
+    val newEpochHeadersQty = bestFullBlock.header.height % settings.chainSettings.voting.votingLength
+    val headersQtyToAcquire = newEpochHeadersQty + Constants.LastHeadersInContext
+    val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => true).headers
+    val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
+    val firstExtensionOpt = chainToApply.headOption
+      .flatMap(h => history.typedModifierById[Extension](h.extensionId))
+    val stateContextOpt = firstExtensionOpt.flatMap { ext =>
+      ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings.chainSettings.voting)
+        .toOption
+    }
+    val recoverVersion = idToVersion(bestFullBlock.id)
+    val recoverRoot = bestFullBlock.header.stateRoot
+    stateContextOpt.map { ctx =>
+      DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
+    } match {
+      case Some(state) =>
+        chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
+      case None => // recover using whole headers chain
+        val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, h => h.isGenesis).headers
+        val genesisState = DigestState.create(None, None, stateDir(settings), constants)
+        wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+    }
+  }
+
+  private def stateDir(settings: ErgoSettings): File = {
+    val dir = ErgoState.stateDir(settings)
+    dir.mkdirs()
+    dir
   }
 
   // scalastyle:on

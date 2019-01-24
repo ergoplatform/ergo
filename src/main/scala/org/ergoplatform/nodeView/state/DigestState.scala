@@ -138,19 +138,43 @@ class DigestState protected(override val version: VersionTag,
     new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
   }
 
-  //todo: remove later
-  private def update(newVersion: VersionTag,
-                     newRootHash: ADDigest): Try[DigestState] = Try {
-    val wrappedVersion = Algos.versionToBAW(newVersion)
-    val toUpdate = Seq(Algos.versionToBAW(newVersion) -> ByteArrayWrapper(newRootHash))
-
-    store.update(wrappedVersion, Seq.empty, toUpdate)
-    new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
-  }
-
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {
+
+  def create(versionOpt: Option[VersionTag],
+             rootHashOpt: Option[ADDigest],
+             dir: File,
+             constants: StateConstants): DigestState = Try {
+    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val context = store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
+      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytes(b.data).toOption)
+      .getOrElse(ErgoStateContext.empty(constants))
+    val verifier = ErgoInterpreter(LaunchParameters)
+    (versionOpt, rootHashOpt) match {
+      case (Some(version), Some(rootHash)) =>
+        val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
+          new DigestState(version, rootHash, store, constants.settings, verifier)
+        } else {
+          val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
+          new DigestState(inVersion, rootHash, store, constants.settings, verifier)
+            .update(version, rootHash, context).get //sync store
+        }
+        state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
+      case (None, None) if store.lastVersionID.isEmpty =>
+        ErgoState.generateGenesisDigestState(dir, constants.settings)
+      case (None, None) =>
+        val version = bytesToVersion(store.lastVersionID.get.data)
+        val rootHash = store.get(Algos.versionToBAW(version)).get.data
+        new DigestState(version, ADDigest @@ rootHash, store, constants.settings, verifier)
+      case _ => ???
+    }
+  } match {
+    case Success(state) => state
+    case Failure(e) =>
+      log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
+      ErgoState.generateGenesisDigestState(dir, constants.settings)
+  }
 
   protected def metadata(newVersion: VersionTag,
                          newRootHash: ADDigest,
@@ -158,34 +182,5 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     Algos.versionToBAW(newVersion) -> ByteArrayWrapper(newRootHash),
     ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
   )
-
-  def create(versionOpt: Option[VersionTag],
-             rootHashOpt: Option[ADDigest],
-             dir: File,
-             settings: ErgoSettings): DigestState = Try {
-    val store = new LSMStore(dir, keepVersions = settings.nodeSettings.keepVersions)
-    val verifier = ErgoInterpreter(LaunchParameters)
-    (versionOpt, rootHashOpt) match {
-      case (Some(version), Some(rootHash)) =>
-        val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, settings, verifier)
-        } else {
-          val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, settings, verifier)
-            .update(version, rootHash).get //sync store
-        }
-        state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
-      case (None, None) if store.lastVersionID.isEmpty =>
-        ErgoState.generateGenesisDigestState(dir, settings)
-      case (None, None) =>
-        val version = bytesToVersion(store.lastVersionID.get.data)
-        val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, settings, verifier)
-      case _ => ???
-    }
-  }.recoverWith { case e =>
-    log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
-    Failure(e)
-  }.getOrElse(ErgoState.generateGenesisDigestState(dir, settings))
 
 }

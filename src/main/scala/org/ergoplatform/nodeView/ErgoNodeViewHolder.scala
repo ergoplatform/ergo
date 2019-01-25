@@ -172,19 +172,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
     val firstExtensionOpt = chainToApply.headOption
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-    val stateContextOpt = firstExtensionOpt.flatMap { ext =>
-      ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings.chainSettings.voting)
-        .toOption
-    }
-    val recoverVersion = idToVersion(bestFullBlock.id)
-    val recoverRoot = bestFullBlock.header.stateRoot
-    stateContextOpt.map { ctx =>
-      DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
-    } match {
-      case Some(state) =>
+
+    val recoveredStateTry = firstExtensionOpt
+      .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
+      )(ext => ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings.chainSettings.voting))
+      .map { ctx =>
+        val recoverVersion = idToVersion(bestFullBlock.id)
+        val recoverRoot = bestFullBlock.header.stateRoot
+        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
+      }
+
+    recoveredStateTry match {
+      case Success(state) =>
+        log.info("Recovering state using current epoch")
         chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
-      case None => // recover using whole headers chain
-        log.warn("Failed to recover state from current epoch, using whole chain")
+      case Failure(exception) => // recover using whole headers chain
+        log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))

@@ -14,8 +14,8 @@ import scala.concurrent.duration._
 
 class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
 
-  val approxMinerTargetHeight = 10
-  val approxFollowerTargetHeight: Int = approxMinerTargetHeight + 10
+  val approxMinerTargetHeight = 20
+  val approxFollowerTargetHeight: Int = approxMinerTargetHeight + 5
 
   val minerLocalVolume = s"$localDataDir/state-recovery-spec/miner/data"
   val followerLocalVolume = s"$localDataDir/state-recovery-spec/follower/data"

@@ -159,11 +159,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       state
   }
 
+  /**
+    * Recovers digest state from history
+    */
   private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
     val constants = StateConstants(Some(self), settings)
-    val newEpochHeadersQty = bestFullBlock.header.height % settings.chainSettings.voting.votingLength
+    val votingLength = settings.chainSettings.voting.votingLength
+    val bestHeight = bestFullBlock.header.height
+    val newEpochHeadersQty = bestHeight % votingLength
     val headersQtyToAcquire = newEpochHeadersQty + Constants.LastHeadersInContext
-    val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => true).headers
+    val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => false).headers
     val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
     val firstExtensionOpt = chainToApply.headOption
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
@@ -179,7 +184,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Some(state) =>
         chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
       case None => // recover using whole headers chain
-        val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, h => h.isGenesis).headers
+        log.warn("Failed to recover state from current epoch, using whole chain")
+        val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
     }

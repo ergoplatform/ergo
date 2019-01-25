@@ -159,9 +159,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                   extensionOpt: Option[Extension],
                   votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
     val height = header.height
+    val expectedHeight = lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
-    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-      throw new Error(s"Improper header applied: $header to state context $this")
+    if (height != expectedHeight) {
+      throw new Error(s"Incorrect header ${header.id} height: $height != $expectedHeight")
     }
 
     process(header, extensionOpt).map { sc =>

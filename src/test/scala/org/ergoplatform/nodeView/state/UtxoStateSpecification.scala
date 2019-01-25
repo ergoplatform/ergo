@@ -3,26 +3,74 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox.{R4, TokenId}
+import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.core._
+import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.Values
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.CompiletimeIRContext
+import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
 class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+
+  property("Founders box workflow") {
+    var (us, bh) = createUtxoState()
+    val foundersBox = genesisBoxes.last
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    us = us.applyModifier(genesis).get
+
+    // spent founders box, changing custom part of proposition to tokenThreshold
+    val tokenId: TokenId = Digest32 !@@ foundersBox.id
+    val tx = {
+      val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
+      val newProp = ErgoScriptPredef.tokenThresholdScript(tokenId, 50, ErgoAddressEncoder.MainnetNetworkPrefix)(new CompiletimeIRContext)
+      val height = genesis.header.height + 1
+      val remaining = emission.remainingFoundationRewardAtHeight(genesis.header.height)
+      val minAmount = LaunchParameters.minValuePerByte * 1000
+      val newBoxes = IndexedSeq(
+        ErgoBox(remaining, foundersBox.proposition, height, Seq(), Map(R4 -> ByteArrayConstant(ValueSerializer.serialize(newProp)))),
+        ErgoBox(minAmount, defaultProver.secrets.head.publicImage, height, Seq((tokenId, 49L))),
+        ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 49L)))
+      )
+      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), us.stateContext).get
+    }
+    val block1 = validFullBlock(Some(genesis.header), us, Seq(tx))
+    us = us.applyModifier(block1).get
+
+    // spent founders box with tokenThreshold
+    val tx2 = {
+      val foundersBox = tx.outputs.head
+      val inputs = tx.outputs.map(b => Input(b.id, emptyProverResult))
+      val height = block1.header.height + 1
+      val remaining = emission.remainingFoundationRewardAtHeight(block1.header.height)
+      val inputValue = tx.outputs.map(_.value).sum
+      val newBoxes = IndexedSeq(
+        ErgoBox(remaining, foundersBox.proposition, height, Seq(), foundersBox.additionalRegisters),
+        ErgoBox(inputValue - remaining, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 98L)))
+      )
+      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      defaultProver.sign(unsignedTx, tx.outputs, us.stateContext).get
+    }
+    val block2 = validFullBlock(Some(block1.header), us, Seq(tx2))
+    us = us.applyModifier(block2).get
+  }
 
   property("Founders should be able to spend genesis founders box") {
     var (us, bh) = createUtxoState()

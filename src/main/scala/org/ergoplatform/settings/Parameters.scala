@@ -246,6 +246,7 @@ object Parameters {
         None
       }
     }.toMap
+    require(paramsTable.nonEmpty, "Parameters table is empty in extension: $extension")
     Parameters(h, paramsTable)
   }
 

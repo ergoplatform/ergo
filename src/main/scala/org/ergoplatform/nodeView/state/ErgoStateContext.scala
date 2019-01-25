@@ -201,10 +201,10 @@ object ErgoStateContext {
               extension: Extension,
               lastHeaders: Seq[Header])
              (vs: VotingSettings): Try[ErgoStateContext] = {
-    if (lastHeaders.headOption.exists(x => (x.height + 1) % vs.votingLength == 0)) {
-      val currentHeader = lastHeaders.head
+    if (lastHeaders.lastOption.exists(_.height % vs.votingLength == 0)) {
+      val currentHeader = lastHeaders.last
       Parameters.parseExtension(currentHeader.height, extension).map { params =>
-        new ErgoStateContext(lastHeaders, genesisStateDigest, params, VotingData.empty)(vs)
+        new ErgoStateContext(lastHeaders.reverse, genesisStateDigest, params, VotingData.empty)(vs)
       }
     } else {
       Failure(new Exception("Context could only be recovered at the start of the voting epoch"))

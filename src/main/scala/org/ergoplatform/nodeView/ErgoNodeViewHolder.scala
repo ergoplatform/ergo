@@ -170,14 +170,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val headersQtyToAcquire = newEpochHeadersQty + Constants.LastHeadersInContext
     val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => false).headers
     val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
-    val firstExtensionOpt = chainToApply.headOption
+    val firstExtensionOpt = lastHeaders.lastOption
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
     val recoveredStateTry = firstExtensionOpt
       .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
       )(ext => ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings.chainSettings.voting))
       .map { ctx =>
-        val recoverVersion = idToVersion(bestFullBlock.id)
+        val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
         DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
       }

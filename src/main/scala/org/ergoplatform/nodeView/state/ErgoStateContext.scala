@@ -14,7 +14,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * State context with predicted header.
@@ -201,11 +201,13 @@ object ErgoStateContext {
               extension: Extension,
               lastHeaders: Seq[Header])
              (vs: VotingSettings): Try[ErgoStateContext] = {
-    val currentHeader = lastHeaders.head
-    assert(currentHeader.votingStarts(vs.votingLength))
-    assert(currentHeader.extensionId == extension.id)
-    Parameters.parseExtension(currentHeader.height, extension).map { params =>
-      new ErgoStateContext(lastHeaders, genesisStateDigest, params, VotingData.empty)(vs)
+    if (lastHeaders.headOption.exists(x => (x.height + 1) % vs.votingLength == 0)) {
+      val currentHeader = lastHeaders.head
+      Parameters.parseExtension(currentHeader.height, extension).map { params =>
+        new ErgoStateContext(lastHeaders, genesisStateDigest, params, VotingData.empty)(vs)
+      }
+    } else {
+      Failure(new Exception("Context could only be recovered at the start of the voting epoch"))
     }
   }
 

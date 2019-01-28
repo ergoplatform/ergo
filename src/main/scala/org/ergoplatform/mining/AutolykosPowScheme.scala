@@ -11,6 +11,7 @@ import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.annotation.tailrec
 import scala.math.BigInt
@@ -153,6 +154,35 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Assembles candidate block derivative required for external miner.
+    */
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
+    val (parentId, interlinks, height) = derivedHeaderFields(candidate.parentOpt)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
+    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
+
+    val h = Header(
+      candidate.version,
+      parentId,
+      interlinks,
+      adProofsRoot,
+      candidate.stateRoot,
+      transactionsRoot,
+      candidate.timestamp,
+      candidate.nBits,
+      height,
+      extensionRoot,
+      null,
+      candidate.votes
+    )
+    val msg = msgByHeader(h)
+    val b = getB(candidate.nBits)
+
+    ExternalCandidateBlock(msg, b, pk)
+  }
+
+  /**
     * Calculate header fields based on parent header
     */
   def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Seq[ModifierId], Int) = {
@@ -196,9 +226,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = {
-    q / RequiredDifficulty.decodeCompactBits(nBits)
-  }
+  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
 
   /**
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in

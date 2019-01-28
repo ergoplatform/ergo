@@ -12,7 +12,6 @@ import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.util.ModifierId
 
-
 class BlocksApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
@@ -20,7 +19,7 @@ class BlocksApiRouteSpec extends FlatSpec
 
   val prefix = "/blocks"
 
-  val route: Route = BlocksApiRoute(nodeViewRef, readersRef, minerRef, settings).route
+  val route: Route = BlocksApiRoute(nodeViewRef, readersRef, settings).route
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {

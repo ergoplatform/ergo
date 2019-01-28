@@ -5,7 +5,6 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
@@ -19,7 +18,7 @@ import scorex.util.ModifierId
 
 import scala.concurrent.Future
 
-case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, miner: ActorRef, ergoSettings: ErgoSettings)
+case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -32,8 +31,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR ~
-      candidateBlockR
+      getModifierByIdR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -95,11 +93,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, mine
     ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.blockTransactions)))
   }
 
-  def candidateBlockR: Route = (path("candidateBlock") & pathEndOrSingleSlash & get) {
-    ApiResponse((miner ? MiningStatusRequest).mapTo[MiningStatusResponse])
-  }
-
   def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
   }
+
 }

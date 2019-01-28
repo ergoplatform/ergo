@@ -6,11 +6,11 @@ import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.mining.CandidateBlock
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -23,6 +23,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -45,6 +46,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
+  private val powScheme = ergoSettings.chainSettings.powScheme
 
   // shared mutable state
   private var isMining = false
@@ -79,11 +81,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def onUpdateSecret: Receive = {
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
-  }
-
-  private def miningStatus: Receive = {
-    case MiningStatusRequest =>
-      sender ! MiningStatusResponse(isMining, candidateOpt)
   }
 
   private def startMining: Receive = {
@@ -137,11 +134,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case SemanticallySuccessfulModifier(_) =>
   }
 
-  override def receive: Receive = receiveSemanticallySuccessfulModifier orElse
-    miningStatus orElse
+  override def receive: Receive =
+    receiveSemanticallySuccessfulModifier orElse
     startMining orElse
     onReaders orElse
     onUpdateSecret orElse
+    externalMining orElse
     unknownMessage
 
   private def onReaders: Receive = {
@@ -152,6 +150,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           case Failure(e) => log.warn("Failed to produce candidate block.", e)
         }
       }
+  }
+
+  private def externalMining: Receive = {
+    case PrepareExternalCandidate if candidateOpt.isDefined =>
+      candidateOpt.foreach { c =>
+        secretKeyOpt.foreach { sk =>
+          sender() ! powScheme.deriveExternalCandidate(c, sk.publicImage)
+        }
+      }
+    case PrepareExternalCandidate =>
+      requestCandidate()
+      context.system.scheduler.scheduleOnce(1.seconds, self, PrepareExternalCandidate)(context.system.dispatcher)
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {
@@ -354,18 +364,9 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object MiningStatusRequest
+  case object PrepareExternalCandidate
 
   case class UpdateSecret(s: DLogProverInput)
-
-  case class MiningStatusResponse(isMining: Boolean, candidateBlock: Option[CandidateBlock])
-
-  implicit val jsonEncoder: Encoder[MiningStatusResponse] = { r: MiningStatusResponse =>
-    Map(
-      "isMining" -> r.isMining.asJson,
-      "candidateBlock" -> r.candidateBlock.asJson
-    ).asJson
-  }
 
 }
 

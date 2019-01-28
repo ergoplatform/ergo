@@ -13,7 +13,7 @@ object ExternalCandidateBlock extends ApiCodecs {
     Json.obj(
       "msg" -> c.msg.asJson,
       "b" -> c.b.asJson(bigIntEncoder),
-      "pk" -> c.pk.pkBytes.asJson
+      "pk" -> c.pk.asJson
     )
   }
 

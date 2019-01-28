@@ -9,6 +9,8 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.settings.RESTApiSettings
 import scorex.core.api.http.ApiResponse
 
+import scala.concurrent.Future
+
 case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
@@ -19,7 +21,8 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    ApiResponse((miner ? ErgoMiner.PrepareExternalCandidate).mapTo[ExternalCandidateBlock])
+    val result = (miner ? ErgoMiner.PrepareExternalCandidate).mapTo[Future[ExternalCandidateBlock]].flatten
+    ApiResponse(result)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[ExternalAutolykosSolution])) { solution =>

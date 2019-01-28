@@ -1,6 +1,7 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
+import com.google.common.primitives.Longs
 import io.circe.Encoder
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -9,6 +10,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.mining.external.ExternalAutolykosSolution
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -17,10 +19,10 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateContext, UtxoStateReader}
+import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
@@ -162,6 +164,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case PrepareExternalCandidate =>
       requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, PrepareExternalCandidate)(context.system.dispatcher)
+
+    case solution: ExternalAutolykosSolution =>
+      candidateOpt.foreach { c =>
+        secretKeyOpt.foreach { sk =>
+          val newBlock = powScheme.completeExternal(sk.publicImage, c, solution)
+          log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
+          viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
+          val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
+            newBlock.blockSections
+          } else {
+            newBlock.mandatoryBlockSections
+          }
+
+          sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
+        }
+      }
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {

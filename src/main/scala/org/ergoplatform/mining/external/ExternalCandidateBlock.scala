@@ -1,7 +1,7 @@
-package org.ergoplatform.mining
+package org.ergoplatform.mining.external
 
-import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import io.circe.{Encoder, Json}
 import org.ergoplatform.api.ApiCodecs
 import sigmastate.basics.DLogProtocol.ProveDlog
 

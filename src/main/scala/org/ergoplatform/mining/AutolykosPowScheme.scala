@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -154,28 +155,22 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Assembles [[ErgoFullBlock]] using candidate block and external pow solution.
+    */
+  def completeExternal(pk: ProveDlog, candidate: CandidateBlock, solution: ExternalAutolykosSolution): ErgoFullBlock = {
+    val fullSolution = AutolykosSolution(pk.h, solution.w, solution.n, solution.d)
+    val header = deriveUnprovedHeader(candidate).copy(powSolution = fullSolution)
+    val adProofs = ADProofs(header.id, candidate.adProofBytes)
+    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
+    val extension = Extension(header.id, candidate.extension.fields)
+    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+  }
+
+  /**
     * Assembles candidate block derivative required for external miner.
     */
   def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
-    val (parentId, interlinks, height) = derivedHeaderFields(candidate.parentOpt)
-    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
-    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
-    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
-
-    val h = Header(
-      candidate.version,
-      parentId,
-      interlinks,
-      adProofsRoot,
-      candidate.stateRoot,
-      transactionsRoot,
-      candidate.timestamp,
-      candidate.nBits,
-      height,
-      extensionRoot,
-      null,
-      candidate.votes
-    )
+    val h = deriveUnprovedHeader(candidate)
     val msg = msgByHeader(h)
     val b = getB(candidate.nBits)
 
@@ -194,6 +189,31 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, interlinks, height)
+  }
+
+  /**
+    * Derives header without pow from [[CandidateBlock]].
+    */
+  private def deriveUnprovedHeader(candidate: CandidateBlock): Header = {
+    val (parentId, interlinks, height) = derivedHeaderFields(candidate.parentOpt)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
+    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
+
+    Header(
+      candidate.version,
+      parentId,
+      interlinks,
+      adProofsRoot,
+      candidate.stateRoot,
+      transactionsRoot,
+      candidate.timestamp,
+      candidate.nBits,
+      height,
+      extensionRoot,
+      null,
+      candidate.votes
+    )
   }
 
   /**

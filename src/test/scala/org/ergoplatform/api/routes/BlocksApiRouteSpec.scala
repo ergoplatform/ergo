@@ -21,6 +21,9 @@ class BlocksApiRouteSpec extends FlatSpec
 
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, settings).route
 
+  val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
+  val headerIdString: String = Algos.encode(headerIdBytes)
+
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -50,20 +53,6 @@ class BlocksApiRouteSpec extends FlatSpec
       history.headerIdsAtHeight(0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
     }
   }
-
-  it should "get candidate block info" in {
-    Get(prefix + "/candidateBlock") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      val res = Map(
-        "isMining" -> false.asJson,
-        "candidateBlock" -> None.asJson
-      ).asJson
-      res.toString shouldEqual responseAs[String]
-    }
-  }
-
-  val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
-  val headerIdString: String = Algos.encode(headerIdBytes)
 
   it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {

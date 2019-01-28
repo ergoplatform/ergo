@@ -3,7 +3,6 @@ package org.ergoplatform.utils
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -82,18 +81,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object PeersManagerStub {
     def props(): Props = Props(new PeersManagerStub)
-  }
-
-  val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
-
-  class MinerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
-      case MiningStatusRequest => sender() ! minerInfo
-    }
-  }
-
-  object MinerStub {
-    def props(): Props = Props(new MinerStub)
   }
 
   class NodeViewStub extends Actor {
@@ -176,7 +163,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   lazy val readersRef: ActorRef = system.actorOf(ReadersStub.props())
-  lazy val minerRef: ActorRef = system.actorOf(MinerStub.props())
   lazy val peerManagerRef: ActorRef = system.actorOf(PeerManagerStub.props())
   lazy val pmRef: ActorRef = system.actorOf(PeersManagerStub.props())
   lazy val nodeViewRef: ActorRef = system.actorOf(NodeViewStub.props())

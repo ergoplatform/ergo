@@ -47,7 +47,7 @@ class ErgoApp(args: Seq[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, minerRef, ergoSettings),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings)
   )

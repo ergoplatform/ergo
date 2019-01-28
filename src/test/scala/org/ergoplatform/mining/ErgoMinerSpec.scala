@@ -1,34 +1,35 @@
 package org.ergoplatform.mining
 
-import akka.actor.{ActorRef, Actor, ActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill}
 import akka.pattern.ask
-import akka.testkit.{TestProbe, TestKit}
+import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.{ErgoMinerRef, ErgoMiner}
+import org.ergoplatform.local.ErgoMiner.{PrepareExternalCandidate, StartMining}
+import org.ergoplatform.local.ErgoMinerRef
 import org.ergoplatform.mining.Listener._
+import org.ergoplatform.mining.external.ExternalCandidateBlock
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, ErgoMemPool}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.FlatSpec
-import scorex.core.NodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, GetDataFromCurrentView}
+import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -155,7 +156,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
-    val boxToDoubleSpend = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToDoubleSpend.propositionBytes shouldBe ErgoState.rewardOutputScript(settings.emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
@@ -184,6 +185,25 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     //Make sure that only tx got into chain
     txs.filter(tx => tx.id == tx1.id || tx.id == tx2.id) should have length 1
     system.terminate()
+  }
+
+  it should "prepare external candidate" in new TestKit(ActorSystem()) {
+    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+    def minerRef: ActorRef = ErgoMinerRef(
+      ergoSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      Some(defaultMinerSecret)
+    )
+
+    val passiveMiner: ActorRef = minerRef
+
+    await((passiveMiner ? PrepareExternalCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
   }
 
 }

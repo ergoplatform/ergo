@@ -33,6 +33,7 @@ import scorex.testkit.utils.FileUtils
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -93,7 +94,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case ErgoMiner.PrepareExternalCandidate => sender() ! externalCandidateBlock
+      case ErgoMiner.PrepareExternalCandidate => sender() ! Future.successful(externalCandidateBlock)
       case _: ExternalAutolykosSolution => ()
     }
   }

@@ -1,6 +1,8 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
+import akka.pattern.ask
+import akka.util.Timeout
 import com.google.common.primitives.Longs
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
@@ -8,7 +10,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.external.ExternalAutolykosSolution
+import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -31,6 +33,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -41,6 +44,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 inSecretKeyOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
+
+  private implicit val timeout: Timeout = 5.seconds
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -153,15 +158,31 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def externalMining: Receive = {
     case PrepareExternalCandidate if candidateOpt.isDefined =>
-      candidateOpt.foreach { c =>
-        secretKeyOpt.foreach { sk =>
-          sender() ! powScheme.deriveExternalCandidate(c, sk.publicImage)
+      sender() ! candidateOpt
+        .flatMap { c =>
+          secretKeyOpt.map(sk => powScheme.deriveExternalCandidate(c, sk.publicImage))
         }
-      }
+        .fold[Future[ExternalCandidateBlock]](
+          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
 
     case PrepareExternalCandidate =>
-      requestCandidate()
-      context.system.scheduler.scheduleOnce(1.seconds, self, PrepareExternalCandidate)(context.system.dispatcher)
+      val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
+      sender() ! readersR.flatMap {
+        case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
+          secretKeyOpt
+            .flatMap { sk =>
+              createCandidate(sk.publicImage, h, m, s.asInstanceOf[UtxoStateReader])
+                .map { c =>
+                  candidateOpt = Some(c)
+                  powScheme.deriveExternalCandidate(c, sk.publicImage)
+                }
+                .toOption
+            }
+            .fold[Future[ExternalCandidateBlock]](
+              Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        case _ =>
+          Future.failed(new Exception("Invalid readers state"))
+      }
 
     case solution: ExternalAutolykosSolution =>
       candidateOpt.foreach { c =>
@@ -175,7 +196,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             newBlock.mandatoryBlockSections
           }
 
-          sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
+          sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
         }
       }
   }

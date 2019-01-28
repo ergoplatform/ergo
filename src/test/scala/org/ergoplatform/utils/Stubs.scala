@@ -3,6 +3,9 @@ package org.ergoplatform.utils
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -27,6 +30,8 @@ import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
+import scorex.util.Random
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.duration._
 import scala.util.Success
@@ -72,8 +77,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
+  val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
+  val externalCandidateBlock = ExternalCandidateBlock(Array.fill(32)(2: Byte), BigInt(9999), pk)
+
   class PeersManagerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case GetAllPeers => sender() ! peers
       case GetBlacklistedPeers => sender() ! blacklistedPeers
     }
@@ -83,8 +91,19 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props(): Props = Props(new PeersManagerStub)
   }
 
+  class MinerStub extends Actor {
+    def receive: Receive = {
+      case ErgoMiner.PrepareExternalCandidate => sender() ! externalCandidateBlock
+      case _: ExternalAutolykosSolution => ()
+    }
+  }
+
+  object MinerStub {
+    def props(): Props = Props(new MinerStub)
+  }
+
   class NodeViewStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive:Receive = {
       case _ =>
     }
   }
@@ -94,7 +113,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NetworkControllerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case GetConnectedPeers => sender() ! connectedPeers
       case _ =>
     }
@@ -105,7 +124,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class PeerManagerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case _ =>
     }
   }
@@ -163,6 +182,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   lazy val readersRef: ActorRef = system.actorOf(ReadersStub.props())
+  lazy val minerRef: ActorRef = system.actorOf(MinerStub.props())
   lazy val peerManagerRef: ActorRef = system.actorOf(PeerManagerStub.props())
   lazy val pmRef: ActorRef = system.actorOf(PeersManagerStub.props())
   lazy val nodeViewRef: ActorRef = system.actorOf(NodeViewStub.props())

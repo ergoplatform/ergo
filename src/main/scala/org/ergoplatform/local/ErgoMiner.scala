@@ -2,12 +2,10 @@ package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import com.google.common.primitives.Longs
-import io.circe.Encoder
-import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
+import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.external.ExternalAutolykosSolution
@@ -25,7 +23,6 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -161,6 +158,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           sender() ! powScheme.deriveExternalCandidate(c, sk.publicImage)
         }
       }
+
     case PrepareExternalCandidate =>
       requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, PrepareExternalCandidate)(context.system.dispatcher)

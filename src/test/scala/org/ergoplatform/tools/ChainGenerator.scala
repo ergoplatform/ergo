@@ -9,7 +9,7 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPoWProofUtils}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -196,8 +196,8 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     pow.proveCandidate(candidate, prover.secrets.head.w) match {
       case Some(fb) => fb
       case _ =>
-        val interlinks = candidate.parentOpt.map(new PoPoWProofUtils(powScheme)
-          .constructInterlinkVector(_))
+        val interlinks = candidate.parentOpt
+          .map(PoPowAlgos.updateInterlinks(_, candidate.extension.interlinks))
           .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {

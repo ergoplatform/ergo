@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
@@ -10,6 +10,7 @@ import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.ModifierId
 import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
@@ -21,16 +22,23 @@ trait ChainGenerator extends ErgoTestConstants {
 
   /** Generates a [[HeaderChain]] of given height starting from a History last block
     */
-  def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain =
-    genHeaderChain(height, history.bestHeaderOpt, history.difficultyCalculator)
+  def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain = {
+    val bestHeaderOpt = history.bestHeaderOpt
+    val bestHeaderInterlinksOpt = bestHeaderOpt
+      .flatMap(h => history.typedModifierById[Extension](h.extensionId))
+      .map(_.interlinks)
+      .getOrElse(Seq.empty)
+    genHeaderChain(height, bestHeaderOpt, bestHeaderInterlinksOpt, history.difficultyCalculator)
+  }
 
   /** Generates a [[HeaderChain]] of given height starting from a given header
     */
   final def genHeaderChain(height: Int,
-                           prefix: Option[Header] = None,
+                           prefixOpt: Option[Header] = None,
+                           prefixInterlinksOpt: Seq[ModifierId] = Seq.empty,
                            control: LinearDifficultyControl = defaultDifficultyControl,
                            extensionHash: Digest32 = EmptyDigest32): HeaderChain =
-    HeaderChain(headerStream(prefix, control, extensionHash).take(height + prefix.size))
+    HeaderChain(headerStream(prefixOpt, control, extensionHash).take(height + prefixOpt.size))
 
   /** Generates a minimal [[HeaderChain]] that satisfies the given condition
     */

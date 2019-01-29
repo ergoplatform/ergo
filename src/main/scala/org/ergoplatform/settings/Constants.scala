@@ -49,5 +49,7 @@ object Constants {
 
   val SoftForkEpochs = 32 //about 45.5 days
 
-  val extensionMaxSize: Int = 10 * 1024 //10 kb
+  val MaxInterlinksQty = 255
+
+  val ExtensionMaxSize: Int = 10 * 1024 + ModifierIdSize * MaxInterlinksQty //10 kb + max interlinks size in bytes
 }

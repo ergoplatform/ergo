@@ -151,7 +151,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
     if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
       // extension is empty, generate it and insert to history
-      Seq(header, Extension(header.id, Seq()))
+      val parentOpt = typedModifierById[Header](header.parentId)
+      val interlinks = parentOpt.map(new PoPoWProofUtils(powScheme).constructInterlinkVector(_)).getOrElse(Seq.empty)
+      Seq(header, Extension(header.id, interlinks, Seq()))
     } else {
       Seq(header)
     }

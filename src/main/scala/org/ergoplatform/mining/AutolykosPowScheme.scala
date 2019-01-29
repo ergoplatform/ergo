@@ -124,7 +124,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       timestamp, extensionRoot, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
-      val extension = Extension(h.id, extensionCandidate.fields)
+      val extension = extensionCandidate.toExtension(h.id)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
   }

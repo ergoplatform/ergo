@@ -2,16 +2,15 @@ package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPoWProofUtils}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.tools.ChainGenerator.powScheme
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -179,9 +178,7 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinks = parentOpt.map(new PoPoWProofUtils(powScheme)
-      .constructInterlinkVector(_))
-      .getOrElse(Seq.empty)
+    val interlinks = Seq.empty // todo: use real interlinks
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(interlinks)
     val votes = Array.fill(3)(0: Byte)
 

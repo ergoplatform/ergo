@@ -130,14 +130,6 @@ class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink 
     */
   }
 
-  ignore("Valid PoPoWProof generation") {
-    forAll(mkGen) { case (m, k) =>
-      val proof = popowHistory.constructPoPoWProof(m, k)
-      proof shouldBe 'success
-      new PoPoWProofUtils(popowHistory.powScheme).validate(proof.get) shouldBe 'success
-    }
-  }
-
   ignore("PoPoW history should be able to apply PoPoWProof proofs") {
     forAll(mkGen) { case (m, k) =>
       val proof = popowHistory.constructPoPoWProof(m, k).get
@@ -154,13 +146,6 @@ class PoPoWProofProcessorSpecification extends HistoryTestHelpers with NoShrink 
       val proof = popowHistory.constructPoPoWProof(m, k).get
       val newHistory = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, 0)
       newHistory.applicable(proof) shouldBe false
-    }
-  }
-
-  ignore("constructPoPoWProof() should generate valid proof") {
-    forAll(mkGen) { case (m, k) =>
-      val proof = popowHistory.constructPoPoWProof(m + 1, k + 1).get
-      new PoPoWProofUtils(popowHistory.powScheme).validate(proof) shouldBe 'success
     }
   }
 

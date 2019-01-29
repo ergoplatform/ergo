@@ -28,7 +28,7 @@ case class Extension(headerId: ModifierId,
                      override val sizeOpt: Option[Int] = None) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
-  override def digest: Digest32 = Extension.rootHash(fields)
+  override def digest: Digest32 = Extension.rootHash(interlinks, fields)
 
   override type M = Extension
 
@@ -53,14 +53,16 @@ object Extension extends ApiCodecs {
 
   def apply(header: Header): Extension = Extension(header.id, Seq.empty, Seq.empty)
 
-  def rootHash(e: Extension): Digest32 = rootHash(e.fields)
+  def rootHash(e: Extension): Digest32 = rootHash(e.interlinks, e.fields)
 
-  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)
+  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.interlinks, e.fields)
 
-  def rootHash(fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
-    val elements: Seq[Array[Byte]] = fields.map { case (k, v) =>
-      Bytes.concat(Array(k.length.toByte), k, v)
-    }
+  def rootHash(interlinks: Seq[ModifierId], fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
+    val elements: Seq[Array[Byte]] = fields
+      .map { case (k, v) =>
+        Bytes.concat(Array(k.length.toByte), k, v)
+      } ++
+      interlinks.map(idToBytes)
     Algos.merkleTreeRoot(LeafData @@ elements)
   }
 

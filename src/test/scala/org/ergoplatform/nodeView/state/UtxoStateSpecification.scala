@@ -125,7 +125,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
     // boxes should contain all no-premine proofs in registers
     val additionalRegisters = boxes.flatMap(_.additionalRegisters.values)
-    initSettings.chainSettings.noPermineProof.foreach { pStr =>
+    initSettings.chainSettings.noPremineProof.foreach { pStr =>
       val pBytes = ByteArrayConstant(pStr.getBytes("UTF-8"))
       additionalRegisters should contain(pBytes)
     }

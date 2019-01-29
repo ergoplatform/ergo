@@ -22,7 +22,7 @@ case class ChainSettings(protocolVersion: Byte,
                          voting: VotingSettings,
                          powScheme: AutolykosPowScheme,
                          monetary: MonetarySettings,
-                         noPermineProof: Seq[String],
+                         noPremineProof: Seq[String],
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
                          genesisId: Option[ModifierId] = None) {

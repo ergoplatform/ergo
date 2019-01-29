@@ -10,7 +10,7 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPoWProofUtils}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -173,14 +173,21 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val nBits: Long = bestHeaderOpt
       .map(header => RequiredDifficulty.encodeCompactBits(history.requiredDifficultyAfter(header)))
       .getOrElse(Constants.InitialNBits)
-    val interlinks = bestHeaderOpt.map(new PoPoWProofUtils(powScheme).constructInterlinkVector(_)).getOrElse(Seq.empty)
+    val bestHeaderInterlinksOpt = bestHeaderOpt
+      .flatMap(h => history.typedModifierById[Extension](h.extensionId))
+      .map(_.interlinks)
+    val interlinks = bestHeaderOpt
+      .flatMap { h =>
+        bestHeaderInterlinksOpt.map(PoPowAlgos.updateInterlinks(h, _))
+      }
+      .getOrElse(Seq.empty)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
       val currentParams = stateContext.currentParameters
       val betterVersion = protocolVersion > header.version
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
-        .map(h => h + votingSettings.votingLength * votingSettings.softForkEpochs)
+        .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
       val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed

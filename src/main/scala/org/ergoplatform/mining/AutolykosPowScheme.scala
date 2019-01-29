@@ -84,9 +84,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
             maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, interlinks, height) = derivedHeaderFields(parentOpt)
+    val (parentId, height) = derivedHeaderFields(parentOpt)
 
-    val h = Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+    val h = Header(version, parentId, Seq.empty, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
@@ -155,15 +155,13 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Calculate header fields based on parent header
     */
-  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Seq[ModifierId], Int) = {
-    val interlinks: Seq[ModifierId] =
-      parentOpt.map(parent => new PoPoWProofUtils(this).constructInterlinkVector(parent)).getOrElse(Seq.empty)
+  def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Int) = {
 
     val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
-    (parentId, interlinks, height)
+    (parentId, height)
   }
 
   /**

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
@@ -227,7 +227,8 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
+        val commonInterlinks = history.typedModifierById[Extension](common.extensionId).map(_.interlinks).get
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
           defaultDifficultyControl, extensionHash)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)

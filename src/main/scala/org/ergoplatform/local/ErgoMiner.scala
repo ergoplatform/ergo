@@ -10,7 +10,7 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPoWProofUtils}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -23,7 +23,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
@@ -41,6 +41,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 inSecretKeyOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
+
+  private val powScheme = ergoSettings.chainSettings.powScheme
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -169,9 +171,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val timestamp = timeProvider.time()
     val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
-      .map(parent => history.requiredDifficultyAfter(parent))
-      .map(d => RequiredDifficulty.encodeCompactBits(d))
+      .map(header => RequiredDifficulty.encodeCompactBits(history.requiredDifficultyAfter(header)))
       .getOrElse(Constants.InitialNBits)
+    val interlinks = bestHeaderOpt.map(new PoPoWProofUtils(powScheme).constructInterlinkVector(_)).getOrElse(Seq.empty)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -185,15 +187,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-        (newParams.toExtensionCandidate(Seq()),
+        (newParams.toExtensionCandidate(interlinks, Seq()),
           newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(Seq.empty),
+        (ExtensionCandidate(interlinks, Seq.empty),
           currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(Seq.empty), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((ExtensionCandidate(interlinks, Seq.empty), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
       ergoSettings.chainSettings.powScheme)

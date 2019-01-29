@@ -99,12 +99,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen
+    interlinks <- Gen.listOfN(255, modifierIdGen)
     mandatoryElements <- Gen.mapOf(extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize))
   } yield {
     val me = mandatoryElements
       .map(kv => Shorts.fromByteArray(kv._1) -> kv._2)
       .map(kv => Shorts.toByteArray(kv._1) -> kv._2)
-    Extension(headerId, me.toSeq)
+    Extension(headerId, interlinks, me.toSeq)
   }
 
   lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))

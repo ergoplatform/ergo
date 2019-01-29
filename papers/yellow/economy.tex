@@ -19,16 +19,16 @@ exceeds 67.5 will go to foundation treasury instead of a miner.  (see Fig.~\ref{
 Instead of having an implicit emission rule via a special type of transaction (e.g. coinbase transaction in Bitcoin),
 Ergo coins emission rule is defined explicitly by sigma-state transactional language.
 
-Miners reward of 93409132.5 Erg will be created in the genesis state in a box,
-protected by the script, defined at https://git.io/fhgOq.
+Total miners rewards of 93409132.5 Erg will be created in the genesis state in a box,
+protected by a script defined at https://git.io/fhgOq.
 This script allows a miner to take only a part of all coins every block.
 Transaction that spends this output should have exactly 2 outputs: the first one should
 have the same protecting script and contain all input coins minus current block reward,
 while the second one may be collected by the current block miner after at least
 720 blocks delay.
 
-Treasury part emission will be kept in the genesis state in a box with 4330791.5 Erg and
-will be protected protected by the script, defined at https://git.io/fhoqw.
+Total foundation rewards will be kept in the genesis state in a box with 4330791.5 Erg and
+will be protected protected by the script defined at https://git.io/fhoqw.
 First output of the transaction that spends this box should at least have the value of the
 remaining treasury.
 In addition, conditions from R4 register of this box should be satisfied,
@@ -36,10 +36,10 @@ allowing to protect this output from undesirable spent.
 At the beginning R4 register will contain 2-of-3
 multisignature proposition with the hardcoded public keys.
 
-Ergo emission will start from zero with no pre-mine. As proof-of-no-pre-mine genesis state
+Ergo emission will start from zero with no premine. As proof-of-no-pre-mine genesis state
 will contain an additional box with 1 Erg inside protected by unspendable proposition.
-This box registers R4-R6 will contain latest news headlines from the Guardian, Xinhua and Vedomosti,
-while registers R7-R8 will contain latest block id's from Bitcoin and Ethereum.
+This box registers R4-R6 will contain latest news headlines from The Guardian, Vedomosti, and Xinhua,
+while registers R7 and R8 will contain latest block id's from Bitcoin and Ethereum blockchains correspondingly.
 
 \subsection{Storage rent}
 

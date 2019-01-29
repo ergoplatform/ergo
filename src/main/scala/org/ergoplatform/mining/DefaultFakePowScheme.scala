@@ -35,7 +35,7 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
     val s = AutolykosSolution(pk, w, n, d)
-    Some(Header(version, parentId, Seq.empty, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+    Some(Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, s, votes))
   }
 

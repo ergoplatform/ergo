@@ -133,13 +133,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     powSolution <- powSolutionGen
-    interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
   } yield Header(
     version,
     parentId,
-    interlinks,
     adRoot,
     stateRoot,
     transactionsRoot,

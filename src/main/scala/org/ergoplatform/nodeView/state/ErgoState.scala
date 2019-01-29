@@ -123,7 +123,7 @@ object ErgoState extends ScorexLogging {
     * It is a long-living box with special bytes in registers
     */
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
-    val proofsBytes = chainSettings.noPermineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
+    val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
     ErgoBox(EmissionRules.CoinsInOneErgo, Values.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
   }

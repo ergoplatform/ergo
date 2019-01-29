@@ -86,7 +86,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, height) = derivedHeaderFields(parentOpt)
 
-    val h = Header(version, parentId, Seq.empty, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+    val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, null, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)

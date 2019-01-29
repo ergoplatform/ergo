@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.mempool
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators

@@ -11,7 +11,6 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}

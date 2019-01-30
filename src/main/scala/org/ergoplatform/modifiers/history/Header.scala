@@ -19,7 +19,6 @@ import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 

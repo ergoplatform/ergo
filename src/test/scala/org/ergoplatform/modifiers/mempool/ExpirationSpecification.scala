@@ -23,7 +23,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
       box.additionalTokens,
       box.additionalRegisters,
       transactionId = box.transactionId,
-      boxId = box.index)
+      boxIndex = box.index)
   }
 
   def constructTest(from: ErgoBox,

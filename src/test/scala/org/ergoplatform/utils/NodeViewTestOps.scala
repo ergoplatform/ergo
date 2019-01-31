@@ -145,8 +145,8 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getModifierById(id: ModifierId)(implicit ctx: Ctx): Option[ErgoPersistentModifier] = getHistory.modifierById(id)
 
-  def getAfterGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
-    ctx.settings.chainSettings.monetary.afterGenesisStateDigest
+  def getGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
+    ctx.settings.chainSettings.genesisStateDigest
 
 }
 

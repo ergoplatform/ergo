@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoInterpreter
@@ -14,20 +15,20 @@ import scala.util.Random
 
 class ErgoMinerPropSpec extends ErgoPropertyTest {
 
-  val delta: Int = settings.emission.settings.minerRewardDelay
+  val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
-    ErgoState.rewardOutputScript(delta, pk).bytes
+    ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
     us.emissionBoxOpt should not be None
-    val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
+    val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
-    val incorrectTxs = ErgoMiner.collectEmission(us, proveDlogGen.sample.get, us.constants.emission).toSeq
-    val txs = ErgoMiner.collectEmission(us, defaultMinerPk, us.constants.emission).toSeq
+    val incorrectTxs = ErgoMiner.collectEmission(us, proveDlogGen.sample.get, emission).toSeq
+    val txs = ErgoMiner.collectEmission(us, defaultMinerPk, emission).toSeq
 
     txs.size shouldBe 1
     val emissionTx = txs.head
@@ -45,8 +46,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val height = us.stateContext.currentHeight
     val blockTx = validTransactionFromBoxes(bh.boxes.take(10).values.toIndexedSeq, outputsProposition = feeProp)
 
-    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, settings.emission).toSeq
-    val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, settings.emission).toSeq
+    val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, emission).toSeq
+    val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emission).toSeq
     txs.length shouldBe 1
     val feeTx = txs.head
     feeTx.outputs.length shouldBe 1
@@ -79,7 +80,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val rnd: Random = new Random
       val us = createUtxoState(bh)
       val usClone = createUtxoState(bh)
-      val feeProposition = ErgoState.feeProposition(delta)
+      val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
       val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
       val head = txsWithFees.head
@@ -123,7 +124,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("should not be able to spend recent fee boxes") {
 
     val delta = 1
-    val feeProposition = ErgoState.feeProposition(delta)
+    val feeProposition = ErgoScriptPredef.feeProposition(delta)
 
     val bh = boxesHolderGen.sample.get
     var us = createUtxoState(bh)
@@ -131,8 +132,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     val emissionRules = new EmissionRules(
       MonetarySettings(
-        minerRewardDelay = delta,
-        afterGenesisStateDigestHex = "584748265afc5bd6d7fb80f750131b923a431ae6e4bedc2b590d49dd81ef64b601"
+        minerRewardDelay = delta
       )
     )
 
@@ -166,12 +166,12 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("collect reward from both emission box and fees") {
     val (us, _) = createUtxoState()
     us.emissionBoxOpt should not be None
-    val expectedReward = us.constants.emission.emissionAtHeight(us.stateContext.currentHeight)
+    val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     forAll(Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))) { btxs =>
       val blockTxs = btxs.map(_._2)
       val height = ErgoHistory.EmptyHistoryHeight
-      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, settings.emission)
+      val txs = ErgoMiner.collectRewards(us.emissionBoxOpt, height, blockTxs, defaultMinerPk, emission)
       txs.length shouldBe 2
 
       val emissionTx = txs.head

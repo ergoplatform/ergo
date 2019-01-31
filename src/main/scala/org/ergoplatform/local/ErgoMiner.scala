@@ -207,7 +207,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
       ergoSettings.chainSettings.powScheme)
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.emission).map(_ -> EmissionTxCost)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map(_ -> EmissionTxCost)
 
     val txs = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
@@ -257,16 +257,17 @@ object ErgoMiner extends ScorexLogging {
                      emission: EmissionRules,
                      assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
     val propositionBytes = emission.settings.feePropositionBytes
+
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState.boxChanges(txs)._2
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
       .filter(b => !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val nextHeight = currentHeight + 1
-    val minerProp = ErgoState.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+    val minerProp = ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.proposition
-      val emissionAmount = emission.emissionAtHeight(nextHeight)
+      val emissionAmount = emission.minersRewardAtHeight(nextHeight)
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
         nextHeight, Seq(), Map())
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
@@ -323,8 +324,9 @@ object ErgoMiner extends ScorexLogging {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
+              val emissionRules = us.constants.settings.chainSettings.emissionRules
 
-              ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, us.constants.emission) match {
+              ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                   feeTx.statefulValidity(boxesToSpend, upcomingContext) match {

@@ -44,7 +44,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val prover = defaultProver
   val minerPk = prover.dlogPubkeys.head
   val selfAddressScript = P2PKAddress(minerPk).script
-  val minerProp = ErgoState.rewardOutputScript(RewardDelay, minerPk)
+  val minerProp = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
@@ -59,17 +59,18 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
-  val monetarySettings = settings.chainSettings.monetary.copy(
-    minerRewardDelay = RewardDelay,
-    afterGenesisStateDigestHex = "d801a0e4573d6993caa2eda7dc97aad2b4c8ed51ebb0afe0dd272c8d7e26d5fd01"
+  val ms = settings.chainSettings.monetary.copy(
+    minerRewardDelay = RewardDelay
   )
-  val chainSettings = ChainSettings(0: Byte, 0: Byte, blockInterval, 256, 8, votingSettings, pow, monetarySettings)
-  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, settings.testingSettings,
+  val cs = settings.chainSettings.copy(
+    monetary = ms,
+    genesisStateDigestHex = "b2dd428ad9a48f39cde752a372c3cc9ca013ce3cab6880df47198b670f570e6d02"
+  )
+
+  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, cs, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
   stateDir.mkdirs()
-
-  val genesisBox = ErgoState.genesisEmissionBox(fullHistorySettings.emission)
 
   val votingEpochLength = votingSettings.votingLength
   val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
@@ -124,7 +125,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     inOpt
       .find { bx =>
         val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition != minerProp)
-        canUnlock && bx.proposition != genesisBox.proposition && bx.value >= MinTxAmount
+        canUnlock && bx.proposition != cs.monetary.emissionBoxProposition && bx.value >= MinTxAmount
       }
       .map { input =>
         val qty = MaxTxsPerBlock
@@ -181,7 +182,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       }
     }.getOrElse((emptyExtensionCandidate, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, fullHistorySettings.emission)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, cs.emissionRules)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>

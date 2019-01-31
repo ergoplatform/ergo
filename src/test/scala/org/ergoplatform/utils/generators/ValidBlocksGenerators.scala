@@ -64,7 +64,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, settings.emission)
+          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
@@ -112,7 +112,8 @@ trait ValidBlocksGenerators
                                      rnd: Random,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
     val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
-    val (regularBoxes, drainedBh) = boxHolderWithoutEmission.take(rnd.nextInt(txSizeLimit / 100) + 1)
+    val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
+    val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)

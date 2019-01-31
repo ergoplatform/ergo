@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.mempool
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
@@ -69,7 +68,7 @@ class ErgoMemPoolSpec extends FlatSpec
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = 4))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
     val masterTx = invalidErgoTransactionGen.sample.get
-    val proposition = ErgoState.feeProposition(settings.chainSettings.monetary.minerRewardDelay)
+    val proposition = settings.chainSettings.monetary.feeProposition
     val txsWithAscendingPriority = (0 to 4).foldLeft(Seq.empty[ErgoTransaction]) { case (acc, idx) =>
       val c = masterTx.outputCandidates.head
       acc :+ masterTx.copy(outputCandidates = IndexedSeq(

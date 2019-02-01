@@ -79,8 +79,8 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  //todo: utxo snapshot application
-  override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] = processing(mod)
+  override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
+    (processFullBlock orElse processHeader orElse processOther)(mod)
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
@@ -97,8 +97,6 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackVersions: Iterable[VersionTag] = store.rollbackVersions().map(w => bytesToVersion(w.data))
 
   def close(): Unit = store.close()
-
-  private def processing: ModifierProcessing[DigestState] = processFullBlock orElse processHeader orElse processOther
 
   private def processFullBlock: ModifierProcessing[DigestState] = {
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>

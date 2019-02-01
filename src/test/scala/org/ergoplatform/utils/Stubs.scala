@@ -42,20 +42,20 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val state: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
   }.sample.value
 
   lazy val wallet = new WalletStub
 
-  val txs: Seq[ErgoTransaction] = chain.head.transactions
+  val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty.put(txs).get
+  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
-
 
   val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
   val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
+
   val ts1: Long = System.currentTimeMillis() - 100
   val ts2: Long = System.currentTimeMillis() + 100
 
@@ -66,12 +66,12 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val protocolVersion = Version("1.1.1")
 
-  val connectedPeers = Seq(
+  val connectedPeers: Seq[Handshake] = Seq(
     Handshake("node_pop", protocolVersion, "first", Some(inetAddr1), Seq(), ts1),
     Handshake("node_pop", protocolVersion, "second", Some(inetAddr2), Seq(), ts2)
   )
 
-  val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")
+  val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   class PeersManagerStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
@@ -194,8 +194,21 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
-    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 10000, 2)
+    val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(
+      stateType,
+      verifyTransactions,
+      blocksToKeep,
+      PoPoWBootstrap,
+      minimalSuffix,
+      mining = false,
+      miningDelay = 1.second,
+      offlineGeneration = false,
+      keepVersions = 200,
+      mempoolCapacity = 100000,
+      blacklistCapacity = 100000,
+      snapshotCreationInterval = 10000,
+      keepLastSnapshots = 2
+    )
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
@@ -226,4 +239,5 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       defaultMinerSecretNumber
     ).value
   }
+
 }

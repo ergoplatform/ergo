@@ -44,7 +44,7 @@ trait ValidBlocksGenerators
     UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, customSettings)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
-    DigestState.create(Some(version), Some(digest), createTempDir, ErgoSettings.read(None))
+    DigestState.create(Some(version), Some(digest), createTempDir, stateConstants)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)

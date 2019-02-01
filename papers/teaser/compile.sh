@@ -10,10 +10,13 @@ if [[ "$?" != 0 ]]; then
     exit 1;
 fi
 
-rm ErgoPow.pdf
-pdflatex ErgoPow.tex
-bibtex ErgoPow
-pdflatex ErgoPow.tex
-pdflatex ErgoPow.tex
+rm teaser.pdf
+pdflatex teaser.tex
+bibtex teaser
+pdflatex teaser.tex
+pdflatex teaser.tex
 rm *.aux
 rm *.log
+rm *.bbl
+rm *.blg
+rm *.out

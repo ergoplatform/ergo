@@ -18,6 +18,8 @@ import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.utils.NetworkTimeProvider
 
+import scala.concurrent.ExecutionContextExecutor
+
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val historyGen: Gen[HT] =
@@ -25,7 +27,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
-      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, settings)
+      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
       new WrappedDigestState(digestState, wus, settings, ErgoInterpreter(LaunchParameters))
     }
   }
@@ -54,11 +56,11 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val pool = ErgoMemPool.empty
+    val settings = ErgoSettings.read(None)
+    val pool = ErgoMemPool.empty(settings)
     val v = h.openSurfaceIds().last
     s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
-    implicit val ec = system.dispatcher
-    val settings = ErgoSettings.read(None)
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")

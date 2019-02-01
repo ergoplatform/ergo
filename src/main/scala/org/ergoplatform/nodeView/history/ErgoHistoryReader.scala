@@ -291,7 +291,6 @@ trait ErgoHistoryReader
     (ourChain, commonBlockThenSuffixes)
   }
 
-
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid

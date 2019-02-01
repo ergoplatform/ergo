@@ -192,7 +192,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val protocolVersion = 0: Byte
     val networkPrefix = 0: Byte
     val blockInterval = 1.minute
-    val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(
       stateType,

@@ -103,22 +103,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   @SuppressWarnings(Array("AsInstanceOf"))
-  private def recreatedState(version: Option[VersionTag] = None, digest: Option[ADDigest] = None): State = {
+  private def recreatedState(): State = {
     val dir = stateDir(settings)
     for (file <- dir.listFiles) file.delete
 
-    {
-      val constants = StateConstants(Some(self), settings)
-      (version, digest, settings.nodeSettings.stateType) match {
-        case (Some(_), Some(_), StateType.Digest) =>
-          DigestState.create(version, digest, dir, constants)
-        case _ =>
-          ErgoState.readOrGenerate(settings, constants)
-      }
-    }
+    val constants = StateConstants(Some(self), settings)
+    ErgoState.readOrGenerate(settings, constants)
       .asInstanceOf[State]
       .ensuring(
-        t => java.util.Arrays.equals(t.rootHash, digest.getOrElse(settings.chainSettings.monetary.afterGenesisStateDigest)),
+        state => java.util.Arrays.equals(state.rootHash, settings.chainSettings.monetary.afterGenesisStateDigest),
         "State root is incorrect"
       )
   }
@@ -160,17 +153,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
-    * Recovers digest state from history
+    * Recovers digest state from history.
     */
   private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
     val constants = StateConstants(Some(self), settings)
     val votingLength = settings.chainSettings.voting.votingLength
     val bestHeight = bestFullBlock.header.height
-    val newEpochHeadersQty = bestHeight % votingLength
+    val newEpochHeadersQty = bestHeight % votingLength // how many blocks current epoch lasts
     val headersQtyToAcquire = newEpochHeadersQty + Constants.LastHeadersInContext
     val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => false).headers
     val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
-    val firstExtensionOpt = lastHeaders.lastOption
+    val firstExtensionOpt = lastHeaders.lastOption // last extension in the prev epoch to recover from
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
     val recoveredStateTry = firstExtensionOpt

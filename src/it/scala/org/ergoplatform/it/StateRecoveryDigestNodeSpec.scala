@@ -33,6 +33,12 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
     .withFallback(nodeSeedConfigs(1))
     .withFallback(specialDataDirConfig(remoteVolume))
 
+  //  Testing scenario:
+  // 1. Start up one node and let it mine {approxMinerTargetHeight} blocks;
+  // 2. Shut it down and copy its history to testing node's directory;
+  // 3. Start mining node again;
+  // 4. Start testing node and wait until it gets synced with the mining node + {approxFollowerTargetHeight}
+  //    - it would require testing node to recover state correctly and apply new blocks on top of it;
   "Startup with only history available" in {
 
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get

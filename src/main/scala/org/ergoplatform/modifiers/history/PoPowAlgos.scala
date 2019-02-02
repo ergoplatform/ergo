@@ -42,16 +42,19 @@ object PoPowAlgos {
   /**
     * Packs interlinks into extension key-value format.
     */
-  def packInterlinks(links: Seq[ModifierId],
-                     acc: Seq[(Array[Byte], Array[Byte])] = Seq.empty): Seq[(Array[Byte], Array[Byte])] = {
-    links.zipWithIndex match {
-      case (headLink, idx) :: _ =>
-        val duplicatesQty = links.count(_ == headLink)
-        val filed = Array(InterlinksPrefixCode, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
-        packInterlinks(links.drop(duplicatesQty), acc :+ filed)
-      case Nil =>
-        acc
+  def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
+    def loop(rem: Seq[(ModifierId, Int)],
+             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] = {
+      rem match {
+        case (headLink, idx) :: _ =>
+          val duplicatesQty = links.count(_ == headLink)
+          val filed = Array(InterlinksPrefixCode, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          loop(rem.drop(duplicatesQty), acc :+ filed)
+        case Nil =>
+          acc
+      }
     }
+    loop(links.zipWithIndex, Seq.empty)
   }
 
   /**

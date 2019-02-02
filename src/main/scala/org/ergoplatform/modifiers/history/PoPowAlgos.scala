@@ -1,9 +1,12 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import scorex.util.ModifierId
+import org.ergoplatform.settings.Constants
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 object PoPowAlgos {
+
+  val InterlinksPrefixCode: Byte = 0x01
 
   def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {
@@ -34,6 +37,35 @@ object PoPowAlgos {
     } else {
       Seq(prevHeader.id)
     }
+  }
+
+  /**
+    * Packs interlinks into extension key-value format.
+    */
+  def packInterlinks(links: Seq[ModifierId],
+                     acc: Seq[(Array[Byte], Array[Byte])] = Seq.empty): Seq[(Array[Byte], Array[Byte])] = {
+    links.zipWithIndex match {
+      case (headLink, idx) :: _ =>
+        val duplicatesQty = links.count(_ == headLink)
+        val filed = Array(InterlinksPrefixCode, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+        packInterlinks(links.drop(duplicatesQty), acc :+ filed)
+      case Nil =>
+        acc
+    }
+  }
+
+  /**
+    * Unpacks interlinks from key-value format of extension.
+    */
+  def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Seq[ModifierId] = {
+    fields
+      .filter(_._1.headOption.contains(InterlinksPrefixCode))
+      .foldLeft(Seq.empty[ModifierId]) { case (acc, (_, v)) =>
+        assert(v.lengthCompare(Constants.ModifierIdSize + 1) == 0)
+        val duplicatesQty = v.head.toInt
+        val link = bytesToId(v.tail)
+        acc ++ Seq.fill(duplicatesQty)(link)
+      }
   }
 
 }

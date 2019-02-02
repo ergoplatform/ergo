@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, PoPowAlgos}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
 import scorex.util.ModifierId
@@ -159,10 +159,9 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
-  def toExtensionCandidate(interlinks: Seq[ModifierId],
-                           optionalFields: Seq[(Array[Byte], Array[Byte])] = Seq()): ExtensionCandidate = {
+  def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = {
     val paramFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
-    ExtensionCandidate(interlinks, paramFields ++ optionalFields)
+    ExtensionCandidate(paramFields ++ otherFields)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"

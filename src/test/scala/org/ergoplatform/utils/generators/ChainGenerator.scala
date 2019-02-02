@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, HeaderChain}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
@@ -26,7 +26,7 @@ trait ChainGenerator extends ErgoTestConstants {
     val bestHeaderOpt = history.bestHeaderOpt
     val bestHeaderInterlinksOpt = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-      .map(_.interlinks)
+      .map(ext => PoPowAlgos.unpackInterlinks(ext.fields))
       .getOrElse(Seq.empty)
     genHeaderChain(height, bestHeaderOpt, bestHeaderInterlinksOpt, history.difficultyCalculator)
   }

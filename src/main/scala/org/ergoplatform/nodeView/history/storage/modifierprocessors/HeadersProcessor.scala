@@ -154,13 +154,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       val parentOpt = typedModifierById[Header](header.parentId)
       val parentInterlinksOpt = parentOpt
         .flatMap(h => typedModifierById[Extension](h.extensionId))
-        .map(_.interlinks)
+        .map(ext => PoPowAlgos.unpackInterlinks(ext.fields))
       val interlinks = parentOpt
         .flatMap { h =>
           parentInterlinksOpt.map(PoPowAlgos.updateInterlinks(h, _))
         }
         .getOrElse(Seq.empty)
-      Seq(header, Extension(header.id, interlinks, Seq()))
+      Seq(header, Extension(header.id, PoPowAlgos.packInterlinks(interlinks)))
     } else {
       Seq(header)
     }

@@ -5,7 +5,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -105,7 +105,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     val me = mandatoryElements
       .map(kv => Shorts.fromByteArray(kv._1) -> kv._2)
       .map(kv => Shorts.toByteArray(kv._1) -> kv._2)
-    Extension(headerId, interlinks, me.toSeq)
+    Extension(headerId, me.toSeq ++ PoPowAlgos.packInterlinks(interlinks))
   }
 
   lazy val genECPoint: Gen[EcPointType] = genBytes(32).map(b => genPk(BigInt(b).mod(q)))

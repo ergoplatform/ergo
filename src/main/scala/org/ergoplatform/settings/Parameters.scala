@@ -4,10 +4,9 @@ import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
-import scorex.util.ModifierId
 
 import scala.util.Try
 
@@ -53,8 +52,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   def updateFork(height: Height, parametersTable: Map[Byte, Int], forkVote: Boolean,
                  epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Map[Byte, Int] = {
 
-    import votingSettings.{votingLength => votingEpochLength, softForkEpochs => votingEpochs, activationEpochs}
-    import votingSettings.softForkApproved
+    import votingSettings.{activationEpochs, softForkApproved, softForkEpochs => votingEpochs, votingLength => votingEpochLength}
 
     lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
     lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)

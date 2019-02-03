@@ -11,7 +11,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -42,8 +42,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 inSecretKeyOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
 
   import ErgoMiner._
-
-  private val powScheme = ergoSettings.chainSettings.powScheme
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -176,7 +174,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .getOrElse(Constants.InitialNBits)
     val bestHeaderInterlinksOpt = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-      .map(ext => PoPowAlgos.unpackInterlinks(ext.fields))
+      .map(ext => unpackInterlinks(ext.fields))
     val interlinks = bestHeaderOpt
       .flatMap { h =>
         bestHeaderInterlinksOpt.map(updateInterlinks(h, _))

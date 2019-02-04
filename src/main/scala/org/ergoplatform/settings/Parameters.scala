@@ -241,7 +241,7 @@ object Parameters {
       require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
       if (k.head == 0) {
         require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")
-        Some(k.head -> Ints.fromByteArray(v))
+        Some(k.last -> Ints.fromByteArray(v))
       } else {
         None
       }

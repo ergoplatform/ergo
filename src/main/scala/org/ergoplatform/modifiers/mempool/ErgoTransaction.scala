@@ -1,7 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import java.nio.ByteBuffer
-
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
@@ -24,8 +22,6 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.serialization.{SigmaSerializer => SSerializer}
-import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable

@@ -4,10 +4,8 @@ import org.ergoplatform.ErgoBox
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SBox
-import sigmastate.serialization.DataSerializer
 import sigmastate.serialization.{ConstantStore, DataSerializer}
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
-
 
 object ErgoBoxSerializer extends ScorexSerializer[ErgoBox] {
 

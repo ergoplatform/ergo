@@ -47,8 +47,6 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
 
-
-
   override def nodeViewSynchronizer(implicit system: ActorSystem):
   (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

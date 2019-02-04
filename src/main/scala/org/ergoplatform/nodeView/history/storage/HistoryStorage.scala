@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Storage for Ergo history
@@ -36,13 +36,12 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
         Some(e)
       case None =>
         objectsStore.get(id).flatMap { bBytes =>
-          try {
-            val pm = HistoryModifierSerializer.parseBytes(bBytes)
-            log.trace(s"Cache miss for existing modifier $id")
-            modifiersCache.put(id, pm)
-            Some(pm)
-          } catch {
-            case e: Throwable =>
+          HistoryModifierSerializer.parseBytesTry(bBytes) match {
+            case Success(pm) =>
+              log.trace(s"Cache miss for existing modifier $id")
+              modifiersCache.put(id, pm)
+              Some(pm)
+            case Failure(e) =>
               log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
               None
           }

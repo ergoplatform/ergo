@@ -8,9 +8,9 @@ import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 import scala.util.Try
-
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -272,8 +272,8 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
-    w.putInt(params.height)
-    w.putInt(params.parametersTable.size)
+    w.putUInt(params.height)
+    w.putUInt(params.parametersTable.size)
     params.parametersTable.foreach { case (k, v) =>
       w.put(k)
       w.putInt(v)
@@ -281,8 +281,8 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
   }
 
   override def parse(r: Reader): Parameters = {
-    val height = r.getInt()
-    val tableLength = r.getInt()
+    val height = r.getUInt().toIntExact
+    val tableLength = r.getUInt().toIntExact
     val table = (0 until tableLength).map {_ =>
       r.getByte() -> r.getInt()
     }

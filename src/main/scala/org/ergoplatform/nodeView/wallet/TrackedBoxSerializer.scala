@@ -12,6 +12,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,9 +26,9 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     w.putBits(headerBits(trackedBox))
       .putBytes(idToBytes(trackedBox.creationTxId))
       .putShort(trackedBox.creationOutIndex)
-      .putOption(trackedBox.creationHeight)(_.putInt(_))
+      .putOption(trackedBox.creationHeight)(_.putUInt(_))
       .putOption(trackedBox.spendingTxId)((r, id) => r.putBytes(idToBytes(id)))
-      .putOption(trackedBox.spendingHeight)(_.putInt(_))
+      .putOption(trackedBox.spendingHeight)(_.putUInt(_))
     ErgoBoxSerializer.serialize(trackedBox.box, w)
   }
 
@@ -35,9 +36,9 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     readHeader(r) { certainty =>
       readTx(r, txLookup) { creationTx =>
         val creationOutIndex = r.getShort()
-        val creationHeight = r.getOption(r.getInt())
+        val creationHeight = r.getOption(r.getUInt().toIntExact)
         readTxOpt(r, txLookup) { spendingTx =>
-          val spendingHeight = r.getOption(r.getInt())
+          val spendingHeight = r.getOption(r.getUInt().toIntExact)
           readErgoBox(r) { box =>
             TrackedBox(creationTx, creationOutIndex, creationHeight, spendingTx, spendingHeight, box, certainty)
           }

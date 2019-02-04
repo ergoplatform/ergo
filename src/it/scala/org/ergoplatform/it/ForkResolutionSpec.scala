@@ -17,7 +17,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
 
   val nodesQty: Int = 4
 
-  val commonChainLength: Int = 10
+  val commonChainLength: Int = 5
   val forkLength: Int = 5
   val syncLength: Int = 15
 

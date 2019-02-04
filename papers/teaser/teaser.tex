@@ -4,6 +4,7 @@
 \usepackage{amssymb}
 \usepackage{color}
 \usepackage{hyperref}
+\usepackage{float}
 
 \bibliographystyle{abbrv}
 
@@ -11,7 +12,7 @@
     \title{The Ergo Platform}
     \author{Dmitry Meshkov}
 
-    \date{January 22, 2019\\v1.0}
+    \date{January 25, 2019\\v1.0}
 
     \maketitle
 
@@ -103,12 +104,12 @@
     \label{sec:economy}
 
     To achieve survivability, Ergo provides economic improvements in addition to the technical
-    ones, most central of which is a demurrage component which plays an important role for Ergo`s
+    ones, most central of which is a storage fee component which plays an important role for Ergo`s
     stability: if an output remains in state for 4 years without being moved, a miner may charge
     small fee for every byte kept in the state. If value of the output is less than a required fee to
     pay, then the output will be removed from the state.
 
-    Thus, demurrage component is similar to regular cloud storage services, however, it is new for
+    Thus, storage fee component is similar to regular cloud storage services, however, it is new for
     cryptocurrencies and has several important consequences. First, Ergo mining will always be
     stable, unlike Bitcoin and other PoW currencies, in which mining may become unstable after the
     initial emission~\cite{carlsten2016instability}. Second, state size growth becomes controllable and predictable,
@@ -125,7 +126,7 @@
     pre-mine. As proof-of-no-pre-mine we are going to use news headlines, like Satoshi, as well as
     latest block ids from Bitcoin and Ethereum.
 
-    \begin{figure}[ht]
+    \begin{figure}[H]
         \centering
         \includegraphics[width=\textwidth]{emission.jpg}
         \caption{Ergo emission curve

@@ -23,12 +23,12 @@ object ErgoSyncInfo {
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] {
 
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
-    w.putInt(obj.lastHeaderIds.size)
+    w.putUShort(obj.lastHeaderIds.size)
     obj.lastHeaderIds.foreach( id => w.putBytes(idToBytes(id)))
   }
 
   override def parse(r: Reader): ErgoSyncInfo = {
-    val length = r.getInt()
+    val length = r.getUShort()
     val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
     ErgoSyncInfo(ids)
   }

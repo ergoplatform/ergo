@@ -13,6 +13,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.{Success, Try}
@@ -188,7 +189,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
 
   override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
     w.putBytes(obj.genesisStateDigest)
-    w.putInt(obj.lastHeaders.size)
+    w.putUInt(obj.lastHeaders.size)
     obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
     VotingDataSerializer.serialize(obj.votingData, w)
     ParametersSerializer.serialize(obj.currentParameters, w)
@@ -196,7 +197,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
 
   override def parse(r: Reader): ErgoStateContext = {
     val genesisDigest = ADDigest @@ r.getBytes(33)
-    val length = r.getInt()
+    val length = r.getUInt().toIntExact
     val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)

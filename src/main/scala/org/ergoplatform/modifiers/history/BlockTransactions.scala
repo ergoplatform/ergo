@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
@@ -13,7 +12,7 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-
+import scorex.util.Extensions._
 
 case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], override val sizeOpt: Option[Int] = None)
   extends BlockSection
@@ -70,7 +69,7 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
 
   override def serialize(obj: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))
-    w.putInt(obj.txs.size)
+    w.putUInt(obj.txs.size)
     obj.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)
     }
@@ -79,7 +78,7 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
   override def parse(r: Reader): BlockTransactions = {
     val startPos = r.position
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val size = r.getInt()
+    val size = r.getUInt().toIntExact
     val txs = (1 to size).map { _ =>
       ErgoTransactionSerializer.parse(r)
     }

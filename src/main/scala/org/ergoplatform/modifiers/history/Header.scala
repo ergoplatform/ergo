@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
@@ -22,7 +21,7 @@ import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Try
+import scorex.util.Extensions._
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -143,7 +142,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putLong(h.timestamp)
     w.putBytes(h.extensionRoot)
     RequiredDifficulty.serialize(h.nBits, w)
-    w.putInt(h.height)
+    w.putUInt(h.height)
     w.putBytes(h.votes)
   }
 
@@ -199,7 +198,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val timestamp = r.getLong()
     val extensionHash = Digest32 @@ r.getBytes(32)
     val nBits = RequiredDifficulty.parse(r)
-    val height = r.getInt()
+    val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
 
     val interlinksSize = r.getULong()

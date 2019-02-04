@@ -82,7 +82,6 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
 
   override def serialize(obj: Extension, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))
-
     w.putUShort(obj.fields.size)
     obj.fields.foreach { case (key, value) =>
       w.putBytes(key)
@@ -97,11 +96,10 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
     val fieldsSize = r.getUShort()
     val fields = (1 to fieldsSize) map {_ =>
       val key = r.getBytes(Extension.FieldKeySize)
-      val size = r.getUShort()
+      val size = r.getUByte()
       val value = r.getBytes(size)
       (key, value)
     }
-
     Extension(headerId, fields, Some(r.position - startPosition))
   }
 

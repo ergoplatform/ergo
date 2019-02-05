@@ -20,6 +20,39 @@ class ParametersSpecification extends ErgoPropertyTest {
 
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
+  property("processExtension") {
+    val constants = stateConstants.copy(
+      settings = settings.copy(
+        chainSettings = settings.chainSettings.copy(voting = votingSettings)
+      )
+    )
+    val ctx = ErgoStateContext.empty(constants)
+    val chain = genChain(votingEpochLength * 4).map { b =>
+      b.copy(extension = b.extension.copy(fields = LaunchParameters.toExtensionCandidate().fields))
+    }
+    val validChain = chain.init
+    val b = chain.last
+    val invalidExtBlock1 = { // extension does not contain all required params
+      b.copy(extension = b.extension.copy(fields = Seq(Array(0: Byte, 1: Byte) -> Array.fill(4)(2: Byte))))
+    }
+    val invalidExtBlock2 = { // extension contains redundant parameter
+      b.copy(extension = b.extension.copy(fields =
+        LaunchParameters.toExtensionCandidate().fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
+      )
+    }
+    val invalidExtBlock3 = { // extension does not contain params at all
+      b.copy(extension = b.extension.copy(fields = Seq()))
+    }
+    val validCtx = validChain.foldLeft(ctx) { (acc, mod) =>
+      val newCtxTry = acc.appendFullBlock(mod, votingSettings)
+      newCtxTry shouldBe 'success
+      newCtxTry.get
+    }
+    validCtx.appendFullBlock(invalidExtBlock1, votingSettings) shouldBe 'failure
+    validCtx.appendFullBlock(invalidExtBlock2, votingSettings) shouldBe 'failure
+    validCtx.appendFullBlock(invalidExtBlock3, votingSettings) shouldBe 'failure
+  }
+
   //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
   property("simple voting - start - conditions") {
     val kInit = 1000000

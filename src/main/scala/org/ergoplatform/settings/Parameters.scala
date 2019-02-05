@@ -251,7 +251,7 @@ object Parameters {
   }
 
   //Check that calculated parameters are matching ones written in the extension section of the block
-  def matchParameters(p1: Parameters, p2: Parameters): Try[Unit] = Try {
+  def matchParameters(p1: Parameters, p2: Parameters): Try[Parameters] = Try {
     if (p1.height != p2.height) {
       throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
     }
@@ -262,7 +262,7 @@ object Parameters {
       val v2 = p2.parametersTable(k)
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
-  }
+  }.map(_ => p1)
 
 }
 

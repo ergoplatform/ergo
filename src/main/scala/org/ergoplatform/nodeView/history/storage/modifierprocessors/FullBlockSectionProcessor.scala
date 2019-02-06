@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
@@ -108,34 +108,48 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       case _ => false
     }
 
+    private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
+      failFast
+        .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
+          fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
+        }
+        .validate(extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
+          fatal(s"Extension ${extension.encodedId} field value length > ${Extension.FieldValueMaxSize}")
+        }
+        .validate(extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length) {
+          fatal(s"Extension ${extension.encodedId} contains duplicate mandatory keys")
+        }
+        .validate(header.isGenesis || extension.fields.nonEmpty) {
+          fatal("Empty fields in non-genesis block")
+        }
+        .validate(header.isGenesis || validInterlinks(extension, header)) {
+          fatal("Invalid interlinks")
+        }
+    }
+
+    private def validInterlinks(extension: Extension, header: Header): Boolean = {
+      import PoPowAlgos._
+      typedModifierById[Header](header.parentId)
+        .flatMap { parent =>
+          typedModifierById[Extension](parent.extensionId).map { parentExt =>
+            updateInterlinks(parent, unpackInterlinks(parentExt.fields)) == unpackInterlinks(extension.fields)
+          }
+        }
+        .getOrElse(false)
+    }
+
     /**
       * Validation specific to concrete type of block payload
       */
     private def modifierSpecificValidation(m: BlockSection, header: Header): ValidationState[Unit] = {
       m match {
-        case e: Extension =>
-          // todo checks that all required mandatory fields are set and non additional mandatory fields
-          failFast
-            .validate(e.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} field key length is not ${Extension.FieldKeySize}")
-            }
-            .validate(e.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} field value length > ${Extension.FieldValueMaxSize}")
-            }
-            .validate(e.fields.map(kv => bytesToId(kv._1)).distinct.length == e.fields.length) {
-              //todo this check may be done in general mandatory fields check
-              fatal(s"Extension ${m.encodedId} contains duplicate mandatory keys")
-            }
-            .validate(header.height > 0 || e.fields.nonEmpty) {
-              //genesis block does not contain votes
-              //todo: this rule may be reconsidered when moving interlink vector to extension section
-              fatal("Fields in genesis block")
-            }
+        case extension: Extension =>
+          validateExtension(extension, header)
         case _ =>
-          // todo some validations of block transactions, including size limit, should go there.
           failFast
       }
     }
+
   }
 
 }

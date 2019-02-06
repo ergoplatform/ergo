@@ -164,14 +164,14 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     val prevHeight = headersHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, ByteArrayWrapper) =
-      heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
+      heightIdsKey(h.height) -> ByteArrayWrapper((h.id +: headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
       .filter(h => !isInBestChain(h))
     val forkIds: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = forkHeaders.map { header =>
       val otherIds = headerIdsAtHeight(header.height).filter(id => id != header.id)
-      heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatMap(idToBytes).toArray)
+      heightIdsKey(header.height) -> ByteArrayWrapper((header.id +: otherIds).flatMap(idToBytes).toArray)
     }
     forkIds :+ self
   }

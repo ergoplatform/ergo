@@ -111,7 +111,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         throw new Exception("Versions in header and parameters section are different")
       }
 
-      Try(Parameters.matchParameters(parsedParams, calculatedParams)).map(_ => calculatedParams)
+      Parameters.matchParameters(parsedParams, calculatedParams)
     }
   }
 

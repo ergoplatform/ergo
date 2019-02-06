@@ -108,6 +108,23 @@ Examples:
             fork. Then a miner generating the block $\#3072$ must write down the following pairs there: $(121, 1100)$ and
             $(122, 1024)$.
     \item{} The voting is to be done on height $1024 + 1024*32 = 33792$, so the last vote could be written into the
-            block $\#33791$.
-    \item{}         
+            block $\#33791$. Block $\#33792$ still should contain correct values for votes collected and voting starting
+            height.
+    \item{} Lets assume that voting for the soft-fork was not successful, i.e. no more than $29491$ votes for soft-fork
+            have been gathered between blocks $\#1024$~(inclusive) and $\#33792$~(exclusive). Then the next epoch block,
+            so the block $\#34816$ should clear the old voting parameter values. A new voting for soft-fork may be
+            started in this new epoch, so in the block $\#34816$, if the block contains a vote for the soft-fork
+            (i.e. a record with key = 120 in the extension section), then the block must contain new starting height
+            and votes collected values (i.e. following pairs: $(121: 0)$ and $(122: 34816)$). If there is no new voting
+            started, all the parameters regarding soft-fork voting must be cleared off of the block $\#34816$.
+    \item{} Now assume that the voting for the soft-fork was successful, i.e. more than $29491$ votes for soft-fork
+            have been gathered between blocks $\#1024$~(inclusive) and $\#33792$~(exclusive). In this case, activation
+            epoch is starting immediately after voting has been done, so on height $33792$. Activation epoch lasts for
+            128 epochs, so the first block after activation period has height of $164864$. Please note that any vote
+            for a soft-fork during the activation period is prohibited. Also, on a first block of a voting epoch
+            soft-fork voting parameters should be written~(height when voting had been started and also number of votes
+            collected). On the first block after activation, protocol version written into a block must be increased.
+            The first block after activation should carry soft-fork voting parameters. The parameters must be cleared
+            next epoch, so in a block $\#165888$. A new voting may be started in the block $\#165888$, similarly to the
+            case of non-successful voting.
 \end{itemize}

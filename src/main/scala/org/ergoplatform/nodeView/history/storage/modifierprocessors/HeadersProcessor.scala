@@ -132,7 +132,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifiersToInsert(h))
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
   }
 
   /**
@@ -145,25 +145,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      modifiersToInsert(h))
-  }
-
-  private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
-    if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
-      // extension is empty, generate it and insert to history
-      val parentOpt = typedModifierById[Header](header.parentId)
-      val parentInterlinksOpt = parentOpt
-        .flatMap(h => typedModifierById[Extension](h.extensionId))
-        .map(ext => PoPowAlgos.unpackInterlinks(ext.fields))
-      val interlinks = parentOpt
-        .flatMap { h =>
-          parentInterlinksOpt.map(PoPowAlgos.updateInterlinks(h, _))
-        }
-        .getOrElse(Seq.empty)
-      Seq(header, Extension(header.id, PoPowAlgos.packInterlinks(interlinks)))
-    } else {
-      Seq(header)
-    }
+      Seq(h))
   }
 
   /**

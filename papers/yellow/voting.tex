@@ -70,7 +70,7 @@ epoch.
 
 \subsection{Voting for a soft-fork}
 
-A soft-fork is when a protocol version supported by the network is being increased. This version is written in a block
+A soft-fork happens when a protocol version supported by the network is being increased. This version is written in a block
 header. Semantics behind versioning is not defined ahead of time by the protocol and so up to clients and their
 developers. The protocol version is being written into every block header, with initial value during launch to be set
 to 1.
@@ -97,3 +97,17 @@ in the extension section of the block, and number of votes collected in the prev
 there as well as ($121: v_s$).
 
 Examples:
+
+\begin{itemize}
+    \item{} Assume that a vote for soft-fork is proposed in block number $1024$ (by writing a record into the extension
+            with a key equals to $120$ and any value). Assume that within this epoch,
+            so before block number $2048$, $500$ votes were collected. Thus a miner which is generating block
+            $\#2048$ must write height when the soft-fork voting has been started in the extension section of the block
+            as ($122: 1024$ key-value pair), as well as number of votes supporting the fork gathered within the epoch
+            done (in form of $121: 500$). Assume that the new epoch started with the block $\#2048$ brings 600 votes for
+            fork. Then a miner generating the block $\#3072$ must write down the following pairs there: $(121, 1100)$ and
+            $(122, 1024)$.
+    \item{} The voting is to be done on height $1024 + 1024*32 = 33792$, so the last vote could be written into the
+            block $\#33791$.
+    \item{}         
+\end{itemize}

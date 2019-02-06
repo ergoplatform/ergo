@@ -250,7 +250,12 @@ object Parameters {
     Parameters(h, paramsTable)
   }
 
-  //Check that calculated parameters are matching ones written in the extension section of the block
+  /**
+    * Check that two set of parameters are the same (contain the same records).
+    * @param p1 - parameters set
+    * @param p2 - parameters set
+    * @return Success(p1), if parameters match, Failure(_) otherwise
+    */
   def matchParameters(p1: Parameters, p2: Parameters): Try[Parameters] = Try {
     if (p1.height != p2.height) {
       throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")

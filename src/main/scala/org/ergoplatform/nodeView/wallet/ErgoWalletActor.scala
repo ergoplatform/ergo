@@ -89,7 +89,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case Failure(_) =>
           log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
-            s"${uncertainBox.creationHeight} while current height is ${stateContext.currentHeight}")
+            s"${uncertainBox.inclusionHeight} while current height is ${stateContext.currentHeight}")
           //todo: remove after some time? remove spent after some time?
           false
       }
@@ -123,7 +123,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private def registerBox(trackedBox: TrackedBox): Boolean = {
     if (registry.contains(trackedBox.boxId)) {
-      trackedBox.creationHeight match {
+      trackedBox.inclusionHeight match {
         case Some(h) =>
           registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
         case None =>

@@ -32,7 +32,7 @@ class AdProofSpec extends ErgoPropertyTest {
     prover.generateProof()
 
     val prevDigest = prover.digest
-    val boxes = (1 to howMany) map { i => ErgoBox(1, Values.TrueLeaf, boxId = i.toShort, creationHeight = startHeight) }
+    val boxes = (1 to howMany) map { i => ErgoBox(1, Values.TrueLeaf, startHeight, boxIndex = i.toShort) }
     boxes.foreach(box => prover.performOneOperation(Insert(box.id, ADValue @@ box.bytes)))
     val pf = prover.generateProof()
 

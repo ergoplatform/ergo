@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import akka.actor.ActorRef
 import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
+import scorex.crypto.authds.ADDigest
 
 /**
   * Constants that do not change with state version changes
@@ -13,4 +14,6 @@ case class StateConstants(nodeViewHolderRef: Option[ActorRef], settings: ErgoSet
 
   lazy val keepVersions: Int = settings.nodeSettings.keepVersions
   lazy val votingSettings: VotingSettings = settings.chainSettings.voting
+
+  lazy val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
 }

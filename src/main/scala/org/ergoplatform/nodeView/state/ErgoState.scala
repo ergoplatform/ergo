@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.pkFromBytes
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
@@ -101,7 +101,7 @@ object ErgoState extends ScorexLogging {
   private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
     val emission = settings.emissionRules
     val pks = settings.foundersPubkeys
-      .map(str => pkFromBytes(Base16.decode(str).get))
+      .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => SigmaPropConstant(ProveDlog(pk)))
     val protection = AtLeast(IntConstant(2), pks).isProven
     val protectionBytes = ValueSerializer.serialize(protection)

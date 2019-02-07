@@ -23,7 +23,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
       box.additionalTokens,
       box.additionalRegisters,
       transactionId = box.transactionId,
-      boxId = box.index)
+      boxIndex = box.index)
   }
 
   def constructTest(from: ErgoBox,
@@ -33,7 +33,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val in = Input(from.id,
       ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h: Int = (from.creationHeight + Constants.StoragePeriod + heightDelta).toInt
+    val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
 
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
     val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)

@@ -162,7 +162,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   private def groupElemGen =
-    Gen.const(GroupElementConstant(CryptoConstants.dlogGroup.createRandomGenerator()))
+    Gen.const(GroupElementConstant(CryptoConstants.dlogGroup.createRandomElement()))
 
   private def proveDiffieHellmanTupleGen = for {
     gv <- groupElemGen

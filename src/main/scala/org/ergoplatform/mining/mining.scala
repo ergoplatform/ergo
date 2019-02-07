@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import sigmastate.basics.BcDlogFp
+import sigmastate.basics.BcDlogGroup
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -12,9 +12,9 @@ package object mining {
 
   val PublicKeyLength: Byte = 33
 
-  val group: BcDlogFp[EcPointType] = CryptoConstants.dlogGroup
+  val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
 
-  val q: BigInt = group.q
+  val q: BigInt = group.order
 
   private val hashFn: NumericHash = new NumericHash(q)
 

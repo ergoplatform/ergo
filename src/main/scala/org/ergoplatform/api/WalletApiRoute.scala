@@ -69,8 +69,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def compileSource(source: String, env: Map[String, Any]): Try[Value[SBoolean.type]] = {
-    val compiler = SigmaCompiler()
-    Try(compiler.compile(env, source, ergoSettings.chainSettings.addressPrefix)).flatMap {
+    val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
+    Try(compiler.compile(env, source)).flatMap {
       case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
         Success(script)
       case other =>

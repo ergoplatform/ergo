@@ -26,9 +26,13 @@ case class PoPoWProof(m: Byte,
 
   override def parentId: ModifierId = ???
 
-  override def serializedId: Array[Byte] = Algos.hash(new PoPoWProofSerializer(powScheme).toBytes(this))
+  override def serializedId: Array[Byte] = Algos.hash(bytes)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
+
+  override type M = PoPoWProof
+
+  override lazy val serializer: ScorexSerializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
 
   //todo: implement
   override def compare(that: PoPoWProof): Int = ???

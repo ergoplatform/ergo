@@ -13,6 +13,10 @@ case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
   override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
     lastHeaderIds.map(b => Header.modifierTypeId -> b)
   }
+
+  override type M = ErgoSyncInfo
+
+  override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
 object ErgoSyncInfo {

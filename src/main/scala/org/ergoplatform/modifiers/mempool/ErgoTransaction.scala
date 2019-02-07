@@ -41,8 +41,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
-  lazy val size = sizeOpt.getOrElse(ErgoTransactionSerializer.toBytes(this).length)
-
   /**
     * Fill a mutable map passed as a parameter with (assets -> total amount) data, based on boxes passed as
     * a parameter. That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
@@ -140,6 +138,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         }
       }.toTry
   }
+
+  override type M = ErgoTransaction
+
+  override def serializer: ScorexSerializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
     import ErgoTransaction._

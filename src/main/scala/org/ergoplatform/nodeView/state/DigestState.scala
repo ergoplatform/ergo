@@ -123,8 +123,7 @@ class DigestState protected(override val version: VersionTag,
   private def update(fullBlock: ErgoFullBlock): Try[DigestState] = {
     val version: VersionTag = idToVersion(fullBlock.header.id)
     stateContext.appendFullBlock(fullBlock, votingSettings).flatMap { newStateContext =>
-      val sateContexBytes = ErgoStateContextSerializer(votingSettings).toBytes(newStateContext)
-      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(sateContexBytes)
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
       update(version, fullBlock.header.stateRoot, Seq(contextKeyVal))
     }
   }
@@ -133,8 +132,7 @@ class DigestState protected(override val version: VersionTag,
   private def update(header: Header): Try[DigestState] = {
     val version: VersionTag = idToVersion(header.id)
     stateContext.appendBlock(header, None, votingSettings).flatMap { newStateContext =>
-      val sateContexBytes = ErgoStateContextSerializer(votingSettings).toBytes(newStateContext)
-      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(sateContexBytes)
+      val contextKeyVal = ByteArrayWrapper(ErgoStateReader.ContextKey) -> ByteArrayWrapper(newStateContext.bytes)
       update(version, header.stateRoot, Seq(contextKeyVal))
     }
   }

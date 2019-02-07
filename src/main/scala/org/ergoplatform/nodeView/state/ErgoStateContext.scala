@@ -9,7 +9,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
@@ -51,7 +51,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val currentParameters: Parameters,
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
-  extends ScorexEncoding {
+  extends BytesSerializable with ScorexEncoding {
 
   lazy val votingEpochLength: Int = votingSettings.votingLength
 
@@ -67,6 +67,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
   val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
+
+  override type M = ErgoStateContext
+
+  override def serializer: ScorexSerializer[M] = ErgoStateContextSerializer(votingSettings)
 
   def upcoming(minerPk: EcPointType,
                timestamp: Long,

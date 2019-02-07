@@ -26,9 +26,11 @@ case class ADProofs(headerId: ModifierId,
 
   override val modifierTypeId: ModifierTypeId = ADProofs.modifierTypeId
 
-  override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
+  override type M = ADProofs
 
-  lazy val size: Int = sizeOpt.getOrElse(ADProofSerializer.toBytes(this).size)
+  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofSerializer
+
+  override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).

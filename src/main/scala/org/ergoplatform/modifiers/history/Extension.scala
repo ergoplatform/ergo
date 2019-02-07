@@ -30,6 +30,10 @@ case class Extension(headerId: ModifierId,
 
   override def digest: Digest32 = Extension.rootHash(fields)
 
+  override type M = Extension
+
+  override def serializer: ScorexSerializer[Extension] = ExtensionSerializer
+
   override def toString: String = {
     s"Extension(id: $id, headerId: ${Algos.encode(headerId)}, " +
       s"fields: ${fields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")}) "

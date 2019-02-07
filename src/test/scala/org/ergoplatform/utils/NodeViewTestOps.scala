@@ -93,7 +93,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
                     ext: ExtensionCandidate = ExtensionCandidate(Seq()))
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
-    val parent = getHistory.bestHeaderOpt
+    val parent = getHistory.bestFullBlockOpt
     validFullBlock(parent, utxoState, txs, Some(time))
   }
 

@@ -105,7 +105,10 @@ trait ChainGenerator extends ErgoTestConstants {
   def nextBlock(prev: Option[ErgoFullBlock],
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
-                nBits: Long = Constants.InitialNBits): ErgoFullBlock =
+                nBits: Long = Constants.InitialNBits): ErgoFullBlock = {
+    val interlinks = prev.toSeq.flatMap(x =>
+      PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields)))
+    val validExtension = extension.copy(fields = extension.fields ++ PoPowAlgos.packInterlinks(interlinks))
     powScheme.proveBlock(
       prev.map(_.header),
       Header.CurrentVersion,
@@ -114,10 +117,11 @@ trait ChainGenerator extends ErgoTestConstants {
       emptyProofs,
       txs,
       Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
-      extension,
+      validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
     ).get
+  }
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {
     var history = historyIn

@@ -324,7 +324,7 @@ object ErgoMiner extends ScorexLogging {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
                       if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current
-                    case Failure(e) => // fee collecting tx is invalid, return current
+                    case _ => // fee collecting tx is invalid, return current
                       current
                   }
                 case None =>

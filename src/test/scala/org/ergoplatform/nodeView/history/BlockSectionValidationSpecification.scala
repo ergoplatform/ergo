@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -28,17 +28,22 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     val extension = block.extension
     val m = extension.fields
 
+    val invalidInterlinks = PoPowAlgos.packInterlinks(
+      PoPowAlgos.unpackInterlinks(block.extension.fields) ++ Seq(header.id)
+    )
+
     // checks, specific for extension
     // validation of field keys size
     val imvKey = extensionKvGen(Extension.FieldKeySize - 1, Extension.FieldValueMaxSize).sample.get
-    applicableCheck(extension.copy(fields = imvKey +: m), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ (imvKey +: m)), header, history)
     // validation of field value sizes
     val imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
-    applicableCheck(extension.copy(fields = imvValue +: m), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ (imvValue +: m)), header, history)
     // validation of key duplicates in fields
     val validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
-    applicableCheck(extension.copy(fields = Seq(validMKV)), header, history, correct = true)
-    applicableCheck(extension.copy(fields = Seq(validMKV, validMKV)), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ Seq(validMKV)), header, history, correct = true)
+    applicableCheck(extension.copy(fields = extension.fields ++ Seq(validMKV, validMKV)), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ Seq(validMKV) ++ invalidInterlinks), header, history)
 
     // common checks
     commonChecks(history, extension, header)

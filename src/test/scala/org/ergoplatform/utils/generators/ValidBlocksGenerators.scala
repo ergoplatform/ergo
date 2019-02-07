@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -133,15 +133,15 @@ trait ValidBlocksGenerators
     validTransactionsFromBoxes(num, boxes, rnd)._1
   }
 
-  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
-    validFullBlock(parentOpt, utxoState: UtxoState, boxHolder: BoxHolder, new Random)
+  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
+    validFullBlock(parentOpt, utxoState, boxHolder, new Random)
 
 
-  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
     validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
-  def validFullBlockWithBoxHolder(parentOpt: Option[Header],
+  def validFullBlockWithBoxHolder(parentOpt: Option[ErgoFullBlock],
                                   utxoState: UtxoState,
                                   boxHolder: BoxHolder,
                                   rnd: Random): (ErgoFullBlock, BoxHolder) = {
@@ -149,12 +149,12 @@ trait ValidBlocksGenerators
     validFullBlock(parentOpt, utxoState, txsBh._1) -> txsBh._2
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      wrappedState: WrappedUtxoState): ErgoFullBlock = {
     validFullBlock(parentOpt, wrappedState, wrappedState.versionedBoxHolder)
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      wrappedState: WrappedUtxoState,
                      time: Long): ErgoFullBlock = {
     validFullBlock(
@@ -165,7 +165,7 @@ trait ValidBlocksGenerators
     )
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
                      timeOpt: Option[Long] = None): ErgoFullBlock = {
@@ -178,12 +178,11 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinks = Seq.empty // todo: use real interlinks
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(interlinks)
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, votes, defaultMinerSecretNumber).get
+    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest,
+      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
 }

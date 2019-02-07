@@ -5,7 +5,7 @@ import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
@@ -18,8 +18,12 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
-case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) {
+case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
+  override type M = AutolykosSolution
+
   val encodedPk: Array[Byte] = pkToBytes(pk)
+
+  override def serializer: ScorexSerializer[AutolykosSolution] = AutolykosSolutionSerializer
 }
 
 object AutolykosSolution extends ApiCodecs {

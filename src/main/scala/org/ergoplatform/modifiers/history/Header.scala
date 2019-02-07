@@ -37,7 +37,9 @@ case class Header(version: Version,
                   votes: Array[Byte], //3 bytes
                   override val sizeOpt: Option[Int] = None) extends PreHeader with ErgoPersistentModifier {
 
-  override def serializedId: Array[Version] = Algos.hash(HeaderSerializer.toBytes(this))
+  override def serializedId: Array[Version] = Algos.hash(bytes)
+
+  override type M = Header
 
   override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
@@ -56,9 +58,9 @@ case class Header(version: Version,
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
-  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
+  override lazy val serializer: ScorexSerializer[Header] = HeaderSerializer
 
-  lazy val size = sizeOpt.getOrElse(HeaderSerializer.toBytes(this).length)
+  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
   /**
     * Checks, that modifier m corresponds t this header

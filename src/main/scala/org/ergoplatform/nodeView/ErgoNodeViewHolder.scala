@@ -17,7 +17,6 @@ import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
-import scorex.crypto.authds.ADDigest
 
 import scala.util.{Failure, Success, Try}
 

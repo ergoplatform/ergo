@@ -27,22 +27,22 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
     val parentOpt = state.stateContext.lastHeaderOpt
-    validFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
+    statefullyValidFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
   }
 
   override def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get
 
   override def totallyValidModifier(history: HT, state: UTXO_ST): PM = {
-    val parentOpt = history.bestHeaderOpt
+    val parentOpt = history.bestFullBlockOpt
     validFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState]).header
   }
 
   override def totallyValidModifiers(history: HT, state: UTXO_ST, count: Int): Seq[PM] = {
     require(count >= 1)
-    val headerOpt = history.bestHeaderOpt
+    val headerOpt = history.bestFullBlockOpt
     (0 until count).foldLeft((headerOpt, Seq.empty[PM])) { case (acc, _) =>
       val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedUtxoState])
-      (Some(pm.header), acc._2 :+ pm)
+      (Some(pm), acc._2 :+ pm)
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
 

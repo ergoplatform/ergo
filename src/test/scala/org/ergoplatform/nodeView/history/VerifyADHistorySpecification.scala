@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -409,6 +409,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       val txs = fullBlock.blockTransactions
       val proofs = fullBlock.adProofs.value
       val extension = fullBlock.extension
+      println(PoPowAlgos.unpackInterlinks(extension.fields))
       history.contains(header) shouldBe false
       history.contains(txs) shouldBe false
       history.contains(proofs) shouldBe false

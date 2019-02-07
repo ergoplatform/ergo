@@ -94,9 +94,10 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
 
     chain1.foreach(fb => history = applyBlock(history, fb))
 
-    chain2.foreach(fb => history = history.append(fb.header).get._1)
-
     history.bestFullBlockOpt.value shouldBe chain1.last
+
+    chain2.foreach(fb => history = applyBlock(history, fb))
+
     history.bestHeaderOpt.value shouldBe chain2.last.header
 
     chain2.flatMap(_.blockSections).foreach(s => modifiersCache.put(s.id, s))
@@ -108,7 +109,6 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
           history.append(mod)
           applyLoop()
         case None =>
-          modifiersCache.size shouldBe 0
           history.bestFullBlockOpt.value shouldBe chain2.last
       }
     }

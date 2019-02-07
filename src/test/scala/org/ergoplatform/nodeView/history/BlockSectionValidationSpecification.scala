@@ -31,14 +31,14 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     // checks, specific for extension
     // validation of field keys size
     val imvKey = extensionKvGen(Extension.FieldKeySize - 1, Extension.FieldValueMaxSize).sample.get
-    applicableCheck(extension.copy(fields = imvKey +: m), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ (imvKey +: m)), header, history)
     // validation of field value sizes
     val imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
-    applicableCheck(extension.copy(fields = imvValue +: m), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ (imvValue +: m)), header, history)
     // validation of key duplicates in fields
     val validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
-    applicableCheck(extension.copy(fields = Seq(validMKV)), header, history, correct = true)
-    applicableCheck(extension.copy(fields = Seq(validMKV, validMKV)), header, history)
+    applicableCheck(extension.copy(fields = extension.fields ++ Seq(validMKV)), header, history, correct = true)
+    applicableCheck(extension.copy(fields = extension.fields ++ Seq(validMKV, validMKV)), header, history)
 
     // common checks
     commonChecks(history, extension, header)

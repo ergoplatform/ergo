@@ -163,7 +163,7 @@ trait ApiCodecs {
       "onchain" -> b.chainStatus.onchain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "creationHeight" -> b.creationHeight.asJson,
+      "inclusionHeight" -> b.inclusionHeight.asJson,
       "spendingHeight" -> b.spendingHeight.asJson,
       "box" -> b.box.asJson
     )

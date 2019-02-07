@@ -8,7 +8,7 @@ Ergo block consists of 4 parts:
     \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
     Allows light clients to verify all the transactions and calculate new root hash.
     \item{\em Extension } - additional data, that does not correspond to previous sections.
-    May contain interlinks, current miner votes and (sometimes) current parameters of the chain.
+    Contains interlinks, current miner votes and (sometimes) current parameters of the chain.
 \end{itemize}
 
 \subsection{Header}
@@ -55,12 +55,12 @@ Some of these fields may be calculated by node by itself if it is in a certain m
 
 Extension is a key-value storage for a variety of data.
 
-A key is always 2-bytes long, maximum size of a value is 64 bytes. Extension could be no more than of $10,240$ bytes.
-Some keys have predefined semantics. In particular, if the first byte of a key is equals to $0x00$, then the second byte
+A key is always 2-bytes long, maximum size of a value is 64 bytes. Extension could be no more than of $16,384$ bytes.
+Some keys have predefined semantics. In particular, if the first byte of a key equals to $0x00$, then the second byte
 defines parameter identifier, and the value defines value of the parameter. See Section~\ref{sec:params-table}
-for details. Other prefixes may be used freely.
-
-\knote{$0x01$ - will be used for interlinks}
+for details. Another predefined key is used for storing interlinks vector - the first byte of the key is $0x01$,
+the second one corresponds to index of the link in the vector and the value contains actual link (32 bytes) prefixed
+with the number of times it appears in the vector (1 byte). Other prefixes may be used freely.
 
 
 

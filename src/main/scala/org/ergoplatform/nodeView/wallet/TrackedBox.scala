@@ -16,7 +16,7 @@ import scorex.util.{ModifierId, bytesToId}
   *
   * @param creationTx       Transaction created the box
   * @param creationOutIndex Output index in the creation transaction
-  * @param creationHeight   Height of the creation transaction block in blockchain if known
+  * @param inclusionHeight  Height the transaction was included into blockchain
   * @param spendingTx       Transaction which spends the box if exists and known
   * @param spendingHeight   Height of the spending transaction block in blockchain if known
   * @param box              Underlying Ergo box
@@ -24,13 +24,13 @@ import scorex.util.{ModifierId, bytesToId}
   */
 case class TrackedBox(creationTx: ErgoTransaction,
                       creationOutIndex: Short,
-                      creationHeight: Option[Height],
+                      inclusionHeight: Option[Height],
                       spendingTx: Option[ErgoTransaction],
                       spendingHeight: Option[Height],
                       box: ErgoBox,
                       certainty: BoxCertainty) {
 
-  require(spendingHeight.isEmpty || creationHeight.nonEmpty,
+  require(spendingHeight.isEmpty || inclusionHeight.nonEmpty,
     s"Onchain transaction $encodedSpendingTxId at height $spendingHeight " +
       s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
 
@@ -44,7 +44,7 @@ case class TrackedBox(creationTx: ErgoTransaction,
     * Can be derived from `spendingStatus` and `chainStatus` combination
     */
   def creationChainStatus: ChainStatus = {
-    if (creationHeight.isEmpty) Offchain else Onchain
+    if (inclusionHeight.isEmpty) Offchain else Onchain
   }
 
   /** Whether box spending is confirmed or not, `Offchain` for unspent boxes.

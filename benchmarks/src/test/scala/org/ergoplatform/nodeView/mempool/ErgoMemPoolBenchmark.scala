@@ -12,7 +12,7 @@ object ErgoMemPoolBenchmark
   extends Bench.ForkedTime
     with ErgoTransactionGenerators {
 
-  private val blockSizes = Gen.enumeration("txs in block")(50, 500, 1000)
+  private val blockSizes = Gen.enumeration("txs in block")(10000)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
 
   private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]) = for {
@@ -37,7 +37,7 @@ object ErgoMemPoolBenchmark
   private val config = Seq[KeyValue](
     exec.minWarmupRuns -> 10,
     exec.maxWarmupRuns -> 30,
-    exec.benchRuns -> 20,
+    exec.benchRuns -> 5,
     exec.requireGC -> true
   )
 
@@ -51,13 +51,13 @@ object ErgoMemPoolBenchmark
       using(bestCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
     }
 
-    performance of "avg case" in {
-      using(avgCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
-    }
-
-    performance of "worst case" in {
-      using(worstCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
-    }
+//    performance of "avg case" in {
+//      using(avgCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
+//    }
+//
+//    performance of "worst case" in {
+//      using(worstCaseGenerator) config (config: _*) in (txsInIncomeOrder => bench(txsInIncomeOrder))
+//    }
   }
 
 }

@@ -224,32 +224,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getRootHash shouldBe Algos.encode(block1.header.stateRoot)
   }
 
-  // todo: payloads could not be applied in incorrect order without an exception being thrown.
-  private val t11 = TestCase("apply payload in incorrect order") { fixture =>
-    import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
-    val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-
-    applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
-
-    val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis)
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
-    val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
-
-    subscribeEvents(classOf[SyntacticallySuccessfulModifier[Header]])
-    nodeViewHolderRef ! LocallyGeneratedModifier(chain2block1.header)
-    expectMsgType[SyntacticallySuccessfulModifier[Header]]
-
-    applyBlock(chain2block2) shouldBe 'success
-    getBestHeaderOpt shouldBe Some(chain2block2.header)
-    getBestFullBlockEncodedId shouldBe Some(genesis.header.encodedId)
-
-    applyPayload(chain2block1) shouldBe 'success
-    getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
-  }
-
   private val t12 = TestCase("Do not apply txs with wrong header id") { fixture =>
     import fixture._
 
@@ -380,7 +354,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val verifyingTxCases: List[TestCase] = List(t10, /*t11, */ t12, t13)
+  val verifyingTxCases: List[TestCase] = List(t10, t12, t13)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>

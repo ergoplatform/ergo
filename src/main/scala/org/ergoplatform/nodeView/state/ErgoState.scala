@@ -53,6 +53,8 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
 object ErgoState extends ScorexLogging {
 
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
+
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
@@ -150,8 +152,8 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, settings)
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
+      stateDir, StateConstants(None, settings))
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -164,7 +166,7 @@ object ErgoState extends ScorexLogging {
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, settings)
+      case StateType.Digest => DigestState.create(None, None, dir, constants)
       case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
       case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }

@@ -49,7 +49,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 
-  lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
+  lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)

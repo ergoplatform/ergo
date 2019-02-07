@@ -18,7 +18,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   override implicit val votingSettings: VotingSettings =
     VotingSettings(votingEpochLength, softForkEpochs = 2, activationEpochs = 3)
 
-  private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate(Seq()).toExtension(headerId)
+  private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate().toExtension(headerId)
 
   property("extension processing") {
     val constants = stateConstants.copy(

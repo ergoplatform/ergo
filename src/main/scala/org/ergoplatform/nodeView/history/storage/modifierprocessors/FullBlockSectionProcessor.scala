@@ -109,7 +109,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
 
     private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
-      failFast
+      validInterlinks(extension, header)
         .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
           fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
         }
@@ -122,20 +122,23 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(header.isGenesis || extension.fields.nonEmpty) {
           fatal("Empty fields in non-genesis block")
         }
-        .validate(header.isGenesis || validInterlinks(extension, header)) {
-          fatal("Invalid interlinks")
-        }
     }
 
-    private def validInterlinks(extension: Extension, header: Header): Boolean = {
+    private def validInterlinks(extension: Extension, header: Header): ValidationState[Unit] = {
       import PoPowAlgos._
-      typedModifierById[Header](header.parentId)
-        .flatMap { parent =>
-          typedModifierById[Extension](parent.extensionId).map { parentExt =>
-            updateInterlinks(parent, unpackInterlinks(parentExt.fields)) == unpackInterlinks(extension.fields)
+      val prevHeaderOpt = typedModifierById[Header](header.parentId)
+      val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))
+      (prevHeaderOpt, prevExtensionOpt) match {
+        case (Some(parent), Some(parentExt)) =>
+          failFast.validate(
+            updateInterlinks(parent, unpackInterlinks(parentExt.fields)) == unpackInterlinks(extension.fields)) {
+            fatal("Invalid interlinks")
           }
-        }
-        .getOrElse(false)
+        case _ =>
+          failFast.validate(header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight) {
+            error("Unable to validate interlinks")
+          }
+      }
     }
 
     /**

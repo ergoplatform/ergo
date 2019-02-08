@@ -11,6 +11,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
@@ -21,7 +22,7 @@ import sigmastate.Values
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.CompiletimeIRContext
-import sigmastate.serialization.ValueSerializer
+import sigmastate.serialization.{GroupElementSerializer, ValueSerializer}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -83,7 +84,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     settingsPks.count(p => defaultProver.dlogPubkeys.contains(p)) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
-      val rewardPk = (new DLogProverInput(BigInt(header.height).bigInteger)).publicImage
+      val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage
 
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1

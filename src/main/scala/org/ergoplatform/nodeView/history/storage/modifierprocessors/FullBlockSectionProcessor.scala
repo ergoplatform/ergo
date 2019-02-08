@@ -117,7 +117,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
           fatal(s"Extension ${extension.encodedId} field value length > ${Extension.FieldValueMaxSize}")
         }
         .validate(extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length) {
-          fatal(s"Extension ${extension.encodedId} contains duplicate mandatory keys")
+          fatal(s"Extension ${extension.encodedId} contains duplicate keys")
         }
         .validate(header.isGenesis || extension.fields.nonEmpty) {
           fatal("Empty fields in non-genesis block")

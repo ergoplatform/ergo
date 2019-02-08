@@ -8,7 +8,8 @@ Ergo block consists of 4 parts:
     \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
     Allows light clients to verify all the transactions and calculate new root hash.
     \item{\em Extension } - additional data, that does not correspond to previous sections.
-    Contains interlinks and (sometimes) current parameters of the chain.
+    Contains interlinks and current parameters of the chain (when an extension belongs to a block at the end of the
+    voting epoch).
 \end{itemize}
 
 \subsection{Header}

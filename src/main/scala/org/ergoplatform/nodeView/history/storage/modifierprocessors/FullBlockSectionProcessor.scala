@@ -109,7 +109,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
 
     private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
-      validInterlinks(extension, header)
+      validateInterlinks(extension, header)
         .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
           fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
         }
@@ -124,7 +124,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         }
     }
 
-    private def validInterlinks(extension: Extension, header: Header): ValidationState[Unit] = {
+    private def validateInterlinks(extension: Extension, header: Header): ValidationState[Unit] = {
       import PoPowAlgos._
       val prevHeaderOpt = typedModifierById[Header](header.parentId)
       val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))

@@ -334,7 +334,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       val txs = fullBlock.blockTransactions
       val proofs = fullBlock.adProofs.value
       val extension = fullBlock.extension
-      println(PoPowAlgos.unpackInterlinks(extension.fields))
+
       history.contains(header) shouldBe false
       history.contains(txs) shouldBe false
       history.contains(proofs) shouldBe false

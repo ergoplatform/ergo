@@ -8,7 +8,7 @@ Ergo block consists of 4 parts:
     \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
     Allows light clients to verify all the transactions and calculate new root hash.
     \item{\em Extension } - additional data, that does not correspond to previous sections.
-    Contains interlinks, current miner votes and (sometimes) current parameters of the chain.
+    Contains interlinks and (sometimes) current parameters of the chain.
 \end{itemize}
 
 \subsection{Header}
@@ -38,6 +38,8 @@ Ergo block consists of 4 parts:
     \hline
     powSolution & 75-107 (depends on d) & solution of Autolykos PoW puzzle  \\
     \hline
+    votes & 3 & current miner votes \\
+    \hline
 \end{tabular}
 
 \vspace{1em}
@@ -45,7 +47,6 @@ Some of these fields may be calculated by node by itself if it is in a certain m
 
 \begin{itemize}
     \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
-    \item interlinksRoot: if(PoPoWBootstrap == false).
     \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
     \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
 \end{itemize}

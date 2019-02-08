@@ -48,8 +48,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     }._1
   }
 
-  // todo: this could no longer be tested this way. rework test
-  ignore(s"pruned chain bootstrapping - first 10 blocks out of 20 are not to be applied to the state") {
+  property(s"pruned chain bootstrapping - first 10 blocks out of 20 are not to be applied to the state") {
     new NodeViewFixture(prunedSettings).apply({ fixture =>
       import fixture._
 

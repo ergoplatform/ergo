@@ -23,7 +23,7 @@ import scala.util.Try
 case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
   override type M = AutolykosSolution
 
-  val encodedPk: Array[Byte] = pkToBytes(pk)
+  val encodedPk: Array[Byte] = groupElemToBytes(pk)
 
   override def serializer: Serializer[AutolykosSolution] = AutolykosSolutionSerializer
 }
@@ -53,13 +53,13 @@ object AutolykosSolutionSerializer extends Serializer[AutolykosSolution] {
 
   override def toBytes(obj: AutolykosSolution): Array[Byte] = {
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
-    Bytes.concat(pkToBytes(obj.pk), pkToBytes(obj.w), obj.n, Array(dBytes.length.toByte), dBytes)
+    Bytes.concat(groupElemToBytes(obj.pk), groupElemToBytes(obj.w), obj.n, Array(dBytes.length.toByte), dBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[AutolykosSolution] = Try {
-    val pk = pkFromBytes(bytes.slice(0, PublicKeyLength))
+    val pk = groupElemFromBytes(bytes.slice(0, PublicKeyLength))
     val pk2End = 2 * PublicKeyLength
-    val w = pkFromBytes(bytes.slice(PublicKeyLength, pk2End))
+    val w = groupElemFromBytes(bytes.slice(PublicKeyLength, pk2End))
     val nonce = bytes.slice(pk2End, pk2End + 8)
     val dBytesLength = bytes(pk2End + 8)
     val d = BigInt(BigIntegers.fromUnsignedByteArray(bytes.slice(pk2End + 9, pk2End + 9 + dBytesLength)))

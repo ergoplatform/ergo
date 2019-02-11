@@ -26,6 +26,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -53,8 +54,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-//    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
-    val desiredSize: Int = 50
+    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)

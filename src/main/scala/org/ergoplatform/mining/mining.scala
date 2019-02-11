@@ -1,6 +1,5 @@
 package org.ergoplatform
 
-import scorex.util.encode.Base16
 import sigmastate.basics.BcDlogGroup
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
@@ -25,7 +24,7 @@ package object mining {
 
   def randomSecret(): PrivateKey = DLogProverInput.random().w
 
-  def groupElemToBytes(pk: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(pk)
+  def groupElemToBytes(ge: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(ge)
 
   def groupElemFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parseBody(Serializer.startReader(bytes))
 }

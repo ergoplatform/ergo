@@ -24,7 +24,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Unspent
       transited.chainStatus shouldBe Onchain
-      transited.creationHeight shouldBe Some(height)
+      transited.inclusionHeight shouldBe Some(height)
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -40,7 +40,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe Some(height)
+      transited.inclusionHeight shouldBe Some(height)
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -89,7 +89,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe None
+      transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -127,7 +127,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe box.creationHeight
+      transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -176,7 +176,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Onchain
-      transited.creationHeight shouldBe box.creationHeight
+      transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe Some(height)
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -192,7 +192,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Onchain
-      transited.creationHeight shouldBe box.creationHeight
+      transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe Some(height)
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -235,14 +235,14 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback from Spent partially Off-chain Box") {
     val registry = new WalletStorage
     forAll(spentPartiallyOffchainBoxGen) { box =>
-      val height = Gen.choose(0, box.creationHeight.value - 1).sample.value
+      val height = Gen.choose(0, box.inclusionHeight.value - 1).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe None
+      transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -253,7 +253,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
     val registry = new WalletStorage
     forAll(spentPartiallyOffchainBoxGen) { box =>
       registry.register(box)
-      registry.makeTransition(box.boxId, ProcessRollback(box.creationHeight.value))
+      registry.makeTransition(box.boxId, ProcessRollback(box.inclusionHeight.value))
       registry.byId(box.boxId) should not be empty
       val same = registry.byId(box.boxId).value
       same shouldBe box
@@ -263,7 +263,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback to higher-than-creation height from Spent partially Off-chain Box") {
     val registry = new WalletStorage
     forAll(spentPartiallyOffchainBoxGen) { box =>
-      val height = Gen.choose(box.creationHeight.value + 1, Integer.MAX_VALUE).sample.value
+      val height = Gen.choose(box.inclusionHeight.value + 1, Integer.MAX_VALUE).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
@@ -275,14 +275,14 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback from Unspent On-chain Box") {
     val registry = new WalletStorage
     forAll(unspentOnchainBoxGen) { box =>
-      val height = Gen.choose(0, box.creationHeight.value - 1).sample.value
+      val height = Gen.choose(0, box.inclusionHeight.value - 1).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Unspent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe None
+      transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -293,7 +293,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
     val registry = new WalletStorage
     forAll(unspentOnchainBoxGen) { box =>
       registry.register(box)
-      registry.makeTransition(box.boxId, ProcessRollback(box.creationHeight.value))
+      registry.makeTransition(box.boxId, ProcessRollback(box.inclusionHeight.value))
       registry.byId(box.boxId) should not be empty
       val same = registry.byId(box.boxId).value
       same shouldBe box
@@ -303,7 +303,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback higher-than-creation height from Unspent On-chain Box") {
     val registry = new WalletStorage
     forAll(unspentOnchainBoxGen) { box =>
-      val height = Gen.choose(box.creationHeight.value, Integer.MAX_VALUE).sample.value
+      val height = Gen.choose(box.inclusionHeight.value, Integer.MAX_VALUE).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
@@ -315,14 +315,14 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback from Spent On-chain Box") {
     val registry = new WalletStorage
     forAll(spentOnchainBoxGen) { box =>
-      val height = Gen.choose(0, box.creationHeight.value).sample.value
+      val height = Gen.choose(0, box.inclusionHeight.value).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe None
+      transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -333,12 +333,12 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
     val registry = new WalletStorage
     forAll(spentOnchainBoxGen) { box =>
       registry.register(box)
-      registry.makeTransition(box.boxId, ProcessRollback(box.creationHeight.value))
+      registry.makeTransition(box.boxId, ProcessRollback(box.inclusionHeight.value))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe box.creationHeight
+      transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value
@@ -348,14 +348,14 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
   property("Process Rollback to higher-than-creation-but-lower-than-spending height from Spent On-chain Box") {
     val registry = new WalletStorage
     forAll(spentOnchainBoxGen) { box =>
-      val height = Gen.choose(box.creationHeight.value + 1, box.spendingHeight.value - 1).sample.value
+      val height = Gen.choose(box.inclusionHeight.value + 1, box.spendingHeight.value - 1).sample.value
       registry.register(box)
       registry.makeTransition(box.boxId, ProcessRollback(height))
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
       transited.chainStatus shouldBe Offchain
-      transited.creationHeight shouldBe box.creationHeight
+      transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
       transited.value shouldBe box.value

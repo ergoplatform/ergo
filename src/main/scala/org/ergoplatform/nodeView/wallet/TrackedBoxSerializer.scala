@@ -26,9 +26,9 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     w.putBits(headerBits(trackedBox))
       .putBytes(idToBytes(trackedBox.creationTxId))
       .putShort(trackedBox.creationOutIndex)
-      .putOption(trackedBox.creationHeight)(_.putUInt(_))
+      .putOption(trackedBox.inclusionHeight)(_.putInt(_))
       .putOption(trackedBox.spendingTxId)((r, id) => r.putBytes(idToBytes(id)))
-      .putOption(trackedBox.spendingHeight)(_.putUInt(_))
+      .putOption(trackedBox.spendingHeight)(_.putInt(_))
     ErgoBoxSerializer.serialize(trackedBox.box, w)
   }
 
@@ -36,9 +36,9 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
     readHeader(r) { certainty =>
       readTx(r, txLookup) { creationTx =>
         val creationOutIndex = r.getShort()
-        val creationHeight = r.getOption(r.getUInt().toIntExact)
+        val creationHeight = r.getOption(r.getInt())
         readTxOpt(r, txLookup) { spendingTx =>
-          val spendingHeight = r.getOption(r.getUInt().toIntExact)
+          val spendingHeight = r.getOption(r.getInt())
           readErgoBox(r) { box =>
             TrackedBox(creationTx, creationOutIndex, creationHeight, spendingTx, spendingHeight, box, certainty)
           }

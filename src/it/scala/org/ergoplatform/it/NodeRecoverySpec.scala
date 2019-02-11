@@ -29,6 +29,10 @@ class NodeRecoverySpec
 
   val node: Node = docker.startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
+  //  Testing scenario:
+  // 1. Start up one node and let it mine {shutdownAtHeight} blocks;
+  // 2. Shut it down unexpectedly and then restart;
+  // 3. Check that node's state is consistent;
   "Node recovery after unexpected shutdown" in {
 
     val result = node.waitForHeight(shutdownAtHeight)
@@ -44,4 +48,5 @@ class NodeRecoverySpec
 
     Await.result(result, 4.minutes)
   }
+
 }

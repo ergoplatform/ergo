@@ -51,8 +51,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
-    val p1 = pkToBytes(s.pk)
-    val p2 = pkToBytes(s.w)
+    val p1 = groupElemToBytes(s.pk)
+    val p2 = groupElemToBytes(s.w)
     val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
     val left = s.w.multiply(f.bigInteger)
     val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
@@ -170,8 +170,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   private[mining] def checkNonces(m: Array[Byte], sk: BigInt, x: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
-    val p1 = pkToBytes(genPk(sk))
-    val p2 = pkToBytes(genPk(x))
+    val p1 = groupElemToBytes(genPk(sk))
+    val p2 = groupElemToBytes(genPk(x))
 
     @tailrec
     def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {

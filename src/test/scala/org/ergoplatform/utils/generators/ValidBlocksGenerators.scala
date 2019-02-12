@@ -173,6 +173,31 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
+    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
+    val interlinks = parentOpt.toSeq.flatMap { block =>
+      PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields))
+    }
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
+    val votes = Array.fill(3)(0: Byte)
+
+    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
+      transactions, time, extension, votes, defaultMinerSecretNumber).get
+  }
+
+  /**
+    * Full block valid against state only - allows to create blocks form headers and state,
+    * does not contain valid interlinks.
+    */
+  def statefulyValidFullBlock(parentOpt: Option[Header],
+                              wrappedState: WrappedUtxoState,
+                              timeOpt: Option[Long] = None): ErgoFullBlock = {
+    val bh = wrappedState.versionedBoxHolder
+    val transactions = validTransactionsFromBoxHolder(bh, new Random())._1
+
+    checkPayload(transactions, wrappedState)
+
+    val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
+
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
     val votes = Array.fill(3)(0: Byte)

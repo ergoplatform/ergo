@@ -1,13 +1,14 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.{ErgoBox, Input}
+import scorex.core.PersistentNodeViewModifier
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
@@ -132,13 +133,18 @@ trait ChainGenerator extends ErgoTestConstants {
   }
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
+    def appendOrPass(mod: ErgoPersistentModifier, history: ErgoHistory) =
+      if (history.contains(mod)) history else history.append(mod).get._1
     blocks.foldLeft(historyIn) { (history, block) =>
-      val historyWithBlockHeader = if (history.contains(block.header)) history else history.append(block.header).get._1
-      val historyWithTxs = historyWithBlockHeader.append(block.blockTransactions).get._1
-      val historyWithExtension = historyWithTxs.append(block.extension).get._1
-      block.adProofs.map(p => historyWithExtension.append(p).get._1).getOrElse(historyWithExtension)
+      val historyWithBlockHeader = appendOrPass(block.header, history)
+      val historyWithTxs = appendOrPass(block.blockTransactions, historyWithBlockHeader)
+      val historyWithExtension = appendOrPass(block.extension, historyWithTxs)
+      block.adProofs.map(p => appendOrPass(p, historyWithExtension)).getOrElse(historyWithExtension)
     }
   }
 
   def applyBlock(historyIn: ErgoHistory, block: ErgoFullBlock): ErgoHistory = applyChain(historyIn, Seq(block))
+
+  def applySection(historyIn: ErgoHistory, section: BlockSection): ErgoHistory = historyIn.append(section).get._1
+
 }

@@ -27,7 +27,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
     val parentOpt = state.stateContext.lastHeaderOpt
-    statefullyValidFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
+    statefulyValidFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
   }
 
   override def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get

@@ -169,11 +169,7 @@ trait ValidBlocksGenerators
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
                      timeOpt: Option[Long] = None): ErgoFullBlock = {
-    transactions.foreach(_.statelessValidity shouldBe 'success)
-    transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
-      assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
-    }
+    checkPayload(transactions, utxoState)
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
@@ -183,6 +179,14 @@ trait ValidBlocksGenerators
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest,
       adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
+  }
+
+  private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
+    transactions.foreach(_.statelessValidity shouldBe 'success)
+    transactions.nonEmpty shouldBe true
+    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+      assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
+    }
   }
 
 }

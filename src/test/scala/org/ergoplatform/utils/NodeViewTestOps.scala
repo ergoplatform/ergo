@@ -46,15 +46,23 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     expectModificationOutcome(header)
   }
 
-  def applyBlock(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
+  def applyBlock(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
     nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
-    expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock))
+    expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock, excludeExt))
   }
 
-  def applyPayload(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
+  def applyPayload(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
-    val sections = if (verifyTransactions) fullBlock.blockSections else Seq.empty
+    val sections = if (verifyTransactions) {
+      if (excludeExt) {
+        fullBlock.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
+      } else {
+        fullBlock.blockSections
+      }
+    } else {
+      Seq.empty
+    }
     sections.foldLeft(Success(()): Try[Unit]) { (lastResult, section) =>
       lastResult.flatMap { _ =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
@@ -133,6 +141,8 @@ trait NodeViewTestOps extends NodeViewBaseOps {
   def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
 
   def getBestFullBlockEncodedId(implicit ctx: Ctx): Option[String] = getBestFullBlockOpt.map(_.header.encodedId)
+
+  def getBestHeaderEncodedId(implicit ctx: Ctx): Option[String] = getBestHeaderOpt.map(_.encodedId)
 
   def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
 

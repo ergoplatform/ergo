@@ -22,6 +22,10 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
       links.head shouldEqual genesis.header.id
       links.tail should not contain genesis.header.id
     }
+
+    interlinks.zipWithIndex.foreach { case (links, idx) =>
+      if (idx > 0) links.size >= interlinks(idx - 1).size shouldBe true
+    }
   }
 
   property("packInterlinks") {

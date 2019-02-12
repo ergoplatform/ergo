@@ -1,17 +1,11 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.{Bytes, Shorts}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.Serializer
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, bytesToId}
-
-import scala.annotation.tailrec
-import scala.util.Try
 
 case class PoPoWProof(m: Byte,
                       k: Byte,

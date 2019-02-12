@@ -25,12 +25,11 @@ import scala.util.Try
 case class Extension(headerId: ModifierId,
                      fields: Seq[(Array[Byte], Array[Byte])],
                      override val sizeOpt: Option[Int] = None) extends BlockSection {
-
-  override type M = Extension
-
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(fields)
+
+  override type M = Extension
 
   override def serializer: Serializer[Extension] = ExtensionSerializer
 
@@ -51,6 +50,19 @@ object Extension extends ApiCodecs {
 
   val FieldValueMaxSize: Int = 64
 
+  def apply(header: Header): Extension = Extension(header.id, Seq())
+
+  def rootHash(e: Extension): Digest32 = rootHash(e.fields)
+
+  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)
+
+  def rootHash(fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
+    val elements: Seq[Array[Byte]] = fields.map { f =>
+      Bytes.concat(Array(f._1.length.toByte), f._1, f._2)
+    }
+    Algos.merkleTreeRoot(LeafData @@ elements)
+  }
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
@@ -67,32 +79,16 @@ object Extension extends ApiCodecs {
       fields <- c.downField("fields").as[List[(Array[Byte], Array[Byte])]]
     } yield Extension(headerId, fields)
   }
-
-  def apply(header: Header): Extension = Extension(header.id, Seq.empty)
-
-  def rootHash(e: Extension): Digest32 = rootHash(e.fields)
-
-  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)
-
-  def rootHash(fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
-    val elements: Seq[Array[Byte]] = fields.map { case (k, v) =>
-      Bytes.concat(Array(k.length.toByte), k, v)
-    }
-    Algos.merkleTreeRoot(LeafData @@ elements)
-  }
-
 }
 
 object ExtensionSerializer extends Serializer[Extension] {
+  val Delimiter: Array[Byte] = Array(0: Byte, Byte.MinValue)
 
   override def toBytes(obj: Extension): Array[Byte] = {
-    val fieldsBytes = scorex.core.utils.concatBytes {
-      obj.fields.map { case (k, v) =>
-        Bytes.concat(k, Array(v.length.toByte), v)
-      }
-    }
+    val mandBytes = scorex.core.utils.concatBytes(obj.fields.map(f =>
+      Bytes.concat(f._1, Array(f._2.length.toByte), f._2)))
 
-    Bytes.concat(idToBytes(obj.headerId), fieldsBytes)
+    Bytes.concat(idToBytes(obj.headerId), mandBytes)
   }
 
   override def parseBytes(bytes: Array[Byte]): Try[Extension] = Try {
@@ -101,7 +97,8 @@ object ExtensionSerializer extends Serializer[Extension] {
     require(totalLength < Constants.ExtensionMaxSize)
 
     @tailrec
-    def parseFields(pos: Int, acc: Seq[(Array[Byte], Array[Byte])] = Seq.empty): Seq[(Array[Byte], Array[Byte])] = {
+    def parseFields(pos: Int,
+                    acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] = {
       val keySize = Extension.FieldKeySize
       if (pos == totalLength) {
         // deserialization complete
@@ -117,7 +114,7 @@ object ExtensionSerializer extends Serializer[Extension] {
     }
 
     val headerId = bytesToId(bytes.take(32))
-    val mandatory = parseFields(32)
+    val mandatory = parseFields(32, Seq())
     Extension(headerId, mandatory, Some(bytes.length))
   }
 

@@ -156,7 +156,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
-  def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = {
+  def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])] = Seq.empty): ExtensionCandidate = {
     val paramFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
     ExtensionCandidate(paramFields ++ otherFields)
   }

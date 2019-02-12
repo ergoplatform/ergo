@@ -121,11 +121,12 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
-          r.shuffle(block.blockSections).foreach(s => history.append(s) shouldBe 'success)
+          val sectionsToAppend = block.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
+          r.shuffle(sectionsToAppend).foreach(s => history.append(s) shouldBe 'success)
 
           appended += block
 
-          findBestBlock(appended).header.height shouldBe history.bestFullBlockOpt.get.header.height
+          sectionsToAppend.forall(history.contains) shouldBe true
         }
       }
     }
@@ -144,16 +145,23 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history.bestFullBlockOpt shouldBe None
     history.bestHeaderOpt shouldBe Some(block3.header)
 
+    history = applySection(history, block0.adProofs.get)
+    history.contains(block0.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block2.adProofs.get)
+    history.contains(block2.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block3.adProofs.get)
+    history.contains(block3.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block1.adProofs.get)
+    history.contains(block1.adProofs.get.id) shouldBe true
+
     history = applyBlock(history, block0)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    history = applyBlock(history, block2)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    history = applyBlock(history, block3)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
     history = applyBlock(history, block1)
+    history = applyBlock(history, block2)
+    history = applyBlock(history, block3)
+
     history.bestFullBlockOpt shouldBe Some(block3)
   }
 

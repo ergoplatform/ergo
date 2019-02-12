@@ -18,7 +18,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   override implicit val votingSettings: VotingSettings =
     VotingSettings(votingEpochLength, softForkEpochs = 2, activationEpochs = 3)
 
-  private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate(Seq()).toExtension(headerId)
+  private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate(Seq.empty).toExtension(headerId)
 
   property("extension processing") {
     val constants = stateConstants.copy(
@@ -28,7 +28,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     )
     val ctx = ErgoStateContext.empty(constants)
     val chain = genChain(votingEpochLength * 4).map { b =>
-      b.copy(extension = b.extension.copy(fields = LaunchParameters.toExtensionCandidate().fields))
+      b.copy(extension = b.extension.copy(fields = LaunchParameters.toExtensionCandidate(Seq.empty).fields))
     }
     val validChain = chain.init
     val lastBlock = chain.last
@@ -39,7 +39,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     }
     val invalidExtBlock2 = { // extension contains redundant parameter
       lastBlock.copy(extension = lastBlock.extension.copy(
-        fields = LaunchParameters.toExtensionCandidate().fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
+        fields = LaunchParameters.toExtensionCandidate(Seq.empty).fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
       )
     }
     val invalidExtBlock3 = { // extension does not contain params at all

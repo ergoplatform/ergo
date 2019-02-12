@@ -170,7 +170,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val timestamp = timeProvider.time()
     val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
-      .map(header => RequiredDifficulty.encodeCompactBits(history.requiredDifficultyAfter(header)))
+      .map(parent => history.requiredDifficultyAfter(parent))
+      .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
     val interlinks = bestHeaderOpt
       .flatMap { h =>

@@ -4,21 +4,12 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+/**
+  * A set of utilities for working with PoPoW security protocol.
+  */
 object PoPowAlgos {
 
-  val InterlinksPrefixCode: Byte = 0x01
-
-  @inline def maxLevelOf(header: Header): Int = {
-    if (!header.isGenesis) {
-      def log2(x: Double) = math.log(x) / math.log(2)
-      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val realTarget = header.powSolution.d
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
-      level.toInt
-    } else {
-      Int.MaxValue
-    }
-  }
+  val InterlinksFieldsPrefix: Byte = 0x01
 
   /**
     * Computes interlinks vector for the next level after `prevHeader`.
@@ -48,7 +39,7 @@ object PoPowAlgos {
       rem match {
         case (headLink, idx) :: _ =>
           val duplicatesQty = links.count(_ == headLink)
-          val filed = Array(InterlinksPrefixCode, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          val filed = Array(InterlinksFieldsPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
           loop(rem.drop(duplicatesQty), acc :+ filed)
         case Nil =>
           acc
@@ -62,13 +53,28 @@ object PoPowAlgos {
     */
   @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Seq[ModifierId] = {
     fields
-      .filter(_._1.headOption.contains(InterlinksPrefixCode))
+      .filter(_._1.headOption.contains(InterlinksFieldsPrefix))
       .foldLeft(Seq.empty[ModifierId]) { case (acc, (_, v)) =>
         assert(v.lengthCompare(Constants.ModifierIdSize + 1) == 0)
         val duplicatesQty = v.head.toInt
         val link = bytesToId(v.tail)
         acc ++ Seq.fill(duplicatesQty)(link)
       }
+  }
+
+  /**
+    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
+    */
+  private def maxLevelOf(header: Header): Int = {
+    if (!header.isGenesis) {
+      def log2(x: Double) = math.log(x) / math.log(2)
+      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val realTarget = header.powSolution.d
+      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      level.toInt
+    } else {
+      Int.MaxValue
+    }
   }
 
 }

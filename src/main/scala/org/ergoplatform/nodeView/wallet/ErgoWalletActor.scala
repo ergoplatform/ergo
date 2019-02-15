@@ -149,6 +149,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       }
 
     case ScanOnchain(fullBlock) =>
+      prover.IR.resetContext()
       height = fullBlock.header.height
       fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
         self ! Resolve(Some(tb.boxId))

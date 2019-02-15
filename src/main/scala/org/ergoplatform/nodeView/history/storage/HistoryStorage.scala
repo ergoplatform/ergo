@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
 import io.iohk.iodb.{ByteArrayWrapper, Store}
+import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
@@ -63,11 +64,12 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
 
   def insert(id: ByteArrayWrapper,
              indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = Try {
+             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = Try {
     objectsToInsert.foreach { o =>
       modifiersCache.put(o.id, o)
       // TODO saving object to disc may be async here for performance reasons
       objectsStore.put(o).get
+      assert(objectsStore.get(o.id).isDefined, s"Failed to save mod with id = ${o.id}") // todo: remove when i629 solved
     }
     if (indexesToInsert.nonEmpty) {
       indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
@@ -78,7 +80,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     }
   }.recoverWith { case e =>
     log.error("Unable to perform insert", e)
-    Failure(e)
+    ErgoApp.forceStopApplication()
   }
 
   def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
@@ -90,4 +92,5 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     log.warn("Closing history storage...")
     indexStore.close()
   }
+
 }

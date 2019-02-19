@@ -176,7 +176,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val interlinks = bestHeaderOpt
       .flatMap { h =>
         history.typedModifierById[Extension](h.extensionId)
-          .map(ext => updateInterlinks(h, unpackInterlinks(ext.fields)))
+          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
+          .map(updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
 

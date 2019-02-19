@@ -198,7 +198,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
-          .map(PoPowAlgos.updateInterlinks(_, PoPowAlgos.unpackInterlinks(candidate.extension.fields)))
+          .map(PoPowAlgos.updateInterlinks(_, PoPowAlgos.unpackInterlinks(candidate.extension.fields).get))
           .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {

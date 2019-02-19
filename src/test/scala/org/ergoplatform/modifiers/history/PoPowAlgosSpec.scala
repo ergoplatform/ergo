@@ -39,4 +39,17 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
     packedSame.map(_._1.last).toSet.size shouldEqual 1
   }
 
+  property("unpackInterlinks") {
+    val interlinks = Gen.listOfN(255, modifierIdGen).sample.get
+    val packed = PoPowAlgos.packInterlinks(interlinks)
+    val improperlyPacked = packed.map(x => x._1 -> (x._2 :+ (127: Byte)))
+
+    val unpackedTry = unpackInterlinks(packed)
+
+    unpackedTry shouldBe 'success
+    unpackInterlinks(improperlyPacked) shouldBe 'failure
+
+    unpackedTry.get shouldEqual interlinks
+  }
+
 }

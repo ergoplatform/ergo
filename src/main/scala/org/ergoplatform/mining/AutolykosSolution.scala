@@ -21,7 +21,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
   override type M = AutolykosSolution
 
-  val encodedPk: Array[Byte] = pkToBytes(pk)
+  val encodedPk: Array[Byte] = groupElemToBytes(pk)
 
   override def serializer: ScorexSerializer[AutolykosSolution] = AutolykosSolutionSerializer
 }
@@ -51,16 +51,16 @@ object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
-    w.putBytes(pkToBytes(obj.pk))
-    w.putBytes(pkToBytes(obj.w))
+    w.putBytes(groupElemToBytes(obj.pk))
+    w.putBytes(groupElemToBytes(obj.w))
     w.putBytes(obj.n)
     w.putUByte(dBytes.length)
     w.putBytes(dBytes)
   }
 
   override def parse(r: Reader): AutolykosSolution = {
-    val pk = pkFromBytes(r.getBytes(PublicKeyLength))
-    val w = pkFromBytes(r.getBytes(PublicKeyLength))
+    val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val w = groupElemFromBytes(r.getBytes(PublicKeyLength))
     val nonce = r.getBytes(8)
     val dBytesLength = r.getUByte()
     val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))

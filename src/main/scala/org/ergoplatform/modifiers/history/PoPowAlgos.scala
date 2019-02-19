@@ -4,6 +4,8 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import scala.util.{Failure, Success, Try}
+
 /**
   * A set of utilities for working with PoPoW security protocol.
   */
@@ -16,7 +18,7 @@ object PoPowAlgos {
     */
   @inline def updateInterlinks(prevHeader: Header, prevInterlinks: Seq[ModifierId]): Seq[ModifierId] = {
     if (!prevHeader.isGenesis) {
-      assert(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
+      require(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
       val genesis = prevInterlinks.head
       val tail = prevInterlinks.tail
       val prevLevel = maxLevelOf(prevHeader)
@@ -51,15 +53,24 @@ object PoPowAlgos {
   /**
     * Unpacks interlinks from key-value format of extension.
     */
-  @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Seq[ModifierId] = {
-    fields
-      .filter(_._1.headOption.contains(InterlinksFieldsPrefix))
-      .foldLeft(Seq.empty[ModifierId]) { case (acc, (_, v)) =>
-        assert(v.lengthCompare(Constants.ModifierIdSize + 1) == 0)
-        val duplicatesQty = v.head.toInt
-        val link = bytesToId(v.tail)
-        acc ++ Seq.fill(duplicatesQty)(link)
+  @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
+    def loop(rem: Seq[(Array[Byte], Array[Byte])],
+             acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] = {
+      rem match {
+        case head :: tail =>
+          val value = head._2
+          if (value.lengthCompare(Constants.ModifierIdSize + 1) == 0) {
+            val duplicatesQty = value.head.toInt
+            val link = bytesToId(value.tail)
+            loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
+          } else {
+            Failure(new Exception("Interlinks improperly packed"))
+          }
+        case Nil =>
+          Success(acc)
       }
+    }
+    loop(fields.filter(_._1.headOption.contains(InterlinksFieldsPrefix)))
   }
 
   /**

@@ -27,7 +27,7 @@ trait ChainGenerator extends ErgoTestConstants {
     val bestHeaderOpt = history.bestHeaderOpt
     val bestHeaderInterlinksOpt = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-      .map(ext => PoPowAlgos.unpackInterlinks(ext.fields))
+      .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
       .getOrElse(Seq.empty)
     genHeaderChain(height, bestHeaderOpt, bestHeaderInterlinksOpt, history.difficultyCalculator)
   }
@@ -108,7 +108,7 @@ trait ChainGenerator extends ErgoTestConstants {
                 extension: ExtensionCandidate,
                 nBits: Long = Constants.InitialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
-      PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields)))
+      PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension.copy(fields = extension.fields ++ PoPowAlgos.packInterlinks(interlinks))
     powScheme.proveBlock(
       prev.map(_.header),

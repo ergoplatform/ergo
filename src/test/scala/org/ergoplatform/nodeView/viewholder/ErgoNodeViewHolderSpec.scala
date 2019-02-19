@@ -145,7 +145,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     */
   private def generateInvalidFullBlock(parentBlock: ErgoFullBlock, parentState: WrappedUtxoState) = {
     val validInterlinks = PoPowAlgos.updateInterlinks(
-      parentBlock.header, PoPowAlgos.unpackInterlinks(parentBlock.extension.fields))
+      parentBlock.header, PoPowAlgos.unpackInterlinks(parentBlock.extension.fields).get)
     val extensionIn = extensionGen.sample.value.copy(fields = PoPowAlgos.packInterlinks(validInterlinks))
     val brokenBlockIn = validFullBlock(Some(parentBlock), parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head

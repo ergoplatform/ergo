@@ -175,7 +175,7 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields))
+      PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
     val votes = Array.fill(3)(0: Byte)

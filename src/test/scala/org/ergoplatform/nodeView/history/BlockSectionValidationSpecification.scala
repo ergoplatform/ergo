@@ -29,7 +29,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     val m = extension.fields
 
     val invalidInterlinks = PoPowAlgos.packInterlinks(
-      PoPowAlgos.unpackInterlinks(block.extension.fields) ++ Seq(header.id)
+      PoPowAlgos.unpackInterlinks(block.extension.fields).get ++ Seq(header.id)
     )
 
     // checks, specific for extension

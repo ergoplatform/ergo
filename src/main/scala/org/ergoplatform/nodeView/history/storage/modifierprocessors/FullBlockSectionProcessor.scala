@@ -133,10 +133,14 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))
       (prevHeaderOpt, prevExtensionOpt) match {
         case (Some(parent), Some(parentExt)) =>
-          vs.validate(
-            updateInterlinks(parent, unpackInterlinks(parentExt.fields)) == unpackInterlinks(extension.fields)) {
-            fatal("Invalid interlinks")
-          }
+          val parentLinksTry = unpackInterlinks(parentExt.fields)
+          val currentLinksTry = unpackInterlinks(extension.fields)
+          vs
+            .validate(currentLinksTry.isSuccess)(fatal("Interlinks improperly packed"))
+            .validate(parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
+              .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur }) {
+              fatal("Invalid interlinks")
+            }
         case _ =>
           vs.validate(header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight) {
             error("Unable to validate interlinks")

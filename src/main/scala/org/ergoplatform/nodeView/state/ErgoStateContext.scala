@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.settings._
-import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
+import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.Constants
@@ -28,7 +28,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
   extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
 
-  override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
+  override val lastBlockMinerPk: Array[Byte] = groupElemToBytes(predictedHeader.minerPk)
 
   override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
 

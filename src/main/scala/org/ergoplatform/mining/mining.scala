@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import sigmastate.basics.BcDlogFp
+import sigmastate.basics.BcDlogGroup
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -12,9 +12,9 @@ package object mining {
 
   val PublicKeyLength: Byte = 33
 
-  val group: BcDlogFp[EcPointType] = CryptoConstants.dlogGroup
+  val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
 
-  val q: BigInt = group.q
+  val q: BigInt = group.order
 
   private val hashFn: NumericHash = new NumericHash(q)
 
@@ -24,8 +24,7 @@ package object mining {
 
   def randomSecret(): PrivateKey = DLogProverInput.random().w
 
-  def pkToBytes(pk: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(pk)
+  def groupElemToBytes(ge: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(ge)
 
-  def pkFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parse(SigmaSerializer.startReader(bytes))
-
+  def groupElemFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parseBody(Serializer.startReader(bytes))
 }

@@ -18,4 +18,14 @@ class ObjectsStoreSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("Bulk objects insertion without losses") {
+    val chain = genChain(2000)
+    chain.foreach { b =>
+      b.blockSections.foreach(objectsStore.put(_) shouldBe 'success)
+    }
+    chain.foreach { b =>
+      b.blockSections.foreach(s => objectsStore.get(s.id).isDefined shouldBe true)
+    }
+  }
+
 }

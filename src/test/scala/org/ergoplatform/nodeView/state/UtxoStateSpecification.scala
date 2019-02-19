@@ -78,12 +78,12 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var height: Int = ErgoHistory.GenesisHeight
 
     val settingsPks = settings.chainSettings.foundersPubkeys
-      .map(str => pkFromBytes(Base16.decode(str).get))
+      .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
     settingsPks.count(p => defaultProver.dlogPubkeys.contains(p)) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
-      val rewardPk = (new DLogProverInput(BigInt(header.height).bigInteger)).publicImage
+      val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage
 
       val t = validTransactionsFromBoxHolder(bh, new Random(height))
       val txs = t._1

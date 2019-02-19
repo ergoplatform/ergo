@@ -36,7 +36,7 @@ object PoPowAlgos {
     * Packs interlinks into extension key-value format.
     */
   @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
-    def loop(rem: Seq[(ModifierId, Int)],
+    def loop(rem: List[(ModifierId, Int)],
              acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] = {
       rem match {
         case (headLink, idx) :: _ =>
@@ -47,14 +47,14 @@ object PoPowAlgos {
           acc
       }
     }
-    loop(links.zipWithIndex, Seq.empty)
+    loop(links.zipWithIndex.toList, Seq.empty)
   }
 
   /**
     * Unpacks interlinks from key-value format of extension.
     */
   @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
-    def loop(rem: Seq[(Array[Byte], Array[Byte])],
+    def loop(rem: List[(Array[Byte], Array[Byte])],
              acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] = {
       rem match {
         case head :: tail =>
@@ -70,7 +70,7 @@ object PoPowAlgos {
           Success(acc)
       }
     }
-    loop(fields.filter(_._1.headOption.contains(InterlinksFieldsPrefix)))
+    loop(fields.filter(_._1.headOption.contains(InterlinksFieldsPrefix)).toList)
   }
 
   /**

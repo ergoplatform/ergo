@@ -16,9 +16,10 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import sigmastate.{SBoolean, SSigmaProp}
+import sigmastate.Values.{SigmaPropConstant, Value}
 import sigmastate.lang.SigmaCompiler
+import sigmastate.utxo.SigmaPropIsProven
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -69,9 +70,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def compileSource(source: String, env: Map[String, Any]): Try[Value[SBoolean.type]] = {
+    import sigmastate.Values._
     val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)).flatMap {
-      case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
+      case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
+        val bool = script match {
+          case SigmaPropConstant(sigmaBoolean) => sigmaBoolean
+          case _ => SigmaPropIsProven(script)
+        }
+        Success(bool)
+      case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>
         Success(script)
       case other =>
         Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))

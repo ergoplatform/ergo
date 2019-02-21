@@ -35,6 +35,8 @@ object Constants {
 
   val StorageContractCost: Long = 50
 
+  val TokenAccessCost: Long = 100
+
   val StorageIndexVarId: Byte = Byte.MaxValue
 
   // Number of last block headers available is scripts from ErgoStateContext

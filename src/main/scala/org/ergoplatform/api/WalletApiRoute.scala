@@ -4,22 +4,21 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.{Encoder, Json}
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
-import sigmastate.basics.DLogProtocol.ProveDlog
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.{SBoolean, SSigmaProp}
-import sigmastate.Values.{SigmaPropConstant, Value}
+import sigmastate.Values.Value
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.lang.SigmaCompiler
 import sigmastate.utxo.SigmaPropIsProven
+import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}

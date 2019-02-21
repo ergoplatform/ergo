@@ -122,4 +122,5 @@ class ExpirationSpecification extends ErgoPropertyTest {
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }
   }
+
 }

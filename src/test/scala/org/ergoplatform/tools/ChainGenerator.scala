@@ -9,7 +9,7 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -159,7 +159,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
 
-    val emptyExtensionCandidate = ExtensionCandidate(Seq())
+    val emptyExtensionCandidate = emptyExtension
     val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
       val newHeight = header.height + 1
       val currentParams = stateContext.currentParameters
@@ -197,8 +197,17 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     pow.proveCandidate(candidate, prover.secrets.head.w) match {
       case Some(fb) => fb
       case _ =>
+        val interlinks = candidate.parentOpt
+          .map(PoPowAlgos.updateInterlinks(_, PoPowAlgos.unpackInterlinks(candidate.extension.fields).get))
+          .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
-        proveCandidate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
+        proveCandidate {
+          candidate.copy(
+            extension = ExtensionCandidate(
+              Seq(Array(0: Byte, 2: Byte) -> minerTag) ++ PoPowAlgos.packInterlinks(interlinks)
+            )
+          )
+        }
     }
   }
 

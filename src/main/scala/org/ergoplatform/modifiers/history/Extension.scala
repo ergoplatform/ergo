@@ -49,6 +49,10 @@ object Extension extends ApiCodecs {
 
   val FieldKeySize: Int = 2
 
+  //predefined key prefixes
+  val SystemParametersPrefix: Byte = 0x00
+  val InterlinksVectorPrefix: Byte = 0x01
+
   val FieldValueMaxSize: Int = 64
 
   def apply(header: Header): Extension = Extension(header.id, Seq())
@@ -98,12 +102,15 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val fieldsSize = r.getUShort()
-    val fields = (1 to fieldsSize) map {_ =>
+    val fieldsView = (1 to fieldsSize).view.map {_ =>
       val key = r.getBytes(Extension.FieldKeySize)
-      val size = r.getUByte()
-      val value = r.getBytes(size)
+      val length = r.getUByte()
+      require(length <= Extension.FieldValueMaxSize, "value size should be <= " + Extension.FieldValueMaxSize)
+      val value = r.getBytes(length)
       (key, value)
     }
+    val fields = fieldsView.takeWhile(r.position - startPosition < Constants.ExtensionMaxSize).toSeq
+    require(r.position - startPosition < Constants.ExtensionMaxSize)
     Extension(headerId, fields, Some(r.position - startPosition))
   }
 

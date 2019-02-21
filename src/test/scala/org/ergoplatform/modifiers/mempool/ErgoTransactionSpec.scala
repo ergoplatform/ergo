@@ -213,16 +213,4 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
-  property("tx outputs contain too many assets in total") {
-    val gen = validErgoTransactionGenTemplate(
-      ErgoTransaction.MaxTokens + 1,
-      ErgoTransaction.MaxTokens + 4,
-      ErgoTransaction.MaxTokens + 4,
-      ErgoTransaction.MaxTokens + 8)
-    forAll(gen) { case (from, wrongTx) =>
-      wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
-    }
-  }
-
 }

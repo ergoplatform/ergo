@@ -63,7 +63,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     map.toMap
   }
 
-  lazy val outAssetsTry: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates).map(_.toMap)
+  lazy val outAssetsTry: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates)
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.

@@ -4,6 +4,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -54,6 +55,7 @@ object PoPowAlgos {
     * Unpacks interlinks from key-value format of extension.
     */
   @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
+    @tailrec
     def loop(rem: List[(Array[Byte], Array[Byte])],
              acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] = {
       rem match {

@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.Serializer
 
 import scala.util.Try
+import Extension.SystemParametersPrefix
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -62,22 +63,22 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs + 1)
       && softForkApproved(votes)) {
-        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+      table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
     }
     //unsuccessful voting - cleaning
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + 1)
       && !softForkApproved(votes)) {
-        table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
+      table = table.-(SoftForkStartingHeight).-(SoftForkVotesCollected)
     }
     //new voting
     if (forkVote &&
-        ((softForkStartingHeight.isEmpty && height % votingEpochLength == 0) ||
-          (softForkStartingHeight.nonEmpty &&
-            height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1))) ||
-          (softForkStartingHeight.nonEmpty &&
-            height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) &&
-            !softForkApproved(votes)))) {
+      ((softForkStartingHeight.isEmpty && height % votingEpochLength == 0) ||
+        (softForkStartingHeight.nonEmpty &&
+          height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + activationEpochs + 1))) ||
+        (softForkStartingHeight.nonEmpty &&
+          height == softForkStartingHeight.get + (votingEpochLength * (votingEpochs + 1)) &&
+          !softForkApproved(votes)))) {
       table = table.updated(SoftForkStartingHeight, height).updated(SoftForkVotesCollected, 0)
     }
     //new epoch in voting
@@ -89,8 +90,8 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)
       && softForkApproved(votes)) {
-        table = table.updated(BlockVersion, table(BlockVersion) + 1)
-      }
+      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+    }
     table
   }
 
@@ -157,7 +158,9 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   }
 
   def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = {
-    val paramFields = parametersTable.toSeq.map { case (k, v) => Array(0: Byte, k) -> Ints.toByteArray(v) }
+    val paramFields = parametersTable.toSeq.map { case (k, v) =>
+      Array(SystemParametersPrefix, k) -> Ints.toByteArray(v)
+    }
     ExtensionCandidate(paramFields ++ otherFields)
   }
 
@@ -251,6 +254,7 @@ object Parameters {
 
   /**
     * Check that two set of parameters are the same (contain the same records).
+    *
     * @param p1 - parameters set
     * @param p2 - parameters set
     * @return Success(p1), if parameters match, Failure(_) otherwise

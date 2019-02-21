@@ -6,13 +6,12 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
+import Extension.InterlinksVectorPrefix
 
 /**
   * A set of utilities for working with PoPoW security protocol.
   */
 object PoPowAlgos {
-
-  val InterlinksFieldsPrefix: Byte = 0x01
 
   /**
     * Computes interlinks vector for the next level after `prevHeader`.
@@ -42,7 +41,7 @@ object PoPowAlgos {
       rem match {
         case (headLink, idx) :: _ =>
           val duplicatesQty = links.count(_ == headLink)
-          val filed = Array(InterlinksFieldsPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          val filed = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
           loop(rem.drop(duplicatesQty), acc :+ filed)
         case Nil =>
           acc
@@ -72,7 +71,7 @@ object PoPowAlgos {
           Success(acc)
       }
     }
-    loop(fields.filter(_._1.headOption.contains(InterlinksFieldsPrefix)).toList)
+    loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
 
   /**

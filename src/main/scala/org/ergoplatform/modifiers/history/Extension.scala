@@ -48,6 +48,10 @@ object Extension extends ApiCodecs {
 
   val FieldKeySize: Int = 2
 
+  //predefined key prefixes
+  val SystemParametersPrefix: Byte = 0x00
+  val InterlinksVectorPrefix: Byte = 0x01
+
   val FieldValueMaxSize: Int = 64
 
   def apply(header: Header): Extension = Extension(header.id, Seq())

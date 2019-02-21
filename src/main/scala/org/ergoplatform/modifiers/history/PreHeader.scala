@@ -28,7 +28,7 @@ object PreHeader {
             nb: Long,
             v: Array[Byte],
             powScheme: AutolykosPowScheme): PreHeader = {
-    val (pId, _, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
+    val (pId, h) = powScheme.derivedHeaderFields(lastHeaderOpt)
     new PreHeader {
       override val version: Version = blockVersion
       override val parentId: ModifierId = pId

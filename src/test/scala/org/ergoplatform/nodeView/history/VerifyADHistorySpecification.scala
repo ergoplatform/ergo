@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -30,15 +30,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     } else {
       (inHistory, Seq.empty)
     }
-  }
-
-  property("Should generate empty extension on fly") {
-    val (history, _) = genHistory()
-    val block = genChain(1, history, extension = emptyExtension).head
-    block.extension shouldBe Extension(block.header.id, Seq())
-    history.bestFullBlockOpt shouldBe None
-    history.append(block.header) shouldBe 'success
-    history.contains(block.extension) shouldBe true
   }
 
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {
@@ -130,11 +121,12 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
-          r.shuffle(block.blockSections).foreach(s => history.append(s) shouldBe 'success)
+          val sectionsToAppend = block.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
+          r.shuffle(sectionsToAppend).foreach(s => history.append(s) shouldBe 'success)
 
           appended += block
 
-          findBestBlock(appended).header.height shouldBe history.bestFullBlockOpt.get.header.height
+          sectionsToAppend.forall(history.contains) shouldBe true
         }
       }
     }
@@ -153,16 +145,23 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history.bestFullBlockOpt shouldBe None
     history.bestHeaderOpt shouldBe Some(block3.header)
 
+    history = applySection(history, block0.adProofs.get)
+    history.contains(block0.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block2.adProofs.get)
+    history.contains(block2.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block3.adProofs.get)
+    history.contains(block3.adProofs.get.id) shouldBe true
+
+    history = applySection(history, block1.adProofs.get)
+    history.contains(block1.adProofs.get.id) shouldBe true
+
     history = applyBlock(history, block0)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    history = applyBlock(history, block2)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
-    history = applyBlock(history, block3)
-    history.bestFullBlockOpt shouldBe Some(block0)
-
     history = applyBlock(history, block1)
+    history = applyBlock(history, block2)
+    history = applyBlock(history, block3)
+
     history.bestFullBlockOpt shouldBe Some(block3)
   }
 

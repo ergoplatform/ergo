@@ -19,13 +19,11 @@ import scorex.util._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
-                  interlinks: Seq[ModifierId],
                   ADProofsRoot: Digest32,
                   stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
                   transactionsRoot: Digest32,
@@ -93,7 +91,6 @@ object Header extends ApiCodecs {
     Map(
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
-      "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
       "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
       "stateRoot" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
@@ -112,7 +109,6 @@ object Header extends ApiCodecs {
   implicit val jsonDecoder: Decoder[Header] = { c: HCursor =>
     for {
       transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
-      interlinks <- c.downField("interlinks").as[List[ModifierId]]
       adProofsRoot <- c.downField("adProofsRoot").as[Digest32]
       stateRoot <- c.downField("stateRoot").as[ADDigest]
       parentId <- c.downField("parentId").as[ModifierId]
@@ -123,7 +119,7 @@ object Header extends ApiCodecs {
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
-    } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
+    } yield Header(version, parentId, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
   }
 }

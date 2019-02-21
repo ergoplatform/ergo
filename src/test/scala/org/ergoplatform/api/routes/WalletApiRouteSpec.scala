@@ -123,7 +123,8 @@ class WalletApiRouteSpec extends FlatSpec
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
     Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~> check(responseAs[Json])
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
   }
 
   it should "generate valid P2SHAddress form source" in {

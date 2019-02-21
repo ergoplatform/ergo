@@ -10,7 +10,8 @@ import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.PoPowAlgos._
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -172,28 +173,35 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(Constants.InitialNBits)
+    val interlinks = bestHeaderOpt
+      .flatMap { h =>
+        history.typedModifierById[Extension](h.extensionId)
+          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
+          .map(updateInterlinks(h, _))
+      }
+      .getOrElse(Seq.empty)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
       val currentParams = stateContext.currentParameters
       val betterVersion = protocolVersion > header.version
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
-        .map(h => h + votingSettings.votingLength * votingSettings.softForkEpochs)
+        .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
       val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-        (newParams.toExtensionCandidate(Seq()),
+        (newParams.toExtensionCandidate(packInterlinks(interlinks)),
           newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(Seq.empty),
+        (ExtensionCandidate(packInterlinks(interlinks)),
           currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(Seq.empty), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
       ergoSettings.chainSettings.powScheme)

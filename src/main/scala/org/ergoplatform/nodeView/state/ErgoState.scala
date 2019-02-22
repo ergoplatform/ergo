@@ -2,26 +2,24 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import org.ergoplatform.ErgoBox.R4
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.group
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.ErgoSettings
-import sigmastate.basics.DLogProtocol.ProveDlog
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SCollection.SByteArray
-import sigmastate.Values.{IntArrayConstant, IntConstant, SigmaPropValue, Value}
-import sigmastate.{Values, _}
-import sigmastate.lang.Terms._
-import sigmastate.serialization.ErgoTreeSerializer
-import sigmastate.utxo._
+import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.serialization.ValueSerializer
+import sigmastate.{AtLeast, Values}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -95,71 +93,66 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
-  private def boxCreationHeight(box: Value[SBox.type]): Value[SInt.type] =
-    SelectField(ExtractCreationInfo(box), 1).asIntValue
-
   /**
-    * @param emission - emission curve
-    * @return Genesis box that contains all the coins in the system, protected by the script,
-    *         that allows to take part of them every block.
+    * Genesis box that contains all coins to be collected by Ergo foundation.
+    * Box is protected by the script that allows to take part of them every block
+    * and proposition from R4
     */
-  def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
-    val fixedRatePeriod = emission.settings.fixedRatePeriod
-    val epochLength = emission.settings.epochLength
-    val fixedRate = emission.settings.fixedRate
-    val oneEpochReduction = emission.settings.oneEpochReduction
-    val minerRewardDelay = emission.settings.minerRewardDelay
-
-    val prop = emissionBoxProp(fixedRatePeriod, epochLength, fixedRate, oneEpochReduction, minerRewardDelay)
-    ErgoBox(emission.coinsTotal, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
+    val emission = settings.emissionRules
+    val pks = settings.foundersPubkeys
+      .map(str => groupElemFromBytes(Base16.decode(str).get))
+      .map(pk => SigmaPropConstant(ProveDlog(pk)))
+    val protection = AtLeast(IntConstant(2), pks).isProven
+    val protectionBytes = ValueSerializer.serialize(protection)
+    val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
+    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
-  private def emissionBoxProp(fixedRatePeriod: Long,
-                              epochLength: Int,
-                              fixedRate: Long,
-                              oneEpochReduction: Long,
-                              minerRewardDelay: Int): Value[SBoolean.type] = {
-    val rewardOut = ByIndex(Outputs, IntConstant(0))
-    val minerOut = ByIndex(Outputs, IntConstant(1))
+  /**
+    * Genesis box that contains coins in the system to be collected by miners.
+    * Box is protected by the script that allows to take part of them every block.
+    */
+  private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
+    val value = chainSettings.emissionRules.minersCoinsTotal
+    val prop = chainSettings.monetary.emissionBoxProposition
+    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  }
 
-    val epoch = Plus(IntConstant(1), Divide(Minus(Height, IntConstant(fixedRatePeriod.toInt)), IntConstant(epochLength)))
-    val coinsToIssue = If(LT(Height, IntConstant(fixedRatePeriod.toInt)),
-      fixedRate,
-      Minus(fixedRate, Multiply(oneEpochReduction, epoch.upcastTo(SLong)))
-    )
-    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(rewardOut))
-    val heightCorrect = EQ(boxCreationHeight(rewardOut), Height)
-    val heightIncreased = GT(Height, boxCreationHeight(Self))
-    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(rewardOut)))
-    val lastCoins = LE(ExtractAmount(Self), oneEpochReduction)
-    val outputsNum = EQ(SizeOf(Outputs), 2)
+  /**
+    * Genesis box that contains proofs of no premine.
+    * It is a long-living box with special bytes in registers
+    */
+  private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
+    val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
+    val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
+    ErgoBox(EmissionRules.CoinsInOneErgo, Values.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+  }
 
-    val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(minerRewardDelay, MinerPubkey)),
-      EQ(Height, boxCreationHeight(minerOut))
-    )
-    AND(
-      heightIncreased,
-      correctMinerOutput,
-      OR(AND(outputsNum, sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins)
-    )
+  /**
+    * All boxes of genesis state.
+    * Emission box is always the first.
+    */
+  def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
+    Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))
   }
 
   def generateGenesisUtxoState(stateDir: File,
                                constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val emissionBox = Some(genesisEmissionBox(constants.emission))
-    val bh = BoxHolder(emissionBox.toSeq)
+    val boxes = genesisBoxes(constants.settings.chainSettings)
+    val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
+      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
       stateDir, StateConstants(None, settings))
   }
 
@@ -177,64 +170,6 @@ object ErgoState extends ScorexLogging {
       case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
       case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
-  }
-
-  /**
-    * Byte array value of the serialized reward output script proposition with pk being substituted
-    * with given pk
-    * @param delta
-    * @param minerPkBytesVal - byte array val for pk to substitute in the reward script
-    */
-  def expectedMinerOutScriptBytesVal(delta: Int, minerPkBytesVal: Value[SByteArray]): Value[SByteArray] = {
-    val genericPk = ProveDlog(group.generator)
-    val genericMinerProp = rewardOutputScript(delta, genericPk)
-    val genericMinerPropBytes = ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(genericMinerProp)
-    val expectedGenericMinerProp = AND(
-      GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))),
-      genericPk
-    )
-    assert(genericMinerProp == expectedGenericMinerProp, s"reward output script changed, check and update constant position for substitution below")
-    // first segregated constant is delta, so key is second constant
-    val positions = IntArrayConstant(Array[Int](1))
-    val minerPubkeySigmaProp = ProveDlog(DecodePoint(minerPkBytesVal))
-    val newVals = Values.ConcreteCollection(Vector[SigmaPropValue](minerPubkeySigmaProp), SSigmaProp)
-    SubstConstants(genericMinerPropBytes, positions, newVals)
-  }
-
-    /**
-    * Required script of the box, that collects mining rewards
-    */
-  def rewardOutputScript(delta: Int, minerPk: ProveDlog): Value[SBoolean.type] = {
-    /*
-    val compiler = new SigmaCompiler
-
-    val compiled = compiler.compile(Map("delta" -> delta, "minerPk" -> minerPk),
-      """{
-        |    val minimalHeight = SELF.R4[Long].get + delta
-        |    val correctHeight = HEIGHT >= minimalHeight
-        |    correctHeight && minerPk
-        |}""".stripMargin).asBoolValue
-        */
-
-    AND(
-      GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))),
-      minerPk
-    )
-  }
-
-  /**
-    * Proposition, that allows to send coins to a box, that is protected by the following proposition:
-    * prove dlog of miners public key and height is at least `delta` blocks bigger then the current one
-    *
-    * TODO it is possible to use creation height instead of R4, but there is no easy access to in in a script
-    */
-  def feeProposition(delta: Int = 720): Value[SBoolean.type] = {
-    val out = ByIndex(Outputs, IntConstant(0))
-    AND(
-      EQ(Height, boxCreationHeight(out)),
-      EQ(ExtractScriptBytes(out), expectedMinerOutScriptBytesVal(delta, MinerPubkey)),
-      EQ(SizeOf(Outputs), 1)
-    )
   }
 
 }

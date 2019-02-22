@@ -2,15 +2,15 @@ package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.ErgoBox
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -64,7 +64,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, settings.emission)
+          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
@@ -112,7 +112,8 @@ trait ValidBlocksGenerators
                                      rnd: Random,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
     val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
-    val (regularBoxes, drainedBh) = boxHolderWithoutEmission.take(rnd.nextInt(txSizeLimit / 100) + 1)
+    val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
+    val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)
@@ -132,15 +133,15 @@ trait ValidBlocksGenerators
     validTransactionsFromBoxes(num, boxes, rnd)._1
   }
 
-  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
-    validFullBlock(parentOpt, utxoState: UtxoState, boxHolder: BoxHolder, new Random)
+  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
+    validFullBlock(parentOpt, utxoState, boxHolder, new Random)
 
 
-  def validFullBlock(parentOpt: Option[Header], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
     validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
-  def validFullBlockWithBoxHolder(parentOpt: Option[Header],
+  def validFullBlockWithBoxHolder(parentOpt: Option[ErgoFullBlock],
                                   utxoState: UtxoState,
                                   boxHolder: BoxHolder,
                                   rnd: Random): (ErgoFullBlock, BoxHolder) = {
@@ -148,12 +149,12 @@ trait ValidBlocksGenerators
     validFullBlock(parentOpt, utxoState, txsBh._1) -> txsBh._2
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      wrappedState: WrappedUtxoState): ErgoFullBlock = {
     validFullBlock(parentOpt, wrappedState, wrappedState.versionedBoxHolder)
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      wrappedState: WrappedUtxoState,
                      time: Long): ErgoFullBlock = {
     validFullBlock(
@@ -164,24 +165,53 @@ trait ValidBlocksGenerators
     )
   }
 
-  def validFullBlock(parentOpt: Option[Header],
+  def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      utxoState: UtxoState,
                      transactions: Seq[ErgoTransaction],
                      timeOpt: Option[Long] = None): ErgoFullBlock = {
-    transactions.foreach(_.statelessValidity shouldBe 'success)
-    transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
-      assert(utxoState.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
-    }
+    checkPayload(transactions, utxoState)
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate()
+    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
+    val interlinks = parentOpt.toSeq.flatMap { block =>
+      PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
+    }
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
+    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, votes, defaultMinerSecretNumber).get
+  }
+
+  /**
+    * Full block valid against state only - allows to create blocks form headers and state,
+    * does not contain valid interlinks.
+    */
+  def statefulyValidFullBlock(parentOpt: Option[Header],
+                              wrappedState: WrappedUtxoState,
+                              timeOpt: Option[Long] = None): ErgoFullBlock = {
+    val bh = wrappedState.versionedBoxHolder
+    val transactions = validTransactionsFromBoxHolder(bh, new Random())._1
+
+    checkPayload(transactions, wrappedState)
+
+    val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
+
+    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
+    val votes = Array.fill(3)(0: Byte)
+
+    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest,
+      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
+  }
+
+  private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
+    transactions.foreach(_.statelessValidity shouldBe 'success)
+    transactions.nonEmpty shouldBe true
+    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+      assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
+    }
   }
 
 }

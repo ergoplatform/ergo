@@ -15,14 +15,12 @@ final case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private lazy val emission = ergoSettings.emission
-
   override def route: Route = (pathPrefix("emission") & withCors) {
     emissionAt
   }
 
   val emissionAt = (pathPrefix("at" / LongNumber) & get) { height =>
-    ApiResponse(emissionInfoAtHeight(height, emission))
+    ApiResponse(emissionInfoAtHeight(height, ergoSettings.chainSettings.emissionRules))
   }
 }
 

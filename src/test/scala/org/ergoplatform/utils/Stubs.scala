@@ -189,9 +189,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
-    val protocolVersion = 0: Byte
-    val networkPrefix = 0: Byte
-    val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
@@ -200,8 +197,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
-                                      votingSettings, powScheme, monetarySettings)
+    val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,

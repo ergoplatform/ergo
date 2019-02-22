@@ -73,7 +73,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   }
 
   property("should only collect valid transactions") {
-    def checkCollectTxs(maxCost: Long, maxSize: Int, withTokens: Boolean): Unit = {
+    def checkCollectTxs(maxCost: Long, maxSize: Int): Unit = {
 
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
@@ -81,7 +81,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val usClone = createUtxoState(bh)
       val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
-      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
+      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProposition))
       val head = txsWithFees.head
 
       usClone.applyModifier(validFullBlock(None, us, bh, rnd)).get
@@ -109,16 +109,12 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     }
 
     // transactions reach computation cost block limit
-    checkCollectTxs(100000L, Int.MaxValue, withTokens = false)
+    checkCollectTxs(100000L, Int.MaxValue)
 
     // transactions reach block size limit
-    checkCollectTxs(Long.MaxValue, 4096, withTokens = false)
-
-    // too many tokens in fees
-    checkCollectTxs(Long.MaxValue, Int.MaxValue, withTokens = true)
+    checkCollectTxs(Long.MaxValue, 4096)
 
   }
-
 
   property("should not be able to spend recent fee boxes") {
 

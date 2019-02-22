@@ -69,19 +69,19 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     state.stateContext.lastHeaderOpt.get.id shouldBe fullChain.last.header.id
   }
 
-  property(s"pruned chain bootstrapping - BK = -1 - all the blocks are to be applied to the state") {
+  property(s"pruned chain bootstrapping - blocksToKeep = -1 - all the blocks are to be applied to the state") {
     new NodeViewFixture(prunedSettings(-1)).apply(f => testCode(f, 0))
   }
 
-  property(s"pruned chain bootstrapping - BK = 3 - first 9 blocks out of 20 are not to be applied to the state") {
+  property(s"pruned chain bootstrapping - blocksToKeep = 3 - first 9 blocks out of 20 are not to be applied to the state") {
     new NodeViewFixture(prunedSettings(3)).apply(f => testCode(f, 9))
   }
 
-  property(s"pruned chain bootstrapping - BK = 15 - all the blocks are to be applied to the state") {
+  property(s"pruned chain bootstrapping - blocksToKeep = 15 - all the blocks are to be applied to the state") {
     new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 0))
   }
 
-  property(s"pruned chain bootstrapping - total = 30, BK = 15 - first 9 blocks are not to be applied to the state") {
+  property(s"pruned chain bootstrapping - total = 30, blocksToKeep = 15 - first 9 blocks are not to be applied to the state") {
     new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 9, 30))
   }
 

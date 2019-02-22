@@ -26,7 +26,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   // Random rate: Stable simulated average interval = 120539, error  = 0.44916666% | Init simulated average interval = 115519, error  = 3.7341666%
 
   blockchainSimulator(difficultyControl,
-    baseHeader.copy(height = 0, timestamp = 0, interlinks = Seq(), nBits = 16842752),
+    baseHeader.copy(height = 0, timestamp = 0, nBits = 16842752),
     randomHashRate)
 
   /**
@@ -90,10 +90,11 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>
       val l = line.split(",")
-      baseHeader.copy(height = l(0).toInt,
+      baseHeader.copy(
+        height = l(0).toInt,
         timestamp = l(1).toLong,
-        interlinks = Seq(),
-        nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2))))
+        nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2)))
+      )
     }
     printEpochs(headers, difficultyControl)
   }

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.settings._
-import org.ergoplatform.mining.{AutolykosPowScheme, pkToBytes}
+import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.Constants
@@ -27,7 +27,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
   extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
 
-  override val lastBlockMinerPk: Array[Byte] = pkToBytes(predictedHeader.minerPk)
+  override val lastBlockMinerPk: Array[Byte] = groupElemToBytes(predictedHeader.minerPk)
 
   override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
 
@@ -164,9 +164,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                   extensionOpt: Option[Extension],
                   votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
     val height = header.height
+    val expectedHeight = lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
-    if (height != lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)) {
-      throw new Exception(s"Improper header applied: $header to $this")
+    if (height != expectedHeight) {
+      throw new Error(s"Incorrect header ${header.id} height: $height != $expectedHeight")
     }
 
     process(header, extensionOpt).map { sc =>
@@ -187,7 +188,7 @@ object ErgoStateContext {
 
   def empty(constants: StateConstants): ErgoStateContext = {
     implicit val votingSettings: VotingSettings = constants.votingSettings
-    new ErgoStateContext(Seq.empty, constants.genesisStateDigest, LaunchParameters, VotingData.empty)
+    new ErgoStateContext(Seq.empty, constants.settings.chainSettings.genesisStateDigest, LaunchParameters, VotingData.empty)
   }
 
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {

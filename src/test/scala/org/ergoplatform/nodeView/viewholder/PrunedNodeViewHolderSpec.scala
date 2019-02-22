@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.viewholder
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
@@ -10,6 +9,7 @@ import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.testkit.utils.NoShrink
+
 import scala.concurrent.duration._
 
 /**
@@ -37,11 +37,11 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   }
 
   def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
-    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[Header])) { case ((chain, wus, parentOpt), h) =>
+    (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[ErgoFullBlock])) { case ((chain, wus, parentOpt), h) =>
       val time = System.currentTimeMillis() - (howMany - h) * BlockInterval.toMillis
       val block = validFullBlock(parentOpt, wus, time)
       val newState = wus.applyModifier(block).get
-      (chain :+ block, newState, Some(block.header))
+      (chain :+ block, newState, Some(block))
     }._1
   }
 

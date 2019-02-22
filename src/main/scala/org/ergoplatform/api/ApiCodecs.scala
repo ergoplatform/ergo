@@ -6,7 +6,7 @@ import io.circe.syntax._
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiEncoderOption.Detalization
-import org.ergoplatform.mining.{pkFromBytes, pkToBytes}
+import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
@@ -54,11 +54,11 @@ trait ApiCodecs {
     for {
       str <- cursor.as[String]
       bytes <- fromTry(Algos.decode(str))
-    } yield pkFromBytes(bytes)
+    } yield groupElemFromBytes(bytes)
   }
 
   implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
-      pkToBytes(point).asJson
+      groupElemToBytes(point).asJson
   }
 
   implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>
@@ -163,7 +163,7 @@ trait ApiCodecs {
       "onchain" -> b.chainStatus.onchain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "creationHeight" -> b.creationHeight.asJson,
+      "inclusionHeight" -> b.inclusionHeight.asJson,
       "spendingHeight" -> b.spendingHeight.asJson,
       "box" -> b.box.asJson
     )

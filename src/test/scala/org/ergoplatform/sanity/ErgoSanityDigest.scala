@@ -37,16 +37,16 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override def semanticallyInvalidModifier(state: DIGEST_ST): PM = invalidErgoFullBlockGen.sample.get
 
   override def totallyValidModifier(history: HT, state: DIGEST_ST): PM = {
-    val parentOpt = history.bestHeaderOpt
+    val parentOpt = history.bestFullBlockOpt
     validFullBlock(parentOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState).header
   }
 
   override def totallyValidModifiers(history: HT, state: DIGEST_ST, count: Int): Seq[PM] = {
     require(count >= 1)
-    val headerOpt = history.bestHeaderOpt
-    (0 until count).foldLeft((headerOpt, Seq.empty[PM])) { case (acc, _) =>
-      val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
-      (Some(pm.header), acc._2 :+ pm)
+    val blockOpt = history.bestFullBlockOpt
+    (0 until count).foldLeft((blockOpt, Seq.empty[PM])) { case (acc, _) =>
+      val pm = validFullBlock(blockOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
+      (Some(pm), acc._2 :+ pm)
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
 

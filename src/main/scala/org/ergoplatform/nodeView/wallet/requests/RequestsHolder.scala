@@ -6,14 +6,14 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2SAddress}
 
 case class RequestsHolder(requests: Seq[TransactionRequest], fee: Long)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
   def requestsWithFee: Seq[TransactionRequest] = {
-    requests :+ PaymentRequest(Pay2SAddress(ErgoState.feeProposition()), fee, None, None)
+    requests :+ PaymentRequest(Pay2SAddress(ErgoScriptPredef.feeProposition()), fee, None, None)
   }
 
 }

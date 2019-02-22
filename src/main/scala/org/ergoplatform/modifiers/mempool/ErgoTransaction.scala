@@ -10,7 +10,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.BoxUtils
 import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
@@ -48,22 +48,23 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to
-    * @return map from asset id to to balance
+    * @return a mapping from asset id to to balance and total assets number
     */
-  private def getAssetsMap(boxes: IndexedSeq[ErgoBoxCandidate]): Try[Map[ByteArrayWrapper, Long]] = Try {
+  private def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
     val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
-    boxes.foreach { box =>
+    val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
       box.additionalTokens.foreach { case (assetId, amount) =>
         require(amount >= 0, s"negative asset amount for ${Algos.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))
       }
+      acc + box.additionalTokens.size
     }
-    map.toMap
+    map.toMap -> assetsNum
   }
 
-  lazy val outAssetsTry: Try[Map[ByteArrayWrapper, Long]] = getAssetsMap(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = extractAssets(outputCandidates)
 
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
@@ -121,13 +122,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
-      .demandTry(outAssetsTry, outAssetsTry.toString) { (validation, outAssets) =>
-        getAssetsMap(boxesToSpend) match {
-          case Success(inAssets) =>
+      .demandTry(outAssetsTry, outAssetsTry.toString) { case (validation, (outAssets, outAssetsNum)) =>
+        extractAssets(boxesToSpend) match {
+          case Success((inAssets, inAssetsNum)) =>
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
             validation.validateSeq(outAssets) {
               case (validation, (outAssetId, outAmount)) =>
-                val assetsCost = assetsAccessCost(inAssets, outAssets, stateContext.currentParameters.tokenAccessCost)
+                val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+                val assetsCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
+                  (inAssets.size + outAssets.size) * tokenAccessCost
                 val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
                 validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                   fatal(s"Assets preservation rule is broken in $this. " +
@@ -158,13 +161,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       outputs.asJson.noSpaces
     }
     s"ErgoTransaction(id: $encodedId, inputs: $inputsStr, outputs: $outputsStr, size: $size)"
-  }
-
-  private def assetsAccessCost(inAssets: Map[ByteArrayWrapper, Long],
-                               outAssets: Map[ByteArrayWrapper, Long],
-                               tokenAccessCost: Int): Long = {
-    (inAssets.values.sum + outAssets.values.sum) * tokenAccessCost +
-      (inAssets.size + outAssets.size) * tokenAccessCost
   }
 
 }

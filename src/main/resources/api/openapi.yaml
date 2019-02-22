@@ -262,7 +262,6 @@ components:
       - id
       - timestamp
       - version
-      - interlinks
       - adProofsRoot
       - stateRoot
       - transactionsRoot
@@ -281,11 +280,6 @@ components:
           $ref: '#/components/schemas/Timestamp'
         version:
           $ref: '#/components/schemas/Version'
-        interlinks:
-          description: A vector containing pointers to previous blocks, including the id of the previous block. See https://pdfs.semanticscholar.org/1969/453d7960eaca8cfbd642877925f5f5028ce5.pdf for more info
-          type: array
-          items:
-            $ref: '#/components/schemas/Digest32'
         adProofsRoot:
           $ref: '#/components/schemas/Digest32'
         stateRoot:

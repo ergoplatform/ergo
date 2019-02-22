@@ -30,17 +30,6 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     }
   }
 
-  property("HeaderWithoutInterlinks serialization") {
-    val serializer = HeaderSerializer
-    forAll(invalidHeaderGen) { b: Header =>
-      val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
-      recovered shouldBe b
-
-      val size = serializer.bytesWithoutInterlinks(b).length
-      recovered.size shouldBe size
-    }
-  }
-
   property("Header serialization") {
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>

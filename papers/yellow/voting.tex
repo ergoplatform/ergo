@@ -79,7 +79,7 @@ The protocol version upgrade is to be done in the following steps:
 \begin{enumerate}
     \item{} A miner is proposing to increase protocol version.
     \item{} Other miners are voting within 32 epochs for the proposal
-    \item{} If the soft-fork proposal is being rejected~(so if it gathers no more than $90\%$ of votes during voting period, e.i.
+    \item{} If the soft-fork proposal is being rejected~(so if it gathers no more than $90\%$ of votes during voting period, i.e.
             no more than $\lfloor 32 * 1024 * 90 / 100 \rfloor = 29491$ votes), new voting may be proposed next epoch
             after the voting done.
     \item{} If the soft-fork proposal is being approved, activation period of 128 epochs is starting. The first block

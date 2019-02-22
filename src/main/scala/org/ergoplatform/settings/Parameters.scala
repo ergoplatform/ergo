@@ -35,7 +35,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   /**
     * Cost of accessing 1 token, in nanoErgs.
     */
-  lazy val tokenAccessCost: Int = parametersTable(TokenAccessCost)
+  lazy val tokenAccessCost: Int = parametersTable(TokenAccessCostIncrease)
 
   /**
     * Max total computation cost of a block.
@@ -202,7 +202,8 @@ object Parameters {
   val MaxBlockCostIncrease: Byte = 4
   val MaxBlockCostDecrease: Byte = (-MaxBlockCostIncrease).toByte
 
-  val TokenAccessCost: Byte = 5
+  val TokenAccessCostIncrease: Byte = 5
+  val TokenAccessCostDecrease: Byte = (-TokenAccessCostIncrease).toByte
 
   val StorageFeeFactorDefault = 1250000
   val StorageFeeFactorMax = 2500000
@@ -214,29 +215,38 @@ object Parameters {
   val MinValueMin = 0
   val MinValueMax = 10000 //0.00001 Erg
 
+  val TokenAccessCostDefault = 100
+  val TokenAccessCostMax = 10000 //0.00001 Erg
+  val TokenAccessCostMin = 0
+  val TokenAccessCostStep = 10
+
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
     MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
-    SoftFork -> "Soft-fork (increasing version of a block)"
+    SoftFork -> "Soft-fork (increasing version of a block)",
+    TokenAccessCostIncrease -> "Token access cost"
   )
 
   val stepsTable: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorStep,
-    MinValuePerByteIncrease -> MinValueStep
+    MinValuePerByteIncrease -> MinValueStep,
+    TokenAccessCostIncrease -> TokenAccessCostStep
   )
 
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
+    TokenAccessCostIncrease -> TokenAccessCostMin,
     MaxBlockSizeIncrease -> 16 * 1024,
     MaxBlockCostIncrease -> 16 * 1024
   )
 
   val maxValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMax,
-    MinValuePerByteIncrease -> MinValueMax
+    MinValuePerByteIncrease -> MinValueMax,
+    TokenAccessCostIncrease -> TokenAccessCostMax
   )
 
   val ParamVotesCount = 2

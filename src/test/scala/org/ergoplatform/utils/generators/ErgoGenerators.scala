@@ -6,7 +6,6 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos}
-import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants

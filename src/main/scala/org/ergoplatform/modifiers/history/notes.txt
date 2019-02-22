@@ -1,0 +1,6 @@
+org.ergoplatform.modifiers.history.ADProofs
+
+    какая максимальная длинна поля proofBytes ?
+
+
+

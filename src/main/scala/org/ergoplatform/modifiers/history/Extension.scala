@@ -109,7 +109,7 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
       val value = r.getBytes(length)
       (key, value)
     }
-    val fields = fieldsView.takeWhile(r.position - startPosition < Constants.ExtensionMaxSize).toSeq
+    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.ExtensionMaxSize).toSeq
     require(r.position - startPosition < Constants.ExtensionMaxSize)
     Extension(headerId, fields, Some(r.position - startPosition))
   }

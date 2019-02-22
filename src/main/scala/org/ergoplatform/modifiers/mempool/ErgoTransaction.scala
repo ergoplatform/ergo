@@ -127,13 +127,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
             validation.validateSeq(outAssets) {
               case (validation, (outAssetId, outAmount)) =>
-                val assetsUsageCost = assetsCost(inAssets, outAssets)
+                val assetsCost = assetsAccessCost(inAssets, outAssets, stateContext.currentParameters.tokenAccessCost)
                 val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
                 validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                   fatal(s"Assets preservation rule is broken in $this. " +
                     s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
                 }
-                .map(_ + assetsUsageCost)
+                .map(_ + assetsCost)
             }
           case Failure(e) => fatal(e.getMessage)
         }
@@ -160,9 +160,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     s"ErgoTransaction(id: $encodedId, inputs: $inputsStr, outputs: $outputsStr, size: $size)"
   }
 
-  private def assetsCost(inAssets: Map[ByteArrayWrapper, Long], outAssets: Map[ByteArrayWrapper, Long]): Long = {
-    (inAssets.values.sum + outAssets.values.sum) * Constants.TokenAccessCost +
-      (inAssets.size + outAssets.size) * Constants.TokenAccessCost
+  private def assetsAccessCost(inAssets: Map[ByteArrayWrapper, Long],
+                               outAssets: Map[ByteArrayWrapper, Long],
+                               tokenAccessCost: Int): Long = {
+    (inAssets.values.sum + outAssets.values.sum) * tokenAccessCost +
+      (inAssets.size + outAssets.size) * tokenAccessCost
   }
 
 }

@@ -8,7 +8,6 @@ import scorex.core.serialization.Serializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 
-
 object Constants {
   val HashLength: Int = 32
 
@@ -34,8 +33,6 @@ object Constants {
   val StoragePeriod: Int = 4 * BlocksPerYear
 
   val StorageContractCost: Long = 50
-
-  val TokenAccessCost: Long = 100
 
   val StorageIndexVarId: Byte = Byte.MaxValue
 

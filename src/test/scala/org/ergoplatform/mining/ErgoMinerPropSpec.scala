@@ -5,7 +5,6 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
@@ -144,11 +143,11 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     val blockTx2 = validTransactionFromBoxes(
       bh.boxes.slice(10, 20).values.toIndexedSeq, outputsProposition = feeProposition)
-    val block2 = validFullBlock(Some(block.header), us, IndexedSeq(blockTx2))
+    val block2 = validFullBlock(Some(block), us, IndexedSeq(blockTx2))
 
     val earlySpendingTx = validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
 
-    val invalidBlock2 = validFullBlock(Some(block.header), us, IndexedSeq(earlySpendingTx, blockTx2))
+    val invalidBlock2 = validFullBlock(Some(block), us, IndexedSeq(earlySpendingTx, blockTx2))
 
     us.applyModifier(invalidBlock2) shouldBe 'failure
 
@@ -158,7 +157,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     val blockTx3 = validTransactionFromBoxes(
       bh.boxes.slice(20, 30).values.toIndexedSeq, outputsProposition = feeProposition)
-    val block3 = validFullBlock(Some(block2.header), us, IndexedSeq(earlySpendingTx2, blockTx3))
+    val block3 = validFullBlock(Some(block2), us, IndexedSeq(earlySpendingTx2, blockTx3))
 
     us.applyModifier(block3) shouldBe 'success
   }

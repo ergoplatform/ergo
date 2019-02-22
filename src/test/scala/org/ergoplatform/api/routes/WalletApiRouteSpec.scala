@@ -46,6 +46,13 @@ class WalletApiRouteSpec extends FlatSpec
       |}
       |""".stripMargin
 
+  val scriptSourceSigProp: String =
+    """
+      |{
+      |    PK("tJPvPKbKm9hcWFMGdmAjhdpKAL6umzFswYMBNh2TKkrxRZZH3VTrhP")
+      |}
+      |""".stripMargin
+
   it should "generate arbitrary transaction" in {
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -109,19 +116,27 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate valid P2SAddress form source" in {
-    Post(prefix + "/p2s_address", Json.obj("source" -> scriptSource.asJson)) ~> route ~> check {
+    val suffix = "/p2s_address"
+    val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
-      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      val addressStr = json.hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
   }
 
   it should "generate valid P2SHAddress form source" in {
-    Post(prefix + "/p2sh_address", Json.obj("source" -> scriptSource.asJson)) ~> route ~> check {
+    val suffix = "/p2sh_address"
+    val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
-      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      val addressStr = json.hcursor.downField("address").as[String].right.get
       ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
     }
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
   }
 
   it should "return addresses" in {

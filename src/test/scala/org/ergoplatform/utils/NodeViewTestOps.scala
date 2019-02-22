@@ -46,15 +46,21 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     expectModificationOutcome(header)
   }
 
-  def applyBlock(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
+  def applyBlock(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
     nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
-    expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock))
+    expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock, excludeExt))
   }
 
-  def applyPayload(fullBlock: ErgoFullBlock)(implicit ctx: Ctx): Try[Unit] = {
+  def applyPayload(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
-    val sections = if (verifyTransactions) fullBlock.blockSections else Seq.empty
+    val sections = if (verifyTransactions && excludeExt) {
+      fullBlock.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
+    } else if (verifyTransactions) {
+      fullBlock.blockSections
+    } else {
+      Seq.empty
+    }
     sections.foldLeft(Success(()): Try[Unit]) { (lastResult, section) =>
       lastResult.flatMap { _ =>
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
@@ -76,7 +82,6 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
       case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
         Success(())
       case outcome =>
-        println("outcome: " + outcome)
         val msg = section match {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"
@@ -94,7 +99,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
                     ext: ExtensionCandidate = ExtensionCandidate(Seq()))
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
-    val parent = getHistory.bestHeaderOpt
+    val parent = getHistory.bestFullBlockOpt
     validFullBlock(parent, utxoState, txs, Some(time))
   }
 
@@ -134,6 +139,8 @@ trait NodeViewTestOps extends NodeViewBaseOps {
   def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
 
   def getBestFullBlockEncodedId(implicit ctx: Ctx): Option[String] = getBestFullBlockOpt.map(_.header.encodedId)
+
+  def getBestHeaderEncodedId(implicit ctx: Ctx): Option[String] = getBestHeaderOpt.map(_.encodedId)
 
   def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
 

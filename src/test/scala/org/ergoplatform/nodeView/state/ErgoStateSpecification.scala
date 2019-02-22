@@ -47,16 +47,16 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
-    var lastHeaders: Seq[Header] = Seq()
-    requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
+    var lastBlocks: Seq[ErgoFullBlock] = Seq()
+    requireEqualStateContexts(us.stateContext, ds.stateContext, lastBlocks.map(_.header))
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(lastHeaders.headOption, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
-      lastHeaders = block.header +: lastHeaders
-      requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
+      lastBlocks = block +: lastBlocks
+      requireEqualStateContexts(us.stateContext, ds.stateContext, lastBlocks.map(_.header))
     }
   }
 
@@ -70,12 +70,12 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.boxChanges() should generate operations in the same order") {
     var (us, bh) = createUtxoState()
-    var parentOpt: Option[Header] = None
+    var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
       val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
-      parentOpt = Some(block.header)
+      parentOpt = Some(block)
       bh = blBh._2
       us = us.applyModifier(block).get
 

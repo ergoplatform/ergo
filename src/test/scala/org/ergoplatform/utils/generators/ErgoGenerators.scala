@@ -5,7 +5,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -132,13 +132,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     powSolution <- powSolutionGen
-    interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
   } yield Header(
     version,
     parentId,
-    interlinks,
     adRoot,
     stateRoot,
     transactionsRoot,

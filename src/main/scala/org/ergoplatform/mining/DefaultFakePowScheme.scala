@@ -29,13 +29,13 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
                      maxNonce: Long = Long.MaxValue): Option[Header] = {
-    val (parentId, interlinks, height) = derivedHeaderFields(parentOpt)
+    val (parentId, height) = derivedHeaderFields(parentOpt)
     val pk: EcPointType = genPk(sk)
     val w: EcPointType = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
     val s = AutolykosSolution(pk, w, n, d)
-    Some(Header(version, parentId, interlinks, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+    Some(Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, s, votes))
   }
 

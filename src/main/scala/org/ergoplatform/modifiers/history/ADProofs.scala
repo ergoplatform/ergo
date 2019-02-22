@@ -15,6 +15,7 @@ import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -111,13 +112,13 @@ object ADProofSerializer extends ScorexSerializer[ADProofs] {
 
   override def serialize(obj: ADProofs, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))
-    w.putUShort(obj.proofBytes.size)
+    w.putUInt(obj.proofBytes.size)
     w.putBytes(obj.proofBytes)
   }
 
   override def parse(r: Reader): ADProofs = {
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val size = r.getUShort()
+    val size = r.getUInt().toIntExact
     val proofBytes = SerializedAdProof @@ r.getBytes(size)
     ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
   }

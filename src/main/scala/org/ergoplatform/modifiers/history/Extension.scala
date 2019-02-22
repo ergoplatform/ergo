@@ -102,7 +102,7 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val fieldsSize = r.getUShort()
-    val fieldsView = (1 to fieldsSize).view.map {_ =>
+    val fieldsView = (1 to fieldsSize).toStream.map {_ =>
       val key = r.getBytes(Extension.FieldKeySize)
       val length = r.getUByte()
       require(length <= Extension.FieldValueMaxSize, "value size should be <= " + Extension.FieldValueMaxSize)
